@@ -8,6 +8,9 @@ Compile instructions:
 	cmake ./Library/Utilities/Range/
 	make
 
+You might need to adapt the CMakeLists.txt in ./Library/Utilities/Range to find your boost include path
+we used boost 1.55 for all testing
+
 Tested with:
 * clang 3.4
 * VC11
