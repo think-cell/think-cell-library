@@ -13,6 +13,8 @@ We used boost 1.55 for all testing
 
 The Range specific code is under https://github.com/think-cell/range/tree/master/Library/Utilities/Range 
 
+The tests and examples are in Library/Utilities/Range/*.t.cpp
+
 Tested with:
 * clang 3.4
 * VC11
