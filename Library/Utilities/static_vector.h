@@ -8,7 +8,7 @@
 template< typename T, unsigned int N >
 class static_vector {
 	T* m_ptEnd;
-	storage_for<T> m_at[N];
+	tc::storage_for<T> m_at[N];
 
 	template<typename It>
 	void append(It itBegin, It itEnd) {

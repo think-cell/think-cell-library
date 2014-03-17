@@ -8,19 +8,19 @@
 
 namespace RANGE_PROPOSAL_NAMESPACE {
 
-	namespace filter_range_impl {
+	namespace filter_adaptor_impl {
 
 		template< typename Pred, typename Rng, bool HasIterator=is_range_with_iterators< Rng >::value >
-		class filter_range;
+		class filter_adaptor;
 
 		template< typename Pred, typename Rng >
-		class filter_range<Pred, Rng, false> : public range_adaptor<filter_range<Pred,Rng>, Rng, typename std::is_empty<Pred>::type
+		class filter_adaptor<Pred, Rng, false> : public range_adaptor<filter_adaptor<Pred,Rng>, Rng, typename std::is_empty<Pred>::type
 			, boost::use_default
-			, boost::bidirectional_traversal_tag // filter_range is bidirectional at best
+			, boost::bidirectional_traversal_tag // filter_adaptor is bidirectional at best
 		> {
-			typedef range_adaptor<filter_range<Pred,Rng>, Rng, typename std::is_empty<Pred>::type
+			typedef range_adaptor<filter_adaptor<Pred,Rng>, Rng, typename std::is_empty<Pred>::type
 				, boost::use_default
-				, boost::bidirectional_traversal_tag // filter_range is bidirectional at best
+				, boost::bidirectional_traversal_tag // filter_adaptor is bidirectional at best
 			> base_;
 
 		protected:
@@ -40,7 +40,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			typedef void ctor_const_overload_support;
 
 			// default ctor
-			filter_range() {}
+			filter_adaptor() {}
 
 			// Range adaptors other than sub_ranges should not be copyable.
 			// Otherwise, copying a range adaptor may have value or reference semantics,
@@ -49,55 +49,74 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			// - store a reference or sub_range of the range,
 			// - or copy the values into another container.
 
-			filter_range( filter_range && rng )
+			filter_adaptor( filter_adaptor && rng ) 
 				: base_(tc_move(rng).base_range_move(), aggregate_tag())
 				, m_pred(tc_move(rng).m_pred)
 			{}
 
+			filter_adaptor& operator=( filter_adaptor && rng ) {
+				base_::operator=(tc_move(rng).base_range_move(), aggregate_tag());
+				m_pred=tc_move(rng).m_pred;
+				return *this;
+			}
+
+		protected:
+			filter_adaptor( filter_adaptor const& rng ) 
+				: base_(rng.base_range(), aggregate_tag())
+				, m_pred(rng.m_pred)
+			{}
+
+			filter_adaptor& operator=( filter_adaptor const& rng ) {
+				base_::operator=(rng.base_range(), aggregate_tag());
+				m_pred=rng.m_pred;
+				return *this;
+			}
+
+		public:
 			// templated copy ctors
 /*			template< typename RngOther, typename PredOther, bool bHasIteratorOther >
-			filter_range( filter_range<PredOther,RngOther,bHasIteratorOther> & rng, ctor_const_overload=ctor_const_overload() )
+			filter_adaptor( filter_adaptor<PredOther,RngOther,bHasIteratorOther> & rng, ctor_const_overload=ctor_const_overload() )
 				: base_(rng.base_range(), aggregate_tag())
 				, m_pred(rng.m_pred)
 			{}
 
 			template< typename RngOther, typename PredOther, bool bHasIteratorOther >
-			filter_range( filter_range<PredOther,RngOther,bHasIteratorOther> && rng, ctor_const_overload=ctor_const_overload() )
+			filter_adaptor( filter_adaptor<PredOther,RngOther,bHasIteratorOther> && rng, ctor_const_overload=ctor_const_overload() )
 				: base_(tc_move(rng).base_range_move(), aggregate_tag())
 				, m_pred(tc_move(rng).m_pred)
 			{}
 
 			template< typename RngOther, typename PredOther, bool bHasIteratorOther >
-			filter_range( filter_range<PredOther,RngOther,bHasIteratorOther> const& rng, ctor_const_overload )
+			filter_adaptor( filter_adaptor<PredOther,RngOther,bHasIteratorOther> const& rng, ctor_const_overload )
 				: base_(rng.base_range(), aggregate_tag())
 				, m_pred(rng.m_pred)
 			{}
 
 			template< typename RngOther, typename PredOther, bool bHasIteratorOther >
-			filter_range( filter_range<PredOther,RngOther,bHasIteratorOther> const& rng, typename std::enable_if<
-				base_::template is_const_compatible_range<filter_range<PredOther,RngOther,bHasIteratorOther> const&>::value
+			filter_adaptor( filter_adaptor<PredOther,RngOther,bHasIteratorOther> const& rng, typename std::enable_if<
+				base_::template is_const_compatible_range<filter_adaptor<PredOther,RngOther,bHasIteratorOther> const&>::value
 			, unused_arg>::type=unused_arg() )
 				: base_(rng.base_range(), aggregate_tag())
 				, m_pred(rng.m_pred)
 			{}
 
 			// some user-defined copy ctor to disable implicit one, with same semantics as templated copy ctor
-			filter_range( typename base_::template const_compatible_range<filter_range>::type rng )
+			filter_adaptor( typename base_::template const_compatible_range<filter_adaptor>::type rng )
 				: base_(rng.base_range(), aggregate_tag())
 				, m_pred(rng.m_pred)
 			{}*/
 
 			// other ctors
 			template< typename RngRef, typename PredRef >
-			filter_range( RngRef && rng, PredRef && pred, typename std::enable_if< !std::is_same<typename std::remove_reference<PredRef>::type, ctor_const_overload>::value, unused_arg>::type=unused_arg() )
+			filter_adaptor( RngRef && rng, PredRef && pred, typename std::enable_if< !std::is_same<typename std::remove_reference<PredRef>::type, ctor_const_overload>::value, unused_arg>::type=unused_arg() )
 				: base_(std::forward<RngRef>(rng), aggregate_tag())
 				, m_pred(std::forward<PredRef>(pred))
 			{}
 		};
 
 		template< typename Pred, typename Rng >
-		class filter_range<Pred, Rng, true> : public filter_range<Pred, Rng, false> {
-			typedef filter_range<Pred, Rng, false> base_;
+		class filter_adaptor<Pred, Rng, true> : public filter_adaptor<Pred, Rng, false> {
+			typedef filter_adaptor<Pred, Rng, false> base_;
 
 		public:
 			using typename base_::index;
@@ -113,43 +132,59 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 		public:
 			// default ctor
-			filter_range() {}
+			filter_adaptor() {}
 
-			filter_range( filter_range && rng ) 
-				: base_(tc_move(rng))
+			filter_adaptor( filter_adaptor && rng ) 
+				: base_(tc::base_cast<base_>(tc_move(rng)))
 			{}
 
+			filter_adaptor& operator=( filter_adaptor && rng ) {
+				base_::operator=(tc::base_cast<base_>(tc_move(rng)));
+				return *this;
+			}
+
+		protected:
+			filter_adaptor( filter_adaptor const& rng ) 
+				: base_(tc::base_cast<base_>(rng))
+			{}
+
+			filter_adaptor& operator=( filter_adaptor const& rng ) {
+				base_::operator=(tc::base_cast<base_>(rng));
+				return *this;
+			}
+
+		public:
 /*			// templated copy ctors
 			template< typename RngOther, typename PredOther >
-			filter_range( filter_range<PredOther,RngOther,true> & rng, ctor_const_overload=ctor_const_overload() )
+			filter_adaptor( filter_adaptor<PredOther,RngOther,true> & rng, ctor_const_overload=ctor_const_overload() )
 				: base_(rng)
 			{}
 
 			template< typename RngOther, typename PredOther >
-			filter_range( filter_range<PredOther,RngOther,true> && rng, ctor_const_overload=ctor_const_overload() )
+			filter_adaptor( filter_adaptor<PredOther,RngOther,true> && rng, ctor_const_overload=ctor_const_overload() )
 				: base_(tc_move(rng))
 			{}
 
 			template< typename RngOther, typename PredOther >
-			filter_range( filter_range<PredOther,RngOther,true> const& rng, ctor_const_overload )
+			filter_adaptor( filter_adaptor<PredOther,RngOther,true> const& rng, ctor_const_overload )
 				: base_(rng,ctor_const_overload())
 			{}
 
 			template< typename RngOther, typename PredOther >
-			filter_range( filter_range<PredOther,RngOther,true> const& rng, typename std::enable_if<
-				base_::template is_const_compatible_range<filter_range<PredOther,RngOther,true> const&>::value
+			filter_adaptor( filter_adaptor<PredOther,RngOther,true> const& rng, typename std::enable_if<
+				base_::template is_const_compatible_range<filter_adaptor<PredOther,RngOther,true> const&>::value
 			, unused_arg>::type=unused_arg() )
 				: base_(rng)
 			{}
 
 			// some user-defined copy ctor to disable implicit one, with same semantics as templated copy ctor
-			filter_range( typename base_::template const_compatible_range<filter_range>::type rng )
+			filter_adaptor( typename base_::template const_compatible_range<filter_adaptor>::type rng )
 				: base_(rng)
 			{}*/
 
 			// other ctors
 			template< typename RngRef, typename PredRef >
-			filter_range( RngRef && rng, PredRef && pred, typename std::enable_if< !std::is_same<typename std::remove_reference<PredRef>::type, ctor_const_overload>::value, unused_arg>::type=unused_arg() )
+			filter_adaptor( RngRef && rng, PredRef && pred, typename std::enable_if< !std::is_same<typename std::remove_reference<PredRef>::type, ctor_const_overload>::value, unused_arg>::type=unused_arg() )
 			:	base_( std::forward<RngRef>(rng)
 			,	std::forward<PredRef>(pred))
 			{}
@@ -186,9 +221,9 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			}
 		};
 	}
-	using filter_range_impl::filter_range;
+	using filter_adaptor_impl::filter_adaptor;
 
 	template<typename Rng, typename Pred>
 	auto filter( Rng && rng, Pred && pred )
-		return_ctor( filter_range<typename std::decay<Pred>::type BOOST_PP_COMMA() Rng >, (std::forward<Rng>(rng),std::forward<Pred>(pred)) )
+		return_ctor( filter_adaptor<typename std::decay<Pred>::type BOOST_PP_COMMA() Rng >, (std::forward<Rng>(rng),std::forward<Pred>(pred)) )
 }

@@ -29,22 +29,22 @@ namespace tc {
 		reference_or_value() {} // m_t may be default-constructible
 
 		template< typename Rhs >
-		reference_or_value( Rhs && rhs, typename std::enable_if< !is_base_of< reference_or_value, typename remove_cvref< Rhs >::type >::value
+		reference_or_value( Rhs && rhs, typename std::enable_if< !std::is_base_of< reference_or_value, typename std::decay< Rhs >::type >::value
 																&& !need_ctor_const_overload<T>::value, unused_arg>::type=unused_arg() )
 		:	m_t( std::forward<Rhs>(rhs) )
 		{}
 		template< typename Rhs >
-		reference_or_value( Rhs && rhs, typename std::enable_if< is_base_of< reference_or_value, typename remove_cvref< Rhs >::type >::value 
+		reference_or_value( Rhs && rhs, typename std::enable_if< std::is_base_of< reference_or_value, typename std::decay< Rhs >::type >::value 
 																&& !need_ctor_const_overload<T>::value, unused_arg>::type=unused_arg() )
 		:	m_t( std::forward<Rhs>(rhs).m_t )
 		{}
 		template< typename Rhs >
-		reference_or_value( Rhs && rhs, typename std::enable_if< !is_base_of< reference_or_value, typename remove_cvref< Rhs >::type >::value
+		reference_or_value( Rhs && rhs, typename std::enable_if< !std::is_base_of< reference_or_value, typename std::decay< Rhs >::type >::value
 																&& need_ctor_const_overload<T>::value, unused_arg>::type=unused_arg() )
 		:	m_t( std::forward<Rhs>(rhs), ctor_const_overload() )
 		{}
 		template< typename Rhs >
-		reference_or_value( Rhs && rhs, typename std::enable_if< is_base_of< reference_or_value, typename remove_cvref< Rhs >::type >::value 
+		reference_or_value( Rhs && rhs, typename std::enable_if< std::is_base_of< reference_or_value, typename std::decay< Rhs >::type >::value 
 																&& need_ctor_const_overload<T>::value, unused_arg>::type=unused_arg() )
 		:	m_t(std::forward<Rhs>(rhs).m_t, ctor_const_overload() )
 		{}

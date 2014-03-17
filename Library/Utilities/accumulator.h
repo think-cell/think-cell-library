@@ -2,7 +2,7 @@
 
 #ifndef RANGE_PROPOSAL_BUILD_STANDALONE
 	// prevent wrong include order
-	#include "Library/ErrorReporting/_Assert.h"
+	#include "Library/ErrorReporting/assert_fwd.h"
 	#include "Library/Utilities/assign.h"
 	#include "Library/ErrorReporting/functors.h"
 #endif
@@ -13,7 +13,6 @@
 #include "Library/Utilities/casts.h"
 
 #include <boost/utility/enable_if.hpp>
-#include <boost/bind.hpp>
 
 #include <utility>
 
@@ -74,7 +73,7 @@ protected:
 	}
 
 public:
-	INHERIT_DEFCTOR(fundamental_base);
+	fundamental_base() {}
 	INHERIT_CTORS(fundamental_base, Base);
 };
 

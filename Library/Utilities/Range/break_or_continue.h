@@ -183,11 +183,11 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	public:
 		typedef break_or_continue result_type;
 		template< typename Func >
-		function( Func && func, typename std::enable_if< is_base_of< base_, typename remove_cvref< Func >::type >::value, unused_arg>::type=unused_arg() )
+		function( Func && func, typename std::enable_if< std::is_base_of< base_, typename std::decay< Func >::type >::value, unused_arg>::type=unused_arg() )
 			: base_( base_cast< base_ >( std::forward<Func>(func) ) )
 		{}
 		template< typename Func >
-		function( Func && func, typename std::enable_if< !is_base_of< base_, typename remove_cvref< Func >::type >::value && std::is_same<break_or_continue,typename std::result_of< Func( A0 ) >::type>::value, unused_arg>::type=unused_arg() )
+		function( Func && func, typename std::enable_if< !std::is_base_of< base_, typename std::decay< Func >::type >::value && std::is_same<break_or_continue,typename std::result_of< Func( A0 ) >::type>::value, unused_arg>::type=unused_arg() )
 			: base_( std::forward<Func>(func) )
 		{}
 		template< typename Func >
@@ -202,11 +202,11 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	public:
 		typedef break_or_continue result_type;
 		template< typename Func >
-		function( Func && func, typename std::enable_if< is_base_of< base_, typename remove_cvref< Func >::type >::value, unused_arg>::type=unused_arg() )
+		function( Func && func, typename std::enable_if< std::is_base_of< base_, typename std::decay< Func >::type >::value, unused_arg>::type=unused_arg() )
 			: base_( base_cast< base_ >( std::forward<Func>(func) ) )
 		{}
 		template< typename Func >
-		function( Func && func, typename std::enable_if< !is_base_of< base_, typename remove_cvref< Func >::type >::value && std::is_same<break_or_continue,typename std::result_of< Func( A0,A1,A2 ) >::type>::value, unused_arg>::type=unused_arg() )
+		function( Func && func, typename std::enable_if< !std::is_base_of< base_, typename std::decay< Func >::type >::value && std::is_same<break_or_continue,typename std::result_of< Func( A0,A1,A2 ) >::type>::value, unused_arg>::type=unused_arg() )
 			: base_( std::forward<Func>(func) )
 		{}
 		template< typename Func >

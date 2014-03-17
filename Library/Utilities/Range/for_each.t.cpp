@@ -174,18 +174,17 @@ UNITTESTDEF( for_each ) {
 //-----------------------------------------------------------------------------------------------------------------------------
 UNITTESTDEF( break_behavior ) {
 	using namespace RANGE_PROPOSAL_NAMESPACE;
-	using std::placeholders::_1;
 
 	TEST_init_hack(std::vector, int, exp, {1,2,3,4,5,6,7,8,9,10});
 
 	// call on various implicit ranges
-	for_each(std::bind(&iterate::generator_break_consumer_break, iterate(), _1), consumer_break(exp, 4));
-	for_each(std::bind(&iterate::generator_break_consumer_nobreak, iterate(), _1), consumer_nobreak(exp, 5, false));
-	for_each(std::bind(&iterate::generator_nobreak_consumer_nobreak, iterate(), _1), consumer_nobreak(exp, 6, false));
+	for_each(std::bind(&iterate::generator_break_consumer_break, iterate(), std::placeholders::_1), consumer_break(exp, 4));
+	for_each(std::bind(&iterate::generator_break_consumer_nobreak, iterate(), std::placeholders::_1), consumer_nobreak(exp, 5, false));
+	for_each(std::bind(&iterate::generator_nobreak_consumer_nobreak, iterate(), std::placeholders::_1), consumer_nobreak(exp, 6, false));
 
 	// these two are undefined (Todo: break compile with nice msg)
-	for_each(std::bind(&iterate::generator_nobreak_consumer_break_correct, iterate(), _1), all_called_mock(exp, 7));
-	for_each(std::bind(&iterate::generator_nobreak_consumer_break_incorrect, iterate(), _1), all_called_mock(exp, 8, false));
+	for_each(std::bind(&iterate::generator_nobreak_consumer_break_correct, iterate(), std::placeholders::_1), all_called_mock(exp, 7));
+	for_each(std::bind(&iterate::generator_nobreak_consumer_break_incorrect, iterate(), std::placeholders::_1), all_called_mock(exp, 8, false));
 }
 
 }

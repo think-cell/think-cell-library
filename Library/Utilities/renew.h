@@ -22,16 +22,27 @@ namespace tc {
 
 	template< typename T >
 	void renew(T& t) {
-		static_assert( !std::is_trivially_default_constructible<T>::value, "default initialization is noop" );
+		// This check is not strict enough. The following struct is !std::is_trivially_default_constructible,
+		// but ctor_default does not initialize n to 0, while ctor_value does:
+		//	struct Foo {
+		//		std::string n; // has user-defined default ctor
+		//		int n; // has no user-defined default ctor
+		//	};
+		static_assert( !std::is_trivially_default_constructible<T>::value, "You must decide between ctor_default and ctor_value!" );
 		tc::dtor(t);
-		new (std::addressof(t)) T; // default initialization http://en.cppreference.com/w/cpp/language/default_initialization
+		new (std::addressof(t)) T;
 	}
 
 	template< typename T >
-	void renew_zero(T& t) {
-		static_assert( std::is_trivially_default_constructible<T>::value, "zero initialization is the same as default initialization" );
+	void renew_default(T& t) {
 		tc::dtor(t);
-		new (std::addressof(t)) T(); // zero initialization http://en.cppreference.com/w/cpp/language/zero_initialization 
+		new (std::addressof(t)) T;
+	}
+
+	template< typename T >
+	void renew_value(T& t) {
+		tc::dtor(t);
+		new (std::addressof(t)) T();
 	}
 
 	#define PART1() \
@@ -69,5 +80,17 @@ namespace tc {
 		) ); \
 		tc::renew( *this, std::forward<S>(s) ); \
 		return *this; \
+	}
+
+#define ASSIGN_BY_SWAP(T) \
+	T& operator=( T other ) { \
+		swap( *this, other ); /*not boost::swap, which may be implemented in terms of move, which would be circular*/ \
+		return *this; \
+	} \
+	template< typename A > \
+	typename std::enable_if< !std::is_same< typename std::decay<A>::type, T >::value, \
+	T& >::type operator=( A && a ) { /*defining this case explicitly allows mapping operator= to explicit ctors*/ \
+		static_assert( !std::is_base_of< T, typename std::decay<A>::type >::value, "Slicing?"); \
+		return *this=T(std::forward<A>(a)); \
 	}
 

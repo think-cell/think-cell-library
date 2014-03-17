@@ -66,15 +66,15 @@ namespace {
 		//typedef std::vector< wrapped_long > WlList;        // works!
 		WlList getWlList() const { return m_list; } 
 	
-		typedef filter_range<decltype(&filter35), WlList> WlFilterdList;
+		typedef filter_adaptor<decltype(&filter35), WlList> WlFilterdList;
 		auto getWlFilterdList() const return_decltype ( tc::filter(getWlList(), &filter35) )
 
 		// This is were it gets wiered, as soon as you somehow use has_range_iterator<WlFilterdList> (here at class scope)
 		// things go crashing down, even though has_range_iterator<WlFilterdList> is perfectly fine one line later at funtion scope
 
-		typedef transform_range<decltype(&transf_times_100), WlFilterdList, true> WlFilterdTransformedList; STATIC_ASSERT(is_range_with_iterators<WlFilterdList>::value);
-		//typedef  transform_range<decltype(&transf_times_100), WlFilterdList, is_range_with_iterators<WlFilterdList>::value> WlFilterdTransformedList;
-		//typedef  transform_range<decltype(&transf_times_100), WlFilterdList> WlFilterdTransformedList;
+		typedef transform_adaptor<decltype(&transf_times_100), WlFilterdList, true> WlFilterdTransformedList; STATIC_ASSERT(is_range_with_iterators<WlFilterdList>::value);
+		//typedef  transform_adaptor<decltype(&transf_times_100), WlFilterdList, is_range_with_iterators<WlFilterdList>::value> WlFilterdTransformedList;
+		//typedef  transform_adaptor<decltype(&transf_times_100), WlFilterdList> WlFilterdTransformedList;
 		WlFilterdTransformedList getWlFilterdTransformedList() const {
 			STATIC_ASSERT(is_range_with_iterators<WlFilterdList>::value);
 			STATIC_ASSERT(is_range_with_iterators<WlFilterdTransformedList>::value);
@@ -166,7 +166,7 @@ struct outer {
 		m_in = tmp;
 	}
 
-	typedef tc::filter_range< filter_stub, tc::transform_range< free_id, std::vector<inner> const &, true>, true > TRange;
+	typedef tc::filter_adaptor< filter_stub, tc::transform_adaptor< free_id, std::vector<inner> const &, true>, true > TRange;
 	TRange trans_range() {
 		return tc::filter( tc::transform(make_const(m_in), free_id()), filter_stub() );
 	}

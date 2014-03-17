@@ -57,12 +57,12 @@ UNITTESTDEF( const_range ) {
 // filter constness tests
 
 template <typename Rng, typename Func>
-void test_const_filter(filter_range<Func, Rng> const& f) {
+void test_const_filter(filter_adaptor<Func, Rng> const& f) {
 
-	//filter_range<Func, Rng> non_const_should_fail(f); // do not add ctor_const_overload() here, you would be lying
-//	filter_range<Func, Rng> const const_filter(f, ctor_const_overload());
-//	filter_range<Func, Rng const> filter_of_const_rng(f, ctor_const_overload());
-	//filter_range<Func, Rng const> filter_of_const_rng2(f); // this should work without ctor_const_overload()
+	//filter_adaptor<Func, Rng> non_const_should_fail(f); // do not add ctor_const_overload() here, you would be lying
+//	filter_adaptor<Func, Rng> const const_filter(f, ctor_const_overload());
+//	filter_adaptor<Func, Rng const> filter_of_const_rng(f, ctor_const_overload());
+	//filter_adaptor<Func, Rng const> filter_of_const_rng2(f); // this should work without ctor_const_overload()
 }
 
 UNITTESTDEF( const_filter_test ) {
@@ -114,12 +114,12 @@ UNITTESTDEF( filter_filter_const_move_test ) {
 // transform constness tests
 
 template <typename Rng, typename Func>
-void test_const_transform(transform_range<Func, Rng> const& t) {
+void test_const_transform(transform_adaptor<Func, Rng> const& t) {
 
-	//transform_range<Func, Rng> non_const_should_fail(t); // do not add ctor_const_overload() here, you would be lying
-//	transform_range<Func, Rng> const const_transform(t, ctor_const_overload());
-//	transform_range<Func, Rng const> transform_of_const_rng(t, ctor_const_overload());
-	//transform_range<Func, Rng const> transform_of_const_rng2(t); // this should work without ctor_const_overload()
+	//transform_adaptor<Func, Rng> non_const_should_fail(t); // do not add ctor_const_overload() here, you would be lying
+//	transform_adaptor<Func, Rng> const const_transform(t, ctor_const_overload());
+//	transform_adaptor<Func, Rng const> transform_of_const_rng(t, ctor_const_overload());
+	//transform_adaptor<Func, Rng const> transform_of_const_rng2(t); // this should work without ctor_const_overload()
 }
 
 UNITTESTDEF( const_transform_test ) {

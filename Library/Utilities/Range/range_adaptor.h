@@ -27,8 +27,179 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	template< typename Rng >
 	struct make_sub_range_result;
 
-	namespace range_adaptor_impl {
+	namespace range_iterator_from_index_impl {
+		class empty_chain {};
 
+		template<
+			typename Derived,
+			typename Index,
+			typename Traversal,
+			typename Value=boost::use_default,
+			typename Chain=empty_chain
+		>
+		struct range_iterator_from_index : public Chain {
+			static_assert( boost::detail::is_iterator_traversal<Traversal>::value, "" );
+			////////////////////////////////////////////////////////
+			// simulate iterator interface on top of index interface
+
+			typedef Index index;
+
+		private:
+			template< typename DerivedConst >
+			struct delayed_difference_type {
+				typedef decltype( std::declval<DerivedConst const>().distance_to_index(std::declval<index>(),std::declval<index>()) ) type;
+			};
+			template< typename DerivedConst >
+			struct range_traits {
+			public:
+				typedef decltype( std::declval<DerivedConst>().dereference_index(std::declval<index>()) ) reference;
+
+				typedef typename boost::mpl::if_<
+					std::is_same<Value,boost::use_default>
+					, typename std::decay<reference>::type
+					, Value
+				>::type value_type;
+
+				typedef typename boost::mpl::eval_if< std::is_convertible< Traversal, boost::random_access_traversal_tag >,
+					delayed_difference_type<DerivedConst>,
+					std::common_type</*default of iterator_facade, needed to compile interfaces relying on difference_tye:*/std::ptrdiff_t>
+				>::type difference_type;
+			};
+		public:
+			template<typename DerivedConst>
+			class common_iterator
+			: public boost::iterator_facade<
+				common_iterator<DerivedConst>
+				, typename range_traits<DerivedConst>::value_type
+				, Traversal
+				, typename range_traits<DerivedConst>::reference
+				, typename range_traits<DerivedConst>::difference_type
+				>
+			{
+			private:
+				typedef boost::iterator_facade<
+					common_iterator<DerivedConst>
+					, typename range_traits<DerivedConst>::value_type
+					, Traversal
+					, typename range_traits<DerivedConst>::reference
+					, typename range_traits<DerivedConst>::difference_type
+				> base_;
+				friend class boost::iterator_core_access;
+				friend class common_iterator;
+				friend struct range_iterator_from_index;
+
+				DerivedConst* m_pidxrng;
+				index m_idx;
+
+				struct enabler {};
+
+			public:
+				typedef typename base_::reference reference;
+				typedef typename base_::difference_type difference_type;
+
+				common_iterator()
+					: m_pidxrng(nullptr)
+					, m_idx()
+				{}
+
+				template<typename OtherDerivedConst>
+				common_iterator(
+					common_iterator<OtherDerivedConst> const& other
+				, typename boost::enable_if<
+						std::is_convertible<OtherDerivedConst*,DerivedConst*>
+					, enabler
+					>::type = enabler()
+				)
+				: m_pidxrng(other.m_pidxrng)
+				, m_idx(other.m_idx) {}
+
+				common_iterator(DerivedConst* pidxrng, index idx)
+				: m_pidxrng(pidxrng)
+				, m_idx(tc_move(idx)) {}
+
+				reference dereference() const {
+					return VERIFY(m_pidxrng)->dereference_index(m_idx);
+				}
+
+				template<typename OtherDerivedConst>
+				bool equal(common_iterator<OtherDerivedConst> const& itRhs) const {
+					return VERIFYEQUAL(VERIFY(m_pidxrng),itRhs.m_pidxrng)->equal_index(m_idx,itRhs.m_idx);
+				}
+
+				void increment() {
+					VERIFY(m_pidxrng)->increment_index(m_idx);
+				}
+
+				void decrement() {
+					VERIFY(m_pidxrng)->decrement_index(m_idx);
+				}
+
+				void advance(difference_type d) {
+					VERIFY(m_pidxrng)->advance_index(m_idx,d);
+				}
+
+				template<typename OtherDerivedConst>
+				difference_type distance_to(common_iterator<OtherDerivedConst> const& itRhs) const {
+					return VERIFYEQUAL(VERIFY(m_pidxrng),itRhs.m_pidxrng)->distance_to_index(m_idx,itRhs.m_idx);
+				}
+
+				friend common_iterator middle_point( common_iterator const& itBegin, common_iterator const& itEnd ) {
+					common_iterator it=itBegin;
+					VERIFYEQUAL(VERIFY(itBegin.m_pidxrng),itEnd.m_pidxrng)->middle_point(it.m_idx,itEnd.m_idx);
+					return it;
+				}
+
+				auto base() const
+					return_decltype( make_const(VERIFY(m_pidxrng))->base_range().make_iterator(m_idx) )
+
+				// sub_range from iterator pair
+				friend typename tc::make_sub_range_result< DerivedConst & >::type make_iterator_range_impl( common_iterator itBegin, common_iterator itEnd ) {
+					return typename tc::make_sub_range_result< DerivedConst & >::type( *VERIFYEQUAL(VERIFY(itBegin.m_pidxrng),itEnd.m_pidxrng), tc_move(itBegin).m_idx, tc_move(itEnd).m_idx );
+				}
+			};
+
+			template<typename DerivedConst>
+			static index const& iterator2index( common_iterator<DerivedConst> const& it ) {
+				return it.m_idx;
+			}
+
+			typedef common_iterator< Derived >			iterator;
+			typedef common_iterator< Derived const >	const_iterator;
+
+			const_iterator make_iterator( index idx ) const {
+				return const_iterator(tc::derived_cast<Derived>(this),tc_move(idx));
+			}
+
+			const_iterator begin() const {
+				return make_iterator(tc::derived_cast<Derived>(this)->begin_index());
+			}
+
+			const_iterator end() const {
+				return make_iterator(tc::derived_cast<Derived>(this)->end_index());
+			}
+
+			iterator make_iterator( index idx ) {
+				return iterator(tc::derived_cast<Derived>(this),tc_move(idx));
+			}
+
+			iterator begin() {
+				return make_iterator(tc::derived_cast<Derived>(this)->begin_index());
+			}
+
+			iterator end() {
+				return make_iterator(tc::derived_cast<Derived>(this)->end_index());
+			}
+
+			bool empty() const {
+				return tc::derived_cast<Derived>(this)->at_end_index(
+					tc::derived_cast<Derived>(this)->begin_index()
+				);
+			}
+		};
+	}
+	using range_iterator_from_index_impl::range_iterator_from_index;
+
+	namespace range_adaptor_impl {
 		class range_adaptor_access {
 		public:
 	#define PART1() \
@@ -54,7 +225,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			, typename Traversal=boost::use_default
 			, bool HasIterator=is_range_with_iterators< Rng >::value
 		>
-		class range_adaptor;
+		struct range_adaptor;
 
 		//-------------------------------------------------------------------------------------------------------------------------
 		// First generator ranges
@@ -80,7 +251,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			, typename ValueType
 			, typename Traversal
 		>
-		class range_adaptor<
+		struct range_adaptor<
 			Derived 
 			, Rng
 			, Aggregate
@@ -90,6 +261,9 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		> {
 			reference_or_value< typename index_range<Rng>::type > m_baserng;
 		protected:
+			// workaround for clang compiler bug http://llvm.org/bugs/show_bug.cgi?id=19140
+			friend struct range_adaptor<Derived, Rng, Aggregate, ValueType, Traversal, true>;
+				
 			typedef typename std::remove_reference< typename index_range<Rng>::type >::type BaseRange;
 
 			// range_adaptor<Rng &>( range_adaptor<Rng &> const& )
@@ -230,14 +404,31 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			, typename ValueType
 			, typename Traversal
 		>
-		class range_adaptor<
+		struct range_adaptor<
 			Derived 
 			, Rng
 			, Aggregate
 			, ValueType
 			, Traversal
 			, true
-		> : public range_adaptor<Derived,Rng,Aggregate,ValueType,Traversal,false> {
+		>
+		: range_adaptor<Derived,Rng,Aggregate,ValueType,Traversal,false>
+		, range_iterator_from_index<
+			Derived,
+			typename range_adaptor<Derived,Rng,Aggregate,ValueType,Traversal,false>::BaseRange::index,
+			typename boost::range_detail::demote_iterator_traversal_tag<
+				typename boost::mpl::if_< std::is_same<Traversal,boost::use_default>
+					, boost::random_access_traversal_tag
+					, Traversal
+				>::type,
+				typename boost::iterator_traversal<
+					typename boost::range_iterator<typename std::remove_reference<Rng>::type>::type
+				>::type
+			>::type,
+			ValueType
+		>
+		{
+		private:
 			typedef range_adaptor<Derived,Rng,Aggregate,ValueType,Traversal,false> base_;
 		protected:
 			using typename base_::BaseRange;
@@ -304,186 +495,6 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 			void middle_point( index & idxBegin, index const& idxEnd ) const {
 				this->base_range().middle_point(idxBegin,idxEnd);
-			}
-
-			////////////////////////////////////////////////////////
-			// simulate iterator interface on top of index interface
-
-		private:
-			template< typename DerivedConst >
-			struct delayed_difference_type {
-				typedef decltype( std::declval<DerivedConst const>().distance_to_index(std::declval<typename DerivedConst::index>(),std::declval<typename DerivedConst::index>()) ) type;
-			};
-			template< typename DerivedConst >
-			struct range_traits {
-			private:
-				typedef typename boost::mpl::if_<
-					std::is_const<DerivedConst>
-					, typename std::remove_reference<Rng>::type const
-					, typename std::remove_reference<Rng>::type
-				>::type RngConst;
-				typedef typename boost::mpl::if_< std::is_same<Traversal,boost::use_default>
-					, boost::random_access_traversal_tag
-					, Traversal
-				>::type traversal_of_adaptor;
-				static_assert( boost::detail::is_iterator_traversal<traversal_of_adaptor>::value, "" );
-				typedef typename boost::iterator_traversal<
-					typename boost::range_iterator<RngConst>::type
-				>::type traversal_of_base;
-				static_assert( boost::detail::is_iterator_traversal<traversal_of_base>::value, "" );
-			public:
-				typedef typename boost::range_detail::demote_iterator_traversal_tag<
-					traversal_of_adaptor,
-					traversal_of_base
-				>::type traversal;
-				static_assert( boost::detail::is_iterator_traversal<traversal>::value, "" );
-
-				typedef decltype( std::declval<DerivedConst>().dereference_index(std::declval<typename DerivedConst::index>()) ) reference;
-
-				typedef typename boost::mpl::if_<
-					std::is_same<ValueType,boost::use_default>
-					, typename boost::mpl::if_<
-						// reference unchanged -> value_type also unchanged
-						std::is_same<typename boost::range_reference< RngConst >::type,reference>
-						, typename boost::range_value< RngConst >::type
-						, typename std::decay<reference>::type
-					>::type
-					, ValueType
-				>::type value_type;
-
-				typedef typename boost::mpl::eval_if< std::is_convertible< traversal, boost::random_access_traversal_tag >,
-					delayed_difference_type<DerivedConst>,
-					std::common_type</*default of iterator_facade, needed to compile interfaces relying on difference_tye:*/std::ptrdiff_t>
-				>::type difference_type;
-			};
-		public:
-			template<typename DerivedConst>
-			class common_iterator
-			: public boost::iterator_facade<
-				common_iterator<DerivedConst>
-				, typename range_traits<DerivedConst>::value_type
-				, typename range_traits<DerivedConst>::traversal
-				, typename range_traits<DerivedConst>::reference
-				, typename range_traits<DerivedConst>::difference_type
-				>
-			{
-			private:
-				typedef boost::iterator_facade<
-					common_iterator<DerivedConst>
-					, typename range_traits<DerivedConst>::value_type
-					, typename range_traits<DerivedConst>::traversal
-					, typename range_traits<DerivedConst>::reference
-					, typename range_traits<DerivedConst>::difference_type
-				> base_;
-				friend class boost::iterator_core_access;
-				friend class common_iterator;
-				friend class range_adaptor;
-
-				DerivedConst* m_pidxrng;
-				typename DerivedConst::index m_idx;
-
-				struct enabler {};
-
-			public:
-				typedef typename base_::reference reference;
-				typedef typename base_::difference_type difference_type;
-
-				common_iterator()
-					: m_pidxrng(nullptr)
-					, m_idx()
-				{}
-
-				template<typename OtherDerivedConst>
-				common_iterator(
-					common_iterator<OtherDerivedConst> const& other
-				, typename boost::enable_if<
-						std::is_convertible<OtherDerivedConst*,DerivedConst*>
-					, enabler
-					>::type = enabler()
-				)
-				: m_pidxrng(other.m_pidxrng)
-				, m_idx(other.m_idx) {}
-
-				common_iterator(DerivedConst* pidxrng, typename DerivedConst::index idx)
-				: m_pidxrng(pidxrng)
-				, m_idx(tc_move(idx)) {}
-
-				reference dereference() const {
-					return VERIFY(m_pidxrng)->dereference_index(m_idx);
-				}
-
-				template<typename OtherDerivedConst>
-				bool equal(common_iterator<OtherDerivedConst> const& itRhs) const {
-					return VERIFYEQUAL(VERIFY(m_pidxrng),itRhs.m_pidxrng)->equal_index(m_idx,itRhs.m_idx);
-				}
-
-				void increment() {
-					VERIFY(m_pidxrng)->increment_index(m_idx);
-				}
-
-				void decrement() {
-					VERIFY(m_pidxrng)->decrement_index(m_idx);
-				}
-
-				void advance(difference_type d) {
-					VERIFY(m_pidxrng)->advance_index(m_idx,d);
-				}
-
-				template<typename OtherDerivedConst>
-				difference_type distance_to(common_iterator<OtherDerivedConst> const& itRhs) const {
-					return VERIFYEQUAL(VERIFY(m_pidxrng),itRhs.m_pidxrng)->distance_to_index(m_idx,itRhs.m_idx);
-				}
-
-				friend common_iterator middle_point( common_iterator const& itBegin, common_iterator const& itEnd ) {
-					common_iterator it=itBegin;
-					VERIFYEQUAL(VERIFY(itBegin.m_pidxrng),itEnd.m_pidxrng)->middle_point(it.m_idx,itEnd.m_idx);
-					return it;
-				}
-
-				auto base() const
-					return_decltype( make_const(VERIFY(m_pidxrng))->base_range().make_iterator(m_idx) )
-
-				// sub_range from iterator pair
-				friend typename tc::make_sub_range_result< DerivedConst & >::type make_iterator_range_impl( common_iterator itBegin, common_iterator itEnd ) {
-					return typename tc::make_sub_range_result< DerivedConst & >::type( *VERIFYEQUAL(VERIFY(itBegin.m_pidxrng),itEnd.m_pidxrng), tc_move(itBegin).m_idx, tc_move(itEnd).m_idx );
-				}
-			};
-
-			template<typename DerivedConst>
-			static auto iterator2index( common_iterator<DerivedConst> const& it )
-				decltype_return_ref( it.m_idx )
-
-			typedef common_iterator< Derived >			iterator;
-			typedef common_iterator< Derived const >	const_iterator;
-
-			const_iterator make_iterator( index idx ) const {
-				return const_iterator(tc::derived_cast<Derived>(this),tc_move(idx));
-			}
-
-			const_iterator begin() const {
-				return make_iterator(tc::derived_cast<Derived>(this)->begin_index());
-			}
-
-			const_iterator end() const {
-				return make_iterator(tc::derived_cast<Derived>(this)->end_index());
-			}
-
-			iterator make_iterator( index idx ) {
-				return iterator(tc::derived_cast<Derived>(this),tc_move(idx));
-			}
-
-			iterator begin() {
-				return make_iterator(tc::derived_cast<Derived>(this)->begin_index());
-			}
-
-			iterator end() {
-				return make_iterator(tc::derived_cast<Derived>(this)->end_index());
-			}
-
-			bool empty() const {
-				return tc::derived_cast<Derived>(this)->at_end_index(
-					tc::derived_cast<Derived>(this)->begin_index()
-				);
 			}
 		};
 	}

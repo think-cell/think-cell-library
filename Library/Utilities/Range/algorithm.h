@@ -92,7 +92,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			--it;
 			if( pred(*it) ) return range_return<Rng,re>::pack(it,std::forward<Rng>(rng));
 		}
-		return range_return<Rng,re>::pack_end(std::forward<Rng>(rng));
+		return range_return<Rng,re>::pack_singleton(std::forward<Rng>(rng));
 	}
 
 	template< typename Rng, typename Pred >
@@ -133,38 +133,30 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		return cont;
 	}
 
+	namespace cont_assign_impl {
+		template< typename T, std::size_t N >
+		struct assign {
+			assign(T (&at)[N])
+			: m_at(at), m_i(0) {}
+			
+			template< typename Rhs >
+			void operator()( Rhs && rhs ) {
+				m_at[m_i]=std::forward<Rhs>(rhs);
+				++m_i;
+			}
+
+			~assign(){
+				_ASSERTEQUAL( m_i, N );
+			}
+		private:
+			T (&m_at)[N];
+			std::size_t m_i;
+		};
+	}
+
 	template< typename T, std::size_t N, typename Rng >
 	void cont_assign(T (&at)[N], Rng && rng) {
-		std::size_t i=0;
-		tc::for_each( std::forward<Rng>(rng), [&]( typename boost::range_reference< typename std::remove_reference<Rng>::type >::type t ) {
-			_ASSERT( i<N );
-			at[i]=tc_move_if_owned(t);
-			++i;
-		} );
-		_ASSERTEQUAL( i, N );
-	}
-
-	template< typename Cont >
-	Cont& head_inplace( Cont & cont, typename boost::range_iterator< typename std::remove_reference<Cont>::type >::type it ) {
-		cont.erase( it, cont.end() );
-		return cont;
-	}
-
-	template< typename Cont >
-	Cont& head_inplace( Cont& cont, typename boost::range_size< typename std::remove_reference<Cont>::type >::type n ) {
-		auto it=cont.begin();
-		_ASSERT( n <= boost::implicit_cast< typename boost::range_size< typename std::remove_reference<Cont>::type >::type >(boost::distance(cont)) );
-		std::advance( it, n );
-		tc::head_inplace( cont, it );
-		return cont;
-	}
-
-	template< typename Cont >
-	Cont& truncate_inplace( Cont& cont, typename boost::range_size< typename std::remove_reference<Cont>::type >::type n ) {
-		auto it=cont.begin();
-		advance_forward_bounded( it, n, cont.end() );
-		tc::head_inplace( cont, it );
-		return cont;
+		tc::for_each( std::forward<Rng>(rng), std::ref(make_lvalue(cont_assign_impl::assign<T,N>(at))) );
 	}
 
 	//	renew overload and cont_resize together guarantee that for N element insertions in a sequence of any of
@@ -776,6 +768,16 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	Cont && sort_unique_erase(Cont && cont) {
 		return tc::sort_unique_erase( std::forward<Cont>(cont), fn_less() );
 	}
+
+	template< typename Rng >
+	auto make_vector( Rng && rng ) return_ctor(
+		std::vector< typename boost::range_value< typename std::remove_reference<Rng>::type >::type >, (boost::begin(rng),boost::end(rng))
+	)
+
+	template< typename Rng >
+	auto make_basic_string( Rng && rng ) return_ctor(
+		std::basic_string< typename boost::range_value< typename std::remove_reference<Rng>::type >::type >, (boost::begin(rng),boost::end(rng))
+	)
 
 	DEFINE_FN( sort_unique_erase );
 }

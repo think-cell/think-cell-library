@@ -33,16 +33,13 @@
 #define MAYBE_STRIP_PARENS_2(x) APPLY(MAYBE_STRIP_PARENS_2_I, x) 
 #define MAYBE_STRIP_PARENS_2_I(...) __VA_ARGS__ 
 
-#define INHERIT_DEFCTOR( TDerived ) \
-	TDerived() {}
-
 #define MAX_INHERIT_CTOR_PARAMS 10
 
 #define INHERIT_CTORS_FORWARD_ARG_(z, n, text) std::forward< T ## n >( t ## n )
 
 #define INHERIT_CTORS_CTOR_(z, n, seq_derived_and_base)                                                                       \
 	template<BOOST_PP_ENUM_PARAMS(BOOST_PP_INC(n), typename T) >                                                                 \
-	BOOST_PP_IF(n,BOOST_PP_EMPTY(),explicit)                                                                                  \
+	explicit                                                                                  \
 	/*TDerived*/STRIP_PARENS( BOOST_PP_SEQ_ELEM(0, seq_derived_and_base) )                                                    \
 	(BOOST_PP_ENUM_BINARY_PARAMS(BOOST_PP_INC(n), T, && t) ) :                                                                \
 	/*TBase*/ STRIP_PARENS ( BOOST_PP_SEQ_ELEM(1, seq_derived_and_base) )                                                     \
@@ -53,5 +50,86 @@
 //   template< typename T0, typename T1 > TDerived( T0&& t0, T1&& t1 ): TBase( std::forward<T0>(t0), std::forward<T1>(t1) ) {};
 //   ...
 // change MAX_INHERIT_CTOR_PARAMS if you need to forward more parameters
-#define INHERIT_CTORS( TDerived, TBase ) BOOST_PP_REPEAT(MAX_INHERIT_CTOR_PARAMS, INHERIT_CTORS_CTOR_, ((TDerived))((TBase)))
+#define INHERIT_CTORS( TDerived, TBase ) \
+	template< typename T0 > \
+	TDerived( T0 && t0, typename std::enable_if< \
+		( std::is_same< TBase, typename std::decay<T0>::type >::value || \
+		!std::is_base_of< TBase, typename std::decay<T0>::type >::value ) && \
+		std::is_convertible< T0 &&, TBase >::value \
+	, unused_arg >::type=unused_arg() ) \
+	:	TBase( std::forward<T0>(t0) ) {} \
+	template< typename T0 > \
+	explicit TDerived( T0 && t0, typename std::enable_if< \
+		( std::is_same< TBase, typename std::decay<T0>::type >::value || \
+		!std::is_base_of< TBase, typename std::decay<T0>::type >::value ) && \
+		!std::is_convertible< T0 &&, TBase >::value \
+	, unused_arg >::type=unused_arg() ) \
+	:	TBase( std::forward<T0>(t0) ) {} \
+	template< typename T0, typename T1 > \
+	explicit TDerived( T0 && t0, T1 && t1 ) \
+	:	TBase( std::forward<T0>(t0),std::forward<T1>(t1) ) {} \
+	template< typename T0, typename T1, typename T2 > \
+	explicit TDerived( T0 && t0, T1 && t1, T2 && t2 ) \
+	:	TBase( std::forward<T0>(t0),std::forward<T1>(t1),std::forward<T2>(t2) ) {} \
+	template< typename T0, typename T1, typename T2, typename T3 > \
+	explicit TDerived( T0 && t0, T1 && t1, T2 && t2, T3 && t3 ) \
+	:	TBase( std::forward<T0>(t0),std::forward<T1>(t1),std::forward<T2>(t2),std::forward<T3>(t3) ) {} \
+	template< typename T0, typename T1, typename T2, typename T3, typename T4 > \
+	explicit TDerived( T0 && t0, T1 && t1, T2 && t2, T3 && t3, T4 && t4 ) \
+	:	TBase( std::forward<T0>(t0),std::forward<T1>(t1),std::forward<T2>(t2),std::forward<T3>(t3),std::forward<T4>(t4) ) {} \
+	template< typename T0, typename T1, typename T2, typename T3, typename T4, typename T5 > \
+	explicit TDerived( T0 && t0, T1 && t1, T2 && t2, T3 && t3, T4 && t4, T5 && t5 ) \
+	:	TBase( std::forward<T0>(t0),std::forward<T1>(t1),std::forward<T2>(t2),std::forward<T3>(t3),std::forward<T4>(t4),std::forward<T5>(t5) ) {} \
+	template< typename T0, typename T1, typename T2, typename T3, typename T4, typename T5, typename T6 > \
+	explicit TDerived( T0 && t0, T1 && t1, T2 && t2, T3 && t3, T4 && t4, T5 && t5, T6 && t6 ) \
+	:	TBase( std::forward<T0>(t0),std::forward<T1>(t1),std::forward<T2>(t2),std::forward<T3>(t3),std::forward<T4>(t4),std::forward<T5>(t5),std::forward<T6>(t6) ) {}
 
+#define INHERIT_ASSIGN( TDerived, TBase ) \
+	template<typename T> \
+	typename std::enable_if< \
+		( std::is_same< TBase, typename std::decay<T>::type >::value || \
+		!std::is_base_of< TBase, typename std::decay<T>::type >::value ) \
+		&& sizeof(TBase)==sizeof(TDerived) \
+	, TDerived& >::type operator=( T && t ){ \
+		TBase::operator=( std::forward<T>(t) ); \
+		return *this; \
+	}
+
+#define DEFAULT_MOVE_CTOR( TDerived, TBase ) \
+	public: \
+		TDerived( TDerived && t ) \
+		:	TBase(tc::base_cast<TBase>(tc_move(t))) { \
+			static_assert(sizeof(TDerived)==sizeof(TBase),"move other members?"); \
+			static_assert( !std::is_base_of< tc::nonmovable, TDerived >::value, "nonmovable" ); \
+		} \
+	private: \
+		TDerived( TDerived const& t ); \
+		TDerived& operator=( TDerived && t ); \
+		TDerived& operator=( TDerived const& t ); \
+	public:
+
+#define DEFAULT_MOVE_CTOR_AND_ASSIGN( TDerived, TBase ) \
+	public: \
+		TDerived( TDerived && t ) \
+		:	TBase(tc::base_cast<TBase>(tc_move(t))) { \
+			static_assert(sizeof(TDerived)==sizeof(TBase),"move other members?"); \
+			static_assert( !std::is_base_of< tc::nonmovable, TDerived >::value, "nonmovable" ); \
+		} \
+		TDerived& operator=( TDerived && t ) { \
+			static_assert(sizeof(TDerived)==sizeof(TBase),"move-assign other members?"); \
+			static_assert( !std::is_base_of< tc::nonmovable, TDerived >::value, "nonmovable" ); \
+			TBase::operator=(tc::base_cast<TBase>(tc_move(t))); \
+			return *this; \
+		} \
+	private: \
+		TDerived( TDerived const& t ); \
+		TDerived& operator=( TDerived const& t ); \
+	public:
+
+#define NONMOVABLE( TDerived, TBase ) \
+	private: \
+		TDerived( TDerived && t ); \
+		TDerived( TDerived const& t ); \
+		TDerived& operator=( TDerived && t ); \
+		TDerived& operator=( TDerived const& t ); \
+	public:

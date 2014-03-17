@@ -51,9 +51,9 @@ set(Ranges
       index_range.h
       range_adaptor.h
       sub_range.h
-      filter_range.h
+      filter_adaptor.h
       transform.h
-      transform_range.h
+      transform_adaptor.h
       for_each.h
       equal.h
       is_ordered.h

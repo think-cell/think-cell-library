@@ -50,21 +50,21 @@
 #define DEFINE_MEM_FN_AUTO_(z, n, memfn) \
 	template< typename O, BOOST_PP_ENUM_PARAMS(BOOST_PP_INC(n), typename __A) > \
 	auto operator()( O && o, BOOST_PP_ENUM_BINARY_PARAMS(BOOST_PP_INC(n), __A, && __a) ) const \
-		enable_if_decltype_return( boost::has_dereference<O>::value, std::forward<O>(o)->memfn( BOOST_PP_ENUM(BOOST_PP_INC(n), DEFINE_FUNCTOR_FORWARD_ARG_, _) ) ) \
+		enable_if_return_decltype( boost::has_dereference<O>::value, std::forward<O>(o)->memfn( BOOST_PP_ENUM(BOOST_PP_INC(n), DEFINE_FUNCTOR_FORWARD_ARG_, _) ) ) \
 	template< typename O, BOOST_PP_ENUM_PARAMS(BOOST_PP_INC(n), typename __A) > \
 	auto operator()( O && o, BOOST_PP_ENUM_BINARY_PARAMS(BOOST_PP_INC(n), __A, && __a) ) const \
-		enable_if_decltype_return( !boost::has_dereference<O>::value, std::forward<O>(o).memfn( BOOST_PP_ENUM(BOOST_PP_INC(n), DEFINE_FUNCTOR_FORWARD_ARG_, _) ) )
+		enable_if_return_decltype( !boost::has_dereference<O>::value, std::forward<O>(o).memfn( BOOST_PP_ENUM(BOOST_PP_INC(n), DEFINE_FUNCTOR_FORWARD_ARG_, _) ) )
 
 #define DEFINE_MEM_FN_AUTO_BODY_( memfn ) \
-	template< typename O > auto operator()( O && o ) const enable_if_decltype_return( boost::has_dereference<O>::value, std::forward<O>(o)->memfn()) \
-	template< typename O > auto operator()( O && o ) const enable_if_decltype_return( !boost::has_dereference<O>::value, std::forward<O>(o).memfn()) \
+	template< typename O > auto operator()( O && o ) const enable_if_return_decltype( boost::has_dereference<O>::value, std::forward<O>(o)->memfn()) \
+	template< typename O > auto operator()( O && o ) const enable_if_return_decltype( !boost::has_dereference<O>::value, std::forward<O>(o).memfn()) \
 	BOOST_PP_REPEAT( MAX_DEFINE_FUNCTOR_PARAMS, DEFINE_MEM_FN_AUTO_, memfn )
 
 #define DEFINE_FN( func ) \
 	DEFINE_FN2( func, fn_ ## func ) \
 	struct dot_member_ ## func { \
-		template< typename O > auto operator()( O & o ) const decltype_return_ref( o.func ) \
-		template< typename O > auto operator()( O const& o ) const decltype_return_ref( o.func ) \
+		template< typename O > auto operator()( O & o ) const return_decltype_ref( o.func ) \
+		template< typename O > auto operator()( O const& o ) const return_decltype_ref( o.func ) \
 	}; \
 	struct dot_mem_fn_ ## func { \
 		DEFINE_MEM_FN_BODY_( .func ) \

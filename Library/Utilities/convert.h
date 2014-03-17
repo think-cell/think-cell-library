@@ -1,15 +1,15 @@
 #pragma once
 
-#include <type_traits>
-#include <string>
-#include <vector> 
+#include "Library/Utilities/Range/transform.h"
 
 #include <boost/utility/enable_if.hpp>
 #include <boost/mpl/or.hpp>
 #include <boost/mpl/not.hpp>
 #include <boost/mpl/and.hpp>
 
-#include "Library/Utilities/Range/transform.h"
+#include <type_traits>
+#include <string>
+#include <vector> 
 
 //////////////////////////////////////////////////////////////////
 // generic initialization and assignment between different types
@@ -271,7 +271,7 @@ template<typename _Elem, typename RngValue>
 struct SStringRangeConverter;
 
 // if this fails to compile you are probably missing 
-// Library/Utilities/Range/transform_range.h or _Str.h 
+// Library/Utilities/Range/transform_adaptor.h or _Str.h 
 // in your TU do not add them here, it would create a cycle in the includes
 
 template<typename TContainer>

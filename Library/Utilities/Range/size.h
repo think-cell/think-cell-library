@@ -107,22 +107,28 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		operator_size_proxy( % )
 
 	template<typename Rng>
-	auto size(Rng const& rng) enable_if_decltype_return( has_mem_fn_size< typename remove_cvref<Rng>::type >::value,
-		make_size_proxy( rng.size() ) )
+	auto size(Rng const& rng) enable_if_return_decltype(
+		has_mem_fn_size< typename std::decay<Rng>::type >::value,
+		make_size_proxy( rng.size() )
+	)
 
 	template<typename Rng>
-	auto size(Rng const& rng) enable_if_decltype_return( !has_mem_fn_size< typename remove_cvref<Rng>::type >::value && !std::is_array<typename remove_cvref<Rng>::type>::value,
-		make_size_proxy( boost::size(rng) ) )
+	auto size(Rng const& rng) enable_if_return_decltype(
+		!has_mem_fn_size< typename std::decay<Rng>::type >::value && !std::is_pointer<typename std::decay<Rng>::type>::value,
+		make_size_proxy( boost::size(rng) )
+	)
 
 	template<typename T>
-	auto size(T * pt ) return_decltype(
-		make_size_proxy( strlen(pt) ) )
+	auto size(T * pt) enable_if_return_decltype(
+		tc::is_char< T >::value,
+		make_size_proxy( strlen(pt) )
+	)
 
 	template<typename T, std::size_t N>
-	auto size(T (&)[N])->decltype( make_size_proxy(N) ) {
-		static_assert( !is_char<T>::value, "" ); // zero-terminated pointer, zero-terminated array or plain array? be specific
-		return make_size_proxy(N);
-	}
+	auto size(T (&)[N]) enable_if_return_decltype(
+		!tc::is_char< T >::value,
+		make_size_proxy(N)
+	)
 
 }
 

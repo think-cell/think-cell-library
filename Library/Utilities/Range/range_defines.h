@@ -3,14 +3,10 @@
 #ifndef RANGE_PROPOSAL_BUILD_STANDALONE
 	#define RANGE_PROPOSAL_NAMESPACE tc
 
-	#include "Library/ErrorReporting/_Assert.h"
+	#include "Library/ErrorReporting/assert_fwd.h"
 #else
 	#define RANGE_PROPOSAL_NAMESPACE tc   // Todo: make this work with different names
 	
-	// standalone replacements for _Assert.h
-	#include "Library/ErrorReporting/tc_move.h"
-	#include "Library/ErrorReporting/make_lvalue.h"
-
 	#ifndef _ASSERT
 		#include <cassert>
 		#define _ASSERT(...) assert((__VA_ARGS__))
@@ -65,8 +61,6 @@
 #else // this is currently MSVC
 	#define THIS_IN_DECLTYPE               // MSVC doesn't allow this in a decltype() context (but should)
 #endif
-
-#include "Library/Utilities/decltype_return.h"
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // STATIC_ASSERT_OVERLOAD_NOT_SELECTED

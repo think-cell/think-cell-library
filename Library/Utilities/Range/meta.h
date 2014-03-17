@@ -4,7 +4,6 @@
 #include "Library/Utilities/remove_cvref.h"
 
 #include <boost/range/has_range_iterator.hpp>
-#include <boost/range/iterator_range.hpp>
 #include <boost/range/value_type.hpp>
 #include <boost/mpl/or.hpp>
 #include <boost/mpl/not.hpp>
@@ -83,8 +82,18 @@ namespace boost {
 		struct range_mutable_iterator<xchar[N]> { \
 			typedef xchar* type; \
 		}; \
+		/* support array-of-unknown-bounds incomplete type */ \
+		template<> \
+		struct range_mutable_iterator<xchar[]> { \
+			typedef xchar* type; \
+		}; \
 		template<std::size_t N> \
 		struct range_const_iterator<xchar[N]> { \
+			typedef std::add_const<xchar>::type* type; \
+		}; \
+		/* support array-of-unknown-bounds incomplete type */ \
+		template<> \
+		struct range_const_iterator<xchar[]> { \
 			typedef std::add_const<xchar>::type* type; \
 		}; \
 		inline xchar* range_begin(xchar* pch) { \
@@ -135,7 +144,29 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 		template<typename T, std::size_t N>
 		struct is_range_with_iterators<T[N]> : std::true_type {};
+
+		/* support array-of-unknown-bounds incomplete type */
+		template<typename T>
+		struct is_range_with_iterators<T[]> : std::true_type {};
 	}
 	template<typename Rng>
 	struct is_range_with_iterators : is_range_with_iterators_detail::is_range_with_iterators<typename tc::remove_cvref<Rng>::type> {};
+
+	namespace is_char_range_detail {
+		template<typename Rng, bool is_range_with_iterators>
+		struct is_char_range2;
+		
+		template<typename Rng>
+		struct is_char_range2<Rng, true> : is_char< typename boost::range_value<Rng>::type >::type {};
+
+		template<typename Rng>
+		struct is_char_range2<Rng, false> : std::false_type {};
+
+		template<typename Rng>
+		struct is_char_range1 : is_char_range2<Rng, is_range_with_iterators<Rng>::value >::type {};
+	};
+	template<typename Rng>
+	struct is_char_range : is_char_range_detail::is_char_range1< typename tc::remove_cvref<Rng>::type > {};
+
+	static_assert( is_char_range<wchar_t const* const>::value, "" );
 }

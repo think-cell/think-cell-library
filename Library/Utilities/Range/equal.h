@@ -14,7 +14,7 @@ namespace RANGE_PROPOSAL_NAMESPACE{
 	//-------------------------------------------------------------------------------------------------------------------------
 	// equal - check whether two ranges are equal - overloaded for combinations of generator and iterator based ranges
 
-	namespace detail {
+	namespace equal_impl {
 
 		template<typename Rng, typename Pred>
 		struct is_equal_elem : boost::noncopyable {
@@ -43,7 +43,7 @@ namespace RANGE_PROPOSAL_NAMESPACE{
 		typename std::enable_if< is_range_with_iterators< RRng >::value,
 	bool >::type equal(LRng const& lrng, RRng const& rrng, Pred&& pred) {
 
-		detail::is_equal_elem<RRng, Pred> equal(rrng, std::forward<Pred>(pred));
+		equal_impl::is_equal_elem<RRng, Pred> equal(rrng, std::forward<Pred>(pred));
 		ensure_index_range(lrng)(std::ref(equal));
 
 		return equal.result();

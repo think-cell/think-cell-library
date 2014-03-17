@@ -8,6 +8,8 @@
 
 #include <vector>
 #include <boost/optional.hpp>
+#include <boost/range/begin.hpp>
+#include <boost/range/end.hpp>
 
 namespace RANGE_PROPOSAL_NAMESPACE {
 

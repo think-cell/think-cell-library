@@ -119,5 +119,77 @@ UNITTESTDEF( zero_termination ) {
 	}
 }
 
+UNITTESTDEF( ensure_index_range_on_chars ) {
+	static_assert( tc::is_range_with_iterators<char*>::value, "" );
+	static_assert( tc::is_range_with_iterators<char const*>::value, "" );
+	static_assert( tc::is_range_with_iterators<char* &>::value, "" );
+	static_assert( tc::is_range_with_iterators<char* const&>::value, "" );
+
+	struct check_5_chars {
+		check_5_chars(): m_cch(0) {};
+		void operator()( char ) {
+			++m_cch;
+		}
+		~check_5_chars() {
+			_ASSERTEQUAL(m_cch,5);
+		}
+	private:
+		std::size_t m_cch;
+	};
+
+	{
+		char * str="Hello";
+		{
+			check_5_chars chk;
+			tc::ensure_index_range(str)(std::ref(chk));
+		}
+		{
+			check_5_chars chk;
+			tc::ensure_index_range(tc::make_const(str))(std::ref(chk));
+		}
+		{
+			check_5_chars chk;
+			tc::ensure_index_range(tc_move(str))(std::ref(chk));
+		}
+	}
+	{
+		char str[]="Hello";
+		{
+			check_5_chars chk;
+			tc::ensure_index_range(str)(std::ref(chk));
+		}
+		{
+			check_5_chars chk;
+			tc::ensure_index_range(tc::make_const(str))(std::ref(chk));
+		}
+	}
+	{
+		char const* str="Hello";
+		{
+			check_5_chars chk;
+			tc::ensure_index_range(str)(std::ref(chk));
+		}
+		{
+			check_5_chars chk;
+			tc::ensure_index_range(tc::make_const(str))(std::ref(chk));
+		}
+		{
+			check_5_chars chk;
+			tc::ensure_index_range(tc_move(str))(std::ref(chk));
+		}
+	}
+	{
+		char const str[]="Hello";
+		{
+			check_5_chars chk;
+			tc::ensure_index_range(str)(std::ref(chk));
+		}
+		{
+			check_5_chars chk;
+			tc::ensure_index_range(tc::make_const(str))(std::ref(chk));
+		}
+	}
+}
+
 }
 

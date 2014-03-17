@@ -26,8 +26,8 @@
 #include "Range/index_range.h"
 #include "Range/range_adaptor.h"
 #include "Range/sub_range.h"
-#include "Range/filter_range.h"
-#include "Range/transform_range.h"
+#include "Range/filter_adaptor.h"
+#include "Range/transform_adaptor.h"
 #include "Range/algorithm.h"
 #include "Range/equal.h"
 

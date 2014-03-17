@@ -40,6 +40,8 @@ template< typename T >        struct has_mem_fn_ ## name< T, void > {           
 };                                                                                                                            \
                                                                                                                               \
 template< typename A, std::size_t N > struct has_mem_fn_ ## name< A[N], void > : std::false_type {};                                  \
+/* support array-of-unknown-bounds incomplete type: */ \
+template< typename A > struct has_mem_fn_ ## name< A[], void > : std::false_type {};                                  \
 template< typename A >           struct has_mem_fn_ ## name< A*, void >   : std::false_type {};                                  \
                                                                                                                               \
 template< typename T, typename Result, typename T0 > struct has_mem_fn_ ## name ## _helper< T, Result ( T0 ) >                \

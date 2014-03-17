@@ -16,8 +16,12 @@
 #include <boost/range/category.hpp>
 #pragma warning( pop )
 
+#include <boost/range/iterator_range.hpp>
+
 #include <boost/mpl/has_xxx.hpp>
 #include <boost/mpl/logical.hpp>
+
+#include <type_traits>
 
 namespace RANGE_PROPOSAL_NAMESPACE {
 	namespace iterator {
@@ -165,13 +169,47 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	template< typename T >
 	struct is_boost_iterator_range< boost::iterator_range<T> > : std::true_type {};
 
+	namespace range_generator_from_index_impl {
+		class empty_chain {};
+
+		template<
+			typename Derived,
+			typename Chain=empty_chain
+		>
+		struct range_generator_from_index : Chain {
+		public:
+			template< typename Func >
+			auto operator()(Func func) -> tc::break_or_continue {
+				for( auto idx=tc::derived_cast<Derived>(this)->begin_index();
+					!tc::derived_cast<Derived>(this)->at_end_index(idx);
+					tc::derived_cast<Derived>(this)->increment_index(idx)
+				) {
+					RETURN_IF_BREAK( tc::continue_if_void( func, tc::derived_cast<Derived>(this)->dereference_index(idx) ) );
+				}
+				return tc::continue_;
+			}
+
+			template< typename Func >
+			auto operator()(Func func) const -> tc::break_or_continue {
+				for( auto idx=tc::derived_cast<Derived>(this)->begin_index();
+					!tc::derived_cast<Derived>(this)->at_end_index(idx);
+					tc::derived_cast<Derived>(this)->increment_index(idx)
+				) {
+					RETURN_IF_BREAK( tc::continue_if_void( func, tc::derived_cast<Derived>(this)->dereference_index(idx) ) );
+				}
+				return tc::continue_;
+			}
+		};
+	}
+	using range_generator_from_index_impl::range_generator_from_index;
+
 	template< typename Rng >
 	struct index_range {
 	private:
-		struct add_index_interface : iterator_base<
+		struct add_index_interface : range_generator_from_index< add_index_interface, iterator_base<
 			typename boost::range_iterator< typename std::remove_reference<Rng>::type >::type,
 			typename boost::range_iterator< typename std::remove_reference<Rng>::type const >::type 
-		> {
+		> > {
 		private:
 			// add_index_interface is deliberately not a range itself, e.g., it is missing begin() and end().
 			// Users should use Rng directly instead, and use add_index_interface only to add the index interface.
@@ -198,22 +236,6 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			add_index_interface( add_index_interface const& rhs)
 			:	m_rng(rhs.m_rng)
 			{}
-
-			template< typename Func > break_or_continue operator()(Func func) {
-				auto const itEnd=boost::end(*m_rng);
-				for( auto it=boost::begin(*m_rng); it!=itEnd; ++it ) {
-					if( break_==continue_if_void( func, *it ) ) return break_;
-				}
-				return continue_;
-			}
-
-			template< typename Func > break_or_continue operator()(Func func) const {
-				auto const itEnd=boost::end(*m_rng);
-				for( auto it=boost::begin(*m_rng); it!=itEnd; ++it ) {
-					if( break_==continue_if_void( func, *it ) ) return break_;
-				}
-				return continue_;
-			}
 
 			index begin_index() const {
 				return index( boost::begin(m_rng.best_access()), aggregate_tag() );

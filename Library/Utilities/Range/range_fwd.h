@@ -17,9 +17,9 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	}
 	using sub_range_impl::sub_range;
 
-	namespace transform_range_impl {
+	namespace transform_adaptor_impl {
 		template< typename Func, typename Rng, bool HasIterator=is_range_with_iterators< Rng >::value >
-		class transform_range;
+		class transform_adaptor;
 	}
-	using transform_range_impl::transform_range;
+	using transform_adaptor_impl::transform_adaptor;
 }
