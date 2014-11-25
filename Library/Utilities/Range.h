@@ -30,8 +30,19 @@
 #include "Range/transform_adaptor.h"
 #include "Range/algorithm.h"
 #include "Range/equal.h"
+#include "Range/empty.h"
 
 #include "casts.h"
 #include "reference_or_value.h"
 
+namespace tc{
+	DEFINE_FN( size )
+	DEFINE_FN( strlen )
+	DEFINE_FN( toasciilower )
+	DEFINE_FN( toasciiupper )
+	DEFINE_FN( isasciidigit )
+	DEFINE_FN( isasciilower )
+	DEFINE_FN( isasciiupper )
+	DEFINE_FN( equal );
+}
 //-----------------------------------------------------------------------------------------------------------------------------

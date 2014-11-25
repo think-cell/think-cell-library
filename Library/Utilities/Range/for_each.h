@@ -5,41 +5,21 @@
 #include "break_or_continue.h"
 #include "index_range.h"
 #include "meta.h"
+#include "empty.h"
 
 #include <vector>
 #include <boost/optional.hpp>
 #include <boost/range/begin.hpp>
 #include <boost/range/end.hpp>
 
+#include <boost/variant.hpp> // needed for parameter_storage
+
 namespace RANGE_PROPOSAL_NAMESPACE {
 
 	//-------------------------------------------------------------------------------------------------------------------------
 	// for_each
-
-	template<typename Enum>
-	struct prohibit_conversion {
-#ifdef _DEBUG
-		class type {
-			enum ambiguous_enum { ambiguous_enum_value };
-			operator ambiguous_enum() const {
-				return ambiguous_enum_value;
-			}
-			Enum m_e;
-		public:
-			type(Enum e)
-			: m_e(e) {}
-			operator Enum() const {
-				return m_e;
-			}
-		};
-#else
-		typedef Enum type;
-#endif
-	};
-
 	template< typename Rng, typename Func >
-	prohibit_conversion<break_or_continue>::type
-	for_each(Rng && rng, Func && func) {
+	break_or_continue for_each(Rng && rng, Func && func) {
 		return continue_if_void( ensure_index_range(std::forward<Rng>(rng)), std::forward<Func>(func));
 	}
 
@@ -76,7 +56,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	}
 
 	template< typename Rng, typename Func >
-	break_or_continue reverse_for_each_may_remove_current(Rng && rng, Func && func) {
+	break_or_continue reverse_for_each_may_remove_current(Rng && rng, Func func) {
 		typename boost::range_iterator< typename std::remove_reference<Rng>::type >::type const itBegin=boost::begin(rng);
 		typename boost::range_iterator< typename std::remove_reference<Rng>::type >::type it=boost::end(rng);
 		if( it!=itBegin ) {
@@ -89,6 +69,93 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		return continue_;
 	}
 
+	/////////////////////////////////////////////////////
+	// for_each_pair
+
+	template< typename Rng, typename Func >
+	typename std::enable_if< is_range_with_iterators<Rng>::value,
+	break_or_continue >::type for_each_pair(Rng const& rng, Func func) {
+		if( !RANGE_PROPOSAL_NAMESPACE::empty(rng) ) {
+			for(typename boost::range_iterator<const Rng>::type it = boost::begin(rng);;) {
+				typename boost::range_iterator<const Rng>::type itNext = boost::next(it);
+				if( boost::end(rng)==itNext ) break;
+				if( break_==continue_if_void(func, *it, *itNext) ) return break_;
+				it = tc_move(itNext);
+			}
+		}
+		return continue_;
+	}
+
+	template<typename T>
+	struct parameter_storage {
+		parameter_storage& operator=(T const& t) {
+			m_variant = std::addressof(t);
+			return *this;
+		}
+		parameter_storage& operator=(T && t) {
+			m_variant = tc_move(t);
+			return *this;
+		}
+		explicit operator bool() const {
+			return m_variant.which();
+		}
+		T const& operator*() {
+			return boost::apply_visitor( FnDerefence(), m_variant );
+		}
+	private:
+		struct empty {};
+		struct FnDerefence : boost::static_visitor<T const&> {
+			T const& operator()(empty) const {
+				_ASSERTFALSE;
+				return *static_cast<T const*>(nullptr);
+			}
+			T const& operator()(T const* p) const {
+				return *p;
+			}
+			T const& operator()(T const& t) const {
+				return t;
+			}
+		};
+		boost::variant<empty, T const*, T> m_variant;
+		static_assert( std::is_same<T, typename std::decay<T>::type>::value, "" );
+	};
+
+	namespace for_each_pair_detail {
+		template<typename T, typename Func>
+		struct Fn {
+		public:
+			Fn(Func& func)
+				: m_func(func)
+			{}
+			break_or_continue operator()(T const& t) {
+				if( m_param && break_==continue_if_void(m_func, *m_param, t) ) {
+					return break_;
+				}
+				m_param = t;
+				return continue_;
+			}
+			break_or_continue operator()(T && t) {
+				if( m_param && break_==continue_if_void(m_func, *m_param, t) ) {
+					return break_;
+				}
+				m_param = tc_move(t);
+				return continue_;
+			}
+		private:
+			Func& m_func;
+			parameter_storage<T> m_param;
+		};
+	}
+
+	template<typename T, typename Rng, typename Func>
+	typename std::enable_if< !is_range_with_iterators<Rng>::value,
+	break_or_continue >::type for_each_pair(Rng const& rng, Func func) {
+		return tc::for_each( rng, for_each_pair_detail::Fn<T, Func>(func) );
+	}
+
+	/////////////////////////////////////////////////////
+	// accumulate
+
 	namespace accumulate_detail {
 		template< typename T, typename AccuOp >
 		struct Fn {
@@ -97,9 +164,28 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			Fn( T & t, AccuOp & accuop )
 			:  m_pt(std::addressof(t)), m_paccuop(std::addressof(accuop))
 			{}
+
 			template< typename S >
-			break_or_continue operator()( S && s ) const {
-				return continue_if_void( *m_paccuop, *m_pt, std::forward<S>(s) );
+			typename std::enable_if<
+				std::is_same<
+					typename tc::result_of<AccuOp(T&, S &&)>::type,
+					break_or_continue
+				>::value,
+				break_or_continue
+			>::type
+			operator()(S && s) const {
+				return (*m_paccuop)( *m_pt, std::forward<S>(s) );
+			}
+
+			template< typename S >
+			typename std::enable_if<
+				!std::is_same<
+					typename tc::result_of<AccuOp(T&, S &&)>::type,
+					break_or_continue
+				>::value
+			>::type
+			operator()(S && s) const {
+				(*m_paccuop)( *m_pt, std::forward<S>(s) );
 			}
 		};
 	}

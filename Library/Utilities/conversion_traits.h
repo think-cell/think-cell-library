@@ -40,45 +40,26 @@ namespace tc {
 	// if you want to enable conversion from a specific udt into a builtin,
 	// specialize is_lossless_convertible
 	template<typename TSource, typename TTarget>
-	struct is_lossless_convertible :
-		boost::mpl::and_<
-			// cannot use VC's std::is_convertible, because it seems to be broken (is_convertible<int&, int> returns false)
-			// Note: Still using std::is_convertible won't reduce compilation times anyway.
-			std::is_convertible<TSource, TTarget>,  
-			boost::mpl::not_<
-				typename boost::numeric::conversion_traits<
-					typename std::remove_reference< TTarget >::type,
-					typename std::remove_reference< TSource >::type
-				>::subranged
-			>
-		> {};
+	struct is_lossless_convertible : std::integral_constant<bool,
+		// cannot use VC's std::is_convertible, because it seems to be broken (is_convertible<int&, int> returns false)
+		// Note: Still using std::is_convertible won't reduce compilation times anyway.
+		std::is_convertible<TSource, TTarget>::value &&
+		!boost::numeric::conversion_traits<
+			typename std::remove_reference< TTarget >::type,
+			typename std::remove_reference< TSource >::type
+		>::subranged::value
+	> {};
 
 	// do not allow initialization of an A{const}& member by B{{const}&}, unless A is same or base of B
 	// conversion would create a reference to a temporary object
 	template<typename TSource, typename TTarget>
-	struct creates_no_reference_to_temporary :
-		boost::mpl::or_<
-			boost::mpl::not_< std::is_reference<TTarget> >,
-	#if !defined(_MSC_VER) || 1600 < _MSC_VER
-			tc::is_base_of< 
-				typename tc::remove_cvref<TTarget>::type,
-				typename tc::remove_cvref<TSource>::type
-			>
-	#else
-			boost::mpl::and_<
-				tc::is_base_of< 
-					typename tc::remove_cvref<TTarget>::type,
-					typename tc::remove_cvref<TSource>::type
-				>,
-				// initializing rvalue reference to a non-class type creates a reference to temporary
-				// https://connect.microsoft.com/VisualStudio/feedback/details/681998/#details
-				boost::mpl::or_<
-					boost::mpl::not_< std::is_rvalue_reference<TTarget> >,
-					std::is_class< typename std::remove_reference<TTarget>::type >
-				>
-			>
-	#endif
-		> {};
+	struct creates_no_reference_to_temporary : std::integral_constant<bool,
+		!std::is_reference<TTarget>::value ||
+		tc::is_base_of< 
+			typename tc::remove_cvref<TTarget>::type,
+			typename tc::remove_cvref<TSource>::type
+		>::value
+	> {};
 }
 
 ////////////////////////////////////////////////
@@ -90,21 +71,16 @@ typedef boost::mpl::int_<3> implicit_initialization_tag; // we want to bit-and t
 
 template<typename TTarget, typename TSource>
 struct initialization_tag {
-	typedef typename boost::mpl::if_<
-		tc::creates_no_reference_to_temporary< TSource, TTarget >,
-		typename boost::mpl::if_<
-			boost::mpl::and_<
-				// Only true_, if implicit conversion exists.
-				tc::is_lossless_convertible<TSource, TTarget>,
-				// in expressions like ((condition) ? (expression of type T&) : (expression of type T))
-				// prefer conversion from T& to T over conversion from T to T& 
-				boost::mpl::or_<
-					boost::mpl::not_< std::is_reference<TTarget> >,
-					std::is_reference<TSource>
-				>
-			>,
-			implicit_initialization_tag,
-			explicit_initialization_tag
+	typedef typename std::conditional<
+		tc::creates_no_reference_to_temporary< TSource, TTarget >::value,
+		typename std::conditional<
+			// Only true_, if implicit conversion exists.
+			tc::is_lossless_convertible<TSource, TTarget>::value &&
+			// in expressions like ((condition) ? (expression of type T&) : (expression of type T))
+			// prefer conversion from T& to T over conversion from T to T& 
+			(!std::is_reference<TTarget>::value || std::is_reference<TSource>::value)
+			, implicit_initialization_tag
+			, explicit_initialization_tag
 		>::type,
 		forbidden_initialization_tag
 	>::type type;

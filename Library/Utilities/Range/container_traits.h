@@ -16,6 +16,7 @@ TC_HAS_MEM_FN_XXX_TRAIT_DEF( splice ) // pretty good indication that datastructu
 TC_HAS_MEM_FN_XXX_TRAIT_DEF( lower_bound ) // pretty good indication that datastructure is tree-like: assume erase(itBegin,itEnd) is cheap and preserves iterators
 TC_HAS_MEM_FN_XXX_TRAIT_DEF( assign )
 TC_HAS_MEM_FN_XXX_TRAIT_DEF( size )
+TC_HAS_MEM_FN_XXX_TRAIT_DEF( empty )
 TC_HAS_MEM_FN_XXX_TRAIT_DEF( data )
 
 BOOST_MPL_HAS_XXX_TRAIT_DEF(efficient_erase)

@@ -4,9 +4,6 @@
 #include "Library/ErrorReporting/tc_move.h"
 
 #include <boost/mpl/has_xxx.hpp>
-#include <boost/mpl/logical.hpp>
-
-#include <boost/utility/enable_if.hpp>
 
 #include <type_traits>
 #include <memory>

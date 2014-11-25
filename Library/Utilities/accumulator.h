@@ -7,12 +7,9 @@
 	#include "Library/ErrorReporting/functors.h"
 #endif
 
-#include "Library/Utilities/perfect_forward.h"
 #include "Library/Utilities/inherit_ctors.h"
 #include "Library/Utilities/decltype_return.h"
 #include "Library/Utilities/casts.h"
-
-#include <boost/utility/enable_if.hpp>
 
 #include <utility>
 
@@ -26,7 +23,7 @@ template<>
 struct fundamental_base<void> {};
 
 template<typename Base>
-struct fundamental_base<Base,typename boost::disable_if< std::is_class< Base > >::type> {
+struct fundamental_base<Base,typename std::enable_if<!std::is_class< Base >::value >::type> {
 	operator Base const&() const {
 		return _get();
 	}
@@ -60,7 +57,7 @@ protected:
 };
 
 template<typename Base>
-struct fundamental_base<Base,typename boost::enable_if< std::is_class< Base > >::type>
+struct fundamental_base<Base,typename std::enable_if< std::is_class< Base >::value >::type>
 	: public Base
 {
 protected:
@@ -87,19 +84,10 @@ struct FAccumulator : fundamental_base< typename std::decay<Value>::type > {
 	,	m_accumulate(std::forward<Accumulate>(accumulate))
 	{}
 
-	#define PART1() \
-		template<
-	#define PART2() \
-		> void operator() (
-	#define PART3() ) { \
-			m_accumulate( this->_get(), 
-	#define PART4() ); \
-		}
-	PERFECT_FORWARD
-	#undef PART1
-	#undef PART2
-	#undef PART3
-	#undef PART4
+	template<typename... Args>
+	void operator() (Args&&... args) {
+		m_accumulate(this->_get(), std::forward<Args>(args)...);
+	}
 
 private:
 	typename std::decay<Accumulate>::type m_accumulate;
@@ -131,37 +119,16 @@ public:
 		m_transform(std::forward<Transform>(transform))
 	{}
 
-#define PART1() \
-	template<
-#define PART2() \
-	> auto operator()(
-#define PART3() ) const \
-		->result_type \
-	{ \
-		return this->_get()( m_transform(
-#define PART4() ) ); \
+	template<typename... Args>
+	auto operator()(Args&&... args) const->result_type
+	{
+		return this->_get()( m_transform(std::forward<Args>(args)...) );
 	}
-PERFECT_FORWARD
-#undef PART1
-#undef PART2
-#undef PART3
-#undef PART4
 
-#define PART1() \
-	template<
-#define PART2() \
-	> auto operator()(
-#define PART3() ) \
-		->result_type \
-	{ \
-		return this->_get()( m_transform(
-#define PART4() ) ); \
+	template<typename... Args>
+	auto operator()(Args&&... args)->result_type {
+		return this->_get()( m_transform(std::forward<Args>(args)...) );
 	}
-PERFECT_FORWARD
-#undef PART1
-#undef PART2
-#undef PART3
-#undef PART4
 };
 
 template< typename result_type, typename Func, typename Transform >

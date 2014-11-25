@@ -48,14 +48,14 @@ typename tc::return_type< T >::type AvoidTypename();
 	static_assert( std::is_reference< typename tc::return_type< decltype((__VA_ARGS__)) >::type >::value, "" ); \
 	return (__VA_ARGS__); \
 }
-#define enable_if_return_decltype(cond,x) ->typename std::enable_if< (cond), typename tc::return_type< decltype(x) >::type >::type { \
-	static_assert( std::is_same< decltype(x), decltype((x)) >::value, "Return value or reference?" ); \
-	return (x); \
+#define enable_if_return_decltype(cond,...) ->typename std::enable_if< (cond), typename tc::return_type< decltype(__VA_ARGS__) >::type >::type { \
+	static_assert( std::is_same< decltype(__VA_ARGS__), decltype((__VA_ARGS__)) >::value, "Return value or reference?" ); \
+	return (__VA_ARGS__); \
 }
-#define code_return_decltype(code,x) ->decltype( AvoidTypename< decltype(x) >() ) { \
-	static_assert( std::is_same< decltype(x), decltype((x)) >::value, "Return value or reference?" ); \
+#define code_return_decltype(code,...) ->decltype( AvoidTypename< decltype(__VA_ARGS__) >() ) { \
+	static_assert( std::is_same< decltype(__VA_ARGS__), decltype((__VA_ARGS__)) >::value, "Return value or reference?" ); \
 	{code} \
-	return (x); \
+	return (__VA_ARGS__); \
 }
 #define return_ctor(T,params) ->T { return T params ; }
 #define enable_if_decltype_ctor(cond,T,params) -> typename std::enable_if< (cond), T >::type { return T params ; }

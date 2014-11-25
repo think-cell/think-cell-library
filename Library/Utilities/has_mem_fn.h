@@ -1,6 +1,5 @@
 #pragma once
 
-#include <boost/mpl/and.hpp>
 #include <boost/type_traits/detail/yes_no_type.hpp>
 
 #include <type_traits>
@@ -26,11 +25,9 @@ template< typename T > struct has_mem_fn_ ## name ## _derived_t : T {           
                                                                                                                               \
 template< typename T, typename Signature > struct has_mem_fn_ ## name ## _helper;                                             \
                                                                                                                               \
-template< typename T, typename Signature = void > struct has_mem_fn_ ## name                                                        \
-	: boost::mpl::and_< has_mem_fn_ ## name< T, void >,                                                                       \
-	                    has_mem_fn_ ## name ## _helper< T, Signature >                                                        \
-	                  >                                                                                                       \
-{};                                                                                                                           \
+template< typename T, typename Signature = void > struct has_mem_fn_ ## name : std::integral_constant< bool,                  \
+	has_mem_fn_ ## name< T, void >::value && has_mem_fn_ ## name ## _helper< T, Signature >::value                            \
+> {};                                                                                                                         \
                                                                                                                               \
 template< typename T >        struct has_mem_fn_ ## name< T, void > {                                                         \
 	struct has_mem_fn_ ## name ## _derived_t : T, has_mem_fn_ ## name ## _base_t {};                                          \

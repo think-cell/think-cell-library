@@ -7,25 +7,25 @@ namespace {
 
 	struct all_called_mock {
 		all_called_mock() : m_expect(0), m_index(0), m_break_at(0), m_copyed_or_moved_from(false) {}
-		all_called_mock(const std::vector<int>& v, std::size_t break_at = 0, bool expect_break = true) 
-			: m_expect(v), 
-			  m_index(0), 
+		all_called_mock(const std::vector<int>& v, std::size_t break_at = 0, bool expect_break = true)
+			: m_expect(v),
+			  m_index(0),
 			  m_break_at((break_at == 0) ? v.size() : break_at),
 			  m_expect_break((break_at != 0) && expect_break),
 			  m_copyed_or_moved_from(false)
 		{}
-		all_called_mock(all_called_mock const& copy) : 
-			  m_expect(copy.m_expect), 
-			  m_index(copy.m_index), 
+		all_called_mock(all_called_mock const& copy) :
+			  m_expect(copy.m_expect),
+			  m_index(copy.m_index),
 			  m_break_at(copy.m_break_at),
 			  m_expect_break(copy.m_expect_break),
 			  m_copyed_or_moved_from(false)
 		{
 			copy.m_copyed_or_moved_from = true;
 		}
-		all_called_mock(all_called_mock&& move) : 
-			  m_expect(move.m_expect), 
-			  m_index(move.m_index), 
+		all_called_mock(all_called_mock&& move) :
+			  m_expect(move.m_expect),
+			  m_index(move.m_index),
 			  m_break_at(move.m_break_at),
 			  m_expect_break(move.m_expect_break),
 			  m_copyed_or_moved_from(false)
@@ -37,9 +37,9 @@ namespace {
 		}
 
 		void mock_reset(const std::vector<int>& v = std::vector<int>(), std::size_t break_at = 0, bool expect_break = true) {
-			if(!m_copyed_or_moved_from && !(m_index == std::min(m_expect.size(), (m_expect_break) ? m_break_at + 1 : m_expect.size()))) { 
-				TEST_OUTPUT( << "unexpectedly terminated before index " << m_index 
-							 << " went to the expected index " << std::min(m_expect.size(), m_break_at + 1) << "\n");
+			if(!m_copyed_or_moved_from && !(m_index == std::min(m_expect.size(), (m_expect_break) ? m_break_at + 1 : m_expect.size()))) {
+				TEST_OUTPUT( << "unexpectedly terminated before index " << m_index
+							 << " went to the expected index " << std::min(m_expect.size(), m_break_at + 1) << '\n');
 				_ASSERT(m_index == std::min(m_expect.size(), m_break_at + 1));
 			}
 			m_index = 0;
@@ -53,14 +53,14 @@ namespace {
 			if (m_copyed_or_moved_from) {
 				TEST_OUTPUT(<< "used copyed or moved consumer for real work!\n");
 			}
-			if(!(m_index < m_expect.size())) { 
-				TEST_OUTPUT( << "unexpectedly called for index " << m_index 
-							 << " when expect has size " << m_expect.size() << "\n");
+			if(!(m_index < m_expect.size())) {
+				TEST_OUTPUT( << "unexpectedly called for index " << m_index
+							 << " when expect has size " << m_expect.size() << '\n');
 				_ASSERT(m_index < m_expect.size());
 			}
 			if (val != m_expect[m_index]) {
-				TEST_OUTPUT( << "unexpected value " << val << " at index " << m_index 
-							 << ", should be " << m_expect[m_index] << "\n");
+				TEST_OUTPUT( << "unexpected value " << val << " at index " << m_index
+							 << ", should be " << m_expect[m_index] << '\n');
 				_ASSERT(val == m_expect[m_index]);
 			}
 			++m_index;
@@ -118,35 +118,35 @@ UNITTESTDEF( for_each ) {
 			for(int i = 1; i<11; ++i) {
 				if(func(i) == break_) { return break_; }
 			}
-			return continue_; 
+			return continue_;
 		}
 
 		break_or_continue generator_break_consumer_nobreak(std::function<void (int)> func) const {
 			for(int i = 1; i<11; ++i) {
 				func(i);
 			}
-			return continue_; 
+			return continue_;
 		}
 
 		void generator_nobreak_consumer_nobreak(std::function<void (int)> func) const {
 			for(int i = 1; i<11; ++i) {
 				func(i);
 			}
-			return; 
+			return;
 		}
 
 		void generator_nobreak_consumer_break_correct(function< break_or_continue(int) > func) const {
 			for(int i = 1; i<11; ++i) {
 				if(func(i) == break_) { return; }
 			}
-			return; 
+			return;
 		}
 
 		void generator_nobreak_consumer_break_incorrect(function< break_or_continue(int) > func) const {
 			for(int i = 1; i<11; ++i) {
 				func(i);
 			}
-			return; 
+			return;
 		}
 	};
 
@@ -182,9 +182,9 @@ UNITTESTDEF( break_behavior ) {
 	for_each(std::bind(&iterate::generator_break_consumer_nobreak, iterate(), std::placeholders::_1), consumer_nobreak(exp, 5, false));
 	for_each(std::bind(&iterate::generator_nobreak_consumer_nobreak, iterate(), std::placeholders::_1), consumer_nobreak(exp, 6, false));
 
-	// these two are undefined (Todo: break compile with nice msg)
-	for_each(std::bind(&iterate::generator_nobreak_consumer_break_correct, iterate(), std::placeholders::_1), all_called_mock(exp, 7));
-	for_each(std::bind(&iterate::generator_nobreak_consumer_break_incorrect, iterate(), std::placeholders::_1), all_called_mock(exp, 8, false));
+	// these two are undefined and must not compile
+//	for_each(std::bind(&iterate::generator_nobreak_consumer_break_correct, iterate(), std::placeholders::_1), all_called_mock(exp, 7));
+//	for_each(std::bind(&iterate::generator_nobreak_consumer_break_incorrect, iterate(), std::placeholders::_1), all_called_mock(exp, 8, false));
 }
 
 }

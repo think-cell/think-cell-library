@@ -23,16 +23,14 @@ namespace {
 		//static_assert(std::is_same<range_const_iterator<decltype(make_const(v))>::type, std::vector<int>::const_iterator>::value, "const vectors const iterator is not reported to be what it should be");
 	}
 
-	auto make_const_range(std::vector<int> const & v) return_decltype( make_iterator_range(v) ) // Todo: Do we want/need sometilladis as a generic tool?
-
 UNITTESTDEF( const_range ) {
 
-	TEST_init_hack(std::vector, int, original, {1,2,3,4,5,6,7,8});
-	TEST_init_hack(std::vector, int, modified, {2,3,4,5,6,7,8,9});
+	std::vector<int> original {1,2,3,4,5,6,7,8};
+	std::vector<int> modified {2,3,4,5,6,7,8,9};
 
 	std::vector<int> v = original;
 
-	auto mutable_range = make_iterator_range(v); TEST_RANGE_LENGTH(mutable_range, 8);
+	auto mutable_range = slice(v); TEST_RANGE_LENGTH(mutable_range, 8);
 
 	TEST_RANGE_EQUAL(original, mutable_range);
 	TEST_RANGE_NOT_EQUAL(modified, mutable_range);
@@ -41,8 +39,8 @@ UNITTESTDEF( const_range ) {
 	TEST_RANGE_NOT_EQUAL(original, mutable_range);
 
 	v = original;
-	auto const_range = make_const_range(v); TEST_RANGE_LENGTH(const_range, 8);
-	static_assert(std::is_same<decltype(make_const_range(v)), decltype(make_iterator_range(make_const(v)))>::value, "wrong const type");
+	auto const_range = const_slice(v); TEST_RANGE_LENGTH(const_range, 8);
+	static_assert(std::is_same<decltype(const_slice(v)), decltype(slice(make_const(v)))>::value, "wrong const type");
 
 	TEST_RANGE_EQUAL(original, const_range);
 	TEST_RANGE_NOT_EQUAL(modified, const_range);

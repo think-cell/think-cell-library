@@ -5,17 +5,16 @@
 
 namespace RANGE_PROPOSAL_NAMESPACE {
 
-	// make an iterator range out of another range. (for testing)
-	template< typename Rng > 
-	auto make_iterator_range(Rng && rng) return_decltype (
-		make_iterator_range(tc_move(boost::begin(std::forward<Rng>(rng))), tc_move(boost::end(std::forward<Rng>(rng)))) 
-	)
-
 	// this is for testing only, equivalent to slice(rng, begin(rng), end(rng)), but also works correctly on temporaries
 	template< typename Rng >
 	typename make_sub_range_result< Rng >::type slice( Rng && rng) {
 		return typename make_sub_range_result< Rng >::type( std::forward<Rng>(rng), boost::begin(rng), boost::end(rng) );
 	}
+
+	// Do we want/need sometilladis as a generic tool?
+	template<typename Rng>
+	auto const_slice(Rng const& rng) return_decltype(slice(rng)) 
+
 
 	// create a generator range that gives the same values as the vector it takes (for testing)
 	template< typename Value_type>
@@ -58,13 +57,6 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 #ifndef RANGE_PROPOSAL_BUILD_STANDALONE
 
-#	ifndef PERFORMUNITTESTS
-#		ifdef _DEBUG
-#			define PERFORMUNITTESTS 1
-#		else
-#			define PERFORMUNITTESTS 0
-#		endif
-#	endif
 #	include "Library/ErrorReporting/UnitTest.h"
 
 #else

@@ -11,17 +11,17 @@ namespace {
 
 UNITTESTDEF( quantifiers ) {
 
-	TEST_init_hack(std::vector, int, v, {1,2,3,4,5,6,7});
+	std::vector<int> v{1,2,3,4,5,6,7};
 
-	TEST_init_hack(std::vector, int, all_even, {2,4,6,8});
-	TEST_init_hack(std::vector, int, all_odd, {3,5,7,9});
+	std::vector<int> all_even{2,4,6,8};
+	std::vector<int> all_odd{3,5,7,9};
 
 	auto even = [](int i){ return (i%2==0); };
 
 	const int existing_value = 5;
 	const int non_existing_value = 9;
 
-	auto const_range = make_iterator_range(make_const(v)); TEST_RANGE_LENGTH(const_range, 7);
+	auto const_range = slice(make_const(v)); TEST_RANGE_LENGTH(const_range, 7);
 	
 	_ASSERT( contains(const_range, existing_value));
 	_ASSERT(!contains(const_range, non_existing_value));
@@ -62,7 +62,7 @@ UNITTESTDEF( sort_accumulate_each_unique_range_2 ) {
 }
 
 UNITTESTDEF( trim_leftright_if ) {
-	TEST_init_hack(std::vector, int, v, {1,2,3,4,5,6,7,7,7});
+	std::vector<int> v{1,2,3,4,5,6,7,7,7};
 	auto rng = trim_left_if(v, [] (int n) {return n<4;});
 	_ASSERT(std::begin(rng) != std::end(rng));
 	_ASSERTEQUAL(size(rng), 6);
@@ -102,6 +102,14 @@ UNITTESTDEF( is_sorted ) {
 		int a[]={1,0};
 		_ASSERT( !tc::is_strictly_sorted(a) );
 	}
+}
+
+UNITTESTDEF( make_vector_on_r_vector_is_identity ) {
+	std::vector<int> v{1,2,3};
+	auto pvecdata = v.data();
+
+	auto vNew = tc::make_vector(tc_move(v));
+	_ASSERT( vNew.data() == pvecdata );
 }
 
 }

@@ -125,7 +125,7 @@ UNITTESTDEF( boost_iterator_range_compat ) {
 	
 	TEST_RANGE_EQUAL(baul_exp, baul_r);
 
-	auto baul_our_r = tc::make_iterator_range(baul);
+	auto baul_our_r = slice(baul);
 	TEST_RANGE_EQUAL(baul_exp, baul_our_r);
 
 }

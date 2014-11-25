@@ -4,6 +4,7 @@
 #include "range_fwd.h"
 
 #include "range_adaptor.h"
+#include "sub_range.h"
 #include "meta.h"
 
 #include "Library/ErrorReporting/tc_move.h"
@@ -19,9 +20,19 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			}
 		};
 
+		template<typename T>
+		struct transform_adaptor_dereference_type {
+			using type=T;
+		};
+
+		template<typename T>
+		struct transform_adaptor_dereference_type<T&&> {
+			using type=typename std::decay<T&&>::type;
+		};
+
 		template< typename Func, typename Rng >
-		class transform_adaptor<Func,Rng,false> : public range_adaptor<transform_adaptor<Func,Rng>, Rng, typename std::is_empty<Func>::type > {
-			typedef range_adaptor<transform_adaptor<Func,Rng>, Rng, typename std::is_empty<Func>::type > base_;
+		class transform_adaptor<Func,Rng,false> : public range_adaptor<transform_adaptor<Func,Rng>, Rng > {
+			typedef range_adaptor<transform_adaptor<Func,Rng>, Rng > base_;
 
 		protected:
 			typedef base_ range_adaptor;
@@ -31,25 +42,14 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			Func m_func;
 
 		private:
-			friend class range_adaptor_impl::range_adaptor_access;
+			friend struct range_adaptor_impl::range_adaptor_access;
 			friend class transform_adaptor_impl::transform_adaptor_access;
-	#define PART1() \
-			template< typename Apply, 
-	#define PART2() \
-				> break_or_continue apply( Apply && apply, 
-	#define PART3() ) const { \
-					return continue_if_void( std::forward<Apply>(apply), m_func(
-	#define PART4() ) ); \
-				}
-	PERFECT_FORWARD
-	#undef PART1
-	#undef PART2
-	#undef PART3
-	#undef PART4
+			template< typename Apply, typename... Args>
+			auto apply( Apply && apply, Args&&... args) const return_decltype (
+				std::forward<Apply>(apply)( m_func(std::forward<Args>(args)...) )
+			)
 
 		public:
-			typedef void ctor_const_overload_support;
-		
 			// default ctor
 			transform_adaptor() {}
 
@@ -84,42 +84,9 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			}
 
 		public:
-			// templated copy ctors
-/*			template< typename RngOther, typename FuncOther, bool bHasIteratorOther >
-			transform_adaptor( transform_adaptor<FuncOther,RngOther,bHasIteratorOther> & rng, ctor_const_overload=ctor_const_overload() )
-				: base_(rng.base_range(), aggregate_tag())
-				, m_func(rng.m_func)
-			{}
-
-			template< typename RngOther, typename FuncOther, bool bHasIteratorOther >
-			transform_adaptor( transform_adaptor<FuncOther,RngOther,bHasIteratorOther> && rng, ctor_const_overload=ctor_const_overload() )
-				: base_(tc_move(rng).base_range_move(), aggregate_tag())
-				, m_func(tc_move(rng).m_func)
-			{}
-
-			template< typename RngOther, typename FuncOther, bool bHasIteratorOther >
-			transform_adaptor( transform_adaptor<FuncOther,RngOther,bHasIteratorOther> const& rng, ctor_const_overload )
-				: base_(rng.base_range(), aggregate_tag())
-				, m_func(rng.m_func)
-			{}
-
-			template< typename RngOther, typename FuncOther, bool bHasIteratorOther >
-			transform_adaptor( transform_adaptor<FuncOther,RngOther,bHasIteratorOther> const& rng, typename std::enable_if<
-				base_::template is_const_compatible_range<transform_adaptor<FuncOther,RngOther,bHasIteratorOther> const&>::value
-			, unused_arg>::type=unused_arg() )
-				: base_(rng.base_range(), aggregate_tag())
-				, m_func(rng.m_func)
-			{}
-
-			// some user-defined copy ctor to disable implicit one, with same semantics as templated copy ctor
-			transform_adaptor( typename base_::template const_compatible_range<transform_adaptor>::type rng )
-				: base_(rng.base_range(), aggregate_tag())
-				, m_func(rng.m_func)
-			{}*/
-
 			// other ctors
 			template< typename RngOther, typename FuncOther >
-			transform_adaptor( RngOther && rng, FuncOther && func, typename std::enable_if< !std::is_same<typename std::remove_reference<FuncOther>::type, ctor_const_overload>::value, unused_arg>::type=unused_arg() )
+			transform_adaptor( RngOther && rng, FuncOther && func )
 				: base_(std::forward<RngOther>(rng), aggregate_tag())
 				, m_func(std::forward<FuncOther>(func))
 			{}
@@ -127,12 +94,16 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 		template< typename Func, typename Rng >
 		class transform_adaptor<Func,Rng,true> : public transform_adaptor<Func,Rng,false> {
+			static_assert( 
+				std::is_same< Rng, typename range_by_value<Rng>::type >::value,
+				"adaptors must hold ranges by value"
+			);
+
 			typedef transform_adaptor<Func,Rng,false> base_;
 			typedef typename base_::range_adaptor range_adaptor;
 
-			friend class range_adaptor_impl::range_adaptor_access;
+			friend struct range_adaptor_impl::range_adaptor_access;
 		public:
-			typedef void ctor_const_overload_support;
 			using typename base_::index;
 
 			// default ctor
@@ -158,39 +129,11 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			}
 
 		public:
-/*			// templated copy ctors
-			template< typename RngOther, typename FuncOther >
-			transform_adaptor( transform_adaptor<FuncOther,RngOther,true> & rng, ctor_const_overload=ctor_const_overload() )
-				: base_(rng)
-			{}
-
-			template< typename RngOther, typename FuncOther >
-			transform_adaptor( transform_adaptor<FuncOther,RngOther,true> && rng, ctor_const_overload=ctor_const_overload() )
-				: base_(tc_move(rng))
-			{}
-
-			template< typename RngOther, typename FuncOther >
-			transform_adaptor( transform_adaptor<FuncOther,RngOther,true> const& rng, ctor_const_overload )
-				: base_(rng,ctor_const_overload())
-			{}
-
-			template< typename RngOther, typename FuncOther >
-			transform_adaptor( transform_adaptor<FuncOther,RngOther,true> const& rng, typename std::enable_if<
-				base_::template is_const_compatible_range<transform_adaptor<FuncOther,RngOther,true> const&>::value
-			, unused_arg>::type=unused_arg() )
-				: base_(rng)
-			{}
-
-			// some user-defined copy ctor to disable implicit one, with same semantics as templated copy ctor
-			transform_adaptor( typename base_::template const_compatible_range<transform_adaptor>::type rng )
-				: base_(rng)
-			{}*/
-
 			// other ctors
 
 			// ctor from range and functor
 			template< typename RngOther, typename FuncOther >
-			transform_adaptor( RngOther && rng, FuncOther && func, typename std::enable_if< !std::is_same<typename std::remove_reference<FuncOther>::type, ctor_const_overload>::value, unused_arg>::type=unused_arg() )
+			transform_adaptor( RngOther && rng, FuncOther && func )
 				: base_(std::forward<RngOther>(rng),std::forward<FuncOther>(func))
 			{}
 
@@ -222,12 +165,12 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			}
 
 		public:
-			auto dereference_index(index const& idx) -> decltype( make_const(THIS_IN_DECLTYPE m_func)(std::declval<range_adaptor &>().dereference_index(idx)) ) {
+			auto dereference_index(index const& idx) -> typename transform_adaptor_dereference_type<decltype( make_const(THIS_IN_DECLTYPE m_func)(std::declval<range_adaptor &>().dereference_index(idx)) )>::type {
 				// always call operator() const, which is assumed to be thread-safe
 				return make_const(this->m_func)(base_::dereference_index(idx));
 			}
 
-			auto dereference_index(index const& idx) const -> decltype( make_const(THIS_IN_DECLTYPE m_func)(std::declval<range_adaptor const&>().dereference_index(idx)) ) {
+			auto dereference_index(index const& idx) const -> typename transform_adaptor_dereference_type<decltype( make_const(THIS_IN_DECLTYPE m_func)(std::declval<range_adaptor const&>().dereference_index(idx)) )>::type {
 				// always call operator() const, which is assumed to be thread-safe
 				return make_const(this->m_func)(base_::dereference_index(idx));
 			}
@@ -260,6 +203,6 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 	template<typename Rng, typename S, typename T>
 	auto replace( Rng && rng, S && s, T && t )
-		return_decltype( tc::replace_if( std::forward<Rng>(rng), boost::bind<bool>( fn_equal(), _1, std::forward<S>(s) ), std::forward<T>(t) ) )
+		return_decltype( tc::replace_if( std::forward<Rng>(rng), boost::bind<bool>( fn_equal_to(), _1, std::forward<S>(s) ), std::forward<T>(t) ) )
 }
 

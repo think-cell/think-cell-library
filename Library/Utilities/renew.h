@@ -1,6 +1,10 @@
 #pragma once
 
-#include "perfect_forward.h"
+#ifndef RANGE_PROPOSAL_BUILD_STANDALONE
+   #include "Library/ErrorReporting/assert_fwd.h"
+#endif
+#include "Library/Utilities/is_constructible.h"
+
 #include <algorithm>
 
 namespace tc {
@@ -28,7 +32,7 @@ namespace tc {
 		//		std::string n; // has user-defined default ctor
 		//		int n; // has no user-defined default ctor
 		//	};
-		static_assert( !std::is_trivially_default_constructible<T>::value, "You must decide between ctor_default and ctor_value!" );
+		static_assert(!tc::is_trivially_default_constructible<T>::value, "You must decide between ctor_default and ctor_value!");
 		tc::dtor(t);
 		new (std::addressof(t)) T;
 	}
@@ -45,25 +49,21 @@ namespace tc {
 		new (std::addressof(t)) T();
 	}
 
-	#define PART1() \
-		template<typename T, 
-	#define PART2() \
-		> void renew( T& t,
-	#define PART3() ) { \
-			tc::dtor(t); \
-			new (std::addressof(t)) T(
-	#define PART4() ); \
-		}
-	PERFECT_FORWARD
-	#undef PART1
-	#undef PART2
-	#undef PART3
-	#undef PART4
+	template<typename T, typename First, typename... Args>
+	T& renew( T& t,First&& first,Args&&... args ) {
+		tc::dtor(t);
+		new (std::addressof(t)) T(std::forward<First>(first),std::forward<Args>(args)...);
+		return t;
+	}
 }
+
+// Sean Parent says that assignment should correspond to implicit construction, not explicit construction
+// Use tc::renew to call explicit constructors, but beware of self-assignment. 
 
 // WATCH OUT, NOT SELF-ASSIGN AWARE
 #define ASSIGN_BY_RENEW( T, S ) \
 	T& operator=( S s ) { \
+		static_assert( std::is_convertible< S, T >::value, "assignment must correspond to implicit construction" ); \
 		/* \
 		- Lvalues may alias (parts of) *this, so don't use renew. \
 		- For rvalue references passed to the C++ library, the caller must ensure that they can be treated as temporaries, e.g., that they don't alias,
@@ -86,11 +86,5 @@ namespace tc {
 	T& operator=( T other ) { \
 		swap( *this, other ); /*not boost::swap, which may be implemented in terms of move, which would be circular*/ \
 		return *this; \
-	} \
-	template< typename A > \
-	typename std::enable_if< !std::is_same< typename std::decay<A>::type, T >::value, \
-	T& >::type operator=( A && a ) { /*defining this case explicitly allows mapping operator= to explicit ctors*/ \
-		static_assert( !std::is_base_of< T, typename std::decay<A>::type >::value, "Slicing?"); \
-		return *this=T(std::forward<A>(a)); \
 	}
 

@@ -9,13 +9,41 @@
 
 #include <boost/iterator/iterator_facade.hpp>
 #include <boost/mpl/has_xxx.hpp>
-#include <boost/mpl/logical.hpp>
 
 #include <type_traits>
-#include <boost/type_traits/common_type.hpp>
 #include <boost/range/detail/demote_iterator_traversal_tag.hpp>
 
 namespace RANGE_PROPOSAL_NAMESPACE {
+
+	template< typename DerivedConst >
+	struct delayed_difference_type {
+		typedef decltype(std::declval<DerivedConst const>().distance_to_index(std::declval<typename DerivedConst::index>(), std::declval<typename DerivedConst::index>())) type;
+	};
+
+	template< typename Rng >
+	struct range_traits {
+	public:
+		using IndexRange = typename index_range<typename std::remove_reference<Rng>::type>::type;
+
+		typedef decltype(std::declval<IndexRange>().dereference_index(std::declval<typename IndexRange::index>())) reference;
+
+		typedef typename std::decay<reference>::type value_type;
+
+		template<typename Traversal>
+		struct difference_type {
+			using type =
+				typename boost::mpl::eval_if_c<
+					std::is_convertible< Traversal, boost::iterators::random_access_traversal_tag >::value,
+					delayed_difference_type<IndexRange>,
+					boost::mpl::identity<
+						/*default of iterator_facade, needed to compile interfaces relying on difference_tye:*/
+						std::ptrdiff_t
+					>
+				>::type;
+		};
+	};
+	template<typename Rng, typename Traversal>
+	using range_difference_type = typename range_traits<Rng>::template difference_type<Traversal>::type;
 
 	//////////////////////////////////////////////////////////
 	// range adaptors
@@ -23,66 +51,44 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	// Basic building block for all ranges.
 	// Comes in two variations, one for generator ranges, one for iterator ranges. 
 	//
-
-	template< typename Rng >
-	struct make_sub_range_result;
-
 	namespace range_iterator_from_index_impl {
-		class empty_chain {};
+
+		template<typename T>
+		struct sfinae_has_member_function_base_range {
+			using type2 = decltype(std::declval<T const>().base_range());
+			using type = void;
+		};
 
 		template<
 			typename Derived,
 			typename Index,
-			typename Traversal,
-			typename Value=boost::use_default,
-			typename Chain=empty_chain
+			typename Traversal
 		>
-		struct range_iterator_from_index : public Chain {
-			static_assert( boost::detail::is_iterator_traversal<Traversal>::value, "" );
+		struct range_iterator_from_index {
+			static_assert( boost::iterators::detail::is_iterator_traversal<Traversal>::value, "" );
 			////////////////////////////////////////////////////////
 			// simulate iterator interface on top of index interface
 
 			typedef Index index;
 
-		private:
-			template< typename DerivedConst >
-			struct delayed_difference_type {
-				typedef decltype( std::declval<DerivedConst const>().distance_to_index(std::declval<index>(),std::declval<index>()) ) type;
-			};
-			template< typename DerivedConst >
-			struct range_traits {
-			public:
-				typedef decltype( std::declval<DerivedConst>().dereference_index(std::declval<index>()) ) reference;
-
-				typedef typename boost::mpl::if_<
-					std::is_same<Value,boost::use_default>
-					, typename std::decay<reference>::type
-					, Value
-				>::type value_type;
-
-				typedef typename boost::mpl::eval_if< std::is_convertible< Traversal, boost::random_access_traversal_tag >,
-					delayed_difference_type<DerivedConst>,
-					std::common_type</*default of iterator_facade, needed to compile interfaces relying on difference_tye:*/std::ptrdiff_t>
-				>::type difference_type;
-			};
 		public:
 			template<typename DerivedConst>
 			class common_iterator
-			: public boost::iterator_facade<
+			: public boost::iterators::iterator_facade<
 				common_iterator<DerivedConst>
 				, typename range_traits<DerivedConst>::value_type
 				, Traversal
 				, typename range_traits<DerivedConst>::reference
-				, typename range_traits<DerivedConst>::difference_type
+				, range_difference_type<DerivedConst,Traversal>
 				>
 			{
 			private:
-				typedef boost::iterator_facade<
+				typedef boost::iterators::iterator_facade<
 					common_iterator<DerivedConst>
 					, typename range_traits<DerivedConst>::value_type
 					, Traversal
 					, typename range_traits<DerivedConst>::reference
-					, typename range_traits<DerivedConst>::difference_type
+					, range_difference_type<DerivedConst,Traversal>
 				> base_;
 				friend class boost::iterator_core_access;
 				friend class common_iterator;
@@ -105,8 +111,8 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				template<typename OtherDerivedConst>
 				common_iterator(
 					common_iterator<OtherDerivedConst> const& other
-				, typename boost::enable_if<
-						std::is_convertible<OtherDerivedConst*,DerivedConst*>
+				, typename std::enable_if<
+						std::is_convertible<OtherDerivedConst*,DerivedConst*>::value
 					, enabler
 					>::type = enabler()
 				)
@@ -149,8 +155,14 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 					return it;
 				}
 
-				auto base() const
-					return_decltype( make_const(VERIFY(m_pidxrng))->base_range().make_iterator(m_idx) )
+				template<
+					typename IndexRange = DerivedConst,
+					typename sfinae_has_member_function_base_range<IndexRange>::type* = nullptr
+				>
+				auto base() const -> decltype( make_const(std::declval<IndexRange*>())->base_range().make_iterator(m_idx) )
+				{
+					return make_const(VERIFY(m_pidxrng))->base_range().make_iterator(m_idx);
+				}
 
 				// sub_range from iterator pair
 				friend typename tc::make_sub_range_result< DerivedConst & >::type make_iterator_range_impl( common_iterator itBegin, common_iterator itEnd ) {
@@ -200,29 +212,17 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	using range_iterator_from_index_impl::range_iterator_from_index;
 
 	namespace range_adaptor_impl {
-		class range_adaptor_access {
-		public:
-	#define PART1() \
-			template< typename Derived,
-	#define PART2() \
-			> static break_or_continue apply( Derived && derived, 
-	#define PART3() ) { \
-				return std::forward<Derived>(derived).apply(
-	#define PART4() ); \
-			}
-	PERFECT_FORWARD
-	#undef PART1
-	#undef PART2
-	#undef PART3
-	#undef PART4
+		struct range_adaptor_access {
+			template< typename Derived, typename... Args>
+			auto operator()( Derived && derived, Args&&... args) return_decltype(
+				std::forward<Derived>(derived).apply(std::forward<Args>(args)...)
+			)
 		};
 
 		template<
 			typename Derived 
 			, typename Rng
-			, typename Aggregate
-			, typename ValueType=boost::use_default
-			, typename Traversal=boost::use_default
+			, typename Traversal=boost::iterators::use_default
 			, bool HasIterator=is_range_with_iterators< Rng >::value
 		>
 		struct range_adaptor;
@@ -247,25 +247,23 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		template<
 			typename Derived 
 			, typename Rng
-			, typename Aggregate
-			, typename ValueType
 			, typename Traversal
 		>
 		struct range_adaptor<
 			Derived 
 			, Rng
-			, Aggregate
-			, ValueType
 			, Traversal
 			, false
 		> {
+			static_assert( !std::is_rvalue_reference<Rng>::value, "" );
 			reference_or_value< typename index_range<Rng>::type > m_baserng;
-		protected:
+		
+		public: // protected:
 			// workaround for clang compiler bug http://llvm.org/bugs/show_bug.cgi?id=19140
-			friend struct range_adaptor<Derived, Rng, Aggregate, ValueType, Traversal, true>;
-				
+			// friend struct range_adaptor<Derived, Rng, Traversal, true>;  // fixes the clang issue but not gcc
 			typedef typename std::remove_reference< typename index_range<Rng>::type >::type BaseRange;
 
+		protected:
 			// range_adaptor<Rng &>( range_adaptor<Rng &> const& )
 			// would allow creating a mutable range from a const range.
 			// More specifically, the copy could modify elements, although the original promised not to.
@@ -282,8 +280,8 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 			template< typename RngOther >
 			struct const_compatible_range {
-				typedef typename boost::mpl::if_< 
-					is_const_compatible_range<RngOther const&>,
+				typedef typename std::conditional< 
+					is_const_compatible_range<RngOther const&>::value,
 					RngOther const&,
 					RngOther &
 				>::type type;
@@ -321,6 +319,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			)
 
 		private:
+
 			template< typename Func, bool Abortable >
 			class adaptor;
 
@@ -334,19 +333,14 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				: m_derived( derived )
 				, m_func( std::forward<Func>(func) ) {}
 
-	#define PART1() \
-				template<
-	#define PART2() \
-				> break_or_continue operator()(
-	#define PART3() ) const { \
-					return range_adaptor_access::apply( m_derived, m_func, 
-	#define PART4() ); \
+				template<typename... Args> break_or_continue operator()(Args&&... args) const {
+					return continue_if_void(
+						range_adaptor_access(),
+						m_derived,
+						m_func,
+						std::forward<Args>(args)...
+					);
 				}
-	PERFECT_FORWARD
-	#undef PART1
-	#undef PART2
-	#undef PART3
-	#undef PART4
 			};
 
 			template< typename Func >
@@ -356,40 +350,83 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 			public:
 				adaptor( Derived const& derived, Func && func )
-				: m_derived( derived )
-				, m_func( std::forward<Func>(func) ) {}
+					: m_derived( derived )
+					, m_func( std::forward<Func>(func) ) {}
 
-	#define PART1() \
-				template<
-	#define PART2() \
-				> void operator()(
-	#define PART3() ) const { \
-					range_adaptor_access::apply( m_derived, m_func, 
-	#define PART4() ); \
+				template<typename... Args>
+				void operator()(Args&&... args) const {
+					static_assert(
+						// Note: Instead of the following static_assert it would be possible to
+						// use return_decltype() and let the functor check in ensure_index_range
+						// check the correct type. The problem with that is, that
+						// VC12 very soon reaches compiler limits on chained decltypes. This
+						// chain is interrupted by returning void here.
+						!std::is_same<
+							decltype(range_adaptor_access()( m_derived, m_func, std::forward<Args>(args)... )),
+							break_or_continue
+						>::value,
+						"void generator ranges must not be used with functors returning break_or_continue!"
+					);
+					range_adaptor_access()( m_derived, m_func, std::forward<Args>(args)... );
 				}
-	PERFECT_FORWARD
-	#undef PART1
-	#undef PART2
-	#undef PART3
-	#undef PART4
 			};
 
 		public:
+
 			template< typename Func >
-			break_or_continue operator()(Func && func) {
-				return continue_if_void( base_range(), adaptor<Func,
-					std::is_same< typename std::result_of< decltype( base_range() )( adaptor<Func,true> ) >::type, break_or_continue >::value
-					>( derived_cast<Derived>(*this), std::forward<Func>(func) ) );
+			typename std::enable_if<
+				std::is_same<
+					typename tc::result_of<BaseRange(adaptor<Func, true>)>::type,
+					break_or_continue
+				>::value,
+				break_or_continue
+			>::type
+			operator()(Func && func) {
+				return base_range()(adaptor<Func, true>(derived_cast<Derived>(*this), std::forward<Func>(func)));
 			}
 
 			template< typename Func >
-			break_or_continue operator()(Func && func) const {
-				return continue_if_void( base_range(), adaptor<Func,
-					std::is_same< typename std::result_of< decltype( base_range() )( adaptor<Func,true> ) >::type, break_or_continue >::value
-					>( derived_cast<Derived>(*this), std::forward<Func>(func) ) );
+			typename std::enable_if<
+				!std::is_same<
+					typename tc::result_of<BaseRange(adaptor<Func, true>)>::type,
+					break_or_continue
+				>::value &&
+				std::is_same<
+					typename tc::result_of<BaseRange(adaptor<Func, false>)>::type,
+					void
+				>::value
+			>::type
+			operator()(Func && func) {
+				return base_range()(adaptor<Func, false>(derived_cast<Derived>(*this), std::forward<Func>(func)));
+			}
+
+			template< typename Func >
+			typename std::enable_if<
+				std::is_same<
+					typename tc::result_of<BaseRange(adaptor<Func, true>)>::type,
+					break_or_continue
+				>::value,
+				break_or_continue
+			>::type
+			operator()(Func && func) const {
+				return base_range()(adaptor<Func, true>(derived_cast<Derived>(*this), std::forward<Func>(func)));
+			}
+
+			template< typename Func >
+			typename std::enable_if<
+				!std::is_same<
+					typename tc::result_of<BaseRange(adaptor<Func, true>)>::type,
+					break_or_continue
+				>::value &&
+				std::is_same<
+					typename tc::result_of<BaseRange(adaptor<Func, false>)>::type,
+					void
+				>::value
+			>::type
+			operator()(Func && func) const {
+				return base_range()(adaptor<Func, false>(derived_cast<Derived>(*this), std::forward<Func>(func)));
 			}
 		};
-
 		//-------------------------------------------------------------------------------------------------------------------------
 		// iterator/index based ranges
 		//
@@ -400,36 +437,31 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		template<
 			typename Derived 
 			, typename Rng
-			, typename Aggregate
-			, typename ValueType
 			, typename Traversal
 		>
 		struct range_adaptor<
 			Derived 
 			, Rng
-			, Aggregate
-			, ValueType
 			, Traversal
 			, true
 		>
-		: range_adaptor<Derived,Rng,Aggregate,ValueType,Traversal,false>
+		: range_adaptor<Derived,Rng,Traversal,false>
 		, range_iterator_from_index<
 			Derived,
-			typename range_adaptor<Derived,Rng,Aggregate,ValueType,Traversal,false>::BaseRange::index,
+			typename range_adaptor<Derived,Rng,Traversal,false>::BaseRange::index,
 			typename boost::range_detail::demote_iterator_traversal_tag<
-				typename boost::mpl::if_< std::is_same<Traversal,boost::use_default>
-					, boost::random_access_traversal_tag
+				typename std::conditional< std::is_same<Traversal,boost::iterators::use_default>::value
+					, boost::iterators::random_access_traversal_tag
 					, Traversal
 				>::type,
 				typename boost::iterator_traversal<
 					typename boost::range_iterator<typename std::remove_reference<Rng>::type>::type
 				>::type
-			>::type,
-			ValueType
+			>::type
 		>
 		{
 		private:
-			typedef range_adaptor<Derived,Rng,Aggregate,ValueType,Traversal,false> base_;
+			typedef range_adaptor<Derived,Rng,Traversal,false> base_;
 		protected:
 			using typename base_::BaseRange;
 
@@ -453,7 +485,6 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		
 		public:
 			typedef typename BaseRange::index index;
-			static bool const index_valid_after_copy=std::is_reference< typename index_range<Rng>::type >::value || BaseRange::index_valid_after_copy;
 
 			index begin_index() const {
 				return this->base_range().begin_index();

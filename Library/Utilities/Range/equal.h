@@ -43,10 +43,10 @@ namespace RANGE_PROPOSAL_NAMESPACE{
 		typename std::enable_if< is_range_with_iterators< RRng >::value,
 	bool >::type equal(LRng const& lrng, RRng const& rrng, Pred&& pred) {
 
-		equal_impl::is_equal_elem<RRng, Pred> equal(rrng, std::forward<Pred>(pred));
-		ensure_index_range(lrng)(std::ref(equal));
+		equal_impl::is_equal_elem<RRng, Pred> equalpred(rrng, std::forward<Pred>(pred));
+		ensure_index_range(lrng)(std::ref(equalpred));
 
-		return equal.result();
+		return equalpred.result();
 	}
 
 	// forward to the symetric case above
@@ -76,7 +76,7 @@ namespace RANGE_PROPOSAL_NAMESPACE{
 	// forward the non predicate version
 	template<typename LRng, typename RRng>
 	bool equal(LRng const& lrng, RRng const& rrng) {
-		return RANGE_PROPOSAL_NAMESPACE::equal(lrng, rrng, fn_equal());
+		return RANGE_PROPOSAL_NAMESPACE::equal(lrng, rrng, fn_equal_to());
 	}
 
 }

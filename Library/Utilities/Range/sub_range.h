@@ -18,29 +18,22 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	// meta function to determine the correct type
 	// may_aggregate<Rng>::type does not work because sub_range::iterator must be an iterator of the underlying range.
 	// Being an iterator of a copy of the underlying range is not sufficient.
-	template< typename Rng > 
+	template< typename Rng, typename Enable >
 	struct make_sub_range_result {
-		typedef sub_range<Rng> type;
+		typedef sub_range< Rng > type;
+	};
+	
+	template< typename Rng >
+	struct make_sub_range_result< Rng, typename std::enable_if<
+		!std::is_same< Rng, typename range_by_value<Rng>::type >::value
+	>::type > {
+		typedef typename make_sub_range_result< typename range_by_value<Rng>::type >::type type;
 	};
 
 	// collapse sub_range< sub_range< ... > > to single sub_range
 	template< typename Rng > 
 	struct make_sub_range_result< sub_range<Rng> > {
 		typedef typename make_sub_range_result<Rng>::type type;
-	};
-	template< typename Rng > 
-	struct make_sub_range_result< sub_range<Rng> & > {
-		typedef typename make_sub_range_result<
-			typename std::add_lvalue_reference<Rng>::type
-		>::type type;
-	};
-	template< typename Rng > 
-	struct make_sub_range_result< sub_range<Rng> const& > {
-		typedef typename make_sub_range_result<
-			typename std::add_lvalue_reference<
-				typename add_const_also_to_ref<Rng>::type
-			>::type
-		>::type type;
 	};
 
 	// put transform_adaptor outside of sub_range (to allow tc::equal_range( tc::transform( rng, func ) ).base_range())
@@ -78,16 +71,16 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	//-------------------------------------------------------------------------------------------------------------------------
 	// fwd decls 
 	template< typename Cont >
-	Cont& head_inplace( Cont & cont, typename boost::range_iterator< typename std::remove_reference<Cont>::type >::type it );
+	Cont& take_inplace( Cont & cont, typename boost::range_iterator< typename std::remove_reference<Cont>::type >::type it );
 
 	template< typename Cont >
-	Cont& head_inplace( Cont& cont, typename boost::range_size< typename std::remove_reference<Cont>::type >::type n );
+	Cont& take_inplace( Cont& cont, typename boost::range_size< typename std::remove_reference<Cont>::type >::type n );
 
 	template< typename Cont >
-	Cont& tail_inplace( Cont & cont, typename boost::range_iterator< typename std::remove_reference<Cont>::type >::type it );
+	Cont& drop_inplace( Cont & cont, typename boost::range_iterator< typename std::remove_reference<Cont>::type >::type it );
 
 	template< typename Cont >
-	Cont& tail_inplace( Cont& cont, typename boost::range_size< typename std::remove_reference<Cont>::type >::type n );
+	Cont& drop_inplace( Cont& cont, typename boost::range_size< typename std::remove_reference<Cont>::type >::type n );
 	
 	template< typename It >
 	typename std::make_unsigned< typename boost::iterator_difference< typename tc::remove_cvref<It>::type >::type >::type advance_forward_bounded(
@@ -98,10 +91,19 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 	//-------------------------------------------------------------------------------------------------------------------------
 
+	template<typename Rng>
+	struct range_traversal {
+		typedef typename boost::iterator_traversal< 
+			typename boost::range_iterator< 
+				typename std::remove_reference<Rng>::type 
+			>::type 
+		>::type type;
+	};
+
 	namespace sub_range_impl {
 		template< typename Rng >
 		struct whole_range_sub_range_helper_base {
-			typedef range_adaptor< sub_range<Rng>, Rng, std::false_type > base_;
+			typedef range_adaptor< sub_range<Rng>, Rng > base_;
 
 			template<typename Rhs>
 			static auto base_range(Rhs && rhs)
@@ -116,7 +118,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 		template< typename It >
 		struct whole_range_sub_range_helper_base<iterator_base<It>> {
-			typedef range_adaptor< sub_range<iterator_base<It>>, iterator_base<It>, std::false_type > base_;
+			typedef range_adaptor< sub_range<iterator_base<It>>, iterator_base<It> > base_;
 
 			template<typename Rhs>
 			static auto base_range(Rhs &&)
@@ -131,7 +133,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 		template< typename T >
 		struct whole_range_sub_range_helper_base<iterator_base<T*>> {
-			typedef range_adaptor< sub_range<iterator_base<T*>>, iterator_base<T*>, std::false_type > base_;
+			typedef range_adaptor< sub_range<iterator_base<T*>>, iterator_base<T*> > base_;
 
 			template<typename Rhs>
 			static auto base_range(Rhs &&)
@@ -159,35 +161,42 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				return_decltype( whole_range_sub_range_helper<Rng>::base_range( tc_move(rhs).base_range_move() ) )
 			template<typename Rhs>
 			static auto begin_index(base_ &, sub_range<Rhs> && rhs)
-				code_return_decltype( static_assert( std::is_reference<Rng>::value || sub_range<Rhs>::index_valid_after_copy BOOST_PP_COMMA() "operation invalidates indices" );, rhs.begin_index() )
+				return_decltype( rhs.begin_index() )
 			template<typename Rhs>
 			static auto end_index(base_ &, sub_range<Rhs> && rhs)
-				code_return_decltype( static_assert( std::is_reference<Rng>::value || sub_range<Rhs>::index_valid_after_copy BOOST_PP_COMMA() "operation invalidates indices" );, rhs.end_index() )
+				return_decltype( rhs.end_index() )
 
 			template<typename Rhs>
 			static auto base_range(sub_range<Rhs> const& rhs)
 				return_decltype( whole_range_sub_range_helper<Rng>::base_range( rhs.base_range() ) )
 			template<typename Rhs>
 			static auto begin_index(base_ &, sub_range<Rhs> const& rhs)
-				code_return_decltype( static_assert( std::is_reference<Rng>::value || sub_range<Rhs>::index_valid_after_copy BOOST_PP_COMMA() "operation invalidates indices" );, rhs.begin_index() )
+				return_decltype( rhs.begin_index() )
 			template<typename Rhs>
 			static auto end_index(base_ &, sub_range<Rhs> const& rhs)
-				code_return_decltype( static_assert( std::is_reference<Rng>::value || sub_range<Rhs>::index_valid_after_copy BOOST_PP_COMMA() "operation invalidates indices" );, rhs.end_index() )
+				return_decltype( rhs.end_index() )
 
 			template<typename Rhs>
 			static auto base_range(sub_range<Rhs> & rhs)
 				return_decltype( whole_range_sub_range_helper<Rng>::base_range( rhs.base_range() ) )
 			template<typename Rhs>
 			static auto begin_index(base_ &, sub_range<Rhs> & rhs)
-				code_return_decltype( static_assert( std::is_reference<Rng>::value || sub_range<Rhs>::index_valid_after_copy BOOST_PP_COMMA() "operation invalidates indices" );, rhs.begin_index() )
+				return_decltype( rhs.begin_index() )
 			template<typename Rhs>
 			static auto end_index(base_ &, sub_range<Rhs> & rhs)
-				code_return_decltype( static_assert( std::is_reference<Rng>::value || sub_range<Rhs>::index_valid_after_copy BOOST_PP_COMMA() "operation invalidates indices" );, rhs.end_index() )
+				return_decltype( rhs.end_index() )
 		};
 
 		template< typename Rng >
-		class sub_range : public range_adaptor< sub_range<Rng>, Rng, std::false_type > {
-			typedef range_adaptor< sub_range<Rng>, Rng, std::false_type > base_;
+		class sub_range : public range_adaptor< sub_range<Rng>, Rng > {
+			static_assert( 
+				tc::is_range<Rng>::value
+					? std::is_same< Rng, typename range_by_value<Rng>::type >::value
+					: std::is_reference<Rng>::value, 
+				"sub_range must hold ranges by value and containers by reference."
+			);
+
+			typedef range_adaptor< sub_range<Rng>, Rng > base_;
 			using typename base_::BaseRange;
 
 		public:
@@ -201,6 +210,8 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			// default ctor (for deferred initialization)
 			sub_range()
 			{}
+
+			typedef void ctor_const_overload_support;
 
 			// templated copy ctors
 			template<typename RngOther> 
@@ -220,7 +231,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 			template<typename RngOther> 
 			sub_range( RngOther && rng, typename std::enable_if<
-				base_::template is_const_compatible_range<RngOther>::value
+				is_range_with_iterators<RngOther>::value && base_::template is_const_compatible_range<RngOther>::value
 			, unused_arg>::type=unused_arg() )
 				: base_( whole_range_sub_range_helper<Rng>::base_range(
 					ctor_base_cast<sub_range,sub_range>( std::forward<RngOther>(rng) ) 
@@ -264,8 +275,15 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				))
 				, m_idxEnd(m_idxBegin)
 			{
-				base_::advance_index(m_idxBegin,tc_move(iBegin));
-				base_::advance_index(m_idxEnd,tc_move(iEnd));
+				static_assert( 
+					std::is_same< 
+						typename range_traversal< typename std::remove_reference<Rng>::type >::type,
+						boost::iterators::random_access_traversal_tag
+					>::value,
+					"Cannot create a subrange using indices from a non-random access range. Create sub_range from iterators instead, e.g. with tc::drop(rng, boost::next(boost::begin(rng)))"
+				);
+				base_::advance_index(m_idxBegin, static_cast< typename boost::range_difference< typename std::remove_reference<Rng>::type >::type >(iBegin));
+				base_::advance_index(m_idxEnd, static_cast< typename boost::range_difference< typename std::remove_reference<Rng>::type >::type >(iEnd));
 			}
 
 			template<typename Rhs>
@@ -355,24 +373,24 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			}
 
 			template< typename It >
-			friend void head_inplace_impl( sub_range& rng, It && it ) {
+			friend void take_inplace_impl( sub_range& rng, It && it ) {
 				rng.m_idxEnd=iterator2index( std::forward<It>(it) );
 			}
 
 			template< typename It >
-			friend void tail_inplace_impl( sub_range& rng, It && it ) {
+			friend void drop_inplace_impl( sub_range& rng, It && it ) {
 				rng.m_idxBegin=iterator2index( std::forward<It>(it) );
 			}
 
 			template< typename Delimiter >
-			friend sub_range&& head( sub_range&& rng, Delimiter && del ) {
-				tc::head_inplace(rng,std::forward<Delimiter>(del));
+			friend sub_range&& take( sub_range&& rng, Delimiter && del ) {
+				tc::take_inplace(rng,std::forward<Delimiter>(del));
 				return tc_move(rng);
 			}
 
 			template< typename Delimiter >
-			friend sub_range&& tail( sub_range&& rng, Delimiter && del ) {
-				tc::tail_inplace(rng,std::forward<Delimiter>(del));
+			friend sub_range&& drop( sub_range&& rng, Delimiter && del ) {
+				tc::drop_inplace(rng,std::forward<Delimiter>(del));
 				return tc_move(rng);
 			}
 		};
@@ -390,59 +408,59 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	}
 
 	//-------------------------------------------------------------------------------------------------------------------------
-	// head
+	// take
 
 	template< typename Cont, typename It >
-	void head_inplace_impl( Cont & cont, It && it ) {
+	void take_inplace_impl( Cont & cont, It && it ) {
 		cont.erase( it, cont.end() );
 	}
 
 	template< typename Cont >
-	Cont& head_inplace( Cont & cont, typename boost::range_iterator< typename std::remove_reference<Cont>::type >::type it ) {
-		head_inplace_impl(cont,tc_move(it)); // allow ADL
+	Cont& take_inplace( Cont & cont, typename boost::range_iterator< typename std::remove_reference<Cont>::type >::type it ) {
+		take_inplace_impl(cont,tc_move(it)); // allow ADL
 		return cont;
 	}
 
 	template< typename Cont >
-	Cont& head_inplace( Cont& cont, typename boost::range_size< typename std::remove_reference<Cont>::type >::type n ) {
+	Cont& take_inplace( Cont& cont, typename boost::range_size< typename std::remove_reference<Cont>::type >::type n ) {
 		auto it=cont.begin();
 		_ASSERT( n <= boost::implicit_cast< typename boost::range_size< typename std::remove_reference<Cont>::type >::type >(boost::distance(cont)) );
 		std::advance( it, n );
-		tc::head_inplace( cont, it );
+		tc::take_inplace( cont, it );
 		return cont;
 	}
 
 	template< typename Rng >
-	typename make_sub_range_result< Rng >::type head_impl( Rng && rng,
+	typename make_sub_range_result< Rng >::type take_impl( Rng && rng,
 		typename boost::range_iterator< typename std::remove_reference<Rng>::type >::type itEnd
 	) {
-		return make_sub_range_result< Rng >::type( std::forward<Rng>(rng), boost::begin(rng), tc_move(itEnd) );
+		return typename make_sub_range_result< Rng >::type( std::forward<Rng>(rng), boost::begin(rng), tc_move(itEnd) );
 	}
 
 	template< typename Rng >
-	typename make_sub_range_result< Rng >::type head_impl( Rng && rng,
+	typename make_sub_range_result< Rng >::type take_impl( Rng && rng,
 		typename boost::range_size< typename std::remove_reference<Rng>::type >::type iEnd
 	) {
-		return make_sub_range_result< Rng >::type( std::forward<Rng>(rng), 0, tc_move(iEnd) );
+		return typename make_sub_range_result< Rng >::type( std::forward<Rng>(rng), 0, tc_move(iEnd) );
 	}
 	
 	template< typename C, typename T, typename A, typename Delimiter >
-	std::basic_string<C,T,A> && head( std::basic_string<C,T,A> && rng, Delimiter && del ) {
-		tc::head_inplace(rng,std::forward<Delimiter>(del));
+	std::basic_string<C,T,A> && take( std::basic_string<C,T,A> && rng, Delimiter && del ) {
+		tc::take_inplace(rng,std::forward<Delimiter>(del));
 		return tc_move(rng);
 	}
 	
 	template< typename Rng, typename Delimiter >
-	auto head( Rng && rng, Delimiter && del ) return_decltype(
-		head_impl( std::forward<Rng>(rng), std::forward<Delimiter>(del) )
+	auto take( Rng && rng, Delimiter && del ) return_decltype(
+		take_impl( std::forward<Rng>(rng), std::forward<Delimiter>(del) )
 	)
 	
 	//-------------------------------------------------------------------------------------------------------------------------
-	// tail
+	// drop
 
-	// tail_inplace
+	// drop_inplace
 /*	template< typename Cont, typename It >
-	void tail_inplace_impl( Cont & cont, It && it ) {
+	void drop_inplace_impl( Cont & cont, It && it ) {
 		cont.erase( cont.begin(), it );
 	}*/
 
@@ -457,28 +475,28 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	>::type {};
 
 	template< typename CharPtr, typename It >
-	typename std::enable_if< tc::is_char_ptr<CharPtr>::value, void >::type tail_inplace_impl( CharPtr& pch, It && it ) {
+	typename std::enable_if< tc::is_char_ptr<CharPtr>::value, void >::type drop_inplace_impl( CharPtr& pch, It && it ) {
 		pch=std::forward<It>(it);
 	}
 
 	template< typename Cont >
-	Cont& tail_inplace( Cont & cont, typename boost::range_iterator< typename std::remove_reference<Cont>::type >::type it ) {
-		tail_inplace_impl(cont,tc_move(it));
+	Cont& drop_inplace( Cont & cont, typename boost::range_iterator< typename std::remove_reference<Cont>::type >::type it ) {
+		drop_inplace_impl(cont,tc_move(it));
 		return cont;
 	}
 
 	template< typename Cont >
-	Cont& tail_inplace( Cont& cont, typename boost::range_size< typename std::remove_reference<Cont>::type >::type n ) {
+	Cont& drop_inplace( Cont& cont, typename boost::range_size< typename std::remove_reference<Cont>::type >::type n ) {
 		auto it=boost::begin(cont);
 		_ASSERT( n <= boost::implicit_cast< typename boost::range_size< typename std::remove_reference<Cont>::type >::type >(boost::distance(cont)) );
 		std::advance( it, n );
-		tc::tail_inplace( cont, it );
+		tc::drop_inplace( cont, it );
 		return cont;
 	}
 
 	template< typename Rng >
 	typename std::enable_if< !tc::is_char_ptr< Rng >::value,
-	typename make_sub_range_result< Rng >::type >::type tail_impl( Rng && rng,
+	typename make_sub_range_result< Rng >::type >::type drop_impl( Rng && rng,
 		typename boost::range_iterator< typename std::remove_reference<Rng>::type >::type itBegin
 	) {
 		return typename make_sub_range_result< Rng >::type( std::forward<Rng>(rng), itBegin, boost::end(rng) );
@@ -486,7 +504,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 	template< typename Rng >
 	typename std::enable_if< !tc::is_char_ptr< Rng >::value,
-	typename make_sub_range_result< Rng >::type >::type tail_impl( Rng && rng,
+	typename make_sub_range_result< Rng >::type >::type drop_impl( Rng && rng,
 		typename boost::range_size< typename std::remove_reference<Rng>::type >::type iBegin
 	) {
 		return typename make_sub_range_result< Rng >::type( std::forward<Rng>(rng), tc_move(iBegin), tc::size(rng) );
@@ -495,34 +513,33 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	// C strings have efficient in-place tail
 	template< typename CharPtr, typename Delimiter >
 	typename std::enable_if< tc::is_char_ptr< CharPtr >::value,
-	typename std::decay<CharPtr>::type >::type tail_impl( CharPtr && pch, Delimiter && del ) {
+	typename std::decay<CharPtr>::type >::type drop_impl( CharPtr && pch, Delimiter && del ) {
 		typename std::decay<CharPtr>::type pchCopy=std::forward<CharPtr>(pch);
-		tc::tail_inplace( pchCopy, std::forward<Delimiter>(del) );
+		tc::drop_inplace( pchCopy, std::forward<Delimiter>(del) );
 		return pchCopy;
 	}
 
 	template< typename Rng, typename Delimiter >
-	auto tail( Rng && rng, Delimiter && del ) return_decltype(
-		tail_impl( std::forward<Rng>(rng), std::forward<Delimiter>(del) )
+	auto drop( Rng && rng, Delimiter && del ) return_decltype(
+		drop_impl( std::forward<Rng>(rng), std::forward<Delimiter>(del) )
 	)
 
 	//-------------------------------------------------------------------------------------------------------------------------
 	// truncate
 
 	template< typename Cont >
-	Cont& truncate_inplace( Cont& cont, typename boost::range_size< typename std::remove_reference<Cont>::type >::type n ) {
-		auto it=cont.begin();
-		advance_forward_bounded( it, n, cont.end() );
-		tc::head_inplace( cont, it );
-		return cont;
+	Cont& truncate_inplace( Cont& rng, typename boost::range_size< typename std::remove_reference<Cont>::type >::type n ) {
+		auto it=boost::begin(rng);
+		tc::advance_forward_bounded( it, n, boost::end(rng) );
+		return tc::take_inplace( rng, tc_move(it) );
 	}
 
 	template< typename Rng >
 	auto truncate( Rng && rng, typename boost::range_size< typename std::remove_reference<Rng>::type >::type n )
-	->decltype(tc::head( std::forward<Rng>(rng), boost::begin(rng) )) {
+	->decltype(tc::take( std::forward<Rng>(rng), boost::begin(rng) )) {
 		auto it=boost::begin(rng);
 		tc::advance_forward_bounded( it, n, boost::end(rng) );
-		return tc::head( std::forward<Rng>(rng), tc_move(it) );
+		return tc::take( std::forward<Rng>(rng), tc_move(it) );
 	}
 
 	//-------------------------------------------------------------------------------------------------------------------------
@@ -550,7 +567,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			It&& it,
 			typename std::make_unsigned< typename boost::iterator_difference< typename tc::remove_cvref<It>::type >::type >::type n,
 			typename tc::remove_cvref<It>::type const& itBound,
-			boost::random_access_traversal_tag
+			boost::iterators::random_access_traversal_tag
 		) {
 			_ASSERT( 0 <= n );
 			if( assign_better( n, tc::make_size_proxy(itBound-it), fn_less_equal() ) ) {
@@ -574,11 +591,11 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	template< typename Rng >
 	typename tc::make_sub_range_result<Rng>::type make_head_range_bounded( 
 		Rng && rng, 
-		typename boost::range_size<Rng>::type nEnd )
+		typename boost::range_size< typename std::remove_reference<Rng>::type >::type nEnd )
 	{
 		typename boost::range_iterator< typename std::remove_reference<Rng>::type >::type itEnd=boost::begin(rng);
 		advance_forward_bounded( itEnd, nEnd, boost::end(rng) );
-		return tc::head( std::forward<Rng>(rng), itEnd );
+		return tc::take( std::forward<Rng>(rng), itEnd );
 	};
 
 	//-------------------------------------------------------------------------------------------------------------------------
@@ -613,10 +630,13 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		return_iterator_or_end, // the resulting iterator, singleton is end()
 		return_iterator, // the resulting iterator, singleton not allowed
 		return_prev_iterator, // prior(found) iterator, singleton not allowed
-		return_next_iterator, // prior(found) iterator, singleton not allowed
+		return_next_iterator, // next(found) iterator, singleton not allowed
 		return_head, // [begin, found) range, singleton not allowed
 		return_head_next, // [begin, next(found)) range, singleton not allowed
+		return_head_next_or_empty, // [begin, next(found)) range, singleton is [begin, begin)
 		return_tail, // [found, end) range, singleton not allowed
+		return_tail_or_empty, // [found, end) range, singleton is [end, end)
+		return_tail_next_or_all, // (found, end) range, singleton is [begin, end)
 		return_index_or_npos, // return index of found, singleton is -1
 		return_index, // return index of found, singleton not allowed
 		return_index_or_size // return index of found, singleton is size
@@ -689,25 +709,53 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		typedef typename make_sub_range_result<Rng>::type type;
 
 		static type pack(typename boost::range_iterator< typename std::remove_reference<Rng>::type >::type found, Rng&& rng) {
-			return tc::head( std::forward<Rng>(rng), found);
+			return tc::take( std::forward<Rng>(rng), found);
 		}
 		static type pack_singleton(Rng && rng) {
 			_ASSERTFALSE;
-			return tc::head( std::forward<Rng>(rng), boost::begin(rng));
+			return tc::take( std::forward<Rng>(rng), boost::begin(rng));
 		}
 	};
 
 	template< typename Rng >
 	struct range_return< Rng, return_tail >
 	{
-		typedef decltype(tc::tail( std::declval<Rng&&>(), boost::begin(std::declval<Rng&>()) )) type;
+		typedef decltype(tc::drop( std::declval<Rng&&>(), boost::begin(std::declval<Rng&>()) )) type;
 
 		static type pack(typename boost::range_iterator< typename std::remove_reference<Rng>::type >::type found, Rng&& rng) {
-			return tc::tail( std::forward<Rng>(rng), found );
+			return tc::drop( std::forward<Rng>(rng), found );
 		}
 		static type pack_singleton(Rng && rng) {
 			_ASSERTFALSE;
-			return tc::tail( std::forward<Rng>(rng), boost::end(rng));
+			return tc::drop( std::forward<Rng>(rng), boost::end(rng));
+		}
+	};
+
+	template< typename Rng >
+	struct range_return< Rng, return_tail_or_empty >
+	{
+		typedef decltype(tc::drop( std::declval<Rng&&>(), boost::begin(std::declval<Rng&>()) )) type;
+
+		static type pack(typename boost::range_iterator< typename std::remove_reference<Rng>::type >::type found, Rng&& rng) {
+			return tc::drop( std::forward<Rng>(rng), found );
+		}
+		static type pack_singleton(Rng && rng) {
+			return tc::drop( std::forward<Rng>(rng), boost::end(rng));
+		}
+	};
+
+	template< typename Rng >
+	struct range_return< Rng, return_tail_next_or_all >
+	{
+		typedef decltype(tc::drop( std::declval<Rng&&>(), boost::begin(std::declval<Rng&>()) )) type;
+
+		static type pack(typename boost::range_iterator< typename std::remove_reference<Rng>::type >::type found, Rng&& rng) {
+			return ( boost::end(rng)==found )
+				? pack_singleton(std::forward<Rng>(rng))
+				: tc::drop( std::forward<Rng>(rng), boost::next(found) );
+		}
+		static type pack_singleton(Rng && rng) {
+			return tc::drop(std::forward<Rng>(rng), boost::begin(rng));
 		}
 	};
 
@@ -759,11 +807,24 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 		static type pack(typename boost::range_iterator< typename std::remove_reference<Rng>::type >::type it, Rng&& rng) {
 			_ASSERT( it!=boost::end(rng) );
-			return tc::head( std::forward<Rng>(rng), boost::next(it) );
+			return tc::take( std::forward<Rng>(rng), boost::next(it) );
 		}
 		static type pack_singleton(Rng && rng) {
 			_ASSERTFALSE;
-			return std::forward<Rng>(rng);
+			return tc::take( std::forward<Rng>(rng), boost::begin(rng) );
+		}
+	};
+
+	template< typename Rng >
+	struct range_return< Rng, return_head_next_or_empty > {
+		typedef typename make_sub_range_result<Rng>::type type;
+
+		static type pack(typename boost::range_iterator< typename std::remove_reference<Rng>::type >::type it, Rng&& rng) {
+			_ASSERT( it!=boost::end(rng) );
+			return tc::take( std::forward<Rng>(rng), boost::next(it) );
+		}
+		static type pack_singleton(Rng&& rng) {
+			return tc::take( std::forward<Rng>(rng), boost::begin(rng) );
 		}
 	};
 
@@ -789,4 +850,31 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			is_char<T>::value,
 			tc::make_iterator_range( std::addressof(at[0]), std::addressof(at[0])+N )
 		)
+
+	template< typename T >
+	using ptr_range = sub_range < iterator_base<T*> >;
 }
+
+//--------------------------------------------------------------------------------------------------------------------------
+// as_char_range
+// reinterprets a range of items as a range of chars
+
+template<typename T>
+typename std::enable_if< tc::is_range_with_iterators< T >::value,
+tc::ptr_range<char const> >::type as_char_range(T const& t) {
+	auto const& rng=tc::as_pointers(t);
+	static_assert( std::is_pod< typename boost::range_value< typename std::remove_reference< decltype( rng ) >::type >::type >::value, "as_char_range only works with PODs" );
+	return tc::make_iterator_range( 
+		reinterpret_cast<char const*>( boost::begin(rng) ),
+		reinterpret_cast<char const*>( boost::end(rng) )
+	);
+}
+
+template<typename T>
+typename std::enable_if< !tc::is_range_with_iterators< T >::value,
+tc::ptr_range<char const> >::type as_char_range(T const& t) {
+	return as_char_range( tc::make_singleton_range(t) );
+}
+
+
+

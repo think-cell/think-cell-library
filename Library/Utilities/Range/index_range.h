@@ -2,7 +2,6 @@
 
 #include "range_defines.h"
 
-#include "for_each.h"
 #include "break_or_continue.h"
 #include "meta.h"
 
@@ -18,10 +17,34 @@
 
 #include <boost/range/iterator_range.hpp>
 
+#ifdef TC_MAC
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wshorten-64-to-32"
+#else
+#pragma warning( push )
+#pragma warning( disable: 4244 )
+#endif
+#include <boost/iterator/counting_iterator.hpp>
+#ifdef TC_MAC
+#pragma clang diagnostic pop
+#else
+#pragma warning( pop )
+#endif
+
 #include <boost/mpl/has_xxx.hpp>
-#include <boost/mpl/logical.hpp>
 
 #include <type_traits>
+
+namespace boost {
+namespace iterators {
+	template <
+		typename Incrementable
+		, typename CategoryOrTraversal
+		, typename Difference
+	>
+	class counting_iterator;
+}
+}
 
 namespace RANGE_PROPOSAL_NAMESPACE {
 	namespace iterator {
@@ -31,7 +54,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	template< typename It >
 	class const_iterator_ {
 		struct wrapper: public It {
-			typedef typename boost::mpl::if_< std::is_lvalue_reference< typename std::iterator_traits<It>::reference >
+			typedef typename std::conditional< std::is_lvalue_reference< typename std::iterator_traits<It>::reference >::value
 				, typename add_const_also_to_ref<
 					typename std::iterator_traits<It>::reference
 				>::type
@@ -57,10 +80,21 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			}
 		};
 	public:
-		typedef typename boost::mpl::if_< std::is_pointer<It>
-			, typename std::remove_pointer<It>::type const*
-			, wrapper
-		>::type type;
+		typedef wrapper type;
+	};
+
+	template<typename T>
+	struct const_iterator_<T*> {
+		typedef T const* type;
+	};
+
+	template <
+		typename Incrementable
+		, typename CategoryOrTraversal
+		, typename Difference
+	>
+	struct const_iterator_<boost::iterators::counting_iterator<Incrementable,CategoryOrTraversal,Difference>> {
+		typedef boost::iterators::counting_iterator<Incrementable,CategoryOrTraversal,Difference> type;
 	};
 
 	template< typename It, typename ConstIt > struct iterator_base;
@@ -97,12 +131,19 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		typedef ConstIt const_iterator;
 		typedef index_from_iterator<It> index;
 
-		static bool const index_valid_after_copy=true;
-
 		static index iterator2index( iterator it ) {
 			return index(it, aggregate_tag());
 		}
 
+/*		iterator_base(iterator_base const&) {};
+		template< typename OtherIt, typename OtherConstIt >
+		explicit iterator_base( iterator_base<OtherIt,OtherConstIt> const&, typename std::enable_if<
+			std::is_convertible<OtherIt,It>::value && std::is_convertible<OtherConstIt,ConstIt>::value
+		, unused_arg >::type=unused_arg() ) {};
+		template< typename OtherIt, typename OtherConstIt > typename std::enable_if<
+			std::is_convertible<OtherIt,It>::value && std::is_convertible<OtherConstIt,ConstIt>::value
+		, iterator_base& >::type operator=( iterator_base<OtherIt,OtherConstIt> const& ) { return *this; };
+*/
 		typename std::iterator_traits<iterator>::reference dereference_index(index const& idx) {
 			return *idx.m_it;
 		}
@@ -114,11 +155,11 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		// their iterators.
 		// TODO: It is probably most sensible to impose the same requirement to this return value as to const_reference,
 		// namely that it is convertible to value_type. A proxy encapsulating const_iterator, which we can create from iterator, would be a fine implementation then.
-		typename boost::mpl::if_<
-			std::is_convertible< 
+		typename std::conditional<
+			std::is_convertible<
 				typename std::iterator_traits<iterator>::reference,
 				typename std::iterator_traits<const_iterator>::reference
-			>,
+			>::value,
 			typename std::iterator_traits<const_iterator>::reference,
 			typename std::iterator_traits<iterator>::value_type
 		>::type dereference_index(index const& idx) const {
@@ -203,36 +244,112 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	}
 	using range_generator_from_index_impl::range_generator_from_index;
 
+	namespace void_generator_type_check_impl {
+		template<typename Func>
+		struct ensure_non_break_or_continue_functor {
+			explicit ensure_non_break_or_continue_functor(Func& f)
+				: m_func(f)
+			{}
+
+			template<typename Arg>
+			void operator()(Arg&& arg) {
+				static_assert(
+					!std::is_same<
+						decltype(m_func(std::forward<Arg>(arg))),
+						break_or_continue
+					>::value,
+					"Functor to void range must not return break_or_continue"
+					);
+				m_func(std::forward<Arg>(arg));
+			}
+
+		private:
+			Func& m_func;
+		};
+
+		template<typename Rng>
+		struct check_void_generator_functor : std::remove_cv<typename std::remove_reference<Rng>::type>::type {
+			using base_ = typename std::remove_reference<Rng>::type;
+
+			template< typename Func >
+			typename std::enable_if<
+				std::is_same<
+					break_or_continue,
+					typename tc::result_of< Rng( Func ) >::type
+				>::value,
+				break_or_continue
+			>::type
+			operator()(Func&& func) {
+				return base_::operator()(std::forward<Func>(func));
+			}
+
+			template< typename Func >
+			typename std::enable_if<
+				std::is_same<
+					void,
+					typename tc::result_of< Rng( Func ) >::type
+				>::value
+			>::type
+			operator()(Func func) {
+				base_::operator()(ensure_non_break_or_continue_functor<Func>(func));
+			}
+
+			template< typename Func >
+			typename std::enable_if<
+				std::is_same<
+					break_or_continue,
+					typename tc::result_of< Rng( Func ) >::type
+				>::value,
+				break_or_continue
+			>::type
+			operator()(Func&& func) const {
+				return base_::operator()(std::forward<Func>(func));
+			}
+
+			template< typename Func >
+			typename std::enable_if<
+				std::is_same<
+					void,
+					typename tc::result_of< Rng( Func ) >::type
+				>::value
+			>::type
+			operator()(Func func) const {
+				base_::operator()(ensure_non_break_or_continue_functor<Func>(func));
+			}
+		};
+	}
+
 	template< typename Rng >
 	struct index_range {
 	private:
 		struct add_index_interface : range_generator_from_index< add_index_interface, iterator_base<
 			typename boost::range_iterator< typename std::remove_reference<Rng>::type >::type,
-			typename boost::range_iterator< typename std::remove_reference<Rng>::type const >::type 
+			typename boost::range_iterator< typename std::remove_reference<Rng>::type const >::type
 		> > {
 		private:
 			// add_index_interface is deliberately not a range itself, e.g., it is missing begin() and end().
 			// Users should use Rng directly instead, and use add_index_interface only to add the index interface.
 			typedef iterator_base<
 				typename boost::range_iterator< typename std::remove_reference<Rng>::type >::type,
-				typename boost::range_iterator< typename std::remove_reference<Rng>::type const >::type 
+				typename boost::range_iterator< typename std::remove_reference<Rng>::type const >::type
 			> base_;
 
 		public:
 			using typename base_::index;
-			static bool const index_valid_after_copy=std::is_reference<Rng>::value || /*char* ranges:*/std::is_pointer<Rng>::value || is_boost_iterator_range<Rng>::value;
 
 			add_index_interface() {}
 
 			template< typename Rhs >
-			add_index_interface( Rhs && rhs, typename boost::disable_if< is_base_of< add_index_interface, typename remove_cvref< Rhs >::type >, unused_arg>::type=unused_arg() )
+			add_index_interface( Rhs && rhs, typename std::enable_if< !std::is_base_of< add_index_interface, typename std::decay< Rhs >::type >::value, unused_arg>::type=unused_arg() )
 			:	m_rng( std::forward<Rhs>(rhs) )
 			{}
+
 			template< typename Rhs >
-			add_index_interface( Rhs && rhs, typename boost::enable_if< is_base_of< add_index_interface, typename remove_cvref< Rhs >::type >, unused_arg>::type=unused_arg() )
+			add_index_interface( Rhs && rhs, typename std::enable_if< std::is_base_of< add_index_interface, typename std::decay< Rhs >::type >::value, unused_arg>::type=unused_arg() )
 			:	m_rng(std::forward<Rhs>(rhs).m_rng)
 			{}
-			// explicitly define the copy constructor to do what the template above does, as it would if the implicit copy consturctor wouldn't interfere
+
+			// explicitly define the copy ctor to do what the template above does, as it would if the implicit copy ctor wouldn't interfere
 			add_index_interface( add_index_interface const& rhs)
 			:	m_rng(rhs.m_rng)
 			{}
@@ -249,25 +366,45 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				return this->equal_index( idx, end_index() );
 			}
 
-			operator Rng &() {
+			operator typename std::remove_reference<Rng>::type &() {
 				return *m_rng;
 			};
 
-			operator Rng const&() const {
+			operator typename std::remove_reference<Rng>::type const&() const {
 				return *m_rng;
 			};
 		private:
-			reference_or_value<Rng> m_rng;
+			reference_or_value< typename std::conditional< std::is_rvalue_reference<Rng>::value, typename std::remove_reference<Rng>::type, Rng >::type > m_rng;
 		};
 
 	public:
-		typedef typename boost::mpl::if_< boost::mpl::and_< is_range_with_iterators< Rng >, boost::mpl::not_< has_index< typename std::remove_reference<Rng>::type > > >,
+		typedef typename std::conditional< is_range_with_iterators< Rng >::value && !has_index< typename std::remove_reference<Rng>::type >::value,
 			add_index_interface,
 			Rng
 		>::type type;
 	};
 
-	template< typename Rng > 
-	auto ensure_index_range( Rng && rng ) 
-		return_decltype ( static_cast< typename index_range<Rng>::type >(std::forward<Rng>(rng)) )
+	template<
+		typename Rng,
+		typename std::enable_if<
+			is_range_with_iterators< Rng >::value &&
+			!has_index< typename std::remove_reference<Rng>::type >::value
+		>::type* = nullptr
+	>
+	auto ensure_index_range( Rng && rng )
+		return_decltype(
+			static_cast<typename index_range< Rng >::type>(std::forward<Rng>(rng))
+		)
+
+	template<
+		typename Rng,
+		typename std::enable_if<
+			!(is_range_with_iterators< Rng >::value &&
+			!has_index< typename std::remove_reference<Rng>::type >::value)
+		>::type* = nullptr
+	>
+	auto ensure_index_range( Rng && rng )
+		return_decltype(
+			derived_or_base_cast<void_generator_type_check_impl::check_void_generator_functor<Rng&&>>(std::forward<Rng>(rng))
+		)
 }

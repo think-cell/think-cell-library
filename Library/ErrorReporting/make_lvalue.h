@@ -16,10 +16,3 @@ template< typename T >
 T & make_lvalue( T && t ) {
 	return boost::implicit_cast<T&>(t);
 }
-
-#define USE_RVALUE_AS_LVALUE(T) \
-public: \
-	operator T&() const { \
-		/*return make_lvalue(*this); // possible if we can overload on && */ \
-		return tc::make_mutable(*this); \
-	}

@@ -1,13 +1,13 @@
 #pragma once
 
-#ifndef RANGE_PROPOSAL_BUILD_STANDALONE
-	#define RANGE_PROPOSAL_NAMESPACE tc
+#include "range_fwd.h"
 
+#ifndef RANGE_PROPOSAL_BUILD_STANDALONE
 	#include "Library/ErrorReporting/assert_fwd.h"
 #else
-	#define RANGE_PROPOSAL_NAMESPACE tc   // Todo: make this work with different names
 	
-	#ifndef _ASSERT
+    #define _CHECKS
+    #ifndef _ASSERT
 		#include <cassert>
 		#define _ASSERT(...) assert((__VA_ARGS__))
 	#endif
@@ -24,11 +24,7 @@
 		#define _ASSERTNOTIFYFALSE _ASSERTFALSE
 	#endif
 	#ifndef _ASSERTEQUAL
-		#ifdef _CHECKS
-			#define _ASSERTEQUAL(a, b) assert(a==b)
-		#else
-			#define _ASSERTEQUAL(a, b) 
-		#endif
+			#define _ASSERTEQUAL(a, b) assert((a)==(b))
 	#endif
 	#ifndef VERIFYEQUAL
 		#define VERIFYEQUAL( expr, constant ) (expr)
@@ -41,7 +37,7 @@
 
 	// standalone replacements for assign.h
 	#include <boost/algorithm/string/compare.hpp>
-	typedef boost::is_equal fn_equal;
+	typedef boost::is_equal fn_equal_to;
 	typedef boost::is_less fn_less;
 	typedef boost::is_not_greater fn_less_equal;
 
@@ -49,6 +45,13 @@
 	struct fn_logical_not {
 		template<typename Lhs> auto operator()( Lhs && lhs ) const -> decltype(!std::forward<Lhs>(lhs)) { return !std::forward<Lhs>(lhs); }
 	};
+
+    #define SWITCH_NO_DEFAULT( ... ) \
+	switch( __VA_ARGS__ ) { \
+	default: \
+		_ASSERT( false );
+
+	#define switch_no_default( ... ) SWITCH_NO_DEFAULT( __VA_ARGS__ ) /##/
 
 #endif
 

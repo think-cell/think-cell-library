@@ -1,6 +1,10 @@
 #pragma once
 
-#include "Library/Utilities/perfect_forward.h"
+#ifndef RANGE_PROPOSAL_BUILD_STANDALONE
+   #include "assert_fwd.h"
+#endif
+#include "Library/Utilities/is_constructible.h"
+
 #include <boost/implicit_cast.hpp>
 
 #include <type_traits>
@@ -22,7 +26,7 @@ namespace tc {
 			//		std::string n; // has user-defined default ctor
 			//		int n; // has no user-defined default ctor
 			//	};
-			static_assert( !std::is_trivially_default_constructible<T>::value, "You must decide between ctor_default and ctor_value!" );
+			static_assert(!tc::is_trivially_default_constructible<T>::value, "You must decide between ctor_default and ctor_value!");
 			new (&m_buffer) T;
 		}
 		void ctor_default() {
@@ -31,19 +35,10 @@ namespace tc {
 		void ctor_value() {
 			new (&m_buffer) T();
 		}
-	#define PART1() \
-		template<
-	#define PART2() \
-		> void ctor(
-	#define PART3() ) { \
-			new (&m_buffer) T(
-	#define PART4() ); \
+		template<typename First, typename... Args>
+		void ctor(First&& first, Args&&... args) {
+			new (&m_buffer) T(std::forward<First>(first),std::forward<Args>(args)...);
 		}
-	PERFECT_FORWARD
-	#undef PART1
-	#undef PART2
-	#undef PART3
-	#undef PART4
 		operator T const&() const {
 			static_assert( sizeof(*this)==sizeof(T), "" ); // no extra members, important for arrays
 			return reinterpret_cast<T const&>(m_buffer);

@@ -125,7 +125,6 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				// The parent of the root of the tree is a special header node (representing end()) whose
 				// parent is again the root node.
 				auto PathToRoot=[]( node_type* pnode )->TNodeVector {
-					typedef node_type node_type;
 					TNodeVector vecpnode;
 					node_type* pnodeParent=node_type::from_impl(pnode->parent());
 
@@ -160,13 +159,13 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			}
 
 			template<typename It>
-			It middle_point_dispatch( It const& itBegin, It const& itEnd, boost::forward_traversal_tag ) {
+			It middle_point_dispatch( It const& itBegin, It const& itEnd, boost::iterators::forward_traversal_tag ) {
 				return middle_point(itBegin,itEnd);
 			}
 
 			// default random-access iterator implementation
 			template<typename It>
-			It middle_point_dispatch( It const& itBegin, It const& itEnd, boost::random_access_traversal_tag ) {
+			It middle_point_dispatch( It const& itBegin, It const& itEnd, boost::iterators::random_access_traversal_tag ) {
 				return itBegin+(itEnd-itBegin)/2;
 			}
 

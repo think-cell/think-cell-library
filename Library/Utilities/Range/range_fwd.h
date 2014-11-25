@@ -1,6 +1,10 @@
 #pragma once
 
+#define RANGE_PROPOSAL_NAMESPACE tc   // Todo: make this work with different names
+
 namespace RANGE_PROPOSAL_NAMESPACE {
+	template< typename T >
+	struct is_range;
 	
 	template<typename Rng>
 	struct is_range_with_iterators;
@@ -22,4 +26,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		class transform_adaptor;
 	}
 	using transform_adaptor_impl::transform_adaptor;
+
+	template< typename Rng, typename Enable=void >
+	struct make_sub_range_result;
 }

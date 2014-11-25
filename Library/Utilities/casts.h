@@ -1,17 +1,17 @@
 #pragma once
 
 #include "Library/ErrorReporting/functors.h"
+#include "Library/ErrorReporting/tc_move.h"
 
 #include "decltype_return.h"
 #include "remove_cvref.h"
 #include "conversion_traits.h"
 
 #include <boost/implicit_cast.hpp>
-#include <boost/mpl/and.hpp>
 
-#include <boost/type_traits/is_function.hpp> // we still use boost::is_function here, because microsofts std::is_function returns false if the function has more than 4 params ...
 #include <type_traits>
-#include <boost/utility/enable_if.hpp>
+#include <cstring>
+#include <boost/mpl/identity.hpp>
 
 //-----------------------------------------------------------------------------------------------------------------------------
 
@@ -54,7 +54,7 @@ namespace tc {
 
 	#define BASE_CAST_IMPL(cvref)                                                                                             \
 	template< typename T >                                                                                                    \
-	T cvref base_cast( typename std::common_type<T>::type cvref t ) {                                                         \
+	T cvref base_cast( typename boost::mpl::identity<T>::type cvref t ) {                                                     \
 		return static_cast<T cvref >(t);                                                                                      \
 	};
 
@@ -74,7 +74,7 @@ namespace tc {
 	#undef BASE_CAST_IMPL
 
 	template< typename Derived, typename Base, typename T >
-	typename boost::mpl::if_< is_base_of<Derived, typename remove_cvref<T>::type>, typename same_cvref< Base, T&& >::type, T&& >::type ctor_base_cast( T&& t ) {
+	typename std::conditional< is_base_of<Derived, typename remove_cvref<T>::type>::value, typename same_cvref< Base, T&& >::type, T&& >::type ctor_base_cast( T&& t ) {
 		static_assert( is_plain_type<Derived>::value, "" );
 		static_assert( is_plain_type<Base>::value, "" );
 		static_assert( std::is_base_of<Base, Derived>::value, "");
@@ -84,11 +84,30 @@ namespace tc {
 	/////////////////////////////////////////////
 	// derived_cast
 
+#if defined _MSC_VER && _MSC_VER <= 1800
+
+	template< typename To, typename From >
+	typename same_cvref< To, From&>::type derived_cast( From& t ) {
+		static_assert( std::is_base_of<typename std::remove_reference<From>::type, To>::value, "derived_cast is for downcasts only.");
+		return static_cast<typename same_cvref< To, From&>::type >(t);
+	};
+
+	template< typename To, typename From >
+	typename same_cvref< To, From&&>::type derived_cast( From&& t ) {
+		static_assert( std::is_base_of<typename std::remove_reference<From>::type, To>::value, "derived_cast is for downcasts only.");
+		return tc_move_always(static_cast<typename same_cvref< To BOOST_PP_COMMA() From&>::type >(t));
+	};
+
+#else
+
 	template< typename To, typename From >
 	typename same_cvref< To, From&&>::type derived_cast( From&& t ) {
 		static_assert( std::is_base_of<typename std::remove_reference<From>::type, To>::value, "derived_cast is for downcasts only.");
 		return static_cast<typename same_cvref< To, From&&>::type >(t);
 	};
+
+#endif
+
 
 	template< typename To, typename From >
 	typename same_cvref< To, From*>::type derived_cast( From* pt ) {
@@ -96,10 +115,26 @@ namespace tc {
 		return static_cast<typename same_cvref< To, From*>::type >(pt);
 	};
 
+#if defined _MSC_VER && _MSC_VER <= 1800
+
+	template< typename To, typename From >
+	typename same_cvref< To, From&>::type derived_or_base_cast( From& t ) {
+		return static_cast<typename same_cvref< To, From&>::type >(t);
+	};
+
+	template< typename To, typename From >
+	typename same_cvref< To, From&&>::type derived_or_base_cast( From&& t ) {
+		return tc_move_always(static_cast<typename same_cvref< To, From&>::type >(t));
+	};
+
+#else
+
 	template< typename To, typename From >
 	typename same_cvref< To, From&&>::type derived_or_base_cast( From&& t ) {
 		return static_cast<typename same_cvref< To, From&&>::type >(t);
 	};
+
+#endif
 
 	template< typename To, typename From >
 	typename same_cvref< To, From*>::type derived_or_base_cast( From* pt ) {
@@ -190,7 +225,7 @@ namespace tc {
 	struct aliasing_ptr;
 	
 	template< typename T >
-	struct aliasing_ptr<T,typename boost::disable_if<boost::is_function<T>>::type> {
+	struct aliasing_ptr<T,typename std::enable_if<!std::is_function<T>::value>::type> {
 		static_assert( !std::is_reference<T>::value, "" );
 		static_assert( std::is_pod<T>::value, "" );
 		class type {
@@ -200,7 +235,7 @@ namespace tc {
 			explicit type(T* pt)
 			: m_pb(reinterpret_cast<typename same_cvref<char,T*>::type>(pt))
 			{}
-			operator bool() const {
+			explicit operator bool() const {
 				return m_pb;
 			}
 			type& operator=(std::nullptr_t) {
@@ -208,7 +243,7 @@ namespace tc {
 				return *this;
 			}
 			typename aliasing_ref<T>::type operator*() const {
-				return typename aliasing_ref<T>::construct(m_pb);
+				return aliasing_ref<T>::construct(m_pb);
 			}
 			type& operator+=( std::ptrdiff_t n ) {
 				m_pb+=n*sizeof(T);
@@ -230,7 +265,7 @@ namespace tc {
 	};
 
 	template< typename T >
-	struct aliasing_ptr<T,typename boost::enable_if<boost::is_function<T>>::type> {
+	struct aliasing_ptr<T,typename std::enable_if<std::is_function<T>::value>::type> {
 		typedef T* type;
 	};
 
@@ -256,8 +291,9 @@ namespace tc {
 
 	// no danger of aliasing because Src is not a pointer:
 	template< typename Dst, typename Src >
-	typename boost::disable_if< boost::mpl::and_< std::is_pointer<Src>, std::is_pointer<Dst> >,
-	Dst >::type bit_cast( Src const& src ) {
+	typename std::enable_if<!(
+		std::is_pointer<Src>::value && std::is_pointer<Dst>::value
+	), Dst >::type bit_cast( Src const& src ) {
 		static_assert( std::is_same< typename tc::remove_cvref<Dst>::type, Dst >::value, "" );
 		static_assert(sizeof(Dst)==sizeof(Src),"bit_cast source and destination must be same size");
 		static_assert(
@@ -272,15 +308,29 @@ namespace tc {
 
 	// danger of aliasing because Src is a pointer:
 	template< typename Dst, typename Src >
-	typename boost::enable_if< boost::mpl::and_< std::is_pointer<Src>, std::is_pointer<Dst> >,
-	typename aliasing_ptr< typename std::remove_pointer<Dst>::type >::type >::type bit_cast( Src const& src ) {
+	typename std::enable_if<
+		std::is_pointer<Src>::value && std::is_pointer<Dst>::value
+	, typename aliasing_ptr< typename std::remove_pointer<Dst>::type >::type >::type bit_cast( Src const& src ) {
 		static_assert( std::is_same< typename tc::remove_cvref<Dst>::type, Dst >::value, "" );
-		return aliasing_ptr< typename std::remove_pointer<Dst>::type >::type(reinterpret_cast<Dst>(src));
+		return typename aliasing_ptr< typename std::remove_pointer<Dst>::type >::type(reinterpret_cast<Dst>(src));
 	}
 
 	template< typename T >
+	auto make_unsigned_modulo( T t )
+		return_decltype( static_cast<typename std::make_unsigned<T>::type>(t) )
+
+#ifndef __GNUC__
+	template< typename T >
 	auto make_unsigned( T t )
-		return_decltype( _ASSERTE( 0<=t ), static_cast<typename std::make_unsigned<T>::type>(t) )
+		return_decltype( _ASSERTE( 0<=t ), make_unsigned_modulo(t) )
+#else 
+	// gcc (4.8.3) does not like the string literals inside _ASSERTE so:
+	template< typename T >
+	auto make_unsigned(T t) -> decltype(static_cast<typename std::make_unsigned<T>::type>(t)) {
+		_ASSERTE( 0<=t );
+		return make_unsigned_modulo(t);
+	}
+#endif
 
 	#pragma warning( push )
 	#pragma warning( disable: 4180 ) // qualifier applied to function type has no meaning; ignored
@@ -316,10 +366,11 @@ namespace tc {
 
 	template<typename Func>
 	struct make_arg_mutable_impl {
-		make_arg_mutable_impl(Func && func) : m_func(std::forward<Func>(func)) {}
-		template<typename T> auto operator()(T const& t) const return_decltype( m_func( make_mutable(t) ) )
 	private:
 		typename std::decay<Func>::type m_func;
+	public:
+		make_arg_mutable_impl(Func && func) : m_func(std::forward<Func>(func)) {}
+		template<typename T> auto operator()(T const& t) const return_decltype( m_func( make_mutable(t) ) )
 	};
 
 	template<typename Func>

@@ -18,6 +18,114 @@ UNITTESTDEF( basic ) {
 	TEST_RANGE_EQUAL(vexp, evenvr);
 }
 
+	using namespace RANGE_PROPOSAL_NAMESPACE;
+
+	template<typename Func>
+	struct WrapVoidFunc {
+		static_assert(
+			std::is_reference<Func>::value,
+			"type must be a reference type"
+		);
+
+		WrapVoidFunc(Func func, break_or_continue& breakorcontinue) :
+			m_func(std::move(func)), m_breakorcontinue(breakorcontinue)
+		{}
+
+		template<typename Arg>
+		typename std::enable_if<
+			std::is_same<
+				decltype(std::declval<typename std::remove_reference<Func>::type >()(std::declval<Arg>())),
+				break_or_continue
+			>::value
+		>::type
+		operator()(Arg&& arg) {
+			if (continue_ == m_breakorcontinue) {
+				m_breakorcontinue = m_func(std::forward<Arg>(arg));
+			}
+		}
+
+		template<typename Arg>
+		typename std::enable_if<
+			!std::is_same<
+				decltype(std::declval<typename std::remove_reference<Func>::type >()(std::declval<Arg>())),
+				break_or_continue
+			>::value
+		>::type
+		operator()(Arg&& arg) {
+			if (continue_ == m_breakorcontinue) {
+				m_func(std::forward<Arg>(arg));
+			}
+		}
+
+		private:
+			Func m_func;
+			break_or_continue& m_breakorcontinue;
+	};
+
+	template<typename Rng>
+	struct void_range_struct : public std::remove_reference<Rng>::type {
+
+		using base_ = typename std::remove_reference<Rng>::type;
+
+		template< typename Func >
+		typename std::enable_if<
+			!std::is_same<
+				decltype(std::declval<base_>()(std::declval<Func>())),
+				break_or_continue
+			>::value,
+			break_or_continue
+		>::type
+		operator()(Func&& func) {
+			break_or_continue breakorcontinue = continue_;
+			base_::operator()(WrapVoidFunc<Func&&>(std::forward<Func>(func), breakorcontinue));
+			return breakorcontinue;
+		}
+
+		template< typename Func >
+		typename std::enable_if<
+			!std::is_same<
+				decltype(std::declval<base_>()(std::declval<Func>())),
+				break_or_continue
+			>::value,
+			break_or_continue
+		>::type
+		operator()(Func&& func) const {
+			break_or_continue breakorcontinue = continue_;
+			base_::operator()(WrapVoidFunc<Func&&>(std::forward<Func>(func), breakorcontinue));
+			return breakorcontinue;
+		}
+
+		template< typename Func >
+		typename std::enable_if<
+			std::is_same<
+				decltype(std::declval<base_>()(std::declval<Func>())),
+				break_or_continue
+			>::value,
+			break_or_continue
+		>::type
+		operator()(Func&& func) {
+			return base_::operator()(std::forward<Func>(func));
+		}
+	
+		template< typename Func >
+		typename std::enable_if<
+			std::is_same<
+				decltype(std::declval<base_>()(std::declval<Func>())),
+				break_or_continue
+			>::value,
+			break_or_continue
+		>::type
+		operator()(Func&& func) const {
+			return base_::operator()(std::forward<Func>(func));
+		}
+	};
+
+	template<typename Rng>
+	auto void_range(Rng&& rng) return_decltype (
+		derived_or_base_cast<void_range_struct<Rng&&>>(std::forward<Rng>(rng))
+		)
+
+
 //---- Generator Range --------------------------------------------------------------------------------------------------------
 namespace {
 	struct generator_range {
@@ -35,8 +143,8 @@ UNITTESTDEF( generator_range ) {
    
    TEST_init_hack(std::vector, int, vexp, {0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48});
 
-   TEST_RANGE_EQUAL(vexp, tc::filter( generator_range(), [](int i){ return i%2==0; } ));
-   TEST_RANGE_EQUAL(tc::filter( generator_range(), [](int i){ return i%2==0; } ), vexp);
+   TEST_RANGE_EQUAL(vexp, tc::filter( void_range(generator_range()), [](int i){ return i%2==0; } ));
+   TEST_RANGE_EQUAL(tc::filter( void_range(generator_range()), [](int i){ return i%2==0; } ), vexp);
 }
 
 //---- Generator Range (with break) -------------------------------------------------------------------------------------------

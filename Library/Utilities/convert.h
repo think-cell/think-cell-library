@@ -1,11 +1,7 @@
 #pragma once
 
 #include "Library/Utilities/Range/transform.h"
-
-#include <boost/utility/enable_if.hpp>
-#include <boost/mpl/or.hpp>
-#include <boost/mpl/not.hpp>
-#include <boost/mpl/and.hpp>
+#include "Library/Utilities/is_constructible.h"
 
 #include <type_traits>
 #include <string>
@@ -43,22 +39,22 @@ template< typename T, typename Enable=void >
 struct TypeCategory;
 
 template< typename T >
-struct TypeCategory<T, typename boost::enable_if<typename std::is_integral<T>::type>::type > : std::integral_constant< ETypeCategory, etypecatIntegral > {};
+struct TypeCategory<T, typename std::enable_if<std::is_integral<T>::value>::type > : std::integral_constant< ETypeCategory, etypecatIntegral > {};
 
 template< typename T >
-struct TypeCategory<T, typename boost::enable_if<typename std::is_floating_point<T>::type>::type > : std::integral_constant< ETypeCategory, etypecatFloatingPoint > {};
+struct TypeCategory<T, typename std::enable_if<std::is_floating_point<T>::value>::type > : std::integral_constant< ETypeCategory, etypecatFloatingPoint >{};
 
 template< typename T >
-struct TypeCategory<T, typename boost::enable_if<typename std::is_enum<T>::type>::type > : std::integral_constant< ETypeCategory, etypecatEnum > {};
+struct TypeCategory<T, typename std::enable_if<std::is_enum<T>::value>::type > : std::integral_constant< ETypeCategory, etypecatEnum >{};
 
 template< typename T >
-struct TypeCategory<T, typename boost::enable_if<typename std::is_reference<T>::type>::type > : std::integral_constant< ETypeCategory, etypecatReference > {};
+struct TypeCategory<T, typename std::enable_if<std::is_reference<T>::value>::type > : std::integral_constant< ETypeCategory, etypecatReference >{};
 
 template< typename T >
-struct TypeCategory<T, typename boost::enable_if<typename std::is_pointer<T>::type>::type > : std::integral_constant< ETypeCategory, etypecatPointer > {};
+struct TypeCategory<T, typename std::enable_if<std::is_pointer<T>::value>::type > : std::integral_constant< ETypeCategory, etypecatPointer >{};
 
 template< typename T >
-struct TypeCategory<T, typename boost::enable_if<typename std::is_class<T>::type>::type > : std::integral_constant< ETypeCategory, etypecatClass > {};
+struct TypeCategory<T, typename std::enable_if<std::is_class<T>::value>::type > : std::integral_constant< ETypeCategory, etypecatClass >{};
 
 template<typename TTarget,
 	ETypeCategory=TypeCategory<TTarget>::value
@@ -105,8 +101,8 @@ struct SDefaultConversions<TTarget, etypecatClass> {
 template<typename TTarget>
 struct SDefaultConversions<TTarget, etypecatReference> {
 	template<typename TSource>
-	typename boost::enable_if<
-		tc::creates_no_reference_to_temporary<TSource, TTarget>,
+	typename std::enable_if<
+		tc::creates_no_reference_to_temporary<TSource, TTarget>::value,
 		TTarget
 	>::type operator() (TSource&& src) const {
 		return boost::implicit_cast<TTarget>(src); // static_cast if needed?
@@ -129,38 +125,44 @@ struct range_checker {
 template<typename TTarget>
 struct SDefaultConversions<TTarget, etypecatIntegral> {
 	template<typename TSource>
-	typename boost::enable_if<
-		boost::mpl::and_<
-			boost::mpl::or_<
-				std::is_class< typename std::remove_reference< TSource >::type >,
-				std::is_union< typename std::remove_reference< TSource >::type >
-			>,
-			std::is_convertible< TSource&&, TTarget >
-		>,
-		TTarget
-	>::type operator() (TSource&& src) const {
+	typename std::enable_if<
+		(
+			std::is_class< typename std::remove_reference< TSource >::type >::value ||
+			std::is_union< typename std::remove_reference< TSource >::type >::value
+		) && 
+		std::is_convertible< TSource&&, TTarget >::value
+	, TTarget >::type operator() (TSource&& src) const {
 		// use specific Convert function defined by source type
-		return boost::implicit_cast<TTarget>(std::forward<TSource>(src));
+		return std::forward<TSource>(src);
 	};
 
 	template<typename TSource>
-	typename boost::enable_if<
-		boost::mpl::and_<
-			boost::mpl::or_<
-				std::is_class< typename std::remove_reference< TSource >::type >,
-				std::is_union< typename std::remove_reference< TSource >::type >
-			>,
-			boost::mpl::not_< std::is_convertible< TSource&&, TTarget > >
-		>,
-		TTarget
-	>::type operator() (TSource&& src) const {
+	typename std::enable_if<
+		(
+			std::is_class< typename std::remove_reference< TSource >::type >::value ||
+			std::is_union< typename std::remove_reference< TSource >::type >::value
+		) &&
+		!std::is_convertible< TSource&&, TTarget >::value && tc::is_constructible< TTarget, TSource&& >::value
+		, TTarget >::type operator() (TSource&& src) const {
+		// use specific Convert function defined by source type
+		return TTarget(std::forward<TSource>(src));
+	};
+
+	template<typename TSource>
+	typename std::enable_if<
+		(
+			std::is_class< typename std::remove_reference< TSource >::type >::value ||
+			std::is_union< typename std::remove_reference< TSource >::type >::value
+		) &&
+		!std::is_convertible< TSource&&, TTarget >::value && !tc::is_constructible< TTarget, TSource&& >::value
+	, TTarget >::type operator() (TSource&& src) const {
 		// use specific Convert function defined by source type
 		return (*this)( ConvertToUnderlying(std::forward<TSource>(src)) );
 	};
 
 	template<typename TSource>
-	typename boost::enable_if<
-		std::is_integral< TSource >,
+	typename std::enable_if<
+		std::is_integral< TSource >::value,
 		TTarget
 	>::type operator() (TSource src) const {
 		_ASSERTPRINT( (!range_checker<TTarget, TSource>::type::out_of_range(src)), src );
@@ -168,20 +170,18 @@ struct SDefaultConversions<TTarget, etypecatIntegral> {
 	}
 
 	template<typename TSource>
-	typename boost::enable_if<
-		std::is_floating_point< TSource >,
-		TTarget
-	>::type operator() (TSource src) const {
+	typename std::enable_if<
+		std::is_floating_point< TSource >::value
+	,TTarget>::type operator() (TSource src) const {
 		double srcRounded=floor( static_cast<double>(src)+.5 );
 		_ASSERTPRINT( (!range_checker<TTarget, double>::type::out_of_range(srcRounded)), src );
 		return static_cast<TTarget>(srcRounded);
 	}
 
 /*	template<typename TSource>
-	typename boost::enable_if<
-		std::is_enum< TSource >,
-		TTarget
-	>::type operator() (TSource src) const {
+	typename std::enable_if<
+		std::is_enum< TSource >::value
+	,TTarget>::type operator() (TSource src) const {
 		return (*this)( static_cast<std::underlying_type<TSource>::type(src) );
 	}*/
 };
@@ -189,20 +189,17 @@ struct SDefaultConversions<TTarget, etypecatIntegral> {
 template<typename TTarget>
 struct SDefaultConversions<TTarget, etypecatFloatingPoint> {
 	template<typename TSource>
-	typename boost::enable_if<
-		boost::mpl::or_<
-			std::is_class< typename std::remove_reference< TSource >::type >,
-			std::is_union< typename std::remove_reference< TSource >::type >
-		>,
-		TTarget
-	>::type operator() (TSource&& src) const {
+	typename std::enable_if<
+		std::is_class< typename std::remove_reference< TSource >::type >::value ||
+		std::is_union< typename std::remove_reference< TSource >::type >::value
+	, TTarget>::type operator() (TSource&& src) const {
 		// use specific Convert function defined by source type
 		return (*this)( ConvertToUnderlying(std::forward<TSource>(src)) );
 	};
 
 	template<typename TSource>
-	typename boost::enable_if<
-		std::is_arithmetic< TSource >,
+	typename std::enable_if<
+		std::is_arithmetic< TSource >::value,
 		TTarget
 	>::type operator() (TSource src) const {
 		_ASSERTPRINT( (!range_checker<TTarget, TSource>::type::out_of_range(src)), src );
@@ -213,20 +210,18 @@ struct SDefaultConversions<TTarget, etypecatFloatingPoint> {
 template<typename TTarget>
 struct SDefaultConversions<TTarget, etypecatEnum> {
 	template<typename TSource>
-	typename boost::enable_if<
-		boost::mpl::or_<
-			std::is_class< typename std::remove_reference< TSource >::type >,
-			std::is_union< typename std::remove_reference< TSource >::type >
-		>,
-		TTarget
+	typename std::enable_if<
+		std::is_class< typename std::remove_reference< TSource >::type >::value ||
+		std::is_union< typename std::remove_reference< TSource >::type >::value
+		, TTarget
 	>::type operator() (TSource&& src) const {
 		// use specific Convert function defined by source type
 		return (*this)( ConvertToUnderlying(std::forward<TSource>(src)) );
 	};
 
 	template<typename TSource>
-	typename boost::enable_if<
-		std::is_enum< TSource >,
+	typename std::enable_if<
+		std::is_enum< TSource >::value,
 		TTarget
 	>::type operator() (TSource src) const {
 		_ASSERTPRINT( (!range_checker<TTarget, TSource>::type::out_of_range(src)), src );
@@ -234,8 +229,8 @@ struct SDefaultConversions<TTarget, etypecatEnum> {
 	}
 
 /*	template<typename TSource>
-	typename boost::enable_if<
-		std::is_integral< TSource >,
+	typename std::enable_if<
+		std::is_integral< TSource >::value,
 		TTarget
 	>::type operator() (TSource src) const {
 		_ASSERTPRINT( (!range_checker<TTarget, TSource>::type::out_of_range(src)), src );
@@ -246,12 +241,10 @@ struct SDefaultConversions<TTarget, etypecatEnum> {
 template<typename TTarget>
 struct SDefaultConversions<TTarget, etypecatPointer> {
 	template<typename TSource>
-	typename boost::enable_if<
-		boost::mpl::or_<
-			std::is_class< typename std::remove_reference< TSource >::type >,
-			std::is_union< typename std::remove_reference< TSource >::type >
-		>,
-		TTarget
+	typename std::enable_if<
+		std::is_class< typename std::remove_reference< TSource >::type >::value ||
+		std::is_union< typename std::remove_reference< TSource >::type >::value
+		, TTarget
 	>::type operator() (TSource&& src) const {
 		// use specific Convert function defined by source type
 		return (*this)( ConvertToUnderlying(std::forward<TSource>(src)) );
@@ -277,22 +270,18 @@ struct SStringRangeConverter;
 template<typename TContainer>
 struct SContainerConversions {
 	template<typename Rng>
-	typename boost::enable_if<
-		boost::mpl::and_<
-			boost::mpl::not_< std::is_same< typename std::decay<Rng>::type, TContainer> >, // disable for trivial conversions to use move semantic / copy on write where possible
-			boost::mpl::not_< tc::is_char< typename TContainer::value_type > >
-		>,
-	TContainer >::type operator()(Rng && rng) const {
+	typename std::enable_if<
+		!std::is_same< typename std::decay<Rng>::type, TContainer>::value && // disable for trivial conversions to use move semantic / copy on write where possible
+		!tc::is_char< typename TContainer::value_type >::value
+	, TContainer >::type operator()(Rng && rng) const {
 		return boost::copy_range<TContainer>(tc::transform(std::forward<Rng>(rng), fn_Convert<typename TContainer::value_type>()));
 	}
 
 	template<typename Rng>
-	typename boost::enable_if<
-		boost::mpl::and_<
-			boost::mpl::not_< std::is_same< typename std::decay<Rng>::type, TContainer> >, // disable for trivial conversions to use move semantic / copy on write where possible
-			tc::is_char< typename TContainer::value_type >
-		>,
-	TContainer >::type operator()(Rng && rng) const {
+	typename std::enable_if<
+		!std::is_same< typename std::decay<Rng>::type, TContainer>::value && // disable for trivial conversions to use move semantic / copy on write where possible
+		tc::is_char< typename TContainer::value_type >::value
+	, TContainer >::type operator()(Rng && rng) const {
 		TContainer cont;
 		SStringRangeConverter<typename TContainer::value_type, typename boost::range_value< typename std::remove_reference<Rng>::type >::type>::Append(cont, std::forward<Rng>(rng));
 		return cont;
@@ -305,7 +294,7 @@ struct SConversions<std::vector<T, Alloc> > :
 	SContainerConversions< std::vector<T, Alloc> >
 {};
 
-// features conversion from BSTR wrappers (CComBSTR, _bstr_t) to basic_string<OLECHAR>
+// features conversion from BSTR wrappers (ATL::CComBSTR, _bstr_t) to basic_string<OLECHAR>
 template<typename CharT, typename Alloc>
 struct SConversions<std::basic_string<CharT, std::char_traits<CharT>, Alloc> > :
 	SContainerConversions<std::basic_string<CharT, std::char_traits<CharT>, Alloc> >
@@ -319,3 +308,15 @@ struct SConversions<CharT const* >{
 		return str.c_str();
 	}
 };
+
+template<typename TTargetFirst, typename TTargetSecond>
+struct SConversions<std::pair<TTargetFirst, TTargetSecond>> {
+	template<typename TSourceFirst, typename TSourceSecond>
+	std::pair<TTargetFirst, TTargetSecond> operator()(std::pair<TSourceFirst, TSourceSecond> const& pair) const {
+		return std::pair<TTargetFirst, TTargetSecond>(
+			Convert<TTargetFirst>(pair.first),
+			Convert<TTargetSecond>(pair.second)
+		);
+	}
+};
+

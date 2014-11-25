@@ -2,12 +2,11 @@
 
 #include <boost/preprocessor/enum.hpp>
 #include "Library/ErrorReporting/storage_for.h"
-#include "perfect_forward.h"
 #include "renew.h"
 
 template< typename T, unsigned int N >
 class static_vector {
-	T* m_ptEnd;
+	unsigned int m_iEnd;
 	tc::storage_for<T> m_at[N];
 
 	template<typename It>
@@ -19,26 +18,14 @@ class static_vector {
 
 public:
 	static_vector()
-	:	m_ptEnd( begin() )
+	:	m_iEnd( 0 )
 	{}
 	
 	template<typename It>
 	static_vector(It itBegin, It itEnd )
-	:	m_ptEnd( begin() )
+	:	m_iEnd( 0 )
 	{
 		append( itBegin, itEnd );
-	}
-
-	static_vector( static_vector const& rhs )
-	:	m_ptEnd( begin() )
-	{
-		append( rhs.begin(), rhs.end() );
-	}
-
-	static_vector( static_vector && rhs )
-	:	m_ptEnd( begin() )
-	{
-		append( rhs.begin(), rhs.end() );
 	}
 
 	typedef T& reference;
@@ -59,18 +46,21 @@ public:
 		return std::addressof(boost::implicit_cast<T const&>(m_at[0]));
 	}
 	iterator end() {
-		return m_ptEnd;
+		return std::addressof(boost::implicit_cast<T&>(m_at[m_iEnd]));
 	}
 	const_iterator end() const {
-		return m_ptEnd;
+		return std::addressof(boost::implicit_cast<T const&>(m_at[m_iEnd]));
 	}
 
 	// query state
 	bool empty() const {
-		return begin()==end();
+		return 0==m_iEnd;
+	}
+	bool full() const {
+		return N == m_iEnd;
 	}
 	size_type size() const {
-		return static_cast<size_type>(end()-begin());
+		return m_iEnd;
 	}
 
 	// access
@@ -92,34 +82,25 @@ public:
 	}
 	T & back() {
 		_ASSERT( !empty() );
-		return m_ptEnd[-1];
+		return m_at[m_iEnd - 1];
 	}
 	T const& back() const {
 		_ASSERT( !empty() );
-		return m_ptEnd[-1];
+		return m_at[m_iEnd - 1];
 	}
 
 	// modify
-#define PART1() \
-	template<
-#define PART2() \
-	> void emplace_back(
-#define PART3() ) { \
-		_ASSERT( size()<N ); \
-		new (m_ptEnd) T(
-#define PART4() ); \
-		++m_ptEnd; \
+	template<typename... Args>
+	void emplace_back(Args&&... args) {
+		_ASSERT(!full());
+		++m_iEnd;
+		new (end() - 1) T(std::forward<Args>(args)...);
 	}
-PERFECT_FORWARD
-#undef PART1
-#undef PART2
-#undef PART3
-#undef PART4
 
 	void pop_back() {
 		_ASSERT( !empty() );
-		--m_ptEnd;
-		tc::dtor(*m_ptEnd);
+		--m_iEnd;
+		tc::dtor(boost::implicit_cast<T&>(m_at[m_iEnd]));
 	}
 
 	void clear() {
