@@ -16,7 +16,6 @@ The Range specific code is under https://github.com/think-cell/range/tree/master
 The tests and examples are in Library/Utilities/Range/*.t.cpp
 
 Tested with:
-* clang 3.4
-* VC11
-* VC12
+* clang 3.5
+* VC12 (== Visual Studio 2013)
 
