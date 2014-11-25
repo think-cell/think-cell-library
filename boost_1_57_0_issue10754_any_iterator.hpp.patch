@@ -1,0 +1,19 @@
+--- ./boost_1_57_0/boost/range/detail/any_iterator.hpp
++++ ./boost_1_57_0/boost/range/detail/any_iterator.hpp
+@@ -114,6 +114,8 @@ namespace boost
+         };
+     } // namespace range_detail
+ 
++	namespace iterators
++	{
+     namespace detail
+     {
+         // Rationale:
+@@ -247,6 +249,7 @@ namespace boost
+ 
+ 
+     }
++	}
+ 
+     namespace range_detail
+     {
