@@ -11,7 +11,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		return typename make_sub_range_result< Rng >::type( std::forward<Rng>(rng), boost::begin(rng), boost::end(rng) );
 	}
 
-	// Do we want/need sometilladis as a generic tool?
+	// Do we want/need something like this as a generic tool?
 	template<typename Rng>
 	auto const_slice(Rng const& rng) return_decltype(slice(rng)) 
 

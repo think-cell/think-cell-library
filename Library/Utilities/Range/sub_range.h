@@ -107,7 +107,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 			template<typename Rhs>
 			static auto base_range(Rhs && rhs)
-				return_decltype( std::forward<Rhs>(rhs) )
+				return_decltype_rvalue_by_ref( std::forward<Rhs>(rhs) )
 			template<typename Rhs>
 			static auto begin_index(base_ & base, Rhs &&)
 				return_decltype( base.begin_index() )
@@ -125,10 +125,10 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				return_decltype( iterator_base<It>() )
 			template<typename Rhs>
 			static auto begin_index(base_ &, Rhs && rng)
-				return_decltype( iterator_base<It>::iterator2index(boost::begin(rng)) )
+				return_decltype( tc::iterator2index(boost::begin(rng)) )
 			template<typename Rhs>
 			static auto end_index(base_ &, Rhs && rng)
-				return_decltype( iterator_base<It>::iterator2index(boost::end(rng)) )
+				return_decltype( tc::iterator2index(boost::end(rng)) )
 		};
 
 		template< typename T >
@@ -140,10 +140,10 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				return_decltype( iterator_base<T*>() )
 			template<typename Rhs>
 			static auto begin_index(base_ &, Rhs && rng)
-				return_decltype( iterator_base<T*>::iterator2index(ptr_begin(rng)) )
+				return_decltype( tc::iterator2index(ptr_begin(rng)) )
 			template<typename Rhs>
 			static auto end_index(base_ &, Rhs && rng)
-				return_decltype( iterator_base<T*>::iterator2index(ptr_end(rng)) )
+				return_decltype( tc::iterator2index(ptr_end(rng)) )
 		};
 
 		template< typename Rng >
@@ -155,10 +155,10 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 			template<typename Rhs>
 			static auto base_range(sub_range<sub_range<Rhs>> && rhs)
-				return_decltype( whole_range_sub_range_helper<Rng>::base_range( tc_move(rhs).base_range_move().base_range_move() ) )
+				return_decltype_rvalue_by_ref( whole_range_sub_range_helper<Rng>::base_range( tc_move(rhs).base_range_move().base_range_move() ) )
 			template<typename Rhs>
 			static auto base_range(sub_range<Rhs> && rhs)
-				return_decltype( whole_range_sub_range_helper<Rng>::base_range( tc_move(rhs).base_range_move() ) )
+				return_decltype_rvalue_by_ref( whole_range_sub_range_helper<Rng>::base_range( tc_move(rhs).base_range_move() ) )
 			template<typename Rhs>
 			static auto begin_index(base_ &, sub_range<Rhs> && rhs)
 				return_decltype( rhs.begin_index() )
@@ -304,8 +304,8 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			: base_(whole_range_sub_range_helper<Rng>::base_range(
 				std::forward<Rhs>(rng)
 			), aggregate_tag())
-			, m_idxBegin(std::remove_reference<typename index_range<Rhs>::type>::type::iterator2index(tc_move(itBegin)))
-			, m_idxEnd(std::remove_reference<typename index_range<Rhs>::type>::type::iterator2index(tc_move(itEnd)))
+			, m_idxBegin(tc::iterator2index(tc_move(itBegin)))
+			, m_idxEnd(tc::iterator2index(tc_move(itEnd)))
 			{}
 
 			template< typename Func > break_or_continue operator()(Func func) {
@@ -344,10 +344,6 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			typedef typename boost::range_iterator< typename std::remove_reference<Rng>::type >::type iterator;
 			typedef typename boost::range_iterator< typename std::remove_reference<Rng>::type const >::type const_iterator;
 
-			template<typename It>
-			static auto iterator2index( It && it )
-				return_decltype( BaseRange::iterator2index(std::forward<It>(it)) )
-
 			const_iterator make_iterator( index idx ) const {
 				return base_::base_range().make_iterator(tc_move(idx));
 			}
@@ -374,12 +370,12 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 			template< typename It >
 			friend void take_inplace_impl( sub_range& rng, It && it ) {
-				rng.m_idxEnd=iterator2index( std::forward<It>(it) );
+				rng.m_idxEnd=tc::iterator2index( std::forward<It>(it) );
 			}
 
 			template< typename It >
 			friend void drop_inplace_impl( sub_range& rng, It && it ) {
-				rng.m_idxBegin=iterator2index( std::forward<It>(it) );
+				rng.m_idxBegin=tc::iterator2index( std::forward<It>(it) );
 			}
 
 			template< typename Delimiter >
@@ -608,7 +604,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 	// There is an other make_iterator_range_impl overload for range adaptor based iterarors in range_adaptor.h
 
-	// make sure ADL lookup of common_iterator::make_iterator_range works
+	// make sure ADL lookup of index_iterator::make_iterator_range works
 	template< typename ItBegin, typename ItEnd >
 	auto make_iterator_range(ItBegin && itBegin, ItEnd && itEnd)
 		return_decltype( make_iterator_range_impl( std::forward<ItBegin>(itBegin), std::forward<ItEnd>(itEnd) ) )

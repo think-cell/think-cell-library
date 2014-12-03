@@ -57,37 +57,27 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			// default ctor
 			filter_adaptor() {}
 
-			// Range adaptors other than sub_ranges should not be copyable.
-			// Otherwise, copying a range adaptor may have value or reference semantics,
-			// depending whether the base range is by-value or by-reference.
-			// Instead, the caller should explicit decide, and either
-			// - store a reference or sub_range of the range,
-			// - or copy the values into another container.
-
 			filter_adaptor( filter_adaptor && rng ) 
-				: base_(tc_move(rng).base_range_move(), aggregate_tag())
+				: base_(tc::base_cast<base_>(tc_move(rng)))
 				, m_pred(tc_move(rng).m_pred)
 			{}
 
 			filter_adaptor& operator=( filter_adaptor && rng ) {
-				base_::operator=(tc_move(rng).base_range_move(), aggregate_tag());
+				base_::operator=(tc::base_cast<base_>(tc_move(rng)));
 				m_pred=tc_move(rng).m_pred;
 				return *this;
 			}
 
-		protected:
 			filter_adaptor( filter_adaptor const& rng ) 
-				: base_(rng.base_range(), aggregate_tag())
+				: base_(tc::base_cast<base_>(rng))
 				, m_pred(rng.m_pred)
 			{}
 
 			filter_adaptor& operator=( filter_adaptor const& rng ) {
-				base_::operator=(rng.base_range(), aggregate_tag());
+				base_::operator=(tc::base_cast<base_>(rng));
 				m_pred=rng.m_pred;
 				return *this;
 			}
-
-		public:
 
 			// other ctors
 			template< typename RngRef, typename PredRef >
@@ -112,7 +102,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		private:
 			void increment_until_kept(index& idx) const {
 				// always call operator() const, which is assumed to be thread-safe
-				while(!base_::at_end_index(idx) && !boost::implicit_cast<bool>(this->m_pred(base_::dereference_index(idx)))) {
+				while(!base_::at_end_index(idx) && !static_cast<bool>(this->m_pred(base_::dereference_index(idx)))) {
 					base_::increment_index(idx);
 				}
 			}
@@ -130,7 +120,6 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				return *this;
 			}
 
-		protected:
 			filter_adaptor( filter_adaptor const& rng ) 
 				: base_(tc::base_cast<base_>(rng))
 			{}
@@ -140,10 +129,9 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				return *this;
 			}
 
-		public:
 			// other ctors
 			template< typename RngRef, typename PredRef >
-			filter_adaptor( RngRef && rng, PredRef && pred)
+			explicit filter_adaptor( RngRef && rng, PredRef && pred)
 			:	base_( std::forward<RngRef>(rng)
 			,	std::forward<PredRef>(pred))
 			{}
@@ -163,7 +151,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				do {
 					base_::decrement_index(idx);
 					// always call operator() const, which is assumed to be thread-safe
-				} while(!boost::implicit_cast<bool>(this->m_pred(base_::dereference_index(idx))));
+				} while(!static_cast<bool>(this->m_pred(base_::dereference_index(idx))));
 			}
 
 			void advance_index() const;
@@ -174,7 +162,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				base_::middle_point(idx,idxEnd);
 			
 				// always call operator() const, which is assumed to be thread-safe
-				while(!base_::equal_index(idxBegin, idx) && !boost::implicit_cast<bool>(this->m_pred(base_::dereference_index(idx)))) {
+				while(!base_::equal_index(idxBegin, idx) && !static_cast<bool>(this->m_pred(base_::dereference_index(idx)))) {
 					base_::decrement_index(idx);
 				}
 			}

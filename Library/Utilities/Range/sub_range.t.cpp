@@ -62,12 +62,12 @@ namespace {
 		auto arr_rng = slice(arr, 1,3);
 
 		sub_range<iterator_base<int *>> mutable_iter_rng = arr_rng;
-		//xx sub_range<iterator_base<int const*>> iter_rng = arr_rng;
+		sub_range<iterator_base<int const*>> iter_rng = arr_rng;
 	}
 
 
 	UNITTESTDEF( const_sub_range_char_ptr ) {
-		//xx sub_range<tc::iterator_base<char const*>> srccp = "test";
+		sub_range<tc::iterator_base<char const*>> srccp = "test";
 	}
 
 	//-------------------------------------------------------------------------------------------------------------------------

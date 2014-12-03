@@ -20,16 +20,6 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			}
 		};
 
-		template<typename T>
-		struct transform_adaptor_dereference_type {
-			using type=T;
-		};
-
-		template<typename T>
-		struct transform_adaptor_dereference_type<T&&> {
-			using type=typename std::decay<T&&>::type;
-		};
-
 		template< typename Func, typename Rng >
 		class transform_adaptor<Func,Rng,false> : public range_adaptor<transform_adaptor<Func,Rng>, Rng > {
 			typedef range_adaptor<transform_adaptor<Func,Rng>, Rng > base_;
@@ -53,40 +43,31 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			// default ctor
 			transform_adaptor() {}
 
-			// Range adaptors other than sub_ranges should not be copyable.
-			// Otherwise, copying a range adaptor may have value or reference semantics,
-			// depending whether the base range is by-value or by-reference.
-			// Instead, the caller should explicit decide, and either
-			// - store a reference or sub_range of the range,
-			// - or copy the values into another container.
-
 			transform_adaptor( transform_adaptor && rng ) 
-				: base_(tc_move(rng).base_range_move(), aggregate_tag())
+				: base_(tc::base_cast<base_>(tc_move(rng)))
 				, m_func(tc_move(rng).m_func)
 			{}
 
 			transform_adaptor& operator=( transform_adaptor && rng ) {
-				base_::operator=(tc_move(rng).base_range_move(), aggregate_tag());
+				base_::operator=(tc::base_cast<base_>(tc_move(rng)));
 				m_func=tc_move(rng).m_func;
 				return *this;
 			}
 
-		protected:
 			transform_adaptor( transform_adaptor const& rng ) 
-				: base_(rng.base_range(), aggregate_tag())
+				: base_(tc::base_cast<base_>(rng))
 				, m_func(rng.m_func)
 			{}
 
 			transform_adaptor& operator=( transform_adaptor const& rng ) {
-				base_::operator=(rng.base_range(), aggregate_tag());
+				base_::operator=(tc::base_cast<base_>(rng));
 				m_func=rng.m_func;
 				return *this;
 			}
 
-		public:
 			// other ctors
 			template< typename RngOther, typename FuncOther >
-			transform_adaptor( RngOther && rng, FuncOther && func )
+			explicit transform_adaptor( RngOther && rng, FuncOther && func )
 				: base_(std::forward<RngOther>(rng), aggregate_tag())
 				, m_func(std::forward<FuncOther>(func))
 			{}
@@ -118,7 +99,6 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				return *this;
 			}
 
-		protected:
 			transform_adaptor( transform_adaptor const& rng ) 
 				: base_(tc::base_cast<base_>(rng))
 			{}
@@ -128,18 +108,17 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				return *this;
 			}
 
-		public:
 			// other ctors
 
 			// ctor from range and functor
 			template< typename RngOther, typename FuncOther >
-			transform_adaptor( RngOther && rng, FuncOther && func )
+			explicit transform_adaptor( RngOther && rng, FuncOther && func )
 				: base_(std::forward<RngOther>(rng),std::forward<FuncOther>(func))
 			{}
 
 			// ctors forwarding to sub_range
 			template< typename RngOther, typename FuncOther >
-			transform_adaptor( transform_adaptor< FuncOther, RngOther, true > && rng
+			explicit transform_adaptor( transform_adaptor< FuncOther, RngOther, true > && rng
 				, typename boost::range_iterator< transform_adaptor< FuncOther, RngOther, true > >::type itBegin
 				, typename boost::range_iterator< transform_adaptor< FuncOther, RngOther, true > >::type itEnd
 			)
@@ -147,30 +126,19 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			{}
 
 			template< typename RngOther, typename FuncOther >
-			transform_adaptor( transform_adaptor< FuncOther, RngOther, true > && rng
+			explicit transform_adaptor( transform_adaptor< FuncOther, RngOther, true > && rng
 				, typename boost::range_size< transform_adaptor< FuncOther, RngOther, true > >::type iBegin
 				, typename boost::range_size< transform_adaptor< FuncOther, RngOther, true > >::type iEnd
 			)
 				: base_(tc::slice(tc_move(rng).base_range_move(),iBegin,iEnd), transform_adaptor_access::get_func(tc_move(rng)))
 			{}
 
-			using base_::make_iterator;
-
-			typename base_::iterator make_iterator(typename boost::range_iterator< typename base_::BaseRange >::type it) {
-				return base_::make_iterator(base_::base_range().iterator2index(it));
-			}
-
-			typename base_::const_iterator make_iterator(typename boost::range_const_iterator< typename base_::BaseRange >::type it) const {
-				return base_::make_iterator(base_::base_range().iterator2index(it));
-			}
-
-		public:
-			auto dereference_index(index const& idx) -> typename transform_adaptor_dereference_type<decltype( make_const(THIS_IN_DECLTYPE m_func)(std::declval<range_adaptor &>().dereference_index(idx)) )>::type {
+			auto dereference_index(index const& idx) -> typename tc::return_decltype_rvalue_by_val_retval<decltype( make_const(THIS_IN_DECLTYPE m_func)(std::declval<range_adaptor &>().dereference_index(idx)) )>::type {
 				// always call operator() const, which is assumed to be thread-safe
 				return make_const(this->m_func)(base_::dereference_index(idx));
 			}
 
-			auto dereference_index(index const& idx) const -> typename transform_adaptor_dereference_type<decltype( make_const(THIS_IN_DECLTYPE m_func)(std::declval<range_adaptor const&>().dereference_index(idx)) )>::type {
+			auto dereference_index(index const& idx) const -> typename tc::return_decltype_rvalue_by_val_retval<decltype( make_const(THIS_IN_DECLTYPE m_func)(std::declval<range_adaptor const&>().dereference_index(idx)) )>::type {
 				// always call operator() const, which is assumed to be thread-safe
 				return make_const(this->m_func)(base_::dereference_index(idx));
 			}

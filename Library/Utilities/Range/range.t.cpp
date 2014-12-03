@@ -121,9 +121,9 @@ UNITTESTDEF( basic ) {
 	};
 
 	template<typename Rng>
-	auto void_range(Rng&& rng) return_decltype (
+	auto void_range(Rng&& rng) return_decltype_rvalue_by_ref (
 		derived_or_base_cast<void_range_struct<Rng&&>>(std::forward<Rng>(rng))
-		)
+	)
 
 
 //---- Generator Range --------------------------------------------------------------------------------------------------------

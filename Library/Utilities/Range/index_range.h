@@ -1,7 +1,6 @@
 #pragma once
 
 #include "range_defines.h"
-
 #include "break_or_continue.h"
 #include "meta.h"
 
@@ -100,40 +99,44 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	template< typename It, typename ConstIt > struct iterator_base;
 	struct aggregate_tag {}; // tag to distinguish constructors that aggregate their single argument from templated copy constructors
 
-	template<typename It>
-	class index_from_iterator {
-		template< typename ItIb, typename ConstIt > friend struct iterator_base;
-		template< typename fIt > friend class index_from_iterator; // enable a const compatible index to be initialized.
+	namespace index_from_iterator_impl {
+		template<typename It>
+		class index_from_iterator {
+			template< typename ItIb, typename ConstIt > friend struct RANGE_PROPOSAL_NAMESPACE::iterator_base;
+			template< typename fIt > friend class index_from_iterator; // enable a const compatible index to be initialized.
 
-		It m_it;
-	public:
+			It m_it;
+		public:
 
-		index_from_iterator() {}
+			index_from_iterator() {}
 
-		template< typename Rhs >
-		index_from_iterator( Rhs && rhs, aggregate_tag)
-		:	m_it( std::forward<Rhs>(rhs) )
-		{}
-		template< typename Rhs >
-		index_from_iterator( Rhs && rhs )
-		:	m_it(std::forward<Rhs>(rhs).m_it)
-		{}
+			template< typename Rhs >
+			index_from_iterator( Rhs && rhs, aggregate_tag)
+			:	m_it( std::forward<Rhs>(rhs) )
+			{}
+			template< typename Rhs >
+			index_from_iterator( Rhs && rhs )
+			:	m_it(std::forward<Rhs>(rhs).m_it)
+			{}
 
-		// explicitly define the copy constructor to do what the template above does, as it would if the implicit copy consturctor wouldn't interfere
-		index_from_iterator( index_from_iterator const& rhs )
-		:	m_it(rhs.m_it)
-		{}
-	};
+			// explicitly define the copy constructor to do what the template above does, as it would if the implicit copy consturctor wouldn't interfere
+			index_from_iterator( index_from_iterator const& rhs )
+			:	m_it(rhs.m_it)
+			{}
+		};
+	}
+	using index_from_iterator_impl::index_from_iterator;
+
+	template< typename It >
+	index_from_iterator<typename std::decay<It>::type> iterator2index( It const& it ) {
+		return index_from_iterator<typename std::decay<It>::type>(it, aggregate_tag());
+	}
 
 	template< typename It, typename ConstIt=typename const_iterator_<It>::type >
 	struct iterator_base {
 		typedef It iterator;
 		typedef ConstIt const_iterator;
 		typedef index_from_iterator<It> index;
-
-		static index iterator2index( iterator it ) {
-			return index(it, aggregate_tag());
-		}
 
 /*		iterator_base(iterator_base const&) {};
 		template< typename OtherIt, typename OtherConstIt >
@@ -392,7 +395,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		>::type* = nullptr
 	>
 	auto ensure_index_range( Rng && rng )
-		return_decltype(
+		return_decltype_rvalue_by_ref(
 			static_cast<typename index_range< Rng >::type>(std::forward<Rng>(rng))
 		)
 
@@ -404,7 +407,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		>::type* = nullptr
 	>
 	auto ensure_index_range( Rng && rng )
-		return_decltype(
-			derived_or_base_cast<void_generator_type_check_impl::check_void_generator_functor<Rng&&>>(std::forward<Rng>(rng))
+		return_decltype_rvalue_by_ref(
+			tc::derived_cast<void_generator_type_check_impl::check_void_generator_functor<Rng&&>>(std::forward<Rng>(rng))
 		)
 }

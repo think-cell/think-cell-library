@@ -182,7 +182,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			It itPartitionPoint = itBegin;
 			while( itPartitionPoint!=itEnd && pred(itPartitionPoint) ) ++itPartitionPoint;
 			for( It itRest=itPartitionPoint; itRest!=itEnd; ++itRest ) {
-				_ASSERT( !boost::implicit_cast<bool>(pred(itRest)) );
+				_ASSERT( !static_cast<bool>(pred(itRest)) );
 			}
 		#endif
 			while( itBegin!=itEnd ) {

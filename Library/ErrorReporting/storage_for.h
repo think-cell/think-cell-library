@@ -1,7 +1,7 @@
 #pragma once
 
 #ifndef RANGE_PROPOSAL_BUILD_STANDALONE
-   #include "assert_fwd.h"
+	#include "assert_fwd.h"
 #endif
 #include "Library/Utilities/is_constructible.h"
 

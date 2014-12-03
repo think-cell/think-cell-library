@@ -68,14 +68,14 @@ struct SUseConversions : SUseDefaultConversions {}; // to control InternalConver
 
 template<typename TTarget, typename TSource>
 auto InternalConvert( TSource&& src, SUseDefaultConversions )
-	return_decltype( SDefaultConversions<TTarget>() (std::forward<TSource>(src)) )
+	return_decltype_rvalue_by_ref( SDefaultConversions<TTarget>() (std::forward<TSource>(src)) )
 
 template<typename TTarget, typename TSource>
 auto InternalConvert( TSource&& src, SUseConversions )
-	return_decltype( SConversions<TTarget>() (std::forward<TSource>(src)) )
+	return_decltype_rvalue_by_ref( SConversions<TTarget>() (std::forward<TSource>(src)) )
 
 template<typename TTarget, typename TSource>
-auto Convert(TSource&& src) return_decltype(
+auto Convert(TSource&& src) return_decltype_rvalue_by_ref(
 	InternalConvert<TTarget>(std::forward<TSource>(src), /*prefer SConversions<TTarget> if applicable*/ SUseConversions())
 )
 

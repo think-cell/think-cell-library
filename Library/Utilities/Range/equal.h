@@ -22,7 +22,7 @@ namespace RANGE_PROPOSAL_NAMESPACE{
 
 			template<typename Elem>
 			break_or_continue operator()(Elem const& elem) {
-				if (it == end || !boost::implicit_cast<bool>(pred(elem, *it))) { equal = false; return break_; }
+				if (it == end || !static_cast<bool>(pred(elem, *it))) { equal = false; return break_; }
 				++it;
 				return continue_;
 			}

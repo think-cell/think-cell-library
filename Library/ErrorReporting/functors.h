@@ -19,11 +19,10 @@ struct define_fn_dummy {};
 
 #define DEFINE_FN2( func, name )                                                                      \
 	struct name {                                                                                     \
-		name& operator=(name const&){ return *this; } /*needed for use as deleter in unique_ptr*/     \
 		template< typename A0, typename ...Args >     /*require at least one argument*/               \
 		auto operator()( A0 && a0, Args && ... args) const                                            \
 			return_decltype( func(std::forward<A0>(a0), std::forward<Args>(args)...) )                \
-};
+	};
 
 #define DEFINE_MEM_FN_BODY_( ... )                                                               \
 	template< typename O, typename ...__A >                                                           \
@@ -54,9 +53,9 @@ struct define_fn_dummy {};
 // shadow inherited members named func.
 #define DEFINE_MEM_FN( func ) \
 	struct dot_member_ ## func { \
-		template< typename O > auto operator()( O & o ) const return_decltype_ref( o.func ) \
-		template< typename O > auto operator()( O const& o ) const return_decltype_ref( o.func ) \
-		template< typename O > auto operator()( O&& o ) const enable_if_return_decltype( !std::is_reference<O>::value, tc_move(tc_move(o).func) ) \
+		template< typename O > auto operator()( O & o ) const return_variable_by_ref( o.func ) \
+		template< typename O > auto operator()( O const& o ) const return_variable_by_ref( o.func ) \
+		template< typename O > auto operator()( O&& o ) const enable_if_return_decltype_rvalue_by_ref( !std::is_reference<O>::value, tc_move(tc_move(o).func) ) \
 	}; \
 	struct dot_mem_fn_ ## func { \
 		DEFINE_MEM_FN_BODY_( .func ) \

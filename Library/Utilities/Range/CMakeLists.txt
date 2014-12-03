@@ -48,6 +48,7 @@ set(Ranges
       partition_iterator.h
       partition_range.h
       index_range.h
+      index_iterator.h
       range_adaptor.h
       sub_range.h
       filter_adaptor.h
