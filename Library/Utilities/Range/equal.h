@@ -1,11 +1,14 @@
 #pragma once
 
+#include "quantifier.h"
+#include "for_each.h"
 #include "break_or_continue.h"
 #include "range_defines.h"
 #include "meta.h"
 
 #include <boost/range/iterator.hpp>
-#include <boost/noncopyable.hpp>
+
+#include "Library/Utilities/noncopyable.h"
 
 #include <functional>
 
@@ -17,12 +20,12 @@ namespace RANGE_PROPOSAL_NAMESPACE{
 	namespace equal_impl {
 
 		template<typename Rng, typename Pred>
-		struct is_equal_elem : boost::noncopyable {
+		struct is_equal_elem : tc::noncopyable {
 			is_equal_elem(Rng const& rng, Pred&& pred_) : it(boost::begin(rng)), end(boost::end(rng)), pred(std::forward<Pred>(pred_)), equal(true) {}
 
 			template<typename Elem>
 			break_or_continue operator()(Elem const& elem) {
-				if (it == end || !static_cast<bool>(pred(elem, *it))) { equal = false; return break_; }
+				if (it == end || !tc::bool_cast(pred(elem, *it))) { equal = false; return break_; }
 				++it;
 				return continue_;
 			}
@@ -30,11 +33,11 @@ namespace RANGE_PROPOSAL_NAMESPACE{
 			bool result() const { return equal && it == end; }
 
 			private:
-				typedef typename boost::range_iterator<Rng const>::type iterator_type;
+				using iterator_type = typename boost::range_iterator<Rng const>::type;
 
 				iterator_type it;
 				iterator_type end;
-				typename std::decay<Pred>::type pred;
+				std::decay_t<Pred> pred;
 				bool equal;
 		};
 	}
@@ -44,7 +47,7 @@ namespace RANGE_PROPOSAL_NAMESPACE{
 	bool >::type equal(LRng const& lrng, RRng const& rrng, Pred&& pred) {
 
 		equal_impl::is_equal_elem<RRng, Pred> equalpred(rrng, std::forward<Pred>(pred));
-		ensure_index_range(lrng)(std::ref(equalpred));
+		tc::for_each(lrng, std::ref(equalpred));
 
 		return equalpred.result();
 	}
@@ -76,8 +79,23 @@ namespace RANGE_PROPOSAL_NAMESPACE{
 	// forward the non predicate version
 	template<typename LRng, typename RRng>
 	bool equal(LRng const& lrng, RRng const& rrng) {
-		return RANGE_PROPOSAL_NAMESPACE::equal(lrng, rrng, fn_equal_to());
+		return RANGE_PROPOSAL_NAMESPACE::equal(lrng, rrng, tc::fn_equal_to());
 	}
 
+	// boost::ends_with does not work with transform_range::iterator returning by value because it has input_iterator category
+	template<typename LRng, typename RRng, typename Pred=tc::fn_equal_to>
+	bool ends_with(LRng const& lrng, RRng const& rrng, Pred pred=Pred()) {
+		auto itL=boost::end(lrng);
+		auto itR=boost::end(rrng);
+		auto const itBeginL=boost::begin(lrng);
+		auto const itBeginR=boost::begin(rrng);
+		for(;;) {
+			if( itR==itBeginR ) return true;
+			if( itL==itBeginL ) return false;
+			--itR;
+			--itL;
+			if( !tc::bool_cast(pred(*itL,*itR)) ) return false;
+		}
+	}
 }
 

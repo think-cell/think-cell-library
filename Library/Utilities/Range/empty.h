@@ -13,21 +13,37 @@
 
 namespace RANGE_PROPOSAL_NAMESPACE {
 	template<typename Rng>
-	typename std::enable_if< has_mem_fn_empty<typename std::decay<Rng>::type>::value,
+	typename std::enable_if<
+		has_mem_fn_empty<std::decay_t<Rng>>::value,
 	bool >::type empty(Rng const& rng) {
 		return rng.empty();
 	}
 
 	template<typename Rng>
-	typename std::enable_if< !has_mem_fn_empty<typename std::decay<Rng>::type>::value && is_range_with_iterators<typename std::decay<Rng>::type>::value,
+	typename std::enable_if<
+		!has_mem_fn_empty<std::decay_t<Rng>>::value &&
+		is_range_with_iterators<Rng>::value &&
+		!has_index<std::decay_t<Rng>>::value,
 	bool >::type empty(Rng const& rng) {
-		auto const& rngidx = ensure_index_range(rng);
+		return boost::begin(rng)==boost::end(rng);
+	}
+
+	template<typename Rng>
+	typename std::enable_if<
+		!has_mem_fn_empty<std::decay_t<Rng>>::value &&
+		is_range_with_iterators<Rng>::value &&
+		has_index<std::decay_t<Rng>>::value,
+	bool >::type empty(Rng const& rngidx) {
 		return rngidx.at_end_index(rngidx.begin_index());
 	}
 
 	template<typename Rng>
-	typename std::enable_if< !has_mem_fn_empty<typename std::decay<Rng>::type>::value && !is_range_with_iterators<typename std::decay<Rng>::type>::value,
+	typename std::enable_if<
+		!has_mem_fn_empty<std::decay_t<Rng>>::value &&
+		!is_range_with_iterators<Rng>::value,
 	bool >::type empty(Rng const& rng) {
-		return continue_==for_each( rng, MAKE_CONSTEXPR_FUNCTION(break_) );
+		return continue_==tc::for_each( rng, MAKE_CONSTEXPR_FUNCTION(break_) );
 	}
+
+	DEFINE_FN2(tc::empty, fn_empty) // Prevent ADL of std::empty (C++17)
 }

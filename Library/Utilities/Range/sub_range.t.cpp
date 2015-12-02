@@ -1,9 +1,13 @@
 #include "sub_range.h"
+#include "union_adaptor.h"
 #include "range.t.h"
 
 #include <vector>
 #include <type_traits>
 #include <iostream>
+
+#include "unique_range_adaptor.h"
+#include "intersection_adaptor.h"
 
 namespace {
 	using namespace RANGE_PROPOSAL_NAMESPACE;
@@ -40,11 +44,11 @@ namespace {
 
 	//-------------------------------------------------------------------------------------------------------------------------
 
-	typedef make_sub_range_result<std::vector<int>&>::type  SRVI;
-	typedef make_sub_range_result<std::vector<int> const&>::type  CSRVI;
+	using SRVI = make_sub_range_result<std::vector<int>&>::type;
+	using CSRVI = make_sub_range_result<std::vector<int> const&>::type;
 
-	typedef make_sub_range_result<make_sub_range_result<std::vector<int>&>::type>::type SSRVI;
-	typedef make_sub_range_result<make_sub_range_result<std::vector<int> const&>::type>::type CSSRVI;
+	using SSRVI = make_sub_range_result<make_sub_range_result<std::vector<int>&>::type>::type;
+	using CSSRVI = make_sub_range_result<make_sub_range_result<std::vector<int> const&>::type>::type;
 
 	//void const_ref_test(SRVI const & rng) {
 	//	//CSRVI const_rng(rng);  // TODO: this fails, but shouldn't! sub_range does detect this, but range_adapter can't cope ...
@@ -59,7 +63,7 @@ namespace {
 	UNITTESTDEF( sub_range_array ) {
 
 		int arr[4] = {1,2,3,4};
-		auto arr_rng = slice(arr, 1,3);
+		auto arr_rng = tc::slice_by_index(arr, 1,3);
 
 		sub_range<iterator_base<int *>> mutable_iter_rng = arr_rng;
 		sub_range<iterator_base<int const*>> iter_rng = arr_rng;
@@ -72,11 +76,11 @@ namespace {
 
 	//-------------------------------------------------------------------------------------------------------------------------
 
-	typedef make_sub_range_result<std::vector<int>&>::type  SRVI;
-	typedef make_sub_range_result<std::vector<int> const&>::type  CSRVI;
+	using SRVI = make_sub_range_result<std::vector<int>&>::type;
+	using CSRVI = make_sub_range_result<std::vector<int> const&>::type;
 
-	typedef make_sub_range_result<make_sub_range_result<std::vector<int>&>::type>::type SSRVI;
-	typedef make_sub_range_result<make_sub_range_result<std::vector<int> const&>::type>::type CSSRVI;
+	using SSRVI = make_sub_range_result<make_sub_range_result<std::vector<int>&>::type>::type;
+	using CSSRVI = make_sub_range_result<make_sub_range_result<std::vector<int> const&>::type>::type;
 
 	void const_ref_test(SRVI const & rng) {
 		//CSRVI const_rng(rng);    // same as const_rng2 below. TODO: this fails, but shouldn't!
@@ -166,8 +170,8 @@ namespace {
 		auto csr = slice(make_const(v));
 
 		// use range_difference to specify bounds
-		auto ssr1 = slice(sr, 3, 6);
-		auto cssr1 = slice(csr, 3, 6);
+		auto ssr1 = tc::slice_by_index(sr, 3, 6);
+		auto cssr1 = tc::slice_by_index(csr, 3, 6);
 		
 		//_ASSERTEQUAL(ssr1, exp36);
 		//_ASSERTEQUAL(cssr1, exp36);
@@ -196,5 +200,435 @@ namespace {
 		//auto ssr2 = sub_range<sub_range<std::vector<int>&>>(v);
 	}
 
+	UNITTESTDEF(union_range_tests) {
+		TEST_RANGE_EQUAL(
+			tc::make_initializer_list({1,2,3,4}),
+			tc::union_range(
+				tc::make_initializer_list({1,4}),
+				tc::make_initializer_list({2,3})
+			)
+		);
+
+		TEST_RANGE_EQUAL(
+			tc::make_initializer_list({4,3,2,1,0}),
+			tc::union_range(
+				tc::make_initializer_list({4,2,0}),
+				tc::make_initializer_list({3,2,1}),
+				[](int lhs, int rhs) {return tc::compare(rhs,lhs);}
+			)
+		);
+
+		_ASSERTEQUAL(
+			3,
+			*tc::upper_bound<tc::return_iterator>(
+				tc::union_range(
+					tc::make_initializer_list({1,2,4}),
+					tc::make_initializer_list({2,3})
+				),
+				2
+			)
+		);
+
+		{
+			auto rng = tc::union_range(
+				tc::make_initializer_list({1,2,3,3,4,4,5}),
+				tc::make_initializer_list({1,1,1,3,4,4,4})
+			);
+
+			TEST_RANGE_EQUAL(
+				rng,
+				tc::make_initializer_list({1,1,1,2,3,3,4,4,4,5})
+			);
+
+			{
+				auto it = tc::lower_bound<tc::return_iterator>(rng,3);
+				_ASSERTEQUAL(*it,3);
+				_ASSERTEQUAL(*boost::prior(it), 2);
+				_ASSERTEQUAL(*boost::next(it), 3);
+	}
+			{
+				auto it = tc::upper_bound<tc::return_iterator>(rng,1);
+				_ASSERTEQUAL(*it,2);
+				_ASSERTEQUAL(*--it, 1);
+				_ASSERTEQUAL(*--it, 1);
+				_ASSERTEQUAL(*--it, 1);
+			}
+		}
+		{
+			auto rng = tc::union_range(
+				tc::make_initializer_list({1,1,1,1,1,1,1,1,1}),
+				tc::make_initializer_list({1,1})
+			);
+			auto it = tc::lower_bound<tc::return_iterator>(rng,1);
+			_ASSERTEQUAL(*it,1);
+		}
+	}
+
+#ifdef _CHECKS
+	struct GenRange {
+		template<typename Func>
+		auto operator()(Func func) const -> break_or_continue {
+			RETURN_IF_BREAK(func(1));
+			RETURN_IF_BREAK(func(3));
+			RETURN_IF_BREAK(func(5));
+			return tc::continue_;
+		}
+	};
+
+	struct GenRangeMutable {
+		std::vector<double> m_vecf = std::vector<double>({1,3,5});
+
+		template<typename Func>
+		auto operator()(Func func) -> break_or_continue {
+			return tc::for_each(m_vecf, std::ref(func));
+		}
+
+		template<typename Func>
+		auto operator()(Func func) const -> break_or_continue {
+			return tc::for_each(m_vecf, std::ref(func));
+		}
+	};
+
+
+#endif
+
+	UNITTESTDEF(union_range_generator) {
+		TEST_RANGE_EQUAL(
+			tc::make_initializer_list({1,2,3,5,6}),
+			tc::union_range(
+				GenRange(),
+				tc::make_initializer_list({2,6})
+			)
+		);
+
+		GenRangeMutable rngMut;
+		std::vector<double> vecf;
+		tc::for_each(
+			tc::union_range(
+				rngMut,
+				vecf
+			),
+			[](double& d) {d += 0.1;}
+		);
+
+		TEST_RANGE_EQUAL(
+			tc::make_initializer_list({1.1,3.1,5.1}),
+			rngMut
+		);
+
+
+
+	}
+
+	UNITTESTDEF(sub_range_with_tranform) {
+
+		std::vector<int> vecn{1,2,3};
+		auto rgntrnsfn = tc::transform(vecn, [](int n) {return n*n;});
+
+		TEST_RANGE_EQUAL(
+			tc::slice(rgntrnsfn, boost::begin(rgntrnsfn), boost::end(rgntrnsfn)),
+			tc::make_initializer_list({1,4,9})
+		);
+
+		TEST_RANGE_EQUAL(
+			tc::make_initializer_list({ 1, 2, 3 }),
+			tc::untransform(tc::slice(rgntrnsfn, boost::begin(rgntrnsfn), boost::end(rgntrnsfn)))
+		);
+
+		TEST_RANGE_EQUAL(
+			tc::make_initializer_list({ 2 }),
+			tc::untransform(tc::equal_range(tc::transform(vecn, [](int n) {return n*n; }), 4))
+		);
+
+		{
+			auto rng = tc::transform(tc::filter(vecn, [](int n) {return n<3;}), [](int n) {return n*n; });
+
+			TEST_RANGE_EQUAL(
+				tc::make_initializer_list({ 2 }),
+				tc::untransform(tc::equal_range(rng, 4))
+			)
+		}
+
+		{
+			// r-value transform with l-value range
+			auto&& rng = tc::untransform(tc::transform(vecn, [](int n){return n*n;}));
+			_ASSERT(3 == tc::size(vecn));
+			_ASSERT(std::addressof(*boost::begin(rng)) == std::addressof(*boost::begin(vecn)));
+			static_assert(std::is_lvalue_reference<decltype(rng)>::value, "");
+			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
+			TEST_RANGE_EQUAL(
+				tc::make_initializer_list({1,2,3}),
+				rng
+			);
+		}
+
+		{
+			// r-value transform with l-value const range
+			auto&& rng = tc::untransform(tc::transform(make_const(vecn), [](int n){return n*n;}));
+			_ASSERT(3 == tc::size(vecn));
+			_ASSERT(std::addressof(*boost::begin(rng)) == std::addressof(*boost::begin(vecn)));
+			static_assert(std::is_lvalue_reference<decltype((rng))>::value, "");
+			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
+			TEST_RANGE_EQUAL(
+				tc::make_initializer_list({1,2,3}),
+				rng
+			);
+		}
+
+		{
+			// r-value transform with r-value range
+			auto&& rng = tc::untransform(tc::transform(std::vector<int>{1, 2, 3}, [](int n){return n*n;}));
+			_ASSERT(3 == tc::size(vecn));
+			static_assert(std::is_rvalue_reference<decltype(rng)>::value, "");
+			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
+			TEST_RANGE_EQUAL(
+				tc::make_initializer_list({1,2,3}),
+				rng
+			);
+		}
+
+		{
+			// l-value transform of l-value-range
+			auto trnsfrng = tc::transform(vecn, [](int n){return n*n;});
+
+			auto&& rng = tc::untransform(trnsfrng);
+			_ASSERT(3 == tc::size(vecn));
+			_ASSERT(std::addressof(*boost::begin(rng)) == std::addressof(*boost::begin(vecn)));
+			static_assert(std::is_lvalue_reference<decltype(rng)>::value, "");
+			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
+			TEST_RANGE_EQUAL(
+				tc::make_initializer_list({1,2,3}),
+				rng
+			);
+		}
+
+		{
+			// l-value transform of const l-value-range
+			auto const trnsfrng = tc::transform(make_const(vecn), [](int n){return n*n;});
+
+			auto&& rng = tc::untransform(trnsfrng);
+			_ASSERT(3 == tc::size(vecn));
+			_ASSERT(std::addressof(*boost::begin(rng)) == std::addressof(*boost::begin(vecn)));
+			static_assert(std::is_lvalue_reference<decltype(rng)>::value, "");
+			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
+			TEST_RANGE_EQUAL(
+				tc::make_initializer_list({1,2,3}),
+				rng
+			);
+		}
+
+		{
+			// l-value transform of const l-value-range
+			auto trnsfrng = tc::transform(make_const(vecn), [](int n){return n*n;});
+
+			auto&& rng = tc::untransform(trnsfrng);
+			_ASSERT(3 == tc::size(vecn));
+			_ASSERT(std::addressof(*boost::begin(rng)) == std::addressof(*boost::begin(vecn)));
+			static_assert(std::is_lvalue_reference<decltype(rng)>::value, "");
+			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
+			TEST_RANGE_EQUAL(
+				tc::make_initializer_list({1,2,3}),
+				rng
+			);
+		}
+
+		{
+			// l-value transform of r-value range
+			auto trnsfrng = tc::transform(std::vector<int>{1, 2, 3}, [](int n){return n*n; });
+			auto&& rng = tc::untransform(trnsfrng);
+			_ASSERTEQUAL(
+				std::addressof(*boost::begin(trnsfrng).base()),
+				std::addressof(*boost::begin(rng))
+			);
+			static_assert(std::is_lvalue_reference<decltype(rng)>::value, "");
+			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
+			TEST_RANGE_EQUAL(
+				tc::make_initializer_list({1,2,3}),
+				rng
+			);
+		}
+		{
+			// const l-value transform of r-value range
+			auto const trnsfrng = tc::transform(std::vector<int>{1, 2, 3}, [](int n){return n*n; });
+			auto&& rng = tc::untransform(trnsfrng);
+			_ASSERTEQUAL(
+				std::addressof(*boost::begin(trnsfrng).base()),
+				std::addressof(*boost::begin(rng))
+			);
+			static_assert(std::is_lvalue_reference<decltype(rng)>::value, "");
+			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
+			TEST_RANGE_EQUAL(
+				tc::make_initializer_list({1,2,3}),
+				rng
+			);
+		}
+	}
+
+	UNITTESTDEF(Unique_Ranges) {
+		std::vector<int> vecn{1,2,3,3,5,5,7};
+
+		{
+			auto rngExpected = tc::make_initializer_list({
+				tc::make_initializer_list({1}),
+				tc::make_initializer_list({2}),
+				tc::make_initializer_list({3,3}),
+				tc::make_initializer_list({5,5}),
+				tc::make_initializer_list({7})
+			});
+
+			{
+				auto it = boost::begin(rngExpected);
+				tc::for_each(
+					tc::adjacent_unique_range(vecn),
+					[&](tc::make_sub_range_result<std::vector<int>&>::type subrng) {
+						TEST_RANGE_EQUAL(subrng, *it);
+						++it;
+					}
+				);
+				_ASSERT(boost::end(rngExpected) == it);
+			}
+
+			{
+				auto it = boost::begin(rngExpected);
+				tc::for_each(
+					tc::adjacent_unique_range(tc::make_const(vecn)),
+					[&](tc::make_sub_range_result<std::vector<int> const&>::type subrng) {
+						TEST_RANGE_EQUAL(subrng, *it);
+						++it;
+					}
+				);
+				_ASSERT(boost::end(rngExpected) == it);
+			}
+
+			{
+				auto it = boost::begin(rngExpected);
+				tc::for_each(
+				tc::adjacent_unique_range(vecn),
+					[&](tc::make_sub_range_result<std::vector<int>&>::type subrng) {
+						TEST_RANGE_EQUAL(subrng, *it);
+						++it;
+					}
+				);
+				_ASSERT(boost::end(rngExpected) == it);
+			}
+
+		}
+
+		auto Pred = [](int lhs, int rhs) {
+			return std::abs(lhs-rhs) <=1;
+		};
+
+		{
+			auto rngExpected = tc::make_initializer_list({
+				tc::make_initializer_list({1,2}),
+				tc::make_initializer_list({3,3}),
+				tc::make_initializer_list({5,5}),
+				tc::make_initializer_list({7})
+			});
+			auto it = boost::begin(rngExpected);
+			tc::for_each(
+				tc::front_unique_range(vecn, Pred),
+				[&](tc::make_sub_range_result<std::vector<int>&>::type subrng) {
+					TEST_RANGE_EQUAL(subrng, *it);
+					++it;
+				}
+			);
+			_ASSERT(boost::end(rngExpected) == it);
+		}
+
+		{
+			auto rngExpected = tc::make_initializer_list({
+				tc::make_initializer_list({1,2,3,3}),
+				tc::make_initializer_list({5,5}),
+				tc::make_initializer_list({7})
+			});
+			auto it = boost::begin(rngExpected);
+			tc::for_each(
+				tc::adjacent_unique_range(vecn, Pred),
+				[&](tc::make_sub_range_result<std::vector<int>&>::type subrng) {
+					TEST_RANGE_EQUAL(subrng, *it);
+					++it;
+				}
+			);
+			_ASSERT(boost::end(rngExpected) == it);
+		}
+	}
+
+	UNITTESTDEF(difference_range) {
+		TEST_RANGE_EQUAL(
+			tc::difference(
+				tc::make_initializer_list({1,2,2,4,7,8,8,11,11}),
+				tc::make_initializer_list({2,3,4,8,8})
+			),
+			tc::make_initializer_list({1,2,7,11,11})
+		);
+	}
+
+	UNITTESTDEF(tc_unique) {
+		TEST_RANGE_EQUAL(
+			tc::adjacent_unique(tc::make_initializer_list({1,2,2,4,7,8,8,11,11})),
+			tc::make_initializer_list({1,2,4,7,8,11})
+		);
+
+		std::vector<int> vecn{1,1,2,2};
+		auto rngunique = tc::adjacent_unique(vecn);
+		auto it = boost::begin(rngunique);
+		auto itvec = it.base();
+		_ASSERT(1==*itvec);
+		_ASSERT(1 == *(++itvec));
+		_ASSERT(2 == *(++itvec));
+
+		_ASSERT(1 == *it);
+		_ASSERT(2 == *(++it));
+		_ASSERT(1 == *(--it));
+		_ASSERT(boost::begin(rngunique) == it);
+
+	}
+
+#ifdef _CHECKS
+	struct MovingInt {
+		int m_n;
+
+		MovingInt(int n) : m_n(n)
+		{}
+
+		MovingInt(MovingInt&& other) : m_n(other.m_n)
+		{
+			other.m_n = 0;
+		}
+
+		MovingInt(MovingInt const&) = delete;
+		MovingInt& operator=(MovingInt& other) = delete;
+
+		MovingInt& operator=(MovingInt&& other) {
+			m_n = other.m_n;
+			if (&other.m_n != &m_n) {
+				other.m_n = 0;
+			}
+			return *this;
+		}
+
+		operator int() const {return m_n;}
+	};
+#endif
+
+	UNITTESTDEF(tc_unique_inplace) {
+		std::vector<MovingInt> vecmn; // list initializtion not possible with move-only element type
+		vecmn.emplace_back(1);
+		vecmn.emplace_back(1);
+		vecmn.emplace_back(1);
+		vecmn.emplace_back(2);
+		vecmn.emplace_back(2);
+		vecmn.emplace_back(2);
+		vecmn.emplace_back(3);
+		vecmn.emplace_back(4);
+		vecmn.emplace_back(4);
+		tc::adjacent_unique_inplace(vecmn);
+
+		TEST_RANGE_EQUAL(
+			vecmn,
+			tc::make_initializer_list({1,2,3,4})
+		);
+	}
 }
 

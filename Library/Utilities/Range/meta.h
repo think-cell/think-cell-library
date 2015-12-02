@@ -3,6 +3,7 @@
 #include "range_defines.h"
 #include "range_fwd.h"
 #include "Library/Utilities/remove_cvref.h"
+#include "Library/ErrorReporting/functors.h"
 
 #include <boost/range/value_type.hpp>
 
@@ -19,23 +20,28 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	// cast may not be necessary, but let's avoid problems even in case of user-defined T
 	template< typename T >
 	bool isasciidigit( T ch ) {
-		return static_cast<T>('0')<=ch && ch<=static_cast<T>('9');
+		return tc::char_cast<T>('0')<=ch && ch<=tc::char_cast<T>('9');
 	}
 
 	template< typename T >
 	bool isasciiupper( T ch ) {
-		return static_cast<T>('A')<=ch && ch<=static_cast<T>('Z');
+		return tc::char_cast<T>('A')<=ch && ch<=tc::char_cast<T>('Z');
 	}
 
 	template< typename T >
 	bool isasciilower( T ch ) {
-		return static_cast<T>('a')<=ch && ch<=static_cast<T>('z');
+		return tc::char_cast<T>('a')<=ch && ch<=tc::char_cast<T>('z');
 	}
 
 	template< typename T >
+	bool isasciicntrl( T ch ) {
+		return tc::char_cast<T>('\0')<=ch && ch<=tc::char_cast<T>('\x1f') || tc::char_cast<T>('\x7f')==ch;
+	}
+	
+	template< typename T >
 	T toasciiupper( T ch ) {
 		if( isasciilower(ch) ) {
-			return static_cast<T>( ch-('a'-'A') );
+			return tc::sub( ch, 'a'-'A' );
 		} else {
 			return ch;
 		}
@@ -43,49 +49,63 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	template< typename T >
 	T toasciilower( T ch ) {
 		if( isasciiupper(ch) ) {
-			return static_cast<T>( ch+('a'-'A') );
+			return tc::add( ch, 'a'-'A' );
 		} else {
 			return ch;
 		}
 	}
+
+	DEFINE_FN(toasciilower)
+	DEFINE_FN(toasciiupper)
+
+	template< class T >
+	struct range_value : boost::range_value<T> {};
 }
 
 namespace boost {
 	#pragma push_macro("CHAR_RANGE")
 	#define CHAR_RANGE( xchar ) \
 		template<> \
+		struct range_iterator<xchar*> { \
+			using type = xchar*; \
+		}; \
+		template<> \
 		struct range_mutable_iterator<xchar*> { \
-			typedef xchar* type; \
+			using type = xchar*; \
 		}; \
 		template<> \
 		struct range_const_iterator<xchar*> { \
-			typedef std::add_const<xchar>::type* type; \
+			using type = std::add_const<xchar>::type*; \
+		}; \
+		template<> \
+		struct range_iterator<xchar* const> { \
+			using type = xchar*; \
 		}; \
 		template<> \
 		struct range_mutable_iterator<xchar* const> { \
-			typedef xchar* type; \
+			using type = xchar*; \
 		}; \
 		template<> \
 		struct range_const_iterator<xchar* const> { \
-			typedef std::add_const<xchar>::type* type; \
+			using type = std::add_const<xchar>::type*; \
 		}; \
 		template<std::size_t N> \
 		struct range_mutable_iterator<xchar[N]> { \
-			typedef xchar* type; \
+			using type = xchar*; \
 		}; \
 		/* support array-of-unknown-bounds incomplete type */ \
 		template<> \
 		struct range_mutable_iterator<xchar[]> { \
-			typedef xchar* type; \
+			using type = xchar*; \
 		}; \
 		template<std::size_t N> \
 		struct range_const_iterator<xchar[N]> { \
-			typedef std::add_const<xchar>::type* type; \
+			using type = std::add_const<xchar>::type*; \
 		}; \
 		/* support array-of-unknown-bounds incomplete type */ \
 		template<> \
 		struct range_const_iterator<xchar[]> { \
-			typedef std::add_const<xchar>::type* type; \
+			using type = std::add_const<xchar>::type*; \
 		}; \
 		inline xchar* range_begin(xchar* pch) { \
 			return pch; \
@@ -126,42 +146,23 @@ namespace boost {
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wsign-conversion"
 #endif
+
+#pragma warning(push)
+#pragma warning( disable: 4267 )
+// warning C4267 : 'argument' : conversion from 'size_t' to 'int', possible loss of data
+// _Median(...) causes warning C4267 when difference_type is int and size_t is 64 bit. 
+// Stephan T. Lavavej [stl@exchange.microsoft.com] agrees this is a bug and filed DevDiv#1213041 
+// "<algorithm>: _Median() doesn't handle fancy difference types" to track the problem.
 #include <boost/range/iterator_range.hpp>
 #include <boost/range/sub_range.hpp>
 #include <boost/range/any_range.hpp>
+#pragma warning(pop)
+
 #ifdef TC_MAC
 #pragma clang diagnostic pop
 #endif 
 
-#if 105600 < BOOST_VERSION
-// TODO: In 1.56.0, this breaks due to an ordering issue check if this is fixed, and the code which is the same 
-// except for the namespace can be replaced by using the original from the include
-#error "Check if still needed!"
 #include <boost/range/has_range_iterator.hpp>
-#define BOOST_156_HACK boost
-#else
-#define BOOST_156_HACK boost::boost_156
-namespace boost {
-	namespace boost_156 {
-		namespace range_detail {
-			BOOST_MPL_HAS_XXX_TRAIT_DEF(type)
-
-			template<typename T, class Enabler = void>	struct has_range_iterator_impl : boost::mpl::false_ {};
-			template<typename T>						struct has_range_iterator_impl < T, BOOST_DEDUCED_TYPENAME ::boost::enable_if < BOOST_DEDUCED_TYPENAME mpl::eval_if < is_const<T>,
-				has_type<range_const_iterator<BOOST_DEDUCED_TYPENAME remove_const<T>::type> >,
-				has_type<range_mutable_iterator<T> >
-			> ::type > ::type >
-			: boost::mpl::true_{};
-
-			template<typename T, class Enabler = void>	struct has_range_const_iterator_impl : boost::mpl::false_ {};
-			template<typename T>						struct has_range_const_iterator_impl<T, BOOST_DEDUCED_TYPENAME ::boost::enable_if< has_type<range_const_iterator<T> > >::type> : boost::mpl::true_{};
-		} // namespace range_detail
-
-		template<typename T> struct has_range_iterator : range_detail::has_range_iterator_impl < BOOST_DEDUCED_TYPENAME remove_reference<T>::type > {};
-		template<typename T> struct has_range_const_iterator : range_detail::has_range_const_iterator_impl < BOOST_DEDUCED_TYPENAME remove_reference<T>::type > {};
-	}
-}
-#endif
 
 namespace RANGE_PROPOSAL_NAMESPACE {
 	namespace is_char_detail {
@@ -187,8 +188,8 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 		template< typename Rng >
 		struct is_range_with_iterators : boost::mpl::or_<
-				BOOST_156_HACK::has_range_const_iterator<Rng>,
-				BOOST_156_HACK::has_range_iterator<Rng>
+				boost::has_range_const_iterator<Rng>,
+				boost::has_range_iterator<Rng>
 			>::type
 		{};
 
@@ -203,26 +204,35 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		struct is_range_with_iterators<T[]> : std::true_type {};
 	}
 	template<typename Rng>
-	struct is_range_with_iterators : is_range_with_iterators_detail::is_range_with_iterators<typename tc::remove_cvref<Rng>::type> {};
+	struct is_range_with_iterators : is_range_with_iterators_detail::is_range_with_iterators<tc::remove_cvref_t<Rng>> {};
 
-	namespace is_char_range_impl {
-		template<typename Rng, bool is_range_with_iterators>
-		struct is_char_range2;
+	namespace is_range_of_impl {
+		template<typename Rng, template<typename> class Pred, bool is_range_with_iterators>
+		struct is_range_of2;
 		
-		template<typename Rng>
-		struct is_char_range2<Rng, true> : is_char< typename boost::range_value<Rng>::type >::type {};
+		template<typename Rng, template<typename> class Pred>
+		struct is_range_of2<Rng, Pred, true> : Pred< typename tc::range_value<Rng>::type >::type {};
 
-		template<typename Rng>
-		struct is_char_range2<Rng, false> : std::false_type {};
+		template<typename Rng, template<typename> class Pred>
+		struct is_range_of2<Rng, Pred, false> : std::false_type {};
 
-		template<typename Rng>
-		struct is_char_range1 : is_char_range2<Rng, is_range_with_iterators<Rng>::value >::type {};
+		template<typename Rng, template<typename> class Pred>
+		struct is_range_of1 : is_range_of2<Rng, Pred, is_range_with_iterators<Rng>::value >::type {};
 	};
+	template<typename Rng, template<typename> class Pred>
+	struct is_range_of : is_range_of_impl::is_range_of1< tc::remove_cvref_t<Rng>, Pred > {};
+
 	template<typename Rng>
-	struct is_char_range : is_char_range_impl::is_char_range1< typename tc::remove_cvref<Rng>::type > {};
+	struct is_char_range : is_range_of<Rng, is_char> {};
 
 	static_assert( is_char_range<wchar_t const* const>::value, "" );
-	
+
+	template< typename T >
+	struct is_decayed : std::is_same< T, std::decay_t<T> >::type {};
+
+	template<typename T>
+	struct is_non_char_integral : std::integral_constant< bool, std::is_integral<T>::value && !tc::is_char<T>::value > {};
+
 	//////////////////////////////
 	// Traversables are either containers or ranges, which are references to consecutive elements in containers.
 	//
@@ -256,11 +266,11 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	struct is_range_impl : is_range_impl2<T, tc::is_range_with_iterators<T>::value >::type {};
 	template<typename It>
 	struct const_range<boost::iterator_range<It>> {
-		typedef boost::iterator_range<typename const_iterator_<It>::type> type;
+		using type = boost::iterator_range<typename const_iterator_<It>::type>;
 	};
 	template< typename T >
 	struct const_range<boost::sub_range<T>> {
-		typedef boost::sub_range<T const> type;
+		using type = boost::sub_range<T const>;
 	};
 	template<
 		class Value
@@ -270,7 +280,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		, class Buffer
 	>
 	struct const_range<boost::any_range<Value,Traversal,Reference,Difference,Buffer>> {
-		typedef boost::any_range<Value,Traversal,Reference,Difference,Buffer> type;
+		using type = boost::any_range<Value,Traversal,Reference,Difference,Buffer>;
 	};
 	template<
 		class Value
@@ -280,7 +290,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		, class Buffer
 	>
 	struct const_range<boost::any_range<Value,Traversal,Reference&,Difference,Buffer>> {
-		typedef boost::any_range<Value,Traversal,Reference const&,Difference,Buffer> type;
+		using type = boost::any_range<Value,Traversal,Reference const&,Difference,Buffer>;
 	};
 
 	// pointers to zero-terminated strings are ranges
@@ -288,7 +298,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	struct is_range_impl<T*> : is_char<T>::type {};
 	template< typename T >
 	struct const_range<T*> {
-		typedef T const* type;
+		using type = T const*;
 	};
 	// sub_ranges are ranges
 	template< typename T >
@@ -296,40 +306,66 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	template< typename T >
 	struct const_range<sub_range<T>> {
 		// sub_range of another range
-		typedef sub_range<typename const_range<T>::type> type;
+		using type = sub_range<typename const_range<T>::type>;
 	};
 	template< typename T >
 	struct const_range<sub_range<T&>> {
 		// sub_range of a container, which is expected to have deep constness.
-		typedef sub_range<T const&> type;
+		using type = sub_range<T const&>;
 	};
 	// iterator_base is range
 	template< typename It, typename ConstIt >
 	struct is_range_impl<iterator_base<It,ConstIt>> : std::true_type {};
 	template< typename It, typename ConstIt >
 	struct const_range<iterator_base<It,ConstIt>> {
-		typedef iterator_base<ConstIt,ConstIt> type;
+		using type = iterator_base<ConstIt,ConstIt>;
 	};
 
+	// singleton_range<T&> is range
 	template< typename T >
-	struct is_range : is_range_impl< typename std::decay<T>::type > {};
+	struct singleton_range;
+
+	template< typename T >
+	struct const_range<singleton_range<T&>> {
+		// singleton_range of a container, which is expected to have deep constness.
+		using type = singleton_range<T const&>;
+	};
+	template< typename T >
+	struct is_range_impl<singleton_range<T&>> : std::true_type{};
+
+	template< typename T >
+	struct is_range : is_range_impl< std::decay_t<T> > {};
 
 	namespace range_by_value_impl {
 		template< typename T >
 		struct range_by_value_for_range {
-			typedef typename std::decay<T>::type type;
+			using type = std::decay_t<T>;
 		};
 		template< typename T >
 		struct range_by_value_for_range<T const&> {
-			typedef typename tc::const_range< typename std::decay<T>::type >::type type;
+			using type = typename tc::const_range< std::decay_t<T> >::type;
 		};
 	}
 	template< typename T >
 	struct range_by_value {
 		static_assert( !std::is_rvalue_reference<T>::value, "" );
-		typedef typename boost::mpl::eval_if_c< is_range<T>::value
+		using type = typename boost::mpl::eval_if_c< is_range<T>::value
 			, range_by_value_impl::range_by_value_for_range<T>
 			, boost::mpl::identity<T>
-		>::type type;
+		>::type;
 	};
+	
+	/////////////////////////////////////////////
+	// verify_class
+
+	template<typename C>
+	struct verify_class_impl{
+		static_assert( std::is_class<C>::value, "not a class!");
+		using type=C;
+	};
+
+	template<typename C>
+	using verify_class=typename verify_class_impl<C>::type;
+
+	template<typename T> DEFINE_FN2( tc::verify_class<T>, fn_ctor );
 }

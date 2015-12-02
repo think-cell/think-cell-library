@@ -7,7 +7,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 	// this is for testing only, equivalent to slice(rng, begin(rng), end(rng)), but also works correctly on temporaries
 	template< typename Rng >
-	typename make_sub_range_result< Rng >::type slice( Rng && rng) {
+	typename make_sub_range_result< Rng >::type slice(Rng&& rng) {
 		return typename make_sub_range_result< Rng >::type( std::forward<Rng>(rng), boost::begin(rng), boost::end(rng) );
 	}
 
@@ -25,7 +25,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			break_or_continue bc=continue_;
 			auto const itEnd=boost::end(m_values);
 			for( auto it=boost::begin(m_values);
-				it!=itEnd && continue_==(bc=continue_if_void( func, *it ));
+				it!=itEnd && continue_==(bc=continue_if_not_break( func, *it ));
 				++it );
 			return bc;
 		}
@@ -34,7 +34,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			break_or_continue bc=continue_;
 			auto const itEnd=boost::end(m_values);
 			for( auto it=boost::begin(m_values);
-				it!=itEnd && continue_==(bc=continue_if_void( func, *it ));
+				it!=itEnd && continue_==(bc=continue_if_not_break( func, *it ));
 				++it );
 			return bc;
 		}

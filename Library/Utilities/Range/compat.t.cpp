@@ -58,23 +58,23 @@ namespace {
 			T m_t;
 		};
 
-		typedef wrapped<long> wrapped_long;
+		using wrapped_long = wrapped<long>;
 		static bool filter35( wrapped_long const& wl ) { return wl.getT() == 3 || wl.getT() == 5; }
 		static std::size_t transf_times_100( wrapped_long const& wl ) { std::size_t color = wl.getT() * 100; return color; }
 
-		typedef std::vector< wrapped_long > const& WlList;
-		//typedef std::vector< wrapped_long > WlList;        // works!
+		using WlList = std::vector< wrapped_long > const&;
+		//using WlList = std::vector< wrapped_long >;        // works!
 		WlList getWlList() const { return m_list; } 
 	
-		typedef filter_adaptor<decltype(&filter35), WlList> WlFilterdList;
+		using WlFilterdList = filter_adaptor<decltype(&filter35), WlList>;
 		auto getWlFilterdList() const return_decltype ( tc::filter(getWlList(), &filter35) )
 
 		// This is were it gets wiered, as soon as you somehow use has_range_iterator<WlFilterdList> (here at class scope)
 		// things go crashing down, even though has_range_iterator<WlFilterdList> is perfectly fine one line later at funtion scope
 
-		typedef transform_adaptor<decltype(&transf_times_100), WlFilterdList, true> WlFilterdTransformedList; STATIC_ASSERT(is_range_with_iterators<WlFilterdList>::value);
-		//typedef  transform_adaptor<decltype(&transf_times_100), WlFilterdList, is_range_with_iterators<WlFilterdList>::value> WlFilterdTransformedList;
-		//typedef  transform_adaptor<decltype(&transf_times_100), WlFilterdList> WlFilterdTransformedList;
+		using WlFilterdTransformedList = transform_adaptor<decltype(&transf_times_100), WlFilterdList, true>; STATIC_ASSERT(is_range_with_iterators<WlFilterdList>::value);
+		//using WlFilterdTransformedList = transform_adaptor<decltype(&transf_times_100), WlFilterdList, is_range_with_iterators<WlFilterdList>::value>;
+		//using WlFilterdTransformedList = transform_adaptor<decltype(&transf_times_100), WlFilterdList>;
 		WlFilterdTransformedList getWlFilterdTransformedList() const {
 			STATIC_ASSERT(is_range_with_iterators<WlFilterdList>::value);
 			STATIC_ASSERT(is_range_with_iterators<WlFilterdTransformedList>::value);
@@ -166,7 +166,7 @@ struct outer {
 		m_in = tmp;
 	}
 
-	typedef tc::filter_adaptor< filter_stub, tc::transform_adaptor< free_id, std::vector<inner> const &, true>, true > TRange;
+	using TRange = tc::filter_adaptor< filter_stub, tc::transform_adaptor< free_id, std::vector<inner> const &, true>, true >;
 	TRange trans_range() {
 		return tc::filter( tc::transform(make_const(m_in), free_id()), filter_stub() );
 	}

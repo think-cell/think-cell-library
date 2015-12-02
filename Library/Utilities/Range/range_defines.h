@@ -1,7 +1,5 @@
 #pragma once
 
-#include "range_fwd.h"
-
 #ifndef RANGE_PROPOSAL_BUILD_STANDALONE
 	#include "Library/ErrorReporting/assert_fwd.h"
 #else
@@ -26,24 +24,41 @@
 	#ifndef _ASSERTEQUAL
 			#define _ASSERTEQUAL(a, b) assert((a)==(b))
 	#endif
+	#ifndef _ASSERTINITIALIZED
+		#define _ASSERTINITIALIZED( expr ) (expr)
+	#endif
 	#ifndef VERIFYEQUAL
 		#define VERIFYEQUAL( expr, constant ) (expr)
 	#endif
 	#ifndef VERIFY
 		#define VERIFY( expr ) (expr)
 	#endif
+	#ifndef VERIFYINITIALIZED
+		#define VERIFYINITIALIZED( expr ) (expr)
+	#endif
+	
+	#include <initializer_list>
+	
+	namespace tc {
+		template<typename T>
+		std::initializer_list<T> make_initializer_list(std::initializer_list<T> il) noexcept {
+			return il;
+		}
+	}
 
 	#define RANGE_UNITTEST_OUTPUT
 
 	// standalone replacements for assign.h
 	#include <boost/algorithm/string/compare.hpp>
-	typedef boost::is_equal fn_equal_to;
-	typedef boost::is_less fn_less;
-	typedef boost::is_not_greater fn_less_equal;
+	namespace tc {
+		using fn_equal_to = boost::is_equal;
+		using fn_less = boost::is_less;
+		using fn_less_equal = boost::is_not_greater; // boost implements it as <=
+	}
 
 	// standalone replacements for functors.h
 	struct fn_logical_not {
-		template<typename Lhs> auto operator()( Lhs && lhs ) const -> decltype(!std::forward<Lhs>(lhs)) { return !std::forward<Lhs>(lhs); }
+		template<typename Lhs> auto operator()( Lhs&& lhs ) const -> decltype(!std::forward<Lhs>(lhs)) { return !std::forward<Lhs>(lhs); }
 	};
 
     #define SWITCH_NO_DEFAULT( ... ) \
@@ -54,6 +69,8 @@
 	#define switch_no_default( ... ) SWITCH_NO_DEFAULT( __VA_ARGS__ ) /##/
 
 #endif
+
+#include "range_fwd.h"
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // Compiler bug/missing feature workarounds

@@ -4,6 +4,8 @@
 #include "range_fwd.h"
 #include "range_adaptor.h"
 #include "meta.h"
+#include "types.h"
+#include "Library/Utilities/Range/size.h"
 
 #include <boost/variant.hpp>
 #include <boost/serialization/strong_typedef.hpp>
@@ -30,13 +32,16 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				reference_or_value< typename index_range<Rng1>::type >
 			> m_baserng;
 
-			join_adaptor(join_adaptor && rng)
+			join_adaptor(join_adaptor&& rng)
 				: m_baserng(tc_move(rng.m_baserng))
 			{}
 
 			template<typename Rhs0, typename Rhs1>
 			join_adaptor(Rhs0&& rhs0, Rhs1&& rhs1)
-				: m_baserng(std::forward<Rhs0>(rhs0), std::forward<Rhs1>(rhs1))
+				: m_baserng(
+					reference_or_value< typename index_range<Rng0>::type >(std::forward<Rhs0>(rhs0), aggregate_tag()),
+					reference_or_value< typename index_range<Rng1>::type >(std::forward<Rhs1>(rhs1), aggregate_tag())
+				)
 			{}
 
 			template< typename Func >
@@ -110,73 +115,6 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				(*std::get<0>(m_baserng))(std::ref(func));
 				(*std::get<1>(m_baserng))(std::ref(func));
 			}
-		};
-
-		template<bool, typename Base, typename T0, typename T1>
-		struct base_or_common_type;
-
-		template<typename Base, typename T0, typename T1>
-		struct base_or_common_type<true, Base, T0, T1> {
-			using type = Base;
-		};
-
-		template<typename Base, typename T0, typename T1>
-		struct base_or_common_type<false, Base, T0, T1> {
-			using type = std::common_type_t<T0, T1>;
-		};
-
-		template<
-			typename T0,
-			typename T1
-		>
-		struct reference_type {
-			using T0Value = std::remove_reference_t<T0>;
-			using T1Value = std::remove_reference_t<T1>;
-
-			template<typename ValueType>
-			using constness = std::conditional_t<
-				std::is_const<T0Value>::value ||
-				std::is_const<T1Value>::value,
-				std::add_const_t<ValueType>,
-				ValueType
-			>;
-
-			template<typename ValueType>
-			using volatileness = std::conditional_t<
-				std::is_volatile<T0Value>::value ||
-				std::is_volatile<T1Value>::value,
-				std::add_volatile_t<ValueType>,
-				ValueType
-			>;
-
-			using base = std::remove_cv_t<
-				std::conditional_t<
-					std::is_same<std::remove_cv_t<T0Value>, std::remove_cv_t<T1Value>>::value,
-					T0Value,
-					std::conditional_t<
-						std::is_base_of<T0Value, T1Value>::value,
-						T0Value,
-						std::conditional_t<
-							std::is_base_of<T1Value, T0Value>::value,
-							T1Value,
-							void
-						>
-					>
-				>
-			>;
-
-			using type = typename base_or_common_type<
-				std::is_lvalue_reference<T0>::value &&
-				std::is_lvalue_reference<T1>::value &&
-				!std::is_same<base, void>::value,
-				std::add_lvalue_reference_t<
-					constness<
-						volatileness<base>
-					>
-				>,
-				T0,
-				T1
-			>::type;
 		};
 
 		template<
@@ -210,12 +148,6 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			using index_t = typename type_by_index<N, Index0, Index1>::type;
 		};
 
-		template<typename Rng>
-		using traversal_t =
-			typename boost::iterator_traversal<
-				typename boost::range_iterator<std::remove_reference_t<Rng>>::type
-			>::type;
-
 		template<
 			typename Rng0,
 			typename Rng1
@@ -238,6 +170,9 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				>::type
 			>
 		{
+		private:
+			using this_type = join_adaptor;
+		public:
 			using join_index_type = join_index<
 				typename std::remove_reference<
 					typename index_range<Rng0>::type
@@ -264,7 +199,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			using typename base_::index;
 			using join_adaptor < Rng0, Rng1, false >::m_baserng;
 
-			join_adaptor(join_adaptor && rng)
+			join_adaptor(join_adaptor&& rng)
 				: join_adaptor<Rng0, Rng1, false>(tc_move(rng))
 				{}
 
@@ -283,19 +218,19 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			}
 
 		public:
-			index begin_index() const {
+			STATIC_FINAL(begin_index)() const -> index {
 				return correct_index( index_t<0>(std::get<0>(m_baserng)->begin_index()) );
 			}
 
-			index end_index() const {
+			STATIC_FINAL(end_index)() const -> index {
 				return index_t<1>( std::get<1>(m_baserng)->end_index() );
 			}
 
-			bool at_end_index(index const& idx) const {
+			STATIC_FINAL(at_end_index)(index const& idx) const -> bool {
 				return 1 == idx.which() && std::get<1>(m_baserng)->at_end_index(boost::get<index_t<1>>(idx));
 			}
 
-			void increment_index(index& idx) const {
+			STATIC_FINAL(increment_index)(index& idx) const -> void {
 				switch_no_default(idx.which()) {
 				case 0:
 					std::get<0>(m_baserng)->increment_index(boost::get<index_t<0>>(idx));
@@ -331,34 +266,34 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			}
 
 			template<int N>
-			auto dereference_index(index const& idx) const return_decltype(
+			auto dereference_index_fwd(index const& idx) const return_decltype(
 				std::get<N>(m_baserng)->dereference_index(boost::get<index_t<N>>(idx))
 			)
 
+			STATIC_FINAL(dereference_index)(index const& idx) const ->
 			typename reference_type<
 				typename range_traits<std::remove_reference_t<Rng0> const>::reference,
 				typename range_traits<std::remove_reference_t<Rng1> const>::reference
-			>::type
-			dereference_index(index const& idx) const {
+			>::type {
 				switch_no_default(idx.which()) {
-					case 0: return dereference_index<0>(idx);
-					case 1: return dereference_index<1>(idx);
+					case 0: return dereference_index_fwd<0>(idx);
+					case 1: return dereference_index_fwd<1>(idx);
 				}
 			}
 
 			template<int N>
-			auto dereference_index(index const& idx) return_decltype(
+			auto dereference_index_fwd(index const& idx) return_decltype(
 				std::get<N>(m_baserng)->dereference_index(boost::get<index_t<N>>(idx))
 			)
 
+			STATIC_FINAL(dereference_index)(index const& idx) ->
 			typename reference_type<
 				typename range_traits<Rng0>::reference,
 				typename range_traits<Rng1>::reference
-			>::type
-			dereference_index(index const& idx) {
+			>::type {
 				switch_no_default(idx.which()) {
-					case 0: return dereference_index<0>(idx);
-					case 1: return dereference_index<1>(idx);
+					case 0: return dereference_index_fwd<0>(idx);
+					case 1: return dereference_index_fwd<1>(idx);
 				}
 			}
 
@@ -476,6 +411,15 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 					}
 				}
 			}
+
+			template<typename R0 = Rng0, typename R1 = Rng1, std::enable_if_t<
+				tc::size_impl::has_size<R0>::value &&
+				tc::size_impl::has_size<R1>::value
+			>* = nullptr>
+			auto size() const return_decltype(
+				tc::size_impl::size(boost::implicit_cast<std::remove_reference_t<R0> const&>(*std::get<0>(THIS_IN_DECLTYPE m_baserng))) +
+				tc::size_impl::size(boost::implicit_cast<std::remove_reference_t<R1> const&>(*std::get<1>(THIS_IN_DECLTYPE m_baserng)))
+			)
 		};
 	}
 
@@ -486,10 +430,10 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		typename Rng1
 	>
 	struct const_range < join_adaptor<Rng0, Rng1> > {
-		typedef join_adaptor <
+		using type = join_adaptor <
 			typename const_range<Rng0>::type,
 			typename const_range<Rng1>::type
-		> type;
+		>;
 	};
 
 	template<typename Rng0, typename Rng1>

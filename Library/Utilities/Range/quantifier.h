@@ -1,5 +1,7 @@
 #pragma once
 
+#include "range_fwd.h"
+#include "for_each.h"
 #include "transform_adaptor.h"
 #include "break_or_continue.h"
 #include <boost/bind.hpp>
@@ -10,60 +12,47 @@
 
 namespace RANGE_PROPOSAL_NAMESPACE {
 
-	struct bool_context {
-		template< typename T >
-		bool_context(T const& t) 
-			: m_b(static_cast<bool>(t))
-		{}
-		operator bool() const { return m_b; }
-	private:
-		bool m_b;
-	};
+DEFINE_FN(bool_cast)
 
 template< typename Rng >
-bool any_of( Rng && rng ) {
+bool any_of(Rng&& rng) {
 	return accumulate(std::forward<Rng>(rng), false, [](bool& bAccu, bool_context b) {
 		return continue_if(!( bAccu=bAccu || b ));
 	} );
 }
 
 template< typename Rng >
-bool all_of( Rng && rng ) {
+bool all_of(Rng&& rng) {
 	return accumulate(std::forward<Rng>(rng), true, [](bool& bAccu, bool_context b) {
 		return continue_if(( bAccu=bAccu && b ));
 	} );
 }
 
 template< typename Rng, typename Pred >
-bool any_of( Rng && rng, Pred && pred ) {
+bool any_of(Rng&& rng, Pred&& pred) {
 	return any_of( tc::transform( std::forward<Rng>(rng), std::forward<Pred>(pred) ) );
 }
 
 template< typename Rng, typename Pred >
-bool all_of( Rng && rng, Pred && pred ) {
+bool all_of(Rng&& rng, Pred&& pred) {
 	return all_of( tc::transform( std::forward<Rng>(rng), std::forward<Pred>(pred) ) );
 }
 
 template< typename Rng >
-bool none_of( Rng && rng ) {
+bool none_of(Rng&& rng) {
 	return !any_of( std::forward<Rng>(rng) );
 }
 
 template< typename Rng, typename Pred >
-bool none_of( Rng && rng, Pred && pred ) {
+bool none_of(Rng&& rng, Pred&& pred) {
 	return !any_of( std::forward<Rng>(rng), std::forward<Pred>(pred) );
-}
-
-template< typename Rng, typename T >
-bool contains( Rng && rng, T const& t ) {
-	return any_of( tc::transform( std::forward<Rng>(rng), boost::bind<bool>( fn_equal_to(), _1, boost::cref(t) ) ) );
 }
 
 // pair is in same order as if minmax_element( ..., operator<( bool, bool ) ) would have been used.
 template< typename Rng >
 std::pair<bool,bool> all_any_of( Rng const& rng ) {
 	std::pair<bool,bool> pairb(true,false);
-	ensure_index_range(rng)( [&](bool b) {
+	tc::for_each(rng, [&](bool b) {
 		pairb.first=pairb.first && b;
 		pairb.second=pairb.second || b;
 		return continue_if( pairb.first || !pairb.second );
@@ -72,8 +61,18 @@ std::pair<bool,bool> all_any_of( Rng const& rng ) {
 }
 
 template< typename Rng, typename Pred >
-std::pair<bool,bool> all_any_of( Rng const& rng, Pred && pred ) {
+std::pair<bool,bool> all_any_of(Rng const& rng, Pred&& pred) {
 	return all_any_of( tc::transform(rng,std::forward<Pred>(pred)) );
+}
+
+inline bool eager_or(std::initializer_list<tc::bool_context> ab) {
+	// use initializer list instead of variadic template: initializer list guarantees evaluation in order of appearance
+	return tc::any_of(ab);
+}
+
+inline bool eager_and(std::initializer_list<tc::bool_context> ab) {
+	// use initializer list instead of variadic template: initializer list guarantees evaluation in order of appearance
+	return tc::all_of(ab);
 }
 
 }

@@ -10,7 +10,15 @@
 
 namespace RANGE_PROPOSAL_NAMESPACE {
 	template<typename Rng, typename Func>
-	auto transform( Rng && rng, Func && func )
-		return_ctor( transform_adaptor<typename std::decay<Func>::type BOOST_PP_COMMA() typename range_by_value<Rng>::type >, (std::forward<Rng>(rng),std::forward<Func>(func)) )
+	auto transform(Rng&& rng, Func&& func)
+		return_ctor( transform_adaptor<std::decay_t<Func> BOOST_PP_COMMA() typename range_by_value<Rng>::type >, (std::forward<Rng>(rng),std::forward<Func>(func)) )
+
+	template<typename Rng>
+	auto transform_asciiupper(Rng const& rng)
+		return_decltype( transform( rng, tc::fn_toasciiupper() ))
+
+	template<typename Rng>
+	auto transform_asciilower(Rng const& rng)
+		return_decltype( transform( rng, tc::fn_toasciilower() ))
 }
 

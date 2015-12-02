@@ -1,6 +1,9 @@
 #include "../Range.h"
 #include "range.t.h"
 
+#include "sparse_adaptor.h"
+
+
 #include <vector>
 #include <boost/range/adaptors.hpp>
 
@@ -12,7 +15,7 @@ UNITTESTDEF( basic ) {
 
 	TEST_init_hack(std::vector, int, v, {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20});
 
-	auto evenvr = tc::filter(v, [](const int& v){ return (v%2==0);});
+	auto evenvr = tc::filter(v, [](int const& v){ return (v%2==0);});
 
 	TEST_init_hack(std::vector, int, vexp, {2, 4, 6, 8, 10, 12, 14, 16, 18, 20});
 	TEST_RANGE_EQUAL(vexp, evenvr);
@@ -34,7 +37,7 @@ UNITTESTDEF( basic ) {
 		template<typename Arg>
 		typename std::enable_if<
 			std::is_same<
-				decltype(std::declval<typename std::remove_reference<Func>::type >()(std::declval<Arg>())),
+				decltype(std::declval<std::remove_reference_t<Func> >()(std::declval<Arg>())),
 				break_or_continue
 			>::value
 		>::type
@@ -47,7 +50,7 @@ UNITTESTDEF( basic ) {
 		template<typename Arg>
 		typename std::enable_if<
 			!std::is_same<
-				decltype(std::declval<typename std::remove_reference<Func>::type >()(std::declval<Arg>())),
+				decltype(std::declval<std::remove_reference_t<Func> >()(std::declval<Arg>())),
 				break_or_continue
 			>::value
 		>::type
@@ -65,7 +68,7 @@ UNITTESTDEF( basic ) {
 	template<typename Rng>
 	struct void_range_struct : public std::remove_reference<Rng>::type {
 
-		using base_ = typename std::remove_reference<Rng>::type;
+		using base_ = std::remove_reference_t<Rng>;
 
 		template< typename Func >
 		typename std::enable_if<
@@ -246,55 +249,56 @@ UNITTESTDEF( ensure_index_range_on_chars ) {
 	};
 
 	{
-		char * str="Hello";
+		char ach[] = "Hello";
+		char * str=ach;
 		{
 			check_5_chars chk;
-			tc::ensure_index_range(str)(std::ref(chk));
+			tc::for_each(str, std::ref(chk));
 		}
 		{
 			check_5_chars chk;
-			tc::ensure_index_range(tc::make_const(str))(std::ref(chk));
+			tc::for_each(tc::make_const(str), std::ref(chk));
 		}
 		{
 			check_5_chars chk;
-			tc::ensure_index_range(tc_move(str))(std::ref(chk));
+			tc::for_each(tc_move(str), std::ref(chk));
 		}
 	}
 	{
 		char str[]="Hello";
 		{
 			check_5_chars chk;
-			tc::ensure_index_range(str)(std::ref(chk));
+			tc::for_each(str, std::ref(chk));
 		}
 		{
 			check_5_chars chk;
-			tc::ensure_index_range(tc::make_const(str))(std::ref(chk));
+			tc::for_each(tc::make_const(str), std::ref(chk));
 		}
 	}
 	{
 		char const* str="Hello";
 		{
 			check_5_chars chk;
-			tc::ensure_index_range(str)(std::ref(chk));
+			tc::for_each(str, std::ref(chk));
 		}
 		{
 			check_5_chars chk;
-			tc::ensure_index_range(tc::make_const(str))(std::ref(chk));
+			tc::for_each(tc::make_const(str), std::ref(chk));
 		}
 		{
 			check_5_chars chk;
-			tc::ensure_index_range(tc_move(str))(std::ref(chk));
+			tc::for_each(tc_move(str), std::ref(chk));
 		}
 	}
 	{
 		char const str[]="Hello";
 		{
 			check_5_chars chk;
-			tc::ensure_index_range(str)(std::ref(chk));
+			tc::for_each(str, std::ref(chk));
 		}
 		{
 			check_5_chars chk;
-			tc::ensure_index_range(tc::make_const(str))(std::ref(chk));
+			tc::for_each(tc::make_const(str), std::ref(chk));
 		}
 	}
 }

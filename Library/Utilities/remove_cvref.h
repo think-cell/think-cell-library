@@ -5,39 +5,65 @@
 
 namespace tc {
 	template<typename T>
-	struct remove_cvref {
-		typedef typename std::remove_cv<
-			typename std::remove_reference<T>::type
-		>::type type;
-	};
+	using remove_cvref_t=std::remove_cv_t< std::remove_reference_t<T> >;
 
 	template<typename T>
 	struct add_const_also_to_ref {
-		typedef T const type;
+		using type = T const;
 	};
 
 	template<typename T>
 	struct add_const_also_to_ref<T&> {
-		typedef T const& type;
+		using type = T const&;
 	};
 
 	template<typename T>
 	struct add_const_also_to_ref<T&&> {
-		typedef T const&& type;
+		using type = T const&&;
 	};
 
 	template<typename T>
-	struct specialize_decay : boost::mpl::identity<T> {};
+	using add_const_also_to_ref_t=typename add_const_also_to_ref<T>::type;
 
 	template<typename T>
-	struct decay : tc::specialize_decay<typename std::decay<T>::type> {};
+	struct decay {
+		using type=std::decay_t<T>; // must still do array-to-pointer, function-to-pointer
+	};
+
+	template<typename T>
+	struct decay<T volatile> {
+		using type=typename tc::decay<T>::type; // recursive
+	};
+
+	template<typename T>
+	struct decay<T const> {
+		using type=typename tc::decay<T>::type; // recursive
+	};
+
+	template<typename T>
+	struct decay<T const volatile> {
+		using type=typename tc::decay<T>::type; // recursive
+	};
+
+	template<typename T>
+	struct decay<T&> {
+		using type=typename tc::decay<T>::type; // recursive
+	};
+	
+	template<typename T>
+	struct decay<T&&> {
+		using type=typename tc::decay<T>::type; // recursive
+	};
+
+	template<typename T>
+	using decay_t=typename decay<T>::type;
 
 	//	auto a=b; uses std::decay
 	// <=>
-	//	auto a=make_copy(b); uses tc::decay
+	//	auto a=make_copy(b); uses tc::decay_t
 	template<typename T>
-	typename tc::decay<T&&>::type make_copy( T&& t ) {
-		return typename tc::decay<T&&>::type( std::forward<T>(t) );
+	tc::decay_t<T&&> make_copy(T&& t) {
+		return static_cast< tc::decay_t<T&&> >( std::forward<T>(t) );
 	}
 }
 

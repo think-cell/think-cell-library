@@ -6,17 +6,17 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 	template< typename DerivedConst >
 	struct delayed_difference_type {
-		typedef decltype(std::declval<DerivedConst const>().distance_to_index(std::declval<typename DerivedConst::index>(), std::declval<typename DerivedConst::index>())) type;
+		using type = decltype(std::declval<DerivedConst const>().distance_to_index(std::declval<typename DerivedConst::index>(), std::declval<typename DerivedConst::index>()));
 	};
 
 	template< typename Rng >
 	struct range_traits {
-		using IndexRange = typename index_range<typename std::remove_reference<Rng>::type>::type;
+		using IndexRange = typename index_range<std::remove_reference_t<Rng>>::type;
 
-		typedef decltype(std::declval<IndexRange>().dereference_index(std::declval<typename IndexRange::index>())) reference;
-		typedef decltype(std::declval<IndexRange const>().begin_index()) index;
+		using reference = decltype(std::declval<IndexRange>().dereference_index(std::declval<typename IndexRange::index>()));
+		using index = decltype(std::declval<IndexRange const>().begin_index());
 
-		typedef typename std::decay<reference>::type value_type;
+		using value_type = std::decay_t<reference>;
 
 		template<typename Traversal>
 		struct difference_type {
@@ -51,35 +51,33 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		};
 
 		template< typename T, bool bConst >
-		struct conditional_const {
-			typedef typename std::conditional< bConst, T const, T >::type type;
-		};
+		using conditional_const_t=std::conditional_t< bConst, T const, T >;
 
 		template<typename IndexRange, typename Traversal, bool bConst>
 		struct index_iterator
 		: boost::iterators::iterator_facade<
 			index_iterator<IndexRange,Traversal,bConst>
-			, typename range_traits<typename conditional_const<IndexRange,bConst>::type>::value_type
+			, typename range_traits< conditional_const_t<IndexRange,bConst> >::value_type
 			, Traversal
-			, typename range_traits<typename conditional_const<IndexRange,bConst>::type>::reference
-			, range_difference_type<typename conditional_const<IndexRange,bConst>::type,Traversal>
+			, typename range_traits< conditional_const_t<IndexRange,bConst> >::reference
+			, range_difference_type< conditional_const_t<IndexRange,bConst>,Traversal>
 			>
 		{
-			static_assert( std::is_same< IndexRange, typename std::decay<IndexRange>::type >::value, "" );
+			static_assert( std::is_same< IndexRange, std::decay_t<IndexRange> >::value, "" );
 
 		private:
-			typedef boost::iterators::iterator_facade<
+			using base_ = boost::iterators::iterator_facade<
 				index_iterator<IndexRange,Traversal,bConst>
-				, typename range_traits<typename conditional_const<IndexRange,bConst>::type>::value_type
+				, typename range_traits< conditional_const_t<IndexRange,bConst>>::value_type
 				, Traversal
-				, typename range_traits<typename conditional_const<IndexRange,bConst>::type>::reference
-				, range_difference_type<typename conditional_const<IndexRange,bConst>::type,Traversal>
-			> base_;
+				, typename range_traits< conditional_const_t<IndexRange,bConst>>::reference
+				, range_difference_type< conditional_const_t<IndexRange,bConst>,Traversal>
+			>;
 			friend class boost::iterator_core_access;
 			friend struct index_iterator<IndexRange,Traversal,!bConst>;
 
-			typename conditional_const<IndexRange,bConst>::type* m_pidxrng;
-			typedef typename range_traits<IndexRange>::index index;
+			conditional_const_t<IndexRange,bConst>* m_pidxrng;
+			using index = typename range_traits<IndexRange>::index;
 			index m_idx;
 
 			template<typename IndexRange, typename Traversal, bool bConst>
@@ -88,8 +86,8 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			struct enabler {};
 
 		public:
-			typedef typename base_::reference reference;
-			typedef typename base_::difference_type difference_type;
+			using reference = typename base_::reference;
+			using difference_type = typename base_::difference_type;
 
 			index_iterator()
 				: m_pidxrng(nullptr)
@@ -107,7 +105,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			: m_pidxrng(other.m_pidxrng)
 			, m_idx(other.m_idx) {}
 
-			index_iterator(typename conditional_const<IndexRange,bConst>::type* pidxrng, index idx)
+			index_iterator( conditional_const_t<IndexRange,bConst>* pidxrng, index idx)
 			: m_pidxrng(pidxrng)
 			, m_idx(tc_move(idx)) {}
 
@@ -147,14 +145,18 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				typename IndexRange_ = IndexRange,
 				typename sfinae_has_member_function_base_range<IndexRange_>::type* = nullptr
 			>
-			auto base() const -> decltype( make_const(std::declval<typename conditional_const<IndexRange_,bConst>::type*>())->base_range().make_iterator(m_idx) )
+			auto base() const -> decltype( make_const(std::declval< conditional_const_t<IndexRange_,bConst>*>())->base_range().make_iterator(m_idx) )
 			{
 				return make_const(VERIFY(m_pidxrng))->base_range().make_iterator(m_idx);
 			}
 
 			// sub_range from iterator pair
-			friend typename tc::make_sub_range_result< typename conditional_const<IndexRange,bConst>::type & >::type make_iterator_range_impl( index_iterator itBegin, index_iterator itEnd ) {
-				return typename tc::make_sub_range_result< typename conditional_const<IndexRange,bConst>::type & >::type( *VERIFYEQUAL(VERIFY(itBegin.m_pidxrng),itEnd.m_pidxrng), tc_move(itBegin).m_idx, tc_move(itEnd).m_idx );
+			friend typename tc::make_sub_range_result< conditional_const_t<IndexRange,bConst> & >::type make_iterator_range_impl( index_iterator itBegin, index_iterator itEnd ) {
+				return typename tc::make_sub_range_result< conditional_const_t<IndexRange,bConst> & >::type( *VERIFYEQUAL(VERIFY(itBegin.m_pidxrng),itEnd.m_pidxrng), tc_move(itBegin).m_idx, tc_move(itEnd).m_idx );
+			}
+
+			explicit operator bool() const {
+				return tc::bool_cast(m_pidxrng);
 			}
 		};
 	}

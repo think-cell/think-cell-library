@@ -8,7 +8,7 @@
 #endif
 
 #include "Library/Utilities/inherit_ctors.h"
-#include "Library/Utilities/decltype_return.h"
+#include "Library/Utilities/return_decltype.h"
 #include "Library/Utilities/casts.h"
 
 #include <utility>
@@ -34,10 +34,6 @@ struct fundamental_base<Base,typename std::enable_if<!std::is_class< Base >::val
 
 private:
 	Base m_base;
-
-public:
-	auto operator!() const
-		return_decltype( !m_base )
 
 protected:
 	fundamental_base() {}
@@ -75,29 +71,29 @@ public:
 };
 
 template<typename Value, typename Accumulate>
-struct FAccumulator : fundamental_base< typename std::decay<Value>::type > {
-	typedef fundamental_base< typename std::decay<Value>::type > fundamental_base;
-	typedef void result_type;
+struct FAccumulator : fundamental_base< std::decay_t<Value> > {
+	using fundamental_base = fundamental_base< std::decay_t<Value> >;
+	using result_type = void;
 
-	FAccumulator(Value && value, Accumulate && accumulate)
+	FAccumulator(Value&& value, Accumulate&& accumulate)
 	:	fundamental_base( std::forward<Value>(value) )
 	,	m_accumulate(std::forward<Accumulate>(accumulate))
 	{}
 
 	template<typename... Args>
-	void operator() (Args&&... args) {
+	void operator() (Args&& ... args) {
 		m_accumulate(this->_get(), std::forward<Args>(args)...);
 	}
 
 private:
-	typename std::decay<Accumulate>::type m_accumulate;
+	std::decay_t<Accumulate> m_accumulate;
 };
 
 ///////////////////////////////////////////////
 // accumulators
 
 template<typename Value, typename Accumulate>
-auto make_accumulator(Value && value, Accumulate && accumulate)
+auto make_accumulator(Value&& value, Accumulate&& accumulate)
 	return_ctor( FAccumulator<Value BOOST_PP_COMMA() Accumulate>, (std::forward<Value>(value),std::forward<Accumulate>(accumulate)) )
 
 ///////////////////////////////////
@@ -105,14 +101,14 @@ auto make_accumulator(Value && value, Accumulate && accumulate)
 // add operator() with more arguments if you need it
 
 template<typename R, typename Func, typename Transform>
-class chain_impl
-	: public fundamental_base< typename std::decay<Func>::type >
+struct chain_impl
+	: fundamental_base< std::decay_t<Func> >
 {
 private:
-	typedef fundamental_base< typename std::decay<Func>::type > fundamental_base;
-	typename std::decay<Transform>::type const m_transform;
+	using fundamental_base = fundamental_base< std::decay_t<Func> >;
+	std::decay_t<Transform> const m_transform;
 public:
-	typedef R result_type; // TODO: replace by return_decltype as soon as compiler supports it
+	using result_type = R; // TODO: replace by return_decltype as soon as compiler supports it
 
 	chain_impl(Func&& func, Transform&& transform)
 	:	fundamental_base(std::forward<Func>(func)),
@@ -120,19 +116,19 @@ public:
 	{}
 
 	template<typename... Args>
-	auto operator()(Args&&... args) const->result_type
+	auto operator()(Args&& ... args) const->result_type
 	{
 		return this->_get()( m_transform(std::forward<Args>(args)...) );
 	}
 
 	template<typename... Args>
-	auto operator()(Args&&... args)->result_type {
+	auto operator()(Args&& ... args)->result_type {
 		return this->_get()( m_transform(std::forward<Args>(args)...) );
 	}
 };
 
 template< typename result_type, typename Func, typename Transform >
-chain_impl<result_type, Func, Transform> chain( Func&& func, Transform&& transform ) {
+chain_impl<result_type, Func, Transform> chain(Func&& func, Transform&& transform) {
 	return chain_impl<result_type, Func, Transform>( std::forward<Func>(func), std::forward<Transform>(transform) );
 }
 

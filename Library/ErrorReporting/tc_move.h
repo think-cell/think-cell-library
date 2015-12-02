@@ -9,16 +9,17 @@
 // safer variants of std::move
 
 template<typename T>
-T&& tc_move_impl(typename std::remove_reference<T>::type& t) {
+T&& tc_move_impl(std::remove_reference_t<T>& t) {
 	static_assert(!std::is_lvalue_reference<T>::value, "");
-	static_assert(!std::is_const<typename std::remove_reference<T>::type>::value, "");
+	static_assert(!std::is_const<std::remove_reference_t<T>>::value, "");
 	return static_cast<T&&>(t);
 }
 
 template<typename T>
-T&& tc_move_impl(typename std::remove_reference<T>::type&& t) {
+T&& tc_move_impl(std::remove_reference_t<T>&& t) {
 	static_assert(!std::is_lvalue_reference<T>::value, "");
-	static_assert(!std::is_const<typename std::remove_reference<T>::type>::value, "");
+	static_assert(!std::is_const<std::remove_reference_t<T>>::value, "");
+	// TODO: static_assert(std::is_nothrow_move_constructible<std::remove_reference_t<T>>::value, "" );
 	return static_cast<T&&>(t);
 }
 
@@ -26,8 +27,8 @@ T&& tc_move_impl(typename std::remove_reference<T>::type&& t) {
 #define tc_move_if_owned(t) std::forward<decltype(t)>(t)
 
 template<typename T>
-typename std::remove_reference<T>::type&& tc_move_always(T&& t) { // same as std::move, but asserts on non-constness of argument
-	static_assert(!std::is_const<typename std::remove_reference<T>::type>::value, "");
-	return static_cast<typename std::remove_reference<T>::type&&>(t);
+std::remove_reference_t<T>&& tc_move_always(T&& t) { // same as std::move, but asserts on non-constness of argument
+	static_assert(!std::is_const<std::remove_reference_t<T>>::value, "");
+	return static_cast<std::remove_reference_t<T>&&>(t);
 }
 

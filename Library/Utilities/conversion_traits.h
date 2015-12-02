@@ -16,20 +16,18 @@
 
 // Use as type of constructor arguments that are required for enabling / disabling constructor through SFINAE.
 // To be replaced by template parameter default when Visual C++ supports template parameter defaults for functions.
-struct unused_arg {
-	unused_arg() {}
-};
+struct unused_arg {};
 
 /////////////
 // conversion traits
 
-// Both boost::is_base_of<X,X> and std::is_base_of<X,X> inherit from true_type if and only if X is a class type.
-// Also, std::is_base_of requires Base and Derived to be complete.
 namespace tc {
+	// Both boost::is_base_of<X,X> and std::is_base_of<X,X> inherit from true_type if and only if X is a class type.
+	// Also, std::is_base_of requires Base and Derived to be complete.
 	template<typename Base, typename Derived>
 	struct is_base_of :
 		boost::mpl::or_<
-			std::is_same< typename std::remove_cv<Base>::type, typename std::remove_cv<Derived>::type >,
+			std::is_same< std::remove_cv_t<Base>, std::remove_cv_t<Derived> >,
 			std::is_base_of<Base, Derived>
 		>::type
 	{};
@@ -45,8 +43,8 @@ namespace tc {
 		// Note: Still using std::is_convertible won't reduce compilation times anyway.
 		std::is_convertible<TSource, TTarget>::value &&
 		!boost::numeric::conversion_traits<
-			typename std::remove_reference< TTarget >::type,
-			typename std::remove_reference< TSource >::type
+			std::remove_reference_t< TTarget >,
+			std::remove_reference_t< TSource >
 		>::subranged::value
 	> {};
 
@@ -56,8 +54,8 @@ namespace tc {
 	struct creates_no_reference_to_temporary : std::integral_constant<bool,
 		!std::is_reference<TTarget>::value ||
 		tc::is_base_of< 
-			typename tc::remove_cvref<TTarget>::type,
-			typename tc::remove_cvref<TSource>::type
+			tc::remove_cvref_t<TTarget>,
+			tc::remove_cvref_t<TSource>
 		>::value
 	> {};
 }
@@ -65,15 +63,15 @@ namespace tc {
 ////////////////////////////////////////////////
 // initialization of TTarget by TSource
 
-typedef boost::mpl::int_<0> forbidden_initialization_tag; // would initialize a reference to a temporary
-typedef boost::mpl::int_<1> explicit_initialization_tag;
-typedef boost::mpl::int_<3> implicit_initialization_tag; // we want to bit-and these values in order to find the minimum
+using forbidden_initialization_tag = boost::mpl::int_<0>; // would initialize a reference to a temporary
+using explicit_initialization_tag = boost::mpl::int_<1>;
+using implicit_initialization_tag = boost::mpl::int_<3>; // we want to bit-and these values in order to find the minimum
 
 template<typename TTarget, typename TSource>
 struct initialization_tag {
-	typedef typename std::conditional<
+	using type=std::conditional_t<
 		tc::creates_no_reference_to_temporary< TSource, TTarget >::value,
-		typename std::conditional<
+		std::conditional_t<
 			// Only true_, if implicit conversion exists.
 			tc::is_lossless_convertible<TSource, TTarget>::value &&
 			// in expressions like ((condition) ? (expression of type T&) : (expression of type T))
@@ -81,9 +79,9 @@ struct initialization_tag {
 			(!std::is_reference<TTarget>::value || std::is_reference<TSource>::value)
 			, implicit_initialization_tag
 			, explicit_initialization_tag
-		>::type,
+		>,
 		forbidden_initialization_tag
-	>::type type;
+	>;
 };
 
 

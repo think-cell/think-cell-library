@@ -3,14 +3,14 @@
 ////////////////////////////////
 // functor equivalents for operators, free functions and member functions
 
-#include <cstdlib>
+#include "tc_move.h"
+#include "Library/Utilities/return_decltype.h"
 
 #include <boost/type_traits/has_dereference.hpp>
 #include <boost/preprocessor/seq/for_each_i.hpp>
 #include <boost/preprocessor/control/if.hpp>
-#include "Library/Utilities/decltype_return.h"
 
-#include "tc_move.h"
+#include <cstdlib>
 
 // DEFINE_FN(func) always defines a function void func(define_fn_dummy)
 // If that function did not exist, -> decltype( func(...) ) would not be
@@ -20,14 +20,14 @@ struct define_fn_dummy {};
 #define DEFINE_FN2( func, name )                                                                      \
 	struct name {                                                                                     \
 		template< typename A0, typename ...Args >     /*require at least one argument*/               \
-		auto operator()( A0 && a0, Args && ... args) const                                            \
-			return_decltype( func(std::forward<A0>(a0), std::forward<Args>(args)...) )                \
+		auto operator()( A0&& a0, Args&& ... args) const                                            \
+			return_decltype_rvalue_by_ref( func(std::forward<A0>(a0), std::forward<Args>(args)...) ) \
 	};
 
 #define DEFINE_MEM_FN_BODY_( ... )                                                               \
 	template< typename O, typename ...__A >                                                           \
-	auto operator()( O && o, __A && ... __a ) const                                                   \
-		return_decltype( std::forward<O>(o) __VA_ARGS__ ( std::forward<__A>(__a)... ) )
+	auto operator()( O&& o, __A&& ... __a ) const                                                   \
+		return_decltype_rvalue_by_ref( std::forward<O>(o) __VA_ARGS__ ( std::forward<__A>(__a)... ) )
 
 // boost::mem_fn (C++11 standard 20.8.2) knows the type it can apply its member function pointer to and
 // dereferences via operator* until it reaches that something of that type. We cannot do that because
@@ -37,15 +37,13 @@ struct define_fn_dummy {};
 // member access via operator->, with the small addition that if operator-> does not exist, we use the
 // the dot operator, in the spirit of dereferencing as much as possible.
 
-#define DEFINE_MEM_FN_AUTO_BODY_( ... )                                                             \
-	template< typename O, typename ...__A >                                                           \
-	auto operator()( O && o, __A && ... __a ) const                                                   \
-		enable_if_return_decltype( boost::has_dereference<O>::value,                                  \
-								   std::forward<O>(o)-> __VA_ARGS__ ( std::forward<__A>(__a)... ) )           \
-	template< typename O, typename ...__A >                                                           \
-	auto operator()( O && o, __A && ... __a ) const                                                   \
-		enable_if_return_decltype( !boost::has_dereference<O>::value,                                 \
-								   std::forward<O>(o). __VA_ARGS__ ( std::forward<__A>(__a)... ) )
+#define DEFINE_MEM_FN_AUTO_BODY_( ... )                                                                      \
+	template< typename O, typename ...__A, std::enable_if_t<boost::has_dereference<O>::value>* = nullptr >   \
+	auto operator()( O&& o, __A&& ... __a ) const                                                          \
+		return_decltype_rvalue_by_ref( std::forward<O>(o)-> __VA_ARGS__ ( std::forward<__A>(__a)... ) )      \
+	template< typename O, typename ...__A, std::enable_if_t<!boost::has_dereference<O>::value>* = nullptr >  \
+	auto operator()( O&& o, __A&& ... __a ) const                                                          \
+		return_decltype_rvalue_by_ref( std::forward<O>(o). __VA_ARGS__ ( std::forward<__A>(__a)... ) )
 
 // When a functor must be declared in class-scope, e.g., to access a protected member function,
 // you should use DEFINE_MEM_FN instead of DEFINE_FN. 
@@ -53,10 +51,12 @@ struct define_fn_dummy {};
 // shadow inherited members named func.
 #define DEFINE_MEM_FN( func ) \
 	struct dot_member_ ## func { \
-		template< typename O > auto operator()( O & o ) const return_variable_by_ref( o.func ) \
-		template< typename O > auto operator()( O const& o ) const return_variable_by_ref( o.func ) \
-		template< typename O > auto operator()( O&& o ) const enable_if_return_decltype_rvalue_by_ref( !std::is_reference<O>::value, tc_move(tc_move(o).func) ) \
+		template< typename O > auto operator()( O & o ) const return_variable_by_ref( o.func )       \
+		template< typename O > auto operator()( O const& o ) const return_variable_by_ref( o.func )  \
+		template< typename O, std::enable_if_t<!std::is_reference<O>::value>* = nullptr >            \
+		auto operator()( O&& o ) const return_decltype_rvalue_by_ref( tc_move(tc_move(o).func) )     \
 	}; \
+	std::true_type returns_reference_to_argument(dot_member_ ## func); /*mark as returning reference to argument*/ \
 	struct dot_mem_fn_ ## func { \
 		DEFINE_MEM_FN_BODY_( .func ) \
 	}; \
@@ -96,7 +96,6 @@ struct define_fn_dummy {};
 DEFINE_FN2( std::max, fn_std_max );
 DEFINE_FN2( std::min, fn_std_min );
 DEFINE_FN2( std::abs, fn_std_abs );
-template<typename T> DEFINE_FN2( T, fn_ctor );
 DEFINE_FN2( operator delete, fn_operator_delete )
 
 DEFINE_FN( first );
@@ -109,7 +108,7 @@ DEFINE_FN(emplace_back);
 #define DEFINE_CAST_(name)                                          \
 	template <typename To>                                          \
 	struct fn_ ## name {                                            \
-		template<typename From> auto operator()(From && from) const \
+		template<typename From> auto operator()(From&& from) const \
 			return_decltype( name <To>(std::forward<From>(from)))   \
 	};
 
@@ -122,30 +121,30 @@ DEFINE_CAST_(const_cast)
 namespace tc {
 	struct fn_subscript {
 		template<typename Lhs, typename Rhs>
-		auto operator()( Lhs && lhs, Rhs && rhs ) const
-			return_decltype( std::forward<Lhs>(lhs)[std::forward<Rhs>(rhs)] )
+		auto operator()( Lhs&& lhs, Rhs&& rhs ) const
+			return_decltype_rvalue_by_ref( std::forward<Lhs>(lhs)[std::forward<Rhs>(rhs)] )
 	};
-}
 
-struct fn_indirection {
-	template<typename Lhs>
-	auto operator()( Lhs && lhs ) const
-		return_decltype( *std::forward<Lhs>(lhs))
-};
+	/* indirection operator, aka dereference operator */
+	struct fn_indirection {
+		template<typename Lhs>
+		auto operator()( Lhs&& lhs ) const
+			return_decltype_rvalue_by_ref( *std::forward<Lhs>(lhs))
+	};
+	std::true_type returns_reference_to_argument(fn_indirection); // mark as returning reference to argument
 
-namespace tc {
 	struct fn_logical_not {
 		template<typename Lhs>
-		auto operator()( Lhs && lhs ) const
-			return_decltype( !std::forward<Lhs>(lhs))
+		auto operator()( Lhs&& lhs ) const
+			return_decltype_rvalue_by_ref( !std::forward<Lhs>(lhs))
 	};
 }
 
 #define INFIX_FN_( name, op ) \
 	struct fn_ ## name { \
 		template<typename Lhs, typename Rhs> \
-		auto operator()( Lhs && lhs, Rhs && rhs ) const \
-			return_decltype(std::forward<Lhs>(lhs) op std::forward<Rhs>(rhs)) \
+		auto operator()( Lhs&& lhs, Rhs&& rhs ) const \
+			return_decltype_rvalue_by_ref(std::forward<Lhs>(lhs) op std::forward<Rhs>(rhs)) \
 	};
 
 INFIX_FN_( bit_or, | )

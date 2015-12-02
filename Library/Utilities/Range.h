@@ -36,10 +36,8 @@
 #include "reference_or_value.h"
 
 namespace tc{
-	DEFINE_FN( size )
+	DEFINE_FN2(tc::size, fn_size); // Prevent ADL of std::size (C++17)
 	DEFINE_FN( strlen )
-	DEFINE_FN( toasciilower )
-	DEFINE_FN( toasciiupper )
 	DEFINE_FN( isasciidigit )
 	DEFINE_FN( isasciilower )
 	DEFINE_FN( isasciiupper )

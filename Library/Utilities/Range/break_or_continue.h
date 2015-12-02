@@ -20,56 +20,56 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		continue_
 	};
 
-	inline break_or_continue continue_if(bool bCondition) {
-		return bCondition ? continue_ : break_;
+	inline tc::break_or_continue continue_if(bool bCondition) {
+		return bCondition ? tc::continue_ : tc::break_;
 	}
 
 	#define RETURN_IF_BREAK(...) if( tc::break_==(__VA_ARGS__) ) { return tc::break_; }
 
-	//// continue_if_void ///////////////////////////////////////////////////////////////////////////
+	//// continue_if_not_break ///////////////////////////////////////////////////////////////////////////
 	// Func returns break_or_continue
 	template <typename Func, typename ...Args>
 	typename std::enable_if<
-		std::is_same< break_or_continue,
-					  typename tc::result_of< Func( Args... ) >::type
+		std::is_same< tc::break_or_continue,
+					  tc::result_of_t< Func( Args... ) >
 					>::value,
-	break_or_continue >::type continue_if_void( Func&& func, Args&& ... args ) {
+	tc::break_or_continue >::type continue_if_not_break(Func&& func, Args&& ... args) {
 		return std::forward<Func>(func)(std::forward<Args>(args)...);
 	}
 
 	// Func does not return break_or_continue
 	template <typename Func, typename ...Args>
 	typename std::enable_if< !
-		std::is_same< break_or_continue,
-					  typename tc::result_of< Func( Args... ) >::type
+		std::is_same< tc::break_or_continue,
+					  tc::result_of_t< Func( Args... ) >
 					>::value,
-	break_or_continue >::type continue_if_void( Func&& func, Args&& ... args ) {
+	tc::break_or_continue >::type continue_if_not_break(Func&& func, Args&& ... args) {
 		std::forward<Func>(func)(std::forward<Args>(args)...);
-		return continue_;
+		return tc::continue_;
 	}
 
 	//// returns_void ///////////////////////////////////////////////////////////////////////////////
-	// returns_void helps when changing existing for_each implementations to support continue_if_void
+	// returns_void helps when changing existing for_each implementations to support continue_if_not_break
 	template <typename Func, typename ...Args>
-		typename std::enable_if< std::is_void< typename tc::result_of< Func(Args...) >::type >::value,
+		typename std::enable_if< std::is_void< tc::result_of_t< Func(Args...) > >::value,
 	void >::type returns_void(Func&& func, Args && ... args) {
 		std::forward<Func>(func)(std::forward<Args>(args)...);
 	}
 
 	//// make_return_continue /////////////////////////////////////////////////////////////////////////
 	template<typename Func>
-	struct make_return_continue : fundamental_base< typename std::decay<Func>::type > {
-		typedef break_or_continue result_type;
-		make_return_continue(Func&& func) : fundamental_base< typename std::decay<Func>::type >(std::forward<Func>(func)) {}
+	struct make_return_continue : fundamental_base< std::decay_t<Func> > {
+		using result_type = tc::break_or_continue;
+		make_return_continue(Func&& func) : fundamental_base< std::decay_t<Func> >(std::forward<Func>(func)) {}
 
 		template<typename... Args>
-		break_or_continue operator()(Args&& ... args) {
+		tc::break_or_continue operator()(Args&& ... args) {
 			this->_get()(std::forward<Args>(args)...);
 			return tc::continue_;
 		}
 
 		template<typename... Args>
-		break_or_continue operator()(Args&& ... args) const {
+		tc::break_or_continue operator()(Args&& ... args) const {
 			this->_get()(std::forward<Args>(args)...);
 			return tc::continue_;
 		}
@@ -86,24 +86,46 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	//	tc::function< tc::break_or_continue(int) > erased2=fn; // erased2(x) runs fn(x), discards the return value and returns tc::continue_
 
 	template< typename Signature >
-	class function;
+	struct function;
 
 	template< typename ...Args >
-	class function< break_or_continue(Args...) > : public std::function< break_or_continue(Args...) >{
-		typedef std::function< break_or_continue(Args...) > base_;
+	struct function< tc::break_or_continue(Args...) > : std::function< tc::break_or_continue(Args...) >{
+    private:
+		using base_ = std::function< tc::break_or_continue(Args...) >;
 	public:
-		typedef break_or_continue result_type;
+		using result_type = tc::break_or_continue;
 		template< typename Func >
-		function( Func && func, typename std::enable_if< std::is_base_of< base_, typename std::decay< Func >::type >::value, unused_arg>::type=unused_arg() )
+		function(Func&& func, typename std::enable_if< std::is_base_of< base_, std::decay_t< Func > >::value, unused_arg>::type=unused_arg())
 			: base_( base_cast< base_ >( std::forward<Func>(func) ) )
 		{}
 		template< typename Func >
-		function( Func && func, typename std::enable_if< !std::is_base_of< base_, typename std::decay< Func >::type >::value && std::is_same<break_or_continue,typename std::result_of< Func( Args... ) >::type>::value, unused_arg>::type=unused_arg() )
+		function(Func&& func, typename std::enable_if< !std::is_base_of< base_, std::decay_t< Func > >::value && std::is_same<tc::break_or_continue, std::result_of_t< Func( Args... ) > >::value, unused_arg>::type=unused_arg())
 			: base_( std::forward<Func>(func) )
 		{}
 		template< typename Func >
-		function( Func && func, typename std::enable_if< !std::is_same<break_or_continue,typename std::result_of< Func( Args... ) >::type>::value, unused_arg>::type=unused_arg() )
+		function(Func&& func, typename std::enable_if< !std::is_same<tc::break_or_continue, std::result_of_t< Func( Args... ) > >::value, unused_arg>::type=unused_arg())
 			: base_( make_return_continue<Func>( std::forward<Func>(func) ) )
 		{}
 	};
+
+	// TODO: extend to more functions
+	template< typename F0, typename F1 >
+	void cyclic_improve(F0 f0, F1 f1) {
+		int nBreakAfter=1;
+		for (;;) {
+
+			if (f0()) {
+				nBreakAfter=1;
+			} else if( 0==nBreakAfter ) {
+				break;
+			}
+
+			if (f1()) {
+				nBreakAfter=0;
+			} else if( 1==nBreakAfter ) {
+				break;
+			}
+
+		}
+	}
 }

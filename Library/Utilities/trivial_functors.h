@@ -1,24 +1,35 @@
 #pragma once
 
-struct noop {
-	typedef void result_type;
-	template<typename ...Args> void operator()(Args const&...) const {}
-};
+namespace tc {
+	struct noop {
+		using result_type = void;
+		template<typename ...Args> void operator()(Args const&...) const {}
+	};
 
-template<typename T, T tValue>
-struct constexpr_function {
-	// typedef * argument_type; cannot be provided without giving up convenience of templated operator()
-	typedef T result_type; // like std::unary_function	
+	template<typename T=void>
+	struct never_called {
+		template<typename ...Args> T operator()(Args const&...) const {_ASSERTFALSE; return {}; }
+	};
 
-	template< typename ...Args > T operator()( Args const&... ) const { return tValue; }
-};
+	template<>
+	struct never_called<void> {
+		template<typename ...Args> void operator()(Args const&...) const {_ASSERTFALSE; }
+	};
 
-#define MAKE_CONSTEXPR_FUNCTION(val) constexpr_function< decltype(val), (val) >()
+	template<typename T, T tValue>
+	struct constexpr_function {
+		// using argument_type = *; cannot be provided without giving up convenience of templated operator()
+		using result_type = T; // like std::unary_function	
 
-struct identity {
-	template< typename T >
-	T&& operator()( T&& t ) const {
-		return std::forward<T>(t);
-	}
-};
+		template< typename ...Args > T operator()( Args const&... ) const { return tValue; }
+	};
 
+	#define MAKE_CONSTEXPR_FUNCTION(val) tc::constexpr_function< decltype(val), (val) >()
+
+	struct identity {
+		template< typename T >
+		T&& operator()(T&& t) const noexcept {
+			return std::forward<T>(t);
+		}
+	};
+}

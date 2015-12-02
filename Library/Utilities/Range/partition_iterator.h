@@ -2,7 +2,6 @@
 
 #include "range_defines.h"
 
-#include "Library/Utilities/static_vector.h"
 
 #include <boost/iterator/filter_iterator.hpp>
 #include <boost/iterator/indirect_iterator.hpp>
@@ -37,14 +36,14 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			template< typename UnaryPred, typename It >
 			boost::filter_iterator<UnaryPred, It>
 			middle_point( boost::filter_iterator<UnaryPred, It> const& itBegin, boost::filter_iterator<UnaryPred, It> const& itEnd ) {
-				_ASSERT( itBegin.end()==itEnd.end() ); // should point within the same range
+				_ASSERT( boost::end(itBegin)==boost::end(itEnd) ); // should point within the same range
 				boost::filter_iterator<UnaryPred, It> itMid( 
 					itBegin.predicate(),
 					tc::iterator::middle_point(
 						itBegin.base(),
 						itEnd.base()
 					),
-					itBegin.end()
+					boost::end(itBegin)
 				);
 				if( itMid==itEnd ) {
 					--itMid;
@@ -91,36 +90,36 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			// NodeBase is a base type of the multi_index_container's node (internal data
 			// structure used to store elements).
 			#if defined(BOOST_MULTI_INDEX_ENABLE_SAFE_MODE)
-				template< typename NodeBase, typename OrderedIndex >
+				template< typename AugmentPolicy, typename NodeBase, typename OrderedIndex >
 				boost::multi_index::safe_mode::safe_iterator<
-					boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<NodeBase> >,
+					boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<AugmentPolicy, NodeBase> >,
 					OrderedIndex
 				>
 				middle_point( 
 					boost::multi_index::safe_mode::safe_iterator<
-						boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<NodeBase> >,
+						boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<AugmentPolicy, NodeBase> >,
 						OrderedIndex
 					> itBegin,
 					boost::multi_index::safe_mode::safe_iterator<
-						boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<NodeBase> >,
+						boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<AugmentPolicy, NodeBase> >,
 						OrderedIndex
 					> itEnd
 				)
 			#else
-				template< typename NodeBase >
-				boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<NodeBase> >
+				template< typename AugmentPolicy, typename NodeBase >
+				boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<AugmentPolicy, NodeBase> >
 				middle_point( 
-					boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<NodeBase> > itBegin,
-					boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<NodeBase> > itEnd
+					boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<AugmentPolicy, NodeBase> > itBegin,
+					boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<AugmentPolicy, NodeBase> > itEnd
 				)
 			#endif
 			{
-				typedef boost::multi_index::detail::ordered_index_node<NodeBase> node_type;
-				typedef static_vector<
+				using node_type = boost::multi_index::detail::ordered_index_node<AugmentPolicy, NodeBase>;
+				using TNodeVector = tc::static_vector<
 					node_type*, 
 					2* // 2*log(N) is maximum hight of RB tree
-						(8*sizeof(std::size_t)-3) // 2^3==8 roughly minimum size of node
-				> TNodeVector;
+						(CHAR_BIT*sizeof(std::size_t)-3) // 2^3==8 roughly minimum size of node
+				>;
 
 				// The parent of the root of the tree is a special header node (representing end()) whose
 				// parent is again the root node.
@@ -138,15 +137,15 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				};
 				TNodeVector vecpnodeBegin=PathToRoot(itBegin.get_node());
 				TNodeVector vecpnodeEnd=PathToRoot(boost::prior(itEnd).get_node());
-				_ASSERTEQUAL( vecpnodeBegin.back(), vecpnodeEnd.back() ); // both paths terminate at the root
+				_ASSERTEQUAL( tc_back(vecpnodeBegin), tc_back(vecpnodeEnd) ); // both paths terminate at the root
 				node_type* pnodeCommon=*boost::prior( boost::mismatch(
 					boost::adaptors::reverse(vecpnodeBegin),
 					boost::adaptors::reverse(vecpnodeEnd)
 				).first ); // or second, same thing
 				#if defined(BOOST_MULTI_INDEX_ENABLE_SAFE_MODE)
-					return boost::multi_index::safe_mode::safe_iterator<boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<NodeBase> >, OrderedIndex>(pnodeCommon, const_cast<OrderedIndex*>(itBegin.owner()));
+					return boost::multi_index::safe_mode::safe_iterator<boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<AugmentPolicy, NodeBase> >, OrderedIndex>(pnodeCommon, const_cast<OrderedIndex*>(itBegin.owner()));
 				#else
-					return boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<NodeBase> >(pnodeCommon);
+					return boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<AugmentPolicy, NodeBase> >(pnodeCommon);
 				#endif
 			}
 
@@ -182,7 +181,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			It itPartitionPoint = itBegin;
 			while( itPartitionPoint!=itEnd && pred(itPartitionPoint) ) ++itPartitionPoint;
 			for( It itRest=itPartitionPoint; itRest!=itEnd; ++itRest ) {
-				_ASSERT( !static_cast<bool>(pred(itRest)) );
+				_ASSERT( !tc::bool_cast(pred(itRest)) );
 			}
 		#endif
 			while( itBegin!=itEnd ) {
@@ -213,7 +212,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			_ASSERT( itBegin!=itEnd );
 			--itEnd;
 			return internal_partition_point( tc_move(itBegin), tc_move(itEnd), [&pred](It it){
-				return pred(*it,*std::next(it));
+				return pred(*it,*boost::next(it));
 			} );
 		}
 
@@ -225,19 +224,13 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		// We thus use boost::bind, which with explicit return type does not require any typedefs.
 
 		template< typename It, typename Value, typename UnaryPredicate >
-		It lower_bound(It itBegin,It itEnd,Value const& val,UnaryPredicate && pred) {
+		It lower_bound(It itBegin,It itEnd,Value const& val,UnaryPredicate&& pred) {
 			return iterator::partition_point(itBegin,itEnd,boost::bind<bool>(std::forward<UnaryPredicate>(pred),_1,boost::cref(val)));
 		}
 
 		template< typename It, typename Value, typename UnaryPredicate >
-		It upper_bound(It itBegin,It itEnd,Value const& val,UnaryPredicate && pred) {
+		It upper_bound(It itBegin,It itEnd,Value const& val,UnaryPredicate&& pred) {
 			return iterator::partition_point(itBegin,itEnd,!boost::bind<bool>(std::forward<UnaryPredicate>(pred),boost::cref(val),_1));
-		}
-
-		template< typename It, typename Value, typename SortPredicate >
-		bool binary_search(It itBegin,It itEnd,Value const& val,SortPredicate && pred) {
-			It it = iterator::lower_bound(itBegin,itEnd,val,pred);
-			return it!=itEnd && !pred(val,*it);
 		}
 
 		template< typename It, typename Value, typename SortPredicate >
@@ -261,11 +254,6 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		template< typename It, typename Value >
 		It upper_bound(It itBegin,It itEnd,Value const& val) {
 			return iterator::upper_bound( itBegin, itEnd, val, boost::is_less() );
-		}
-
-		template< typename It, typename Value >
-		bool binary_search(It itBegin,It itEnd,Value const& val) {
-			return iterator::binary_search( itBegin, itEnd, val, boost::is_less() );
 		}
 
 		template< typename It, typename Value >

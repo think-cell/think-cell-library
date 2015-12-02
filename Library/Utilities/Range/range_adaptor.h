@@ -5,6 +5,7 @@
 #include "meta.h"
 
 #include "Library/Utilities/casts.h"
+#include "Library/Utilities/static_polymorphism.h"
 
 #include <boost/iterator/iterator_facade.hpp>
 #include <boost/mpl/has_xxx.hpp>
@@ -28,26 +29,34 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			typename Traversal
 		>
 		struct range_iterator_from_index {
+		private:
+			using this_type = range_iterator_from_index;
+		public:
 			static_assert( boost::iterators::detail::is_iterator_traversal<Traversal>::value, "" );
 			////////////////////////////////////////////////////////
 			// simulate iterator interface on top of index interface
 
-			typedef Index index;
+			using index = Index;
 
-		public:
-			typedef index_iterator< Derived, Traversal, false > iterator;
-			typedef index_iterator< Derived, Traversal, true > const_iterator;
+			using iterator = index_iterator< Derived, Traversal, false >;
+			using const_iterator = index_iterator< Derived, Traversal, true >;
+
+			STATIC_VIRTUAL(begin_index)
+			STATIC_VIRTUAL(end_index)
+			STATIC_VIRTUAL(at_end_index)
+			STATIC_VIRTUAL(increment_index)
+			STATIC_VIRTUAL(dereference_index)
 
 			const_iterator make_iterator( index idx ) const {
 				return const_iterator(tc::derived_cast<Derived>(this),tc_move(idx));
 			}
 
 			const_iterator begin() const {
-				return make_iterator(tc::derived_cast<Derived>(this)->begin_index());
+				return make_iterator(begin_index());
 			}
 
 			const_iterator end() const {
-				return make_iterator(tc::derived_cast<Derived>(this)->end_index());
+				return make_iterator(end_index());
 			}
 
 			iterator make_iterator( index idx ) {
@@ -55,17 +64,21 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			}
 
 			iterator begin() {
-				return make_iterator(tc::derived_cast<Derived>(this)->begin_index());
+				return make_iterator(begin_index());
 			}
 
 			iterator end() {
-				return make_iterator(tc::derived_cast<Derived>(this)->end_index());
+				return make_iterator(end_index());
 			}
 
 			bool empty() const {
-				return tc::derived_cast<Derived>(this)->at_end_index(
-					tc::derived_cast<Derived>(this)->begin_index()
+				return at_end_index(
+					begin_index()
 				);
+			}
+
+			STATIC_OVERRIDE(at_end_index)(index const& idx) const -> bool {
+				return tc::derived_cast<Derived>(this)->equal_index(idx, end_index());
 			}
 		};
 	}
@@ -74,7 +87,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	namespace range_adaptor_impl {
 		struct range_adaptor_access {
 			template< typename Derived, typename... Args>
-			auto operator()( Derived && derived, Args&&... args) return_decltype(
+			auto operator()(Derived&& derived, Args&& ... args) return_decltype(
 				std::forward<Derived>(derived).apply(std::forward<Args>(args)...)
 			)
 		};
@@ -118,45 +131,22 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			static_assert( !std::is_rvalue_reference<Rng>::value, "" );
 			reference_or_value< typename index_range<Rng>::type > m_baserng;
 		
-		public: // protected:
+		// protected:
 			// workaround for clang compiler bug http://llvm.org/bugs/show_bug.cgi?id=19140
 			// friend struct range_adaptor<Derived, Rng, Traversal, true>;  // fixes the clang issue but not gcc
-			typedef typename std::remove_reference< typename index_range<Rng>::type >::type BaseRange;
+			using BaseRange=std::remove_reference_t< typename index_range<Rng>::type >;
 
 		protected:
-			// range_adaptor<Rng &>( range_adaptor<Rng &> const& )
-			// would allow creating a mutable range from a const range.
-			// More specifically, the copy could modify elements, although the original promised not to.
-			// So we only implement range_adaptor<Rng &>( range_adaptor<Rng &> & )
-			template< typename RngOther >
-			struct is_const_compatible_range : boost::mpl::or_<
-				// RngOther is copied:
-				boost::mpl::not_< std::is_reference<Rng> >,
-				// RngOther is referenced const:
-				std::is_const< typename std::remove_reference<Rng>::type >,
-				// RngOther is referenced mutable, so RngOther must be mutable reference:
-				boost::mpl::not_< std::is_const< typename std::remove_reference<RngOther>::type > >
-			>::type {};
-
-			template< typename RngOther >
-			struct const_compatible_range {
-				typedef typename std::conditional< 
-					is_const_compatible_range<RngOther const&>::value,
-					RngOther const&,
-					RngOther &
-				>::type type;
-			};
-
 			range_adaptor()
 				// m_baserng may be default-constructible
 			{}
 
 			template< typename Rhs >
-			range_adaptor( Rhs && rhs, aggregate_tag )
-			:	m_baserng( std::forward<Rhs>(rhs) )
+			range_adaptor( Rhs&& rhs, aggregate_tag )
+			:	m_baserng( std::forward<Rhs>(rhs), aggregate_tag() )
 			{}
 			template< typename Rhs >
-			range_adaptor( Rhs && rhs )
+			range_adaptor( Rhs&& rhs )
 			:	m_baserng(std::forward<Rhs>(rhs).m_baserng)
 			{}
 
@@ -171,7 +161,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			)
 
 			auto base_range() const return_decltype(
-				*make_const(m_baserng)
+				*m_baserng
 			)
 
 			auto base_range_move() return_decltype_rvalue_by_ref(
@@ -181,20 +171,21 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		private:
 
 			template< typename Func, bool Abortable >
-			class adaptor;
+			struct adaptor;
 
 			template< typename Func >
-			class adaptor<Func, true> {
+			struct adaptor<Func, true> {
+            private:
 				Derived const& m_derived;
-				typename std::decay<Func>::type mutable m_func;
+				std::decay_t<Func> mutable m_func;
 
 			public:
-				adaptor( Derived const& derived, Func && func )
+				adaptor(Derived const& derived, Func&& func)
 				: m_derived( derived )
 				, m_func( std::forward<Func>(func) ) {}
 
-				template<typename... Args> break_or_continue operator()(Args&&... args) const {
-					return continue_if_void(
+				template<typename... Args> break_or_continue operator()(Args&& ... args) const {
+					return continue_if_not_break(
 						range_adaptor_access(),
 						m_derived,
 						m_func,
@@ -204,17 +195,18 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			};
 
 			template< typename Func >
-			class adaptor<Func, false> {
+			struct adaptor<Func, false> {
+            private:
 				Derived const& m_derived;
-				typename std::decay<Func>::type mutable m_func;
+				std::decay_t<Func> mutable m_func;
 
 			public:
-				adaptor( Derived const& derived, Func && func )
+				adaptor(Derived const& derived, Func&& func)
 					: m_derived( derived )
 					, m_func( std::forward<Func>(func) ) {}
 
 				template<typename... Args>
-				void operator()(Args&&... args) const {
+				void operator()(Args&& ... args) const {
 					static_assert(
 						// Note: Instead of the following static_assert it would be possible to
 						// use return_decltype() and let the functor check in ensure_index_range
@@ -236,54 +228,54 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			template< typename Func >
 			typename std::enable_if<
 				std::is_same<
-					typename tc::result_of<BaseRange(adaptor<Func, true>)>::type,
+					tc::result_of_t<BaseRange(adaptor<Func, true>)>,
 					break_or_continue
 				>::value,
 				break_or_continue
 			>::type
-			operator()(Func && func) {
+			operator()(Func&& func) {
 				return base_range()(adaptor<Func, true>(derived_cast<Derived>(*this), std::forward<Func>(func)));
 			}
-
+		
 			template< typename Func >
 			typename std::enable_if<
 				!std::is_same<
-					typename tc::result_of<BaseRange(adaptor<Func, true>)>::type,
+					tc::result_of_t<BaseRange(adaptor<Func, true>)>,
 					break_or_continue
 				>::value &&
 				std::is_same<
-					typename tc::result_of<BaseRange(adaptor<Func, false>)>::type,
+					tc::result_of_t<BaseRange(adaptor<Func, false>)>,
 					void
 				>::value
 			>::type
-			operator()(Func && func) {
+			operator()(Func&& func) {
 				return base_range()(adaptor<Func, false>(derived_cast<Derived>(*this), std::forward<Func>(func)));
 			}
 
 			template< typename Func >
 			typename std::enable_if<
 				std::is_same<
-					typename tc::result_of<BaseRange(adaptor<Func, true>)>::type,
+					tc::result_of_t<BaseRange(adaptor<Func, true>)>,
 					break_or_continue
 				>::value,
 				break_or_continue
 			>::type
-			operator()(Func && func) const {
+			operator()(Func&& func) const {
 				return base_range()(adaptor<Func, true>(derived_cast<Derived>(*this), std::forward<Func>(func)));
 			}
 
 			template< typename Func >
 			typename std::enable_if<
 				!std::is_same<
-					typename tc::result_of<BaseRange(adaptor<Func, true>)>::type,
+					tc::result_of_t<BaseRange(adaptor<Func, true>)>,
 					break_or_continue
 				>::value &&
 				std::is_same<
-					typename tc::result_of<BaseRange(adaptor<Func, false>)>::type,
+					tc::result_of_t<BaseRange(adaptor<Func, false>)>,
 					void
 				>::value
 			>::type
-			operator()(Func && func) const {
+			operator()(Func&& func) const {
 				return base_range()(adaptor<Func, false>(derived_cast<Derived>(*this), std::forward<Func>(func)));
 			}
 		};
@@ -310,18 +302,19 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			Derived,
 			typename range_adaptor<Derived,Rng,Traversal,false>::BaseRange::index,
 			typename boost::range_detail::demote_iterator_traversal_tag<
-				typename std::conditional< std::is_same<Traversal,boost::iterators::use_default>::value
+				std::conditional_t< std::is_same<Traversal,boost::iterators::use_default>::value
 					, boost::iterators::random_access_traversal_tag
 					, Traversal
-				>::type,
+				>,
 				typename boost::iterator_traversal<
-					typename boost::range_iterator<typename std::remove_reference<Rng>::type>::type
+					typename boost::range_iterator<std::remove_reference_t<Rng>>::type
 				>::type
 			>::type
 		>
 		{
 		private:
-			typedef range_adaptor<Derived,Rng,Traversal,false> base_;
+			using base_ = range_adaptor<Derived,Rng,Traversal,false>;
+			using this_type = range_adaptor;
 		protected:
 			using typename base_::BaseRange;
 
@@ -330,12 +323,12 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			{}
 
 			template< typename Rhs >
-			range_adaptor( Rhs && rhs, aggregate_tag )
+			range_adaptor( Rhs&& rhs, aggregate_tag )
 			:	base_(std::forward<Rhs>(rhs), aggregate_tag())
 			{}
 
 			template< typename Rhs >
-			range_adaptor( Rhs && rhs )
+			range_adaptor( Rhs&& rhs )
 			:	base_(std::forward<Rhs>(rhs))
 			{}
 
@@ -344,31 +337,31 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			{}
 		
 		public:
-			typedef typename BaseRange::index index;
+			using index = typename BaseRange::index;
 
-			index begin_index() const {
+			STATIC_OVERRIDE(begin_index)() const -> index {
 				return this->base_range().begin_index();
 			}
 
-			index end_index() const {
+			STATIC_OVERRIDE(end_index)() const -> index {
 				return this->base_range().end_index();
 			}
 
-			bool at_end_index(index const& idx) const {
+			STATIC_OVERRIDE(at_end_index)(index const& idx) const -> bool {
 				return this->base_range().at_end_index(idx);
 			}
 
-			auto dereference_index(index const& idx)
+			STATIC_OVERRIDE(dereference_index)(index const& idx)
 				return_decltype( THIS_IN_DECLTYPE base_range().dereference_index(idx) )
 
-			auto dereference_index(index const& idx) const
+			STATIC_OVERRIDE(dereference_index)(index const& idx) const
 				return_decltype( make_const(THIS_IN_DECLTYPE base_range()).dereference_index(idx) )
 
 			bool equal_index(index const& idxLhs, index const& idxRhs) const {
 				return this->base_range().equal_index(idxLhs,idxRhs);
 			}
 
-			void increment_index(index& idx) const {
+			STATIC_OVERRIDE(increment_index)(index& idx) const -> void {
 				this->base_range().increment_index(idx);
 			}
 
@@ -376,11 +369,11 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				this->base_range().decrement_index(idx);
 			}
 
-			void advance_index(index& idx, typename boost::range_difference<typename std::remove_reference<Rng>::type>::type d) const {
+			void advance_index(index& idx, typename boost::range_difference<std::remove_reference_t<Rng>>::type d) const {
 				this->base_range().advance_index(idx,d);
 			}
 
-			typename boost::range_difference<typename std::remove_reference<Rng>::type>::type distance_to_index(index const& idxLhs, index const& idxRhs) const {
+			typename boost::range_difference<std::remove_reference_t<Rng>>::type distance_to_index(index const& idxLhs, index const& idxRhs) const {
 				return this->base_range().distance_to_index(idxLhs,idxRhs);
 			}
 
