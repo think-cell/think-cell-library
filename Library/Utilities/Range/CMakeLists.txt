@@ -21,13 +21,15 @@ function(CreateStandalone CS_Dest)
 endfunction()
 
 
- ## Adapt those to your environment
-include_directories(/usr/local/include/boost_1_59_0/)
-link_directories(/usr/local/include/boost_1_59_0/stage/lib)
+# Require boost system library
+find_package(Boost COMPONENTS system REQUIRED)
+include_directories(${Boost_INCLUDE_DIR})
+set(LIBRARIES ${LIBRARIES} ${Boost_LIBRARIES})
+
 add_definitions(-DCLANG)
 	
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++1y -stdlib=libc++ -Wall -pedantic -Wno-long-long -Wno-parentheses -Wno-unknown-pragmas -Wno-extra-semi -Wno-unused-function -Wno-unused-variable -Wno-unused-value -Wno-unused-private-field -fms-extensions -fdelayed-template-parsing")
-set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -stdlib=libc++ -lboost_system")
+set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -stdlib=libc++")
 
 
 # Define Sources
@@ -121,6 +123,7 @@ add_definitions(-DRANGE_PROPOSAL_BUILD_STANDALONE -DPERFORMUNITTESTS -DBOOST_RAN
 
 foreach(Example ${Examples})
 	add_executable(example_${Example} ${Build} ${Ranges} ${TC_Utils} ${Tests} ${Example})
+    target_link_libraries(example_${Example} ${LIBRARIES})
 endforeach()
 
 CreateStandalone("StandaloneRanges/Library/Utilities/Range" FILES ${Build} ${Ranges} ${TC_Utils} ${Tests} ${Examples})
