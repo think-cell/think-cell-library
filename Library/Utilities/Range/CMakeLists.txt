@@ -22,7 +22,7 @@ endfunction()
 
 
 # Require boost system library
-find_package(Boost COMPONENTS system REQUIRED)
+find_package(Boost 1.59 COMPONENTS system REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
 set(LIBRARIES ${LIBRARIES} ${Boost_LIBRARIES})
 
