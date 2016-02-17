@@ -1,8 +1,22 @@
+//-----------------------------------------------------------------------------------------------------------------------------
+// think-cell public library
+// Copyright (C) 2016 think-cell Software GmbH
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+//
+// You should have received a copy of the GNU General Public License along with this program. 
+// If not, see <http://www.gnu.org/licenses/>. 
+//-----------------------------------------------------------------------------------------------------------------------------
+
 #pragma once
 
 #ifndef RANGE_PROPOSAL_BUILD_STANDALONE
 	// prevent wrong include order
-	#include "assert_fwd.h"
+	#include "Library/ErrorReporting/assert_fwd.h"
 	#include "assign.h"
 	#include "functors.h"
 #endif
@@ -12,6 +26,8 @@
 #include "casts.h"
 
 #include <utility>
+
+namespace tc {
 
 ////////////////////////////
 // fundamental_base
@@ -23,12 +39,12 @@ template<>
 struct fundamental_base<void> {};
 
 template<typename Base>
-struct fundamental_base<Base,typename std::enable_if<!std::is_class< Base >::value >::type> {
-	operator Base const&() const {
+struct fundamental_base<Base,std::enable_if_t<!std::is_class< Base >::value >> {
+	operator Base const&() const noexcept {
 		return _get();
 	}
 
-	operator Base &() {
+	operator Base &() noexcept {
 		return _get();
 	}
 
@@ -36,52 +52,52 @@ private:
 	Base m_base;
 
 protected:
-	fundamental_base() {}
+	fundamental_base() noexcept {}
 
 	template< typename A1 >
-	fundamental_base(A1&& a1)
+	fundamental_base(A1&& a1) noexcept
 	:	m_base(std::forward<A1>(a1))
 	{}
 
-	Base const& _get() const {
+	Base const& _get() const noexcept {
 		return m_base;
 	}
 
-	Base & _get() {
+	Base & _get() noexcept {
 		return m_base;
 	}
 };
 
 template<typename Base>
-struct fundamental_base<Base,typename std::enable_if< std::is_class< Base >::value >::type>
+struct fundamental_base<Base,std::enable_if_t< std::is_class< Base >::value >>
 	: public Base
 {
 protected:
-	Base const& _get() const {
+	Base const& _get() const noexcept {
 		return tc::base_cast<Base>(*this);
 	}
 
-	Base & _get() {
+	Base & _get() noexcept {
 		return tc::base_cast<Base>(*this);
 	}
 
 public:
-	fundamental_base() {}
+	fundamental_base() noexcept {}
 	INHERIT_CTORS(fundamental_base, Base);
 };
 
 template<typename Value, typename Accumulate>
-struct FAccumulator : fundamental_base< std::decay_t<Value> > {
+struct FAccumulator final : fundamental_base< std::decay_t<Value> > {
 	using fundamental_base = fundamental_base< std::decay_t<Value> >;
 	using result_type = void;
 
-	FAccumulator(Value&& value, Accumulate&& accumulate)
+	FAccumulator(Value&& value, Accumulate&& accumulate) noexcept
 	:	fundamental_base( std::forward<Value>(value) )
 	,	m_accumulate(std::forward<Accumulate>(accumulate))
 	{}
 
 	template<typename... Args>
-	void operator() (Args&& ... args) {
+	void operator() (Args&& ... args) noexcept {
 		m_accumulate(this->_get(), std::forward<Args>(args)...);
 	}
 
@@ -93,42 +109,7 @@ private:
 // accumulators
 
 template<typename Value, typename Accumulate>
-auto make_accumulator(Value&& value, Accumulate&& accumulate)
+auto make_accumulator(Value&& value, Accumulate&& accumulate) noexcept
 	return_ctor( FAccumulator<Value BOOST_PP_COMMA() Accumulate>, (std::forward<Value>(value),std::forward<Accumulate>(accumulate)) )
 
-///////////////////////////////////
-// chaining N-ary function to unary function,
-// add operator() with more arguments if you need it
-
-template<typename R, typename Func, typename Transform>
-struct chain_impl
-	: fundamental_base< std::decay_t<Func> >
-{
-private:
-	using fundamental_base = fundamental_base< std::decay_t<Func> >;
-	std::decay_t<Transform> const m_transform;
-public:
-	using result_type = R; // TODO: replace by return_decltype as soon as compiler supports it
-
-	chain_impl(Func&& func, Transform&& transform)
-	:	fundamental_base(std::forward<Func>(func)),
-		m_transform(std::forward<Transform>(transform))
-	{}
-
-	template<typename... Args>
-	auto operator()(Args&& ... args) const->result_type
-	{
-		return this->_get()( m_transform(std::forward<Args>(args)...) );
-	}
-
-	template<typename... Args>
-	auto operator()(Args&& ... args)->result_type {
-		return this->_get()( m_transform(std::forward<Args>(args)...) );
-	}
-};
-
-template< typename result_type, typename Func, typename Transform >
-chain_impl<result_type, Func, Transform> chain(Func&& func, Transform&& transform) {
-	return chain_impl<result_type, Func, Transform>( std::forward<Func>(func), std::forward<Transform>(transform) );
-}
-
+} // namespace tc

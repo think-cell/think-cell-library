@@ -1,17 +1,34 @@
+//-----------------------------------------------------------------------------------------------------------------------------
+// think-cell public library
+// Copyright (C) 2016 think-cell Software GmbH
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+//
+// You should have received a copy of the GNU General Public License along with this program. 
+// If not, see <http://www.gnu.org/licenses/>. 
+//-----------------------------------------------------------------------------------------------------------------------------
+
 #pragma once
 #include <type_traits>
 
 namespace tc {
-	template< typename Var, typename Expr >
-	struct return_decltype_retval {
+	template< typename Var, typename Expr, typename Sfinae >
+	struct return_decltype_retval final {
 		static_assert( std::is_same< Var, Expr >::value, "choose between return_variable_by_ref and return_by_val" );
 		static_assert( !std::is_rvalue_reference< Expr >::value, "choose between return_decltype_rvalue_by_ref and return_decltype_rvalue_by_val");
 		using type=Expr;
 	};
-	template< typename Var, typename Expr >
-	using return_decltype_retval_t = typename tc::return_decltype_retval<Var, Expr>::type;
+	template< typename Var, typename Expr, typename Sfinae=void >
+	using return_decltype_retval_t = typename tc::return_decltype_retval<Var, Expr, Sfinae>::type;
 
 #define return_decltype(...) -> tc::return_decltype_retval_t< decltype(__VA_ARGS__),decltype((__VA_ARGS__)) > { \
+	return (__VA_ARGS__); \
+}
+#define return_decltype_sfinae(T__,...) -> tc::return_decltype_retval_t< decltype(__VA_ARGS__),decltype((__VA_ARGS__)), T__ > { \
 	return (__VA_ARGS__); \
 }
 #define code_return_decltype(code,...) -> tc::return_decltype_retval_t< decltype(__VA_ARGS__),decltype((__VA_ARGS__)) > { \
@@ -24,11 +41,11 @@ namespace tc {
 }
 
 	template< typename Var, typename Expr >
-	struct return_variable_by_ref_retval {
+	struct return_variable_by_ref_retval final {
 		static_assert( std::is_lvalue_reference< Expr >::value, "use return_variable_by_ref only for variables");
 		using type=Expr; // rvalue references behave like lvalues
 		/* DOES NOT COMPILE
-			void foo(int&& n) {}
+			void foo(int&& n) noexcept {}
  
 			int m;
 			int&& n=std::move(m);
@@ -43,7 +60,7 @@ namespace tc {
 }
 
 	template< typename Var, typename Expr >
-	struct return_decltype_rvalue_by_ref_retval {
+	struct return_decltype_rvalue_by_ref_retval final {
 		static_assert( std::is_same< Var, Expr >::value, "choose between return_variable_by_ref and return_by_val" );
 		using type=Expr;
 	};
@@ -77,21 +94,21 @@ namespace tc {
 namespace decltype_return_test {
 	struct A{
 		int a;
-		void access_a() {
+		void access_a() noexcept {
 			static_assert( std::is_same<decltype(a),int>::value, "");
 			static_assert( std::is_same<decltype((a)),int&>::value, "");
 		}
 		int& b;
-		void access_b() {
+		void access_b() noexcept {
 			static_assert( std::is_same<decltype(b),int&>::value, "");
 			static_assert( std::is_same<decltype((b)),int&>::value, "");
 		}
 		int&& c;
-		void access_c() {
+		void access_c() noexcept {
 			static_assert( std::is_same<decltype(c),int&&>::value, "");
 			static_assert( std::is_same<decltype((b)),int&>::value, "");
 		}
 	};
 }
 
-#define return_ctor(T,params) ->T { return T params ; }
+#define return_ctor(T,...) ->T { return T __VA_ARGS__ ; }

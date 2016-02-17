@@ -1,10 +1,23 @@
+//-----------------------------------------------------------------------------------------------------------------------------
+// think-cell public library
+// Copyright (C) 2016 think-cell Software GmbH
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+//
+// You should have received a copy of the GNU General Public License along with this program. 
+// If not, see <http://www.gnu.org/licenses/>. 
+//-----------------------------------------------------------------------------------------------------------------------------
+
 #pragma once
 
 #include "range_defines.h"
 #include "break_or_continue.h"
 #include "meta.h"
 
-#include "conversion_traits.h"
 #include "reference_or_value.h"
 #include "static_polymorphism.h"
 
@@ -46,37 +59,37 @@ namespace iterators {
 }
 }
 
-namespace RANGE_PROPOSAL_NAMESPACE {
+namespace tc {
 	namespace iterator {
-		template<typename It> It middle_point(It const&, It const&);
+		template<typename It> It middle_point(It const&, It const&) noexcept;
 	}
 
 	template< typename It >
-	struct const_iterator_ {
+	struct const_iterator_ final {
 	private:
-		struct wrapper: public It {
+		struct wrapper final: public It {
 			using reference=std::conditional_t< std::is_lvalue_reference< typename std::iterator_traits<It>::reference >::value
 				, tc::add_const_also_to_ref_t<
 					typename std::iterator_traits<It>::reference
 				>
 				, typename std::iterator_traits<It>::value_type // TODO
 			>;
-			wrapper() {}
-			wrapper( It const& rhs )
+			wrapper() noexcept {}
+			wrapper( It const& rhs ) noexcept
 				: It( rhs )
 			{}
-			wrapper( wrapper const& rhs )
+			wrapper( wrapper const& rhs ) noexcept
 				: It( tc::base_cast<It>(rhs) )
 			{}
-			wrapper& operator=( It const& rhs ) {
+			wrapper& operator=( It const& rhs ) & noexcept {
 				It::operator=( rhs );
 				return *this;
 			}
-			wrapper& operator=( wrapper const& rhs ) {
+			wrapper& operator=( wrapper const& rhs ) & noexcept {
 				It::operator=( tc::base_cast<It>(rhs) );
 				return *this;
 			}
-			reference operator*() const {
+			reference operator*() const noexcept {
 				return It::operator*();
 			}
 		};
@@ -85,7 +98,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	};
 
 	template<typename T>
-	struct const_iterator_<T*> {
+	struct const_iterator_<T*> final {
 		using type = T const*;
 	};
 
@@ -94,7 +107,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		, typename CategoryOrTraversal
 		, typename Difference
 	>
-	struct const_iterator_<boost::iterators::counting_iterator<Incrementable,CategoryOrTraversal,Difference>> {
+	struct const_iterator_<boost::iterators::counting_iterator<Incrementable,CategoryOrTraversal,Difference>> final {
 		using type = boost::iterators::counting_iterator<Incrementable,CategoryOrTraversal,Difference>;
 	};
 
@@ -102,31 +115,31 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 	namespace index_from_iterator_impl {
 		template<typename It>
-		struct index_from_iterator {
-			template< typename ItIb, typename ConstIt > friend struct RANGE_PROPOSAL_NAMESPACE::iterator_base;
+		struct index_from_iterator final {
+			template< typename ItIb, typename ConstIt > friend struct tc::iterator_base;
 			template< typename fIt > friend struct index_from_iterator; // enable a const compatible index to be initialized.
 
 		private:
 			It m_it;
 		public:
 
-			index_from_iterator() {}
+			index_from_iterator() noexcept {}
 
 			template< typename Rhs >
-			index_from_iterator( Rhs&& rhs, aggregate_tag)
+			index_from_iterator( Rhs&& rhs, aggregate_tag) noexcept
 			:	m_it( std::forward<Rhs>(rhs) )
 			{}
 			template< typename Rhs >
 			index_from_iterator( Rhs&& rhs, 
-								typename std::enable_if< 
+								std::enable_if_t< 
 									std::is_constructible< It, decltype(Rhs::m_it) >::value,
 									unused_arg 
-								>::type = unused_arg() )
+								> = unused_arg() ) noexcept
 			:	m_it(std::forward<Rhs>(rhs).m_it)
 			{}
 
 			// explicitly define the copy constructor to do what the template above does, as it would if the implicit copy consturctor wouldn't interfere
-			index_from_iterator( index_from_iterator const& rhs )
+			index_from_iterator( index_from_iterator const& rhs ) noexcept
 			:	m_it(rhs.m_it)
 			{}
 		};
@@ -134,7 +147,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	using index_from_iterator_impl::index_from_iterator;
 
 	template< typename It >
-	index_from_iterator<std::decay_t<It>> iterator2index( It const& it ) {
+	index_from_iterator<std::decay_t<It>> iterator2index( It const& it ) noexcept {
 		return index_from_iterator<std::decay_t<It>>(it, aggregate_tag());
 	}
 
@@ -144,16 +157,16 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		using const_iterator = ConstIt;
 		using index = index_from_iterator<It>;
 
-/*		iterator_base(iterator_base const&) {};
+/*		iterator_base(iterator_base const&) noexcept {}
 		template< typename OtherIt, typename OtherConstIt >
-		explicit iterator_base( iterator_base<OtherIt,OtherConstIt> const&, typename std::enable_if<
+		explicit iterator_base( iterator_base<OtherIt,OtherConstIt> const&, std::enable_if_t<
 			std::is_convertible<OtherIt,It>::value && std::is_convertible<OtherConstIt,ConstIt>::value
-		, unused_arg >::type=unused_arg() ) {};
-		template< typename OtherIt, typename OtherConstIt > typename std::enable_if<
+		, unused_arg > =unused_arg() ) {};
+		template< typename OtherIt, typename OtherConstIt > std::enable_if_t<
 			std::is_convertible<OtherIt,It>::value && std::is_convertible<OtherConstIt,ConstIt>::value
-		, iterator_base& >::type operator=( iterator_base<OtherIt,OtherConstIt> const& ) { return *this; };
+		, iterator_base& > operator=( iterator_base<OtherIt,OtherConstIt> const& ) & noexcept { return *this; }
 */
-		typename std::iterator_traits<iterator>::reference dereference_index(index const& idx) {
+		typename std::iterator_traits<iterator>::reference dereference_index(index const& idx) noexcept {
 			return *idx.m_it;
 		}
 
@@ -171,39 +184,39 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			>::value,
 			typename std::iterator_traits<const_iterator>::reference,
 			typename std::iterator_traits<iterator>::value_type
-		> dereference_index(index const& idx) const {
+		> dereference_index(index const& idx) const noexcept {
 			return *idx.m_it;
 		}
 
-		bool equal_index(index const& idxLhs, index const& idxRhs) const {
+		bool equal_index(index const& idxLhs, index const& idxRhs) const noexcept {
 			return idxLhs.m_it==idxRhs.m_it;
 		}
 
-		void increment_index(index& idx) const {
+		void increment_index(index& idx) const noexcept {
 			++idx.m_it;
 		}
 
-		void decrement_index(index& idx) const {
+		void decrement_index(index& idx) const noexcept {
 			--idx.m_it;
 		}
 
-		void advance_index(index& idx, typename std::iterator_traits<iterator>::difference_type d) const {
+		void advance_index(index& idx, typename std::iterator_traits<iterator>::difference_type d) const noexcept {
 			idx.m_it+=d;
 		}
 
-		typename std::iterator_traits<iterator>::difference_type distance_to_index(index const& idxLhs, index const& idxRhs) const {
+		typename std::iterator_traits<iterator>::difference_type distance_to_index(index const& idxLhs, index const& idxRhs) const noexcept {
 			return idxRhs.m_it-idxLhs.m_it;
 		}
 
-		void middle_point( index & idxBegin, index const& idxEnd ) const {
+		void middle_point( index & idxBegin, index const& idxEnd ) const noexcept {
 			idxBegin.m_it=tc::iterator::middle_point( idxBegin.m_it, idxEnd.m_it );
 		}
 
-		iterator make_iterator( index idx ) {
+		iterator make_iterator( index idx ) noexcept {
 			return idx.m_it;
 		}
 
-		const_iterator make_iterator( index idx ) const {
+		const_iterator make_iterator( index idx ) const noexcept {
 			return idx.m_it;
 		}
 	};
@@ -214,10 +227,10 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	// adding index to legacy ranges
 
 	template< typename T >
-	struct is_boost_iterator_range : std::false_type {};
+	struct is_boost_iterator_range final : std::false_type {};
 
 	template< typename T >
-	struct is_boost_iterator_range< boost::iterator_range<T> > : std::true_type {};
+	struct is_boost_iterator_range< boost::iterator_range<T> > final : std::true_type {};
 
 	namespace range_generator_from_index_impl {
 		struct empty_chain {};
@@ -232,7 +245,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			STATIC_VIRTUAL(at_end_index)
 
 			template< typename Func >
-			tc::break_or_continue operator()(Func func) {
+			tc::break_or_continue operator()(Func func) MAYTHROW {
 				for( auto idx=begin_index();
 					!at_end_index(idx);
 					this->increment_index(idx)
@@ -243,7 +256,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			}
 
 			template< typename Func >
-			tc::break_or_continue operator()(Func func) const {
+			tc::break_or_continue operator()(Func func) const MAYTHROW {
 				for( auto idx=begin_index();
 					!at_end_index(idx);
 					this->increment_index(idx)
@@ -258,13 +271,13 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 	namespace void_generator_type_check_impl {
 		template<typename Func>
-		struct ensure_non_break_or_continue_functor {
-			explicit ensure_non_break_or_continue_functor(Func& f)
+		struct ensure_non_break_or_continue_functor final {
+			explicit ensure_non_break_or_continue_functor(Func& f) noexcept
 				: m_func(f)
 			{}
 
 			template<typename Arg>
-			void operator()(Arg&& arg) {
+			void operator()(Arg&& arg) noexcept {
 				static_assert(
 					!std::is_same<
 						decltype(m_func(std::forward<Arg>(arg))),
@@ -281,9 +294,9 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	}
 
 	template< typename Rng >
-	struct index_range {
+	struct index_range final {
 	private:
-		struct add_index_interface : range_generator_from_index< add_index_interface, iterator_base<
+		struct add_index_interface final : range_generator_from_index< add_index_interface, iterator_base<
 			typename boost::range_iterator< std::remove_reference_t<Rng> >::type,
 			typename boost::range_iterator< std::remove_reference_t<Rng> const >::type
 		> > {
@@ -294,32 +307,32 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		public:
 			using index = typename this_type::index;
 
-			add_index_interface() {}
+			add_index_interface() noexcept {}
 
-			template< typename Rhs, std::enable_if_t< !std::is_base_of< add_index_interface, typename std::decay< Rhs >::type >::value>* =nullptr >
-			add_index_interface( Rhs&& rhs )
+			template< typename Rhs, std::enable_if_t< !tc::is_base_of_decayed< add_index_interface, Rhs >::value>* =nullptr >
+			add_index_interface( Rhs&& rhs ) noexcept
 			:	m_rng( std::forward<Rhs>(rhs), aggregate_tag() )
 			{}
 
-			STATIC_FINAL(begin_index)() const -> index {
+			STATIC_FINAL(begin_index)() const noexcept -> index {
 				return index( boost::begin(m_rng.best_access()), aggregate_tag() );
 			}
 	
-			STATIC_FINAL(end_index)() const -> index {
+			STATIC_FINAL(end_index)() const noexcept -> index {
 				return index( boost::end(m_rng.best_access()), aggregate_tag() );
 			}
 
-			STATIC_FINAL(at_end_index)(index const& idx) const -> bool {
+			STATIC_FINAL(at_end_index)(index const& idx) const noexcept -> bool {
 				return this->equal_index( idx, this->end_index() );
 			}
 
-			operator std::remove_reference_t<Rng> &() {
+			operator std::remove_reference_t<Rng> &() noexcept {
 				return *m_rng;
-			};
+			}
 
-			operator std::remove_reference_t<Rng> const&() const {
+			operator std::remove_reference_t<Rng> const&() const noexcept {
 				return *m_rng;
-			};
+			}
 		private:
 			reference_or_value< std::conditional_t< std::is_rvalue_reference<Rng>::value, std::remove_reference_t<Rng>, Rng > > m_rng;
 		};
@@ -330,4 +343,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			Rng
 		>;
 	};
+
+	template<typename T>
+	using index_range_t = typename index_range<T>::type;
 }

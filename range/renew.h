@@ -1,10 +1,31 @@
+//-----------------------------------------------------------------------------------------------------------------------------
+// think-cell public library
+// Copyright (C) 2016 think-cell Software GmbH
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+//
+// You should have received a copy of the GNU General Public License along with this program. 
+// If not, see <http://www.gnu.org/licenses/>. 
+//-----------------------------------------------------------------------------------------------------------------------------
+
 #pragma once
 
 #ifndef RANGE_PROPOSAL_BUILD_STANDALONE
-	#include "assert_fwd.h"
+	#include "Library/ErrorReporting/assert_fwd.h"
 #endif
 
+#pragma warning(push)
+#pragma warning( disable: 4267 )
+// warning C4267 : 'argument' : conversion from 'size_t' to 'int', possible loss of data
+// _Median(...) causes warning C4267 when difference_type is int and size_t is 64 bit. 
+// Stephan T. Lavavej [stl@exchange.microsoft.com] agrees this is a bug and filed DevDiv#1213041 
+// "<algorithm>: _Median() doesn't handle fancy difference types" to track the problem.
 #include <algorithm>
+#pragma warning(pop)
 
 namespace tc {
 	template< typename T >
@@ -73,7 +94,7 @@ namespace tc {
 
 // WATCH OUT, NOT SELF-ASSIGN AWARE
 #define ASSIGN_BY_RENEW( T, S ) \
-	T& operator=( S s ) noexcept \
+	T& operator=( S s ) & noexcept \
 	{ \
 		static_assert( std::is_convertible< S, T >::value, "assignment must correspond to implicit construction" ); \
 		/* \
@@ -95,7 +116,7 @@ namespace tc {
 	}
 
 #define ASSIGN_BY_SWAP(T) \
-	T& operator=( T other ) { \
+	T& operator=( T other ) & noexcept { \
 		swap( *this, other ); /*not boost::swap, which may be implemented in terms of move, which would be circular*/ \
 		return *this; \
 	}

@@ -8,7 +8,7 @@ namespace {
 
 //---- Basic ------------------------------------------------------------------------------------------------------------------
 void basic () {
-   using namespace RANGE_PROPOSAL_NAMESPACE;
+   using namespace tc;
 
    int av[] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20};
    auto v = std::vector<int> (av, av+sizeof(av)/sizeof(int)); 
@@ -35,7 +35,7 @@ namespace {
 }
 
 void ex_generator_range () {
-	using namespace RANGE_PROPOSAL_NAMESPACE;
+	using namespace tc;
 	for_each( tc::filter( generator_range(), [](int i){ return i%2==0; } ), [](int i) {
 		std::cout << i << ", ";
 	});
@@ -46,8 +46,8 @@ void ex_generator_range () {
 namespace {
 	struct generator_range_break {
 		template< typename Func >
-		RANGE_PROPOSAL_NAMESPACE::break_or_continue operator()( Func func ) {
-			using namespace RANGE_PROPOSAL_NAMESPACE;
+		tc::break_or_continue operator()( Func func ) {
+			using namespace tc;
 			for(int i=0;i<5000;++i) {
 				if (func(i)==break_) { return break_; }
 			}
@@ -57,7 +57,7 @@ namespace {
 }
 
 void ex_generator_range_break () {
-	using namespace RANGE_PROPOSAL_NAMESPACE;
+	using namespace tc;
 	for_each( tc::filter( generator_range_break(), [](int i){ return i%2==0; } ), [](int i) -> break_or_continue {
 		std::cout << i << ", ";
 		return (i>=50)? break_ : continue_;
@@ -67,7 +67,7 @@ void ex_generator_range_break () {
 
 //---- Stacked filters --------------------------------------------------------------------------------------------------------
 void stacked_filters() {
-	using namespace RANGE_PROPOSAL_NAMESPACE;
+	using namespace tc;
 	for_each( tc::filter( tc::filter( tc::filter(
 								generator_range_break(),
 								[](int i){ return i%2!=0; } ),
@@ -91,7 +91,7 @@ int main() {
 	ex_generator_range_break();
 	stacked_filters();
 
-	using namespace RANGE_PROPOSAL_NAMESPACE;
+	using namespace tc;
 
 	int av[] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20};
 	auto v = std::vector<int> (av, av+sizeof(av)/sizeof(int)); 

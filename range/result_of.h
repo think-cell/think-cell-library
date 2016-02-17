@@ -1,16 +1,20 @@
+//-----------------------------------------------------------------------------------------------------------------------------
+// think-cell public library
+// Copyright (C) 2016 think-cell Software GmbH
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+//
+// You should have received a copy of the GNU General Public License along with this program. 
+// If not, see <http://www.gnu.org/licenses/>. 
+//-----------------------------------------------------------------------------------------------------------------------------
+
 #pragma once
 
 namespace tc {
-	template<typename Func> struct result_of;
-
-	template<typename Func, typename ...Args>
-	struct result_of<Func(Args...)> {
-		using type = typename std::result_of< typename std::remove_reference<Func>::type(Args...) >::type;
-	};
-
 	template< typename T >
-	using result_of_t=typename result_of<T>::type;
-
-	template< typename T >
-	using result_value_of_t=std::decay_t< tc::result_of_t< T > >;
+	using decayed_result_of_t=std::decay_t< std::result_of_t< T > >;
 }

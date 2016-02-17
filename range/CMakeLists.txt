@@ -28,7 +28,7 @@ set(LIBRARIES ${LIBRARIES} ${Boost_LIBRARIES})
 
 add_definitions(-DCLANG)
 	
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++1y -stdlib=libc++ -Wall -pedantic -Wno-long-long -Wno-parentheses -Wno-unknown-pragmas -Wno-extra-semi -Wno-unused-function -Wno-unused-variable -Wno-unused-value -Wno-unused-private-field -fms-extensions -fdelayed-template-parsing")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++1z -stdlib=libc++ -Wall -pedantic -Wno-long-long -Wno-parentheses -Wno-unknown-pragmas -Wno-extra-semi -Wno-unused-function -Wno-unused-variable -Wno-unused-value -Wno-unused-private-field -fms-extensions -fdelayed-template-parsing")
 set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -stdlib=libc++")
 
 
@@ -45,6 +45,7 @@ set(Ranges
 	index_iterator.h
 	quantifier.h
 	range_adaptor.h
+	reverse_adaptor.h
 	sparse_adaptor.h
 	sub_range.h
 	filter_adaptor.h
@@ -65,10 +66,18 @@ set(Ranges
 source_group(Ranges FILES ${Ranges})
 
 set(TC_Utils
+	array.h
+	as_lvalue.h
 	assign.h
 	casts.h
 	compare.h
+	container.h
+	convert.h
+	counting_range.h
+	empty_chain.h
+	implements_compare.h
 	in_place.h
+	is_static_castable.h
 	make_lazy.h
 	modified.h
 	noncopyable.h
@@ -84,8 +93,9 @@ set(TC_Utils
 	storage_for.h
 	functors.h
 	accumulator.h
-	conversion_traits.h
+	type_traits.h
 	has_mem_fn.h
+	scope.h
    )
 source_group(Utilities FILES ${TC_Utils})
 
@@ -101,6 +111,8 @@ set(Tests
 	  algorithm.t.cpp
 	  sub_range.t.cpp
 	  transform.t.cpp
+	  reverse_adaptor.t.cpp
+	  type_traits_t.cpp
 )
 source_group(Tests FILES ${Tests})
 

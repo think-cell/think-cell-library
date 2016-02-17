@@ -1,7 +1,20 @@
+//-----------------------------------------------------------------------------------------------------------------------------
+// think-cell public library
+// Copyright (C) 2016 think-cell Software GmbH
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+//
+// You should have received a copy of the GNU General Public License along with this program. 
+// If not, see <http://www.gnu.org/licenses/>. 
+//-----------------------------------------------------------------------------------------------------------------------------
+
 #pragma once
 
 #include "range_fwd.h"
-#include "for_each.h"
 #include "transform_adaptor.h"
 #include "break_or_continue.h"
 #include <boost/bind.hpp>
@@ -10,47 +23,45 @@
 /////////////////////////////////////////////
 // std::all/any/none_of on ranges
 
-namespace RANGE_PROPOSAL_NAMESPACE {
+namespace tc {
 
 DEFINE_FN(bool_cast)
 
 template< typename Rng >
-bool any_of(Rng&& rng) {
-	return accumulate(std::forward<Rng>(rng), false, [](bool& bAccu, bool_context b) {
-		return continue_if(!( bAccu=bAccu || b ));
-	} );
+bool any_of(Rng&& rng) noexcept {
+	//return !tc::empty( tc::filter( std::forward<Rng>(rng), tc::fn_bool_cast() ) );
+	return tc::break_==tc::for_each(std::forward<Rng>(rng), [](bool_context b) noexcept {return tc::continue_if(!b);});
 }
 
 template< typename Rng >
-bool all_of(Rng&& rng) {
-	return accumulate(std::forward<Rng>(rng), true, [](bool& bAccu, bool_context b) {
-		return continue_if(( bAccu=bAccu && b ));
-	} );
+bool all_of(Rng&& rng) noexcept {
+	//return tc::empty( tc::filter( std::forward<Rng>(rng), !boost::bind<bool>(tc::fn_bool_cast(), _1) ) );
+	return tc::continue_==tc::for_each(std::forward<Rng>(rng), [](bool_context b) noexcept {return tc::continue_if(b);});
 }
 
 template< typename Rng, typename Pred >
-bool any_of(Rng&& rng, Pred&& pred) {
+bool any_of(Rng&& rng, Pred&& pred) noexcept {
 	return any_of( tc::transform( std::forward<Rng>(rng), std::forward<Pred>(pred) ) );
 }
 
 template< typename Rng, typename Pred >
-bool all_of(Rng&& rng, Pred&& pred) {
+bool all_of(Rng&& rng, Pred&& pred) noexcept {
 	return all_of( tc::transform( std::forward<Rng>(rng), std::forward<Pred>(pred) ) );
 }
 
 template< typename Rng >
-bool none_of(Rng&& rng) {
+bool none_of(Rng&& rng) noexcept {
 	return !any_of( std::forward<Rng>(rng) );
 }
 
 template< typename Rng, typename Pred >
-bool none_of(Rng&& rng, Pred&& pred) {
+bool none_of(Rng&& rng, Pred&& pred) noexcept {
 	return !any_of( std::forward<Rng>(rng), std::forward<Pred>(pred) );
 }
 
 // pair is in same order as if minmax_element( ..., operator<( bool, bool ) ) would have been used.
 template< typename Rng >
-std::pair<bool,bool> all_any_of( Rng const& rng ) {
+std::pair<bool,bool> all_any_of( Rng const& rng ) noexcept {
 	std::pair<bool,bool> pairb(true,false);
 	tc::for_each(rng, [&](bool b) {
 		pairb.first=pairb.first && b;
@@ -61,16 +72,16 @@ std::pair<bool,bool> all_any_of( Rng const& rng ) {
 }
 
 template< typename Rng, typename Pred >
-std::pair<bool,bool> all_any_of(Rng const& rng, Pred&& pred) {
+std::pair<bool,bool> all_any_of(Rng const& rng, Pred&& pred) noexcept {
 	return all_any_of( tc::transform(rng,std::forward<Pred>(pred)) );
 }
 
-inline bool eager_or(std::initializer_list<tc::bool_context> ab) {
+inline bool eager_or(std::initializer_list<tc::bool_context> ab) noexcept {
 	// use initializer list instead of variadic template: initializer list guarantees evaluation in order of appearance
 	return tc::any_of(ab);
 }
 
-inline bool eager_and(std::initializer_list<tc::bool_context> ab) {
+inline bool eager_and(std::initializer_list<tc::bool_context> ab) noexcept {
 	// use initializer list instead of variadic template: initializer list guarantees evaluation in order of appearance
 	return tc::all_of(ab);
 }

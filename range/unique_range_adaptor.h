@@ -1,3 +1,17 @@
+//-----------------------------------------------------------------------------------------------------------------------------
+// think-cell public library
+// Copyright (C) 2016 think-cell Software GmbH
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+//
+// You should have received a copy of the GNU General Public License along with this program. 
+// If not, see <http://www.gnu.org/licenses/>. 
+//-----------------------------------------------------------------------------------------------------------------------------
+
 #pragma once
 
 #include "range_defines.h"
@@ -7,7 +21,7 @@
 #include "types.h"
 #include "static_polymorphism.h"
 
-namespace RANGE_PROPOSAL_NAMESPACE {
+namespace tc {
 
 	namespace unique_range_adaptor_adl_barrier {
 
@@ -16,18 +30,15 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			typename Equals
 		>
 		struct unique_adaptor
-			: range_generator_from_index<
+			: range_iterator_generator_from_index<
 				unique_adaptor<Rng, Equals>,
-				range_iterator_from_index<
-					unique_adaptor<Rng, Equals>,
-					typename std::remove_reference<
-						typename index_range<Rng>::type
-					>::type::index,
-					typename boost::range_detail::demote_iterator_traversal_tag<
-						boost::iterators::bidirectional_traversal_tag,
-						traversal_t<Rng>
-					>::type
-				>
+				typename std::remove_reference<
+					index_range_t<Rng>
+				>::type::index,
+				typename boost::range_detail::demote_iterator_traversal_tag<
+					boost::iterators::bidirectional_traversal_tag,
+					traversal_t<Rng>
+				>::type
 			>
 		{
 			using index = typename unique_adaptor::index;
@@ -36,47 +47,43 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				typename RngRef,
 				typename EqualsRef
 			>
-			unique_adaptor(RngRef&& rng, EqualsRef&& equals)
-				: m_baserng(reference_or_value< typename index_range<Rng>::type >(std::forward<RngRef>(rng), aggregate_tag()))
+			unique_adaptor(RngRef&& rng, EqualsRef&& equals) noexcept
+				: m_baserng(reference_or_value< index_range_t<Rng> >(std::forward<RngRef>(rng), aggregate_tag()))
 				, m_equals(std::forward<EqualsRef>(equals))
 			{}
 
 		private:
 			using this_type = unique_adaptor;
-			reference_or_value< typename index_range<Rng>::type > m_baserng;
+			reference_or_value< index_range_t<Rng> > m_baserng;
             Equals m_equals;
 
 		public:
 
-			STATIC_FINAL(begin_index)() const -> index {
+			STATIC_FINAL(begin_index)() const noexcept -> index {
 				return m_baserng->begin_index();
 			}
 
-			STATIC_FINAL(end_index)() const -> index {
+			STATIC_FINAL(end_index)() const noexcept -> index {
 				return m_baserng->end_index();
 			}
 
-			STATIC_FINAL(at_end_index)(index const& idx) const -> bool {
+			STATIC_FINAL(at_end_index)(index const& idx) const noexcept -> bool {
 				return m_baserng->at_end_index(idx);
 			}
 
-			bool at_begin_index(index const& idx) const {
-				return m_baserng->at_begin_index(idx);
-			}
-
-			STATIC_FINAL(dereference_index)(index const& idx) const return_decltype(
+			STATIC_FINAL(dereference_index)(index const& idx) const noexcept return_decltype(
 				m_baserng->dereference_index(idx)
 			)
 
-			STATIC_FINAL(dereference_index)(index const& idx) return_decltype(
+			STATIC_FINAL(dereference_index)(index const& idx) noexcept return_decltype(
 				m_baserng->dereference_index(idx)
 			)
 
-			bool equal_index(index const& idxLhs, index const& idxRhs) const {
+			STATIC_FINAL(equal_index)(index const& idxLhs, index const& idxRhs) const noexcept -> bool {
 				return m_baserng->equal_index(idxLhs, idxRhs);
 			}
 
-			STATIC_FINAL(increment_index)(index& idx0) const -> void {
+			STATIC_FINAL(increment_index)(index& idx0) const noexcept -> void {
 				using RefType = tc::reference_or_value<decltype(this->dereference_index(idx0))>;
 
 				_ASSERT(!this->at_end_index(idx0));
@@ -111,14 +118,13 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				}
 			}
 
-
-			void decrement_index(index& idx0) const {
+			STATIC_FINAL(decrement_index)(index& idx0) const noexcept -> void {
 				using RefType = tc::reference_or_value<decltype(this->dereference_index(idx0))>;
 
-				_ASSERT(!equal_index(this->begin_index(),idx0));
+				_ASSERT(!this->equal_index(this->begin_index(),idx0));
 
 				m_baserng->decrement_index(idx0);
-				if (!equal_index(this->begin_index(),idx0)) {
+				if (!this->equal_index(this->begin_index(),idx0)) {
 					RefType ref0(this->dereference_index(idx0), aggregate_tag());
 
 					for (;;) {
@@ -128,7 +134,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 						if (!this->m_equals(*ref1, *ref0)) {
 							break;
 						}
-						if (equal_index(this->begin_index(),idx1)) {
+						if (this->equal_index(this->begin_index(),idx1)) {
 							idx0 = tc_move(idx1);
 							break;
 						}
@@ -140,18 +146,22 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 							idx0 = tc_move(idx1);
 							break;
 						}
-						if (equal_index(this->begin_index(),idx0)) {
+						if (this->equal_index(this->begin_index(),idx0)) {
 							break;
 						}
 					}
 				}
 			}
 
-			auto base_range() return_decltype(
+			auto element_base_index(index const& idx) const noexcept {
+				return idx;
+			}
+
+			auto base_range() noexcept return_decltype(
 				*m_baserng
 			)
 
-			auto base_range() const return_decltype(
+			auto base_range() const noexcept return_decltype(
 				*m_baserng
 			)
 		};
@@ -169,20 +179,17 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			typename Equals
 		>
 		struct unique_range_adaptor
-			: range_generator_from_index<
+			: range_iterator_generator_from_index<
 				Derived,
-				range_iterator_from_index<
-					Derived,
-					unique_range_index<
-						typename std::remove_reference<
-							typename index_range<Rng>::type
-						>::type::index
-					>,
-					typename boost::range_detail::demote_iterator_traversal_tag<
-						boost::iterators::forward_traversal_tag,
-						traversal_t<Rng>
-					>::type
-				>
+				unique_range_index<
+					typename std::remove_reference_t<
+						index_range_t<Rng>
+					>::index
+				>,
+				typename boost::range_detail::demote_iterator_traversal_tag<
+					boost::iterators::forward_traversal_tag,
+					traversal_t<Rng>
+				>::type
 			>
 		{
 			using index = typename unique_range_adaptor::index;
@@ -191,7 +198,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			using this_type = unique_range_adaptor;
 
 		protected:
-			reference_or_value< typename index_range<Rng>::type > m_baserng;
+			reference_or_value< index_range_t<Rng> > m_baserng;
 			Equals m_equals;
 
 		public:
@@ -199,44 +206,40 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				typename RngRef,
 				typename EqualsRef
 			>
-			unique_range_adaptor(RngRef&& rng, EqualsRef&& equals)
-				: m_baserng(reference_or_value< typename index_range<Rng>::type >(std::forward<RngRef>(rng), aggregate_tag()))
+			unique_range_adaptor(RngRef&& rng, EqualsRef&& equals) noexcept
+				: m_baserng(reference_or_value< index_range_t<Rng> >(std::forward<RngRef>(rng), aggregate_tag()))
 				, m_equals(std::forward<EqualsRef>(equals))
 			{}
 
 			STATIC_VIRTUAL(FindSubRangeEnd)
 
-			STATIC_OVERRIDE(begin_index)() const -> index {
+			STATIC_OVERRIDE(begin_index)() const noexcept -> index {
 				auto idxBegin = m_baserng->begin_index();
 				return {idxBegin, FindSubRangeEnd(idxBegin) };
 			}
 
-			STATIC_OVERRIDE(end_index)() const -> index {
+			STATIC_OVERRIDE(end_index)() const noexcept -> index {
 				return {m_baserng->end_index(), m_baserng->end_index()};
 			}
 
-			STATIC_OVERRIDE(increment_index)(index& idx) const -> void {
+			STATIC_OVERRIDE(increment_index)(index& idx) const noexcept -> void {
 				idx.m_idxBegin = tc_move(idx.m_idxEnd);
 				idx.m_idxEnd = FindSubRangeEnd(idx.m_idxBegin);
 			}
 
-			STATIC_OVERRIDE(at_end_index)(index const& idx) const -> bool {
+			STATIC_OVERRIDE(at_end_index)(index const& idx) const noexcept -> bool {
 				return m_baserng->at_end_index(idx.m_idxBegin);
 			}
 
-			bool at_begin_index(index const& idx) const {
-				return m_baserng->at_begin_index(idx.m_idxBegin);
-			}
-
-			STATIC_OVERRIDE(dereference_index)(index const& idx) const return_decltype(
+			STATIC_OVERRIDE(dereference_index)(index const& idx) const noexcept return_decltype(
 				tc::slice(*m_baserng, idx.m_idxBegin, idx.m_idxEnd)
 			)
 
-			STATIC_OVERRIDE(dereference_index)(index const& idx) return_decltype(
+			STATIC_OVERRIDE(dereference_index)(index const& idx) noexcept return_decltype(
 				tc::slice(*m_baserng, idx.m_idxBegin, idx.m_idxEnd)
 			)
 
-			bool equal_index(index const& idxLhs, index const& idxRhs) const {
+			STATIC_OVERRIDE(equal_index)(index const& idxLhs, index const& idxRhs) const noexcept -> bool {
 				return m_baserng->equal_index(idxLhs.m_idxBegin, idxRhs.m_idxBegin);
 			}
 
@@ -252,7 +255,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			friend struct unique_range_adaptor<unique_range_front_adaptor<Rng, Equals>, Rng, Equals>;
 
 			template<typename RhsRng, typename RhsEquals>
-			unique_range_front_adaptor(RhsRng&& rng, RhsEquals&& equals) : unique_range_adaptor<unique_range_front_adaptor, Rng, Equals>(std::forward<RhsRng>(rng), std::forward<RhsEquals>(equals))
+			unique_range_front_adaptor(RhsRng&& rng, RhsEquals&& equals) noexcept : unique_range_adaptor<unique_range_front_adaptor, Rng, Equals>(std::forward<RhsRng>(rng), std::forward<RhsEquals>(equals))
 			{}
 
 			using index = typename unique_range_front_adaptor::index;
@@ -260,7 +263,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		private:
 			using index_base = typename index::index_base;
 			using this_type = unique_range_front_adaptor;
-			STATIC_FINAL(FindSubRangeEnd)(index_base const& idx) const -> index_base {
+			STATIC_FINAL(FindSubRangeEnd)(index_base const& idx) const noexcept -> index_base {
 				if (this->m_baserng->at_end_index(idx)) return idx;
 
 				auto idxEnd = idx;
@@ -283,7 +286,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			friend struct unique_range_adaptor<unique_range_adjacent_adaptor<Rng, Equals>, Rng, Equals>;
 
 			template<typename RhsRng, typename RhsEquals>
-			unique_range_adjacent_adaptor(RhsRng&& rng, RhsEquals&& equals) : unique_range_adaptor<unique_range_adjacent_adaptor, Rng, Equals>(std::forward<RhsRng>(rng), std::forward<RhsEquals>(equals))
+			unique_range_adjacent_adaptor(RhsRng&& rng, RhsEquals&& equals) noexcept : unique_range_adaptor<unique_range_adjacent_adaptor, Rng, Equals>(std::forward<RhsRng>(rng), std::forward<RhsEquals>(equals))
 			{}
 
 			using index = typename unique_range_adjacent_adaptor::index;
@@ -292,7 +295,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			using index_base = typename index::index_base;
 			using this_type = unique_range_adjacent_adaptor;
 
-			STATIC_FINAL(FindSubRangeEnd)(index_base const& idx) const -> index_base {
+			STATIC_FINAL(FindSubRangeEnd)(index_base const& idx) const noexcept -> index_base {
 				if (this->m_baserng->at_end_index(idx)) return idx;
 
 				for(auto idxEnd = idx;;) {
@@ -315,13 +318,13 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		typename Rng,
 		typename Equals
 	>
-	auto front_unique_range(Rng&& rng, Equals&& equals) return_ctor(
-		unique_range_front_adaptor< typename range_by_value<Rng>::type BOOST_PP_COMMA() std::decay_t<Equals> >,
+	auto front_unique_range(Rng&& rng, Equals&& equals) noexcept return_ctor(
+		unique_range_front_adaptor< range_by_value_t<Rng> BOOST_PP_COMMA() std::decay_t<Equals> >,
 		(std::forward<Rng>(rng), std::forward<Equals>(equals))
 	)
 
 	template< typename Rng >
-	auto front_unique_range(Rng&& rng) return_decltype(
+	auto front_unique_range(Rng&& rng) noexcept return_decltype(
 		front_unique_range(std::forward<Rng>(rng),tc::fn_equal_to())
 	)
 
@@ -329,13 +332,13 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		typename Rng,
 		typename Equals
 	>
-	auto adjacent_unique_range(Rng&& rng, Equals&& equals) return_ctor(
-		unique_range_adjacent_adaptor< typename range_by_value<Rng>::type BOOST_PP_COMMA() std::decay_t<Equals> >,
+	auto adjacent_unique_range(Rng&& rng, Equals&& equals) noexcept return_ctor(
+		unique_range_adjacent_adaptor< range_by_value_t<Rng> BOOST_PP_COMMA() std::decay_t<Equals> >,
 		(std::forward<Rng>(rng), std::forward<Equals>(equals))
 	)
 
 	template< typename Rng >
-	auto adjacent_unique_range(Rng&& rng) return_decltype(
+	auto adjacent_unique_range(Rng&& rng) noexcept return_decltype(
 		adjacent_unique_range(std::forward<Rng>(rng), tc::fn_equal_to())
 	)
 
@@ -347,13 +350,13 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		typename Rng,
 		typename Equals
 	>
-	auto adjacent_unique(Rng&& rng, Equals&& equals) return_ctor(
-		unique_adaptor< typename range_by_value<Rng>::type BOOST_PP_COMMA() std::decay_t<Equals> >,
+	auto adjacent_unique(Rng&& rng, Equals&& equals) noexcept return_ctor(
+		unique_adaptor< range_by_value_t<Rng> BOOST_PP_COMMA() std::decay_t<Equals> >,
 		(std::forward<Rng>(rng), std::forward<Equals>(equals))
 	)
 
 	template< typename Rng >
-	auto adjacent_unique(Rng&& rng) return_decltype(
+	auto adjacent_unique(Rng&& rng) noexcept return_decltype(
 		adjacent_unique(std::forward<Rng>(rng),tc::fn_equal_to())
 	)
 

@@ -12,24 +12,28 @@
 // If not, see <http://www.gnu.org/licenses/>. 
 //-----------------------------------------------------------------------------------------------------------------------------
 
-#include "range.h"
-#include "range.t.h"
+#pragma once
 
-namespace {
-	void static_tests() noexcept {
-		auto rngSize = tc::transform(tc::vector<int>(), [](int) { return 0; });
-		static_assert(tc::size_impl::has_size<decltype(rngSize)>::value, "");
+namespace tc {
+	namespace empty_chain_impl {
+		// consider a CRTP such as implements_compare etc.
+		//
+		//		template <typename Derived, typename Chain=empty_chain>
+		//		struct SomeCRTP : Chain {};
+		//
+		//		class A : SomeCRTP<A> {}; // implicitly derives from empty_chain
+		//		class B : SomeCRTP<B> { A myA; }; // implicitly derives from empty_chain
+		//
+		// then, C++ does NOT allow empty base class optimization, because the compiler has to ensure
+		//		std::addressof( base_cast<empty_chain>(instance_of_B) ) != std::addressof( base_cast<empty_chain>(instance_of_B.myA) )
+		//
+		// therefore, force different types for each instance of empty_chain, i.e.,
+		//
+		//		template <typename Derived, typename Chain=empty_chain<Derived>>
+		//		struct SomeCRTP : Chain {};
 
-		auto rngNoSize = tc::transform(tc::filter(tc::vector<int>(), [](int){ return false; }), [](int) { return 0; });
-		static_assert(!tc::size_impl::has_size<decltype(rngNoSize)>::value, "");
+		template <typename T>
+		struct empty_chain {};
 	}
-}
-
-UNITTESTDEF(vector_int_ref_need_sfinae_transform) {
-	tc::vector<int> vecn{1,2,3};
-	auto rgntrnsfn = tc::transform(vecn, [](int& n) {return n*n;});
-	auto it = boost::begin(rgntrnsfn);
-	_ASSERTEQUAL(*it++,1);
-	_ASSERTEQUAL(*it++,4);
-	_ASSERTEQUAL(*it++,9);
+	using empty_chain_impl::empty_chain;
 }

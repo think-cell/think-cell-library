@@ -1,20 +1,34 @@
-#include "Range.h"
+//-----------------------------------------------------------------------------------------------------------------------------
+// think-cell public library
+// Copyright (C) 2016 think-cell Software GmbH
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+//
+// You should have received a copy of the GNU General Public License along with this program. 
+// If not, see <http://www.gnu.org/licenses/>. 
+//-----------------------------------------------------------------------------------------------------------------------------
+
+#include "range.h"
 #include "range.t.h"
 
 //---- for_each ---------------------------------------------------------------------------------------------------------------
 namespace {
-	using namespace RANGE_PROPOSAL_NAMESPACE;
+	using namespace tc;
 
-	struct all_called_mock {
-		all_called_mock() : m_expect(0), m_index(0), m_break_at(0), m_copyed_or_moved_from(false) {}
-		all_called_mock(std::vector<int> const& v, std::size_t break_at = 0, bool expect_break = true)
+	struct all_called_mock final {
+		all_called_mock() noexcept : m_expect(0), m_index(0), m_break_at(0), m_copyed_or_moved_from(false) {}
+		all_called_mock(tc::vector<int> const& v, std::size_t break_at = 0, bool expect_break = true) noexcept
 			: m_expect(v),
 			  m_index(0),
 			  m_break_at((break_at == 0) ? v.size() : break_at),
 			  m_expect_break((break_at != 0) && expect_break),
 			  m_copyed_or_moved_from(false)
 		{}
-		all_called_mock(all_called_mock const& copy) :
+		all_called_mock(all_called_mock const& copy) noexcept :
 			  m_expect(copy.m_expect),
 			  m_index(copy.m_index),
 			  m_break_at(copy.m_break_at),
@@ -23,7 +37,7 @@ namespace {
 		{
 			copy.m_copyed_or_moved_from = true;
 		}
-		all_called_mock(all_called_mock&& move) :
+		all_called_mock(all_called_mock&& move) noexcept :
 			  m_expect(move.m_expect),
 			  m_index(move.m_index),
 			  m_break_at(move.m_break_at),
@@ -36,7 +50,7 @@ namespace {
 			mock_reset();
 		}
 
-		void mock_reset(std::vector<int> const& v = std::vector<int>(), std::size_t break_at = 0, bool expect_break = true) {
+		void mock_reset(tc::vector<int> const& v = tc::vector<int>(), std::size_t break_at = 0, bool expect_break = true) noexcept {
 			if(!m_copyed_or_moved_from && !(m_index == std::min(m_expect.size(), (m_expect_break) ? m_break_at + 1 : m_expect.size()))) {
 				TEST_OUTPUT( << "unexpectedly terminated before index " << m_index
 							 << " went to the expected index " << std::min(m_expect.size(), m_break_at + 1) << '\n');
@@ -49,7 +63,7 @@ namespace {
 			m_copyed_or_moved_from = false;
 		}
 
-		break_or_continue operator()(int val) {
+		break_or_continue operator()(int val) noexcept {
 			if (m_copyed_or_moved_from) {
 				TEST_OUTPUT(<< "used copyed or moved consumer for real work!\n");
 			}
@@ -68,7 +82,7 @@ namespace {
 		}
 
 		private:
-			std::vector<int> m_expect;
+			tc::vector<int> m_expect;
 			std::size_t m_index;
 			std::size_t m_break_at;
 			bool m_expect_break;
@@ -77,15 +91,15 @@ namespace {
 
 	all_called_mock g_mock;
 
-	void foo(int i) { g_mock(i); }
+	void foo(int i) noexcept { g_mock(i); }
 		
 //-----------------------------------------------------------------------------------------------------------------------------
 UNITTESTDEF( for_each ) {
-	using namespace RANGE_PROPOSAL_NAMESPACE;
+	using namespace tc;
 	using std::placeholders::_1;
 
-	TEST_init_hack(std::vector, int, v, {1,2,3,4,5,6,7,8,9,10});
-	TEST_init_hack(std::vector, int, exp, {1,2,3,4,5,6,7,8,9,10});
+	TEST_init_hack(tc::vector, int, v, {1,2,3,4,5,6,7,8,9,10});
+	TEST_init_hack(tc::vector, int, exp, {1,2,3,4,5,6,7,8,9,10});
 
 	auto gv = make_generator_range(v);
 
@@ -113,36 +127,36 @@ UNITTESTDEF( for_each ) {
 
 
 //---- test break behavior  ---------------------------------------------------------------------------------------------------
-	struct iterate {
-		break_or_continue generator_break_consumer_break(function< break_or_continue(int) > func) const {
+	struct iterate final {
+		break_or_continue generator_break_consumer_break(function< break_or_continue(int) > func) const noexcept {
 			for(int i = 1; i<11; ++i) {
 				if(func(i) == break_) { return break_; }
 			}
 			return continue_;
 		}
 
-		break_or_continue generator_break_consumer_nobreak(std::function<void (int)> func) const {
+		break_or_continue generator_break_consumer_nobreak(std::function<void (int)> func) const noexcept {
 			for(int i = 1; i<11; ++i) {
 				func(i);
 			}
 			return continue_;
 		}
 
-		void generator_nobreak_consumer_nobreak(std::function<void (int)> func) const {
+		void generator_nobreak_consumer_nobreak(std::function<void (int)> func) const noexcept {
 			for(int i = 1; i<11; ++i) {
 				func(i);
 			}
 			return;
 		}
 
-		void generator_nobreak_consumer_break_correct(function< break_or_continue(int) > func) const {
+		void generator_nobreak_consumer_break_correct(function< break_or_continue(int) > func) const noexcept {
 			for(int i = 1; i<11; ++i) {
 				if(func(i) == break_) { return; }
 			}
 			return;
 		}
 
-		void generator_nobreak_consumer_break_incorrect(function< break_or_continue(int) > func) const {
+		void generator_nobreak_consumer_break_incorrect(function< break_or_continue(int) > func) const noexcept {
 			for(int i = 1; i<11; ++i) {
 				func(i);
 			}
@@ -150,21 +164,21 @@ UNITTESTDEF( for_each ) {
 		}
 	};
 
-	struct consumer_break {
-		consumer_break(std::vector<int> const& v, std::size_t break_at = 0, bool expect_break = true) : m_mock(v, break_at, expect_break) {}
+	struct consumer_break final {
+		consumer_break(tc::vector<int> const& v, std::size_t break_at = 0, bool expect_break = true) noexcept : m_mock(v, break_at, expect_break) {}
 
-		break_or_continue operator()(int i) { return m_mock(i); }
+		break_or_continue operator()(int i) noexcept { return m_mock(i); }
 		private:
 			all_called_mock m_mock;
 	};
 
-	struct consumer_nobreak {
-		consumer_nobreak(std::vector<int> const& v, std::size_t break_at = 0, bool expect_break = true) : m_mock(v, break_at, expect_break), m_accu(0) {}
+	struct consumer_nobreak final {
+		consumer_nobreak(tc::vector<int> const& v, std::size_t break_at = 0, bool expect_break = true) noexcept : m_mock(v, break_at, expect_break), m_accu(0) {}
 		~consumer_nobreak() {}
 
-		void operator()(int i) { m_mock(i); m_accu += i; }
+		void operator()(int i) noexcept { m_mock(i); m_accu += i; }
 
-		operator int() { return m_accu; }
+		operator int() noexcept { return m_accu; }
 
 		private:
 			all_called_mock m_mock;
@@ -173,9 +187,9 @@ UNITTESTDEF( for_each ) {
 
 //-----------------------------------------------------------------------------------------------------------------------------
 UNITTESTDEF( break_behavior ) {
-	using namespace RANGE_PROPOSAL_NAMESPACE;
+	using namespace tc;
 
-	TEST_init_hack(std::vector, int, exp, {1,2,3,4,5,6,7,8,9,10});
+	TEST_init_hack(tc::vector, int, exp, {1,2,3,4,5,6,7,8,9,10});
 
 	// call on various implicit ranges
 	for_each(std::bind(&iterate::generator_break_consumer_break, iterate(), std::placeholders::_1), consumer_break(exp, 4));
@@ -202,24 +216,24 @@ UNITTESTDEF(for_each_adjacent_triple_initialization_order) {
 
 #ifdef _CHECKS
 
-	struct lr_overloads{
+	struct lr_overloads final{
 		std::array<int,3> m_n;
 
-		lr_overloads() {
+		lr_overloads() noexcept {
 			m_n[0] = 0;
 			m_n[1] = 0;
 			m_n[2] = 0;
 		}
 
-		void operator()(int const&, int const&, int const&) { ++m_n[0];}
-		void operator()(int&&, int const&, int const&) { ++m_n[1]; }
-		void operator()(int&&, int&&, int&&) { ++m_n[2]; }
+		void operator()(int const&, int const&, int const&) noexcept { ++m_n[0];}
+		void operator()(int&&, int const&, int const&) noexcept { ++m_n[1]; }
+		void operator()(int&&, int&&, int&&) noexcept { ++m_n[2]; }
 	};
 #endif
 
 UNITTESTDEF(for_each_adjacent_triple_deref) {
-	std::vector<int> vecn{0,0,0,0,0};
-	tc::for_each_adjacent_triple(
+	tc::vector<int> vecn{0,0,0,0,0};
+	tc::for_each_adjacent_tuple<3>(
 		vecn,
 		[](int& n0, int& n1, int& n2) {
 			++n0;
@@ -234,7 +248,7 @@ UNITTESTDEF(for_each_adjacent_triple_deref) {
 	);
 
 	int nTransforms = 0;
-	tc::for_each_adjacent_triple(
+	tc::for_each_adjacent_tuple<3>(
 		tc::transform(
 			vecn,
 			[&](int n) {++nTransforms; return n;}
@@ -249,7 +263,7 @@ UNITTESTDEF(for_each_adjacent_triple_deref) {
 
 	{
 		lr_overloads overloads;
-		tc::for_each_adjacent_triple(
+		tc::for_each_adjacent_tuple<3>(
 			vecn,
 			std::ref(overloads)
 		);
@@ -259,7 +273,7 @@ UNITTESTDEF(for_each_adjacent_triple_deref) {
 
 	{
 		lr_overloads overloads;
-		tc::for_each_adjacent_triple(
+		tc::for_each_adjacent_tuple<3>(
 			tc::transform(vecn, [](int n) {return n;}),
 			std::ref(overloads)
 		);
@@ -270,8 +284,8 @@ UNITTESTDEF(for_each_adjacent_triple_deref) {
 
 
 UNITTESTDEF(for_each_ordered_pair) {
-	std::vector<int> vecn{1,2,3,4};
-	std::vector<std::pair<int, int>> vecpairnn;
+	tc::vector<int> vecn{1,2,3,4};
+	tc::vector<std::pair<int, int>> vecpairnn;
 	tc::for_each_ordered_pair(
 		vecn,
 		std::bind(mem_fn_emplace_back(), std::ref(vecpairnn), std::placeholders::_1, std::placeholders::_2)

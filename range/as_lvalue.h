@@ -12,24 +12,16 @@
 // If not, see <http://www.gnu.org/licenses/>. 
 //-----------------------------------------------------------------------------------------------------------------------------
 
-#include "range.h"
-#include "range.t.h"
+#pragma once
 
-namespace {
-	void static_tests() noexcept {
-		auto rngSize = tc::transform(tc::vector<int>(), [](int) { return 0; });
-		static_assert(tc::size_impl::has_size<decltype(rngSize)>::value, "");
+namespace tc {
+/*	template< typename T >
+	T& as_lvalue( T& t ) noexcept {
+		return t;
+	}*/
 
-		auto rngNoSize = tc::transform(tc::filter(tc::vector<int>(), [](int){ return false; }), [](int) { return 0; });
-		static_assert(!tc::size_impl::has_size<decltype(rngNoSize)>::value, "");
+	template< typename T >
+	T& as_lvalue(T&& t) noexcept {
+		return t;
 	}
-}
-
-UNITTESTDEF(vector_int_ref_need_sfinae_transform) {
-	tc::vector<int> vecn{1,2,3};
-	auto rgntrnsfn = tc::transform(vecn, [](int& n) {return n*n;});
-	auto it = boost::begin(rgntrnsfn);
-	_ASSERTEQUAL(*it++,1);
-	_ASSERTEQUAL(*it++,4);
-	_ASSERTEQUAL(*it++,9);
 }

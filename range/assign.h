@@ -1,42 +1,88 @@
+//-----------------------------------------------------------------------------------------------------------------------------
+// think-cell public library
+// Copyright (C) 2016 think-cell Software GmbH
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+//
+// You should have received a copy of the GNU General Public License along with this program. 
+// If not, see <http://www.gnu.org/licenses/>. 
+//-----------------------------------------------------------------------------------------------------------------------------
+
 #pragma once
 #include "functors.h"
-
+#include "return_decltype.h"
 #include <boost/bind.hpp>
 #include <atomic>
 
 /////////////////////////////////////////////////////////////////////
 // comparison functors, required for assign_min/assign_max
 
-#include "return_decltype.h"
-#include <boost/algorithm/string/compare.hpp>
 
 namespace tc {
 
-using fn_less = boost::is_less;
-using fn_less_equal = boost::is_not_greater; // boost implements it as <=
-using fn_equal_to = boost::is_equal;
+////////////////////////////
+// comparison functors
+// Unlike std::less<> et. al., they are special-made for comparisons, so they only use operator== and operator< with constant arguments and expect noexcept and a bool return
+// This avoids types having to support operator> and operator>=, which we do not want to use in our code.
 
-// general functor equivalent of >, do not express as <
-struct fn_greater {
+struct fn_equal_to {
 	template<typename Lhs, typename Rhs>
-	auto operator()( Lhs&& lhs, Rhs&& rhs ) const
-		return_decltype( std::forward<Lhs>(lhs) > std::forward<Rhs>(rhs) )
+	bool operator()(Lhs const& lhs, Rhs const& rhs) const noexcept {
+		return lhs==rhs;
+	}
+	using is_transparent=void;
 };
 
-// general functor equivalent of >=, do not express as not <
+struct fn_not_equal_to {
+	template<typename Lhs, typename Rhs>
+	bool operator()(Lhs const& lhs, Rhs const& rhs) const noexcept {
+		return !boost::implicit_cast<bool>(lhs == rhs);
+	}
+	using is_transparent = void;
+};
+
+struct fn_less {
+	template<typename Lhs, typename Rhs>
+	bool operator()(Lhs const& lhs, Rhs const& rhs) const noexcept {
+		return lhs<rhs;
+	}
+	using is_transparent = void;
+};
+
 struct fn_greater_equal {
 	template<typename Lhs, typename Rhs>
-	auto operator()( Lhs&& lhs, Rhs&& rhs ) const
-		return_decltype( std::forward<Lhs>(lhs) >= std::forward<Rhs>(rhs) )
+	bool operator()(Lhs const& lhs, Rhs const& rhs) const noexcept {
+		return !boost::implicit_cast<bool>(lhs<rhs);
+	}
+	using is_transparent = void;
 };
 
+struct fn_greater {
+	template<typename Lhs, typename Rhs>
+	bool operator()(Lhs const& lhs, Rhs const& rhs) const noexcept {
+		return rhs<lhs;
+	}
+	using is_transparent = void;
+};
+
+struct fn_less_equal {
+	template<typename Lhs, typename Rhs>
+	bool operator()(Lhs const& lhs, Rhs const& rhs) const noexcept {
+		return !boost::implicit_cast<bool>(rhs<lhs);
+	}
+	using is_transparent = void;
+};
 
 /////////////////////////////////////////////////////////////////////
 // assign
 
-
 template< typename Var, typename Val, typename Better >
-bool assign_better( Var&& var, Val&& val, Better better ) {
+bool assign_better( Var&& var, Val&& val, Better better ) noexcept {
+	static_assert( tc::is_safely_assignable<Var, Val>::value, "" );
 	if( better(VERIFYINITIALIZED(val), VERIFYINITIALIZED(var)) ) {
 		std::forward<Var>(var)=std::forward<Val>(val);
 		return true;
@@ -46,7 +92,7 @@ bool assign_better( Var&& var, Val&& val, Better better ) {
 }
 
 template< typename Var, typename Val, typename Better >
-bool assign_better( std::atomic<Var>& var, Val&& val, Better better ) {
+bool assign_better( std::atomic<Var>& var, Val&& val, Better better ) noexcept {
 	Var varOld=var;
 	_ASSERTINITIALIZED( varOld );
 	while( better(VERIFYINITIALIZED(val), varOld) ) {
@@ -56,34 +102,34 @@ bool assign_better( std::atomic<Var>& var, Val&& val, Better better ) {
 }
 
 template< typename Var, typename Val, typename Better >
-bool assign_better( std::atomic<Var>&& var, Val&& val, Better better ) =delete; // make passing rvalue ref an error
+bool assign_better( std::atomic<Var>&& var, Val&& val, Better better ) noexcept =delete; // make passing rvalue ref an error
 
 template< typename Var, typename Val >
-bool change( Var&& var, Val&& val ) {
+bool change( Var&& var, Val&& val ) noexcept {
 	return tc::assign_better( std::forward<Var>(var), std::forward<Val>(val), !boost::bind<bool>(tc::fn_equal_to(), _2, _1) ); // var==val, not val==var
 }
 
 template< typename Var, typename Val >
-bool change( std::atomic<Var> & var, Val&& val ) {
+bool change( std::atomic<Var> & var, Val&& val ) noexcept {
 	_ASSERTINITIALIZED( val );
 	return !boost::implicit_cast<bool>( var.exchange(val)==val );
 }
 
 template< typename Var, typename Val >
-bool change( std::atomic<Var>&& var, Val&& val ); // make passing rvalue ref a linker error
+bool change( std::atomic<Var>&& var, Val&& val ) noexcept; // make passing rvalue ref a linker error
 
 template< typename Var, typename Val >
-bool assign_max( Var&& var, Val&& val ) {
-	return tc::assign_better( std::forward<Var>(var), std::forward<Val>(val), boost::bind<bool>( tc::fn_less(), _2, _1 ) ); // use operator< for comparison just like std::min/max
+bool assign_max( Var&& var, Val&& val ) noexcept {
+	return tc::assign_better( std::forward<Var>(var), std::forward<Val>(val), tc::fn_greater() ); // use operator< for comparison just like std::min/max
 }
 
 template< typename Var, typename Val >
-bool assign_min( Var&& var, Val&& val ) {
+bool assign_min( Var&& var, Val&& val ) noexcept {
 	return tc::assign_better( std::forward<Var>(var), std::forward<Val>(val), tc::fn_less() );
 }
 
 template<typename Var, typename Val>
-void change_with_or(Var&& var, Val&& val, bool& bChanged) {
+void change_with_or(Var&& var, Val&& val, bool& bChanged) noexcept {
 	// accessing an uninitialized variable is undefined behavior, so don't compare for equality if var is uninitialized!
 	if( VERIFYINITIALIZED(bChanged) ) {
 		_ASSERTINITIALIZED( val );
@@ -94,7 +140,7 @@ void change_with_or(Var&& var, Val&& val, bool& bChanged) {
 }
 
 template< typename Var, typename Val, typename Func >
-bool assign_max_if_impl( Var&& var, Val&& val, Func func ) {
+bool assign_max_if_impl( Var&& var, Val&& val, Func func ) noexcept {
 	return tc::assign_better( std::forward<Var>(var), std::forward<Val>(val), [&func](Val const& val, Var const& var) { return var < val && tc::bool_cast(func()); } );
 }
 
@@ -114,13 +160,13 @@ DEFINE_FN( assign_better );
 // https://connect.microsoft.com/VisualStudio/feedback/ViewFeedback.aspx?FeedbackID=518015&ppud=0&wa=wsignin1.0
 
 template< typename Lhs, typename Rhs >
-bool binary_equal( Lhs const& lhs, Rhs const& rhs ) {
+bool binary_equal( Lhs const& lhs, Rhs const& rhs ) noexcept {
 	static_assert( sizeof(lhs)==sizeof(rhs), "" );
 	return 0==std::memcmp(std::addressof(lhs),std::addressof(rhs),sizeof(lhs));
 }
 
 template< typename Dst, typename Src >
-bool binary_change( Dst& dst, Src const& src ) {
+bool binary_change( Dst& dst, Src const& src ) noexcept {
 	static_assert( sizeof(Dst)==sizeof(src), "" );
 	if( !binary_equal(dst,src) ) {
 		std::memcpy(std::addressof(dst),std::addressof(src),sizeof(dst));
@@ -132,7 +178,7 @@ bool binary_change( Dst& dst, Src const& src ) {
 
 #define change_for_float( TFloat ) \
 template< typename S > \
-bool change( TFloat& tVar, S&& sValue ) { \
+bool change( TFloat& tVar, S&& sValue ) noexcept { \
 	TFloat const fNAN=std::numeric_limits<TFloat>::quiet_NaN(); \
 	_ASSERTINITIALIZED( tVar ); \
 	_ASSERT( !std::isnan( tVar ) || binary_equal(tVar,fNAN) ); \

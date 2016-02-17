@@ -1,8 +1,23 @@
+//-----------------------------------------------------------------------------------------------------------------------------
+// think-cell public library
+// Copyright (C) 2016 think-cell Software GmbH
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+//
+// You should have received a copy of the GNU General Public License along with this program. 
+// If not, see <http://www.gnu.org/licenses/>. 
+//-----------------------------------------------------------------------------------------------------------------------------
+
 #pragma once
 
 #include "range_defines.h"
 #include "range_fwd.h"
 #include "remove_cvref.h"
+#include "type_traits.h"
 #include "functors.h"
 
 #include <boost/range/value_type.hpp>
@@ -11,35 +26,46 @@
 #include <string>
 #include <ctype.h>
 
-namespace RANGE_PROPOSAL_NAMESPACE {
+namespace tc {
 	template<typename T>
-	std::size_t strlen( T const* pt ) {
+	std::size_t strlen( T const* pt ) noexcept {
 		return std::char_traits<T>::length(pt);
 	}
 
 	// cast may not be necessary, but let's avoid problems even in case of user-defined T
 	template< typename T >
-	bool isasciidigit( T ch ) {
+	bool isasciidigit( T ch ) noexcept {
 		return tc::char_cast<T>('0')<=ch && ch<=tc::char_cast<T>('9');
 	}
 
 	template< typename T >
-	bool isasciiupper( T ch ) {
+	bool isasciiupper( T ch ) noexcept {
 		return tc::char_cast<T>('A')<=ch && ch<=tc::char_cast<T>('Z');
 	}
 
 	template< typename T >
-	bool isasciilower( T ch ) {
+	bool isasciilower( T ch ) noexcept {
 		return tc::char_cast<T>('a')<=ch && ch<=tc::char_cast<T>('z');
 	}
 
 	template< typename T >
-	bool isasciicntrl( T ch ) {
+	bool isasciicntrl( T ch ) noexcept {
 		return tc::char_cast<T>('\0')<=ch && ch<=tc::char_cast<T>('\x1f') || tc::char_cast<T>('\x7f')==ch;
+	}
+
+	template< typename T >
+	bool isasciiblank( T ch ) noexcept {
+		return tc::char_cast<T>('\t')==ch || tc::char_cast<T>(' ')==ch;
+	}
+
+	template< typename T >
+	bool isasciispace( T ch ) noexcept {
+		return tc::isasciiblank(ch) || 
+			tc::char_cast<T>('\xa')<=ch && ch<=tc::char_cast<T>('\xd'); // \n, \v, \f, \r
 	}
 	
 	template< typename T >
-	T toasciiupper( T ch ) {
+	T toasciiupper( T ch ) noexcept {
 		if( isasciilower(ch) ) {
 			return tc::sub( ch, 'a'-'A' );
 		} else {
@@ -47,7 +73,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		}
 	}
 	template< typename T >
-	T toasciilower( T ch ) {
+	T toasciilower( T ch ) noexcept {
 		if( isasciiupper(ch) ) {
 			return tc::add( ch, 'a'-'A' );
 		} else {
@@ -58,7 +84,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	DEFINE_FN(toasciilower)
 	DEFINE_FN(toasciiupper)
 
-	template< class T >
+	template< typename T >
 	struct range_value : boost::range_value<T> {};
 }
 
@@ -164,34 +190,14 @@ namespace boost {
 
 #include <boost/range/has_range_iterator.hpp>
 
-namespace RANGE_PROPOSAL_NAMESPACE {
-	namespace is_char_detail {
-		template< typename T >
-		struct is_char: std::false_type {};
-		template<>
-		struct is_char<char>: std::true_type {};
-		template<>
-		struct is_char<wchar_t>: std::true_type {};
-#ifndef BOOST_NO_CXX11_CHAR16_T
-		template<>
-		struct is_char<char16_t>: std::true_type {};
-#endif
-#ifndef BOOST_NO_CXX11_CHAR32_T
-		template<>
-		struct is_char<char32_t>: std::true_type {};
-#endif
-	}
-	template< typename T >
-	struct is_char: is_char_detail::is_char< typename std::remove_cv< T >::type > {};
-
+namespace tc {
 	namespace is_range_with_iterators_detail {
 
 		template< typename Rng >
-		struct is_range_with_iterators : boost::mpl::or_<
-				boost::has_range_const_iterator<Rng>,
-				boost::has_range_iterator<Rng>
-			>::type
-		{};
+		struct is_range_with_iterators : std::integral_constant< bool,
+			boost::has_range_const_iterator<Rng>::value ||
+			boost::has_range_iterator<Rng>::value
+		> {};
 
 		template<typename T>
 		struct is_range_with_iterators<T*> : tc::is_char<T>::type {};
@@ -223,15 +229,9 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	struct is_range_of : is_range_of_impl::is_range_of1< tc::remove_cvref_t<Rng>, Pred > {};
 
 	template<typename Rng>
-	struct is_char_range : is_range_of<Rng, is_char> {};
+	struct is_char_range final : is_range_of<Rng, is_char> {};
 
 	static_assert( is_char_range<wchar_t const* const>::value, "" );
-
-	template< typename T >
-	struct is_decayed : std::is_same< T, std::decay_t<T> >::type {};
-
-	template<typename T>
-	struct is_non_char_integral : std::integral_constant< bool, std::is_integral<T>::value && !tc::is_char<T>::value > {};
 
 	//////////////////////////////
 	// Traversables are either containers or ranges, which are references to consecutive elements in containers.
@@ -265,11 +265,11 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	template<typename T>
 	struct is_range_impl : is_range_impl2<T, tc::is_range_with_iterators<T>::value >::type {};
 	template<typename It>
-	struct const_range<boost::iterator_range<It>> {
+	struct const_range<boost::iterator_range<It>> final {
 		using type = boost::iterator_range<typename const_iterator_<It>::type>;
 	};
 	template< typename T >
-	struct const_range<boost::sub_range<T>> {
+	struct const_range<boost::sub_range<T>> final {
 		using type = boost::sub_range<T const>;
 	};
 	template<
@@ -279,7 +279,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		, class Difference
 		, class Buffer
 	>
-	struct const_range<boost::any_range<Value,Traversal,Reference,Difference,Buffer>> {
+	struct const_range<boost::any_range<Value,Traversal,Reference,Difference,Buffer>> final {
 		using type = boost::any_range<Value,Traversal,Reference,Difference,Buffer>;
 	};
 	template<
@@ -289,7 +289,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		, class Difference
 		, class Buffer
 	>
-	struct const_range<boost::any_range<Value,Traversal,Reference&,Difference,Buffer>> {
+	struct const_range<boost::any_range<Value,Traversal,Reference&,Difference,Buffer>> final {
 		using type = boost::any_range<Value,Traversal,Reference const&,Difference,Buffer>;
 	};
 
@@ -297,19 +297,19 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	template< typename T >
 	struct is_range_impl<T*> : is_char<T>::type {};
 	template< typename T >
-	struct const_range<T*> {
+	struct const_range<T*> final {
 		using type = T const*;
 	};
 	// sub_ranges are ranges
 	template< typename T >
 	struct is_range_impl<sub_range<T>> : std::true_type {};
 	template< typename T >
-	struct const_range<sub_range<T>> {
+	struct const_range<sub_range<T>> final {
 		// sub_range of another range
 		using type = sub_range<typename const_range<T>::type>;
 	};
 	template< typename T >
-	struct const_range<sub_range<T&>> {
+	struct const_range<sub_range<T&>> final {
 		// sub_range of a container, which is expected to have deep constness.
 		using type = sub_range<T const&>;
 	};
@@ -317,7 +317,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	template< typename It, typename ConstIt >
 	struct is_range_impl<iterator_base<It,ConstIt>> : std::true_type {};
 	template< typename It, typename ConstIt >
-	struct const_range<iterator_base<It,ConstIt>> {
+	struct const_range<iterator_base<It,ConstIt>> final {
 		using type = iterator_base<ConstIt,ConstIt>;
 	};
 
@@ -327,14 +327,14 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 	template< typename T >
 	struct const_range<singleton_range<T&>> {
-		// singleton_range of a container, which is expected to have deep constness.
+		// singleton_range is a container, which is expected to have deep constness.
 		using type = singleton_range<T const&>;
 	};
 	template< typename T >
 	struct is_range_impl<singleton_range<T&>> : std::true_type{};
 
 	template< typename T >
-	struct is_range : is_range_impl< std::decay_t<T> > {};
+	struct is_range final : is_range_impl< std::decay_t<T> > {};
 
 	namespace range_by_value_impl {
 		template< typename T >
@@ -347,19 +347,34 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		};
 	}
 	template< typename T >
-	struct range_by_value {
+	struct range_by_value final {
 		static_assert( !std::is_rvalue_reference<T>::value, "" );
 		using type = typename boost::mpl::eval_if_c< is_range<T>::value
 			, range_by_value_impl::range_by_value_for_range<T>
 			, boost::mpl::identity<T>
 		>::type;
 	};
+
+	template<typename T>
+	using range_by_value_t = typename range_by_value<T>::type;
 	
+	/////////////////////////////////////////////
+	// container type checks
+
+	template< typename T >
+	struct is_basic_string : std::false_type {};
+
+	template< typename Char, typename Alloc >
+	struct is_basic_string<std::basic_string<Char, std::char_traits<Char>, Alloc> > : std::true_type {};
+
+	template< typename T >
+	struct is_vector : std::false_type {};
+
 	/////////////////////////////////////////////
 	// verify_class
 
 	template<typename C>
-	struct verify_class_impl{
+	struct verify_class_impl final{
 		static_assert( std::is_class<C>::value, "not a class!");
 		using type=C;
 	};

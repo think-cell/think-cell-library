@@ -1,7 +1,21 @@
+//-----------------------------------------------------------------------------------------------------------------------------
+// think-cell public library
+// Copyright (C) 2016 think-cell Software GmbH
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+//
+// You should have received a copy of the GNU General Public License along with this program. 
+// If not, see <http://www.gnu.org/licenses/>. 
+//-----------------------------------------------------------------------------------------------------------------------------
+
 #pragma once
 
 #ifndef RANGE_PROPOSAL_BUILD_STANDALONE
-	#include "assert_fwd.h"
+	#include "Library/ErrorReporting/assert_fwd.h"
 #else
 	
     #define _CHECKS
@@ -10,7 +24,7 @@
 		#define _ASSERT(...) assert((__VA_ARGS__))
 	#endif
 	#ifndef _ASSERTE
-		#define _ASSERTE(...) ((void)0)
+		#define _ASSERTE(...) (static_cast<void>(0))
 	#endif
 	#ifndef _ASSERTDEBUG
 		#define _ASSERTDEBUG(...) _ASSERT((__VA_ARGS__))
@@ -37,6 +51,8 @@
 		#define VERIFYINITIALIZED( expr ) (expr)
 	#endif
 	
+	#define MAYTHROW noexcept(false)
+	
 	#include <initializer_list>
 	
 	namespace tc {
@@ -47,19 +63,6 @@
 	}
 
 	#define RANGE_UNITTEST_OUTPUT
-
-	// standalone replacements for assign.h
-	#include <boost/algorithm/string/compare.hpp>
-	namespace tc {
-		using fn_equal_to = boost::is_equal;
-		using fn_less = boost::is_less;
-		using fn_less_equal = boost::is_not_greater; // boost implements it as <=
-	}
-
-	// standalone replacements for functors.h
-	struct fn_logical_not {
-		template<typename Lhs> auto operator()( Lhs&& lhs ) const -> decltype(!std::forward<Lhs>(lhs)) { return !std::forward<Lhs>(lhs); }
-	};
 
     #define SWITCH_NO_DEFAULT( ... ) \
 	switch( __VA_ARGS__ ) { \
@@ -87,12 +90,12 @@
 //
 // see equal.h for a usage example
 
-namespace RANGE_PROPOSAL_NAMESPACE {
-	struct wrong_overload_selected {};
+namespace tc {
+	struct wrong_overload_selected final {};
 }
 
 #define STATIC_ASSERT_OVERLOAD_NOT_SELECTED(NAME, EXPR, MSG, RETURN_T, ...)                                                   \
-	typename std::enable_if< EXPR,  RETURN_T>::type NAME(__VA_ARGS__) {                                                       \
+	std::enable_if_t< EXPR,  RETURN_T> NAME(__VA_ARGS__) noexcept {                                              \
 		static_assert(!(EXPR), MSG);                                                                                          \
 		return std::declval<RETURN_T>();                                                                                      \
 	}

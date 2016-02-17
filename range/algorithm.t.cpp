@@ -1,34 +1,47 @@
-#include "Range.h"
+//-----------------------------------------------------------------------------------------------------------------------------
+// think-cell public library
+// Copyright (C) 2016 think-cell Software GmbH
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+//
+// You should have received a copy of the GNU General Public License along with this program. 
+// If not, see <http://www.gnu.org/licenses/>. 
+//-----------------------------------------------------------------------------------------------------------------------------
+
+#include "range.h"
+#include "container.h" // tc::vector
 #include "range.t.h"
 
-#include <vector>
-
 namespace {
-	using namespace RANGE_PROPOSAL_NAMESPACE;
+	using namespace tc;
 
-	void static_tests() {
-		// copy_range with explicit move constructor
-		struct SMove { explicit SMove(std::vector<int>&&) {} };
-		tc::copy_range<SMove>(std::vector<int>());
+	void static_tests() noexcept {
+		// make_container with explicit move constructor
+		struct SMove { explicit SMove(tc::vector<int>&&) noexcept {} };
+		tc::make_container<SMove>(tc::vector<int>());
 
-		// copy_range with explicit constructor
-		struct SCopy { explicit SCopy(std::vector<int>) {} };
-		tc::copy_range<SCopy>(std::vector<int>());
+		// make_container with explicit constructor
+		struct SCopy { explicit SCopy(tc::vector<int>) noexcept {} };
+		tc::make_container<SCopy>(tc::vector<int>());
 	}
 
 UNITTESTDEF( quantifiers ) {
 
-	std::vector<int> v{1,2,3,4,5,6,7};
+	tc::vector<int> v{1,2,3,4,5,6,7};
 
-	std::vector<int> all_even{2,4,6,8};
-	std::vector<int> all_odd{3,5,7,9};
+	tc::vector<int> all_even{2,4,6,8};
+	tc::vector<int> all_odd{3,5,7,9};
 
 	auto even = [](int i){ return (i%2==0); };
 
 	int const existing_value = 5;
 	int const non_existing_value = 9;
 
-	auto const_range = slice(make_const(v)); TEST_RANGE_LENGTH(const_range, 7);
+	auto const_range = slice(tc::as_const(v)); TEST_RANGE_LENGTH(const_range, 7);
 	
 	_ASSERT( tc::find_first<tc::return_bool>(const_range, existing_value));
 	_ASSERT(!tc::find_first<tc::return_bool>(const_range, non_existing_value));
@@ -47,13 +60,13 @@ UNITTESTDEF( quantifiers ) {
 }
 
 UNITTESTDEF( sort_accumulate_each_unique_range_2 ) {
-	struct SValAccu {
-		SValAccu(int val, int accu) : m_val(val), m_accu(accu) {}
+	struct SValAccu final {
+		SValAccu(int val, int accu) noexcept : m_val(val), m_accu(accu) {}
 		int m_val;
 		int m_accu;
 	};
 	{
-		std::vector< SValAccu > vec;
+		tc::vector< SValAccu > vec;
 		for( int i=0; i < 5; ++i ) {
 			vec.emplace_back( 1, 1 );
 		}
@@ -69,7 +82,7 @@ UNITTESTDEF( sort_accumulate_each_unique_range_2 ) {
 }
 
 UNITTESTDEF( trim_leftright_if ) {
-	std::vector<int> v{1,2,3,4,5,6,7,7,7};
+	tc::vector<int> v{1,2,3,4,5,6,7,7,7};
 	auto rng = trim_left_if(v, [] (int n) {return n<4;});
 	_ASSERT(std::begin(rng) != std::end(rng));
 	_ASSERTEQUAL(tc::size(rng), 6);
@@ -79,19 +92,19 @@ UNITTESTDEF( trim_leftright_if ) {
 UNITTESTDEF( is_sorted ) {
 	{
 		int a[]={0};
-		_ASSERT( boost::range::is_sorted(a) );
+		_ASSERT( tc::is_sorted(a) );
 	}
 	{
 		int a[]={0,0};
-		_ASSERT( boost::range::is_sorted(a) );
+		_ASSERT( tc::is_sorted(a) );
 	}
 	{
 		int a[]={0,1};
-		_ASSERT( boost::range::is_sorted(a) );
+		_ASSERT( tc::is_sorted(a) );
 	}
 	{
 		int a[]={1,0};
-		_ASSERT( !boost::range::is_sorted(a) );
+		_ASSERT( !tc::is_sorted(a) );
 	}
 	{
 		int a[]={0};
@@ -112,7 +125,7 @@ UNITTESTDEF( is_sorted ) {
 }
 
 UNITTESTDEF( make_vector_on_r_vector_is_identity ) {
-	std::vector<int> v{1,2,3};
+	tc::vector<int> v{1,2,3};
 	auto pvecdata = v.data();
 
 	auto vNew = tc::make_vector(tc_move(v));
@@ -120,9 +133,9 @@ UNITTESTDEF( make_vector_on_r_vector_is_identity ) {
 }
 
 UNITTESTDEF(find_closest_if) {
-	struct IntCompareOnce : boost::noncopyable {
-		IntCompareOnce(int n) :m_n(n), m_bCompared(false) { }
-		bool operator==(int n) const {
+	struct IntCompareOnce final : boost::noncopyable {
+		IntCompareOnce(int n) noexcept :m_n(n), m_bCompared(false) { }
+		bool operator==(int n) const noexcept {
 			_ASSERT( change(m_bCompared, true) );
 			return m_n==n;
 		}
@@ -133,7 +146,7 @@ UNITTESTDEF(find_closest_if) {
 
 	auto find=[](auto const& rngn, int iStart, int nTarget, int nComparisonsMax) {
 		int nComparisons = 0;
-		return tc::find_closest_if<tc::return_index_or_npos>(rngn, tc::begin_next(rngn,iStart), [&](IntCompareOnce const& n) {
+		return tc::find_closest_if<tc::return_element_index_or_npos>(rngn, tc::begin_next(rngn,iStart), [&](IntCompareOnce const& n) {
 			_ASSERT(++nComparisons<=nComparisonsMax);
 			return n==nTarget;
 		});
@@ -148,11 +161,11 @@ UNITTESTDEF(find_closest_if) {
 }
 
 UNITTESTDEF(rangefilter_on_subrange) {
-	std::vector<int> vecn={2,3,3,0, /*rngn starts here*/ 3,4,5,6,4,5,6,7};
+	tc::vector<int> vecn={2,3,3,0, /*rngn starts here*/ 3,4,5,6,4,5,6,7};
 	auto rngn=tc::drop_first(vecn, 4);
 
 	{
-		tc::sort_unique_inplace(rngn); // uses range_filter<tc::sub_range<std::vector<int>&> > internally
+		tc::sort_unique_inplace(rngn); // uses range_filter<tc::sub_range<tc::vector<int>&> > internally
 		int const anExpected[]={2,3,3,0, /*rngn starts here*/ 3,4,5,6,7};
 		_ASSERT(tc::equal(vecn, anExpected));
 		_ASSERT(boost::begin(rngn)==tc::begin_next(vecn,4));
@@ -161,7 +174,7 @@ UNITTESTDEF(rangefilter_on_subrange) {
 
 	{
 		{
-			range_filter<tc::sub_range<std::vector<int>&> > filter(rngn);
+			range_filter<tc::sub_range<tc::vector<int>&> > filter(rngn);
 			auto it=boost::begin(rngn);
 			filter.keep(it++);
 			filter.keep(it++);
@@ -178,6 +191,12 @@ UNITTESTDEF(rangefilter_on_subrange) {
 		_ASSERT(boost::begin(rngn)==tc::begin_next(vecn,4));
 		_ASSERT(boost::end(rngn)==boost::end(vecn));
 	}
+}
+
+UNITTESTDEF(is_strictly_sorted){
+	int an[]={0,1,2,3,4,5};
+	_ASSERT(tc::is_strictly_sorted(an));
+	_ASSERT(!tc::is_strictly_sorted(tc::reverse(an)));
 }
 
 }

@@ -1,10 +1,22 @@
+//-----------------------------------------------------------------------------------------------------------------------------
+// think-cell public library
+// Copyright (C) 2016 think-cell Software GmbH
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+//
+// You should have received a copy of the GNU General Public License along with this program. 
+// If not, see <http://www.gnu.org/licenses/>. 
+//-----------------------------------------------------------------------------------------------------------------------------
+
 #pragma once
 
 #include <type_traits>
 
-#define RANGE_PROPOSAL_NAMESPACE tc   // Todo: make this work with different names
-
-namespace RANGE_PROPOSAL_NAMESPACE {
+namespace tc {
 	template< typename T >
 	struct is_range;
 	
@@ -33,17 +45,17 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	struct make_sub_range_result;
 
 	template<typename T>
-	bool bool_cast(T const& t){
+	bool bool_cast(T const& t) noexcept {
 		static_assert( std::is_pointer<T>::value || std::is_class<T>::value || std::is_same<T,bool>::value, "");
 		return static_cast<bool>( VERIFYINITIALIZED(t) );
 	}
 
-	struct bool_context {
+	struct bool_context final {
 		template< typename T >
-		bool_context(T const& t)
+		bool_context(T const& t) noexcept
 			: m_b(tc::bool_cast(t))
 		{}
-		operator bool() const { return m_b; }
+		operator bool() const noexcept { return m_b; }
 	private:
 		bool const m_b;
 	};

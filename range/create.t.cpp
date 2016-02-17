@@ -1,19 +1,33 @@
-#include "Range.h"
+//-----------------------------------------------------------------------------------------------------------------------------
+// think-cell public library
+// Copyright (C) 2016 think-cell Software GmbH
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+//
+// You should have received a copy of the GNU General Public License along with this program. 
+// If not, see <http://www.gnu.org/licenses/>. 
+//-----------------------------------------------------------------------------------------------------------------------------
+
+#include "range.h"
+#include "container.h" // tc::vector
 #include "range.t.h"
 
 #include <string>
-#include <vector>
 #include <forward_list>
 
 namespace {
-	using namespace RANGE_PROPOSAL_NAMESPACE;
+	using namespace tc;
 
 UNITTESTDEF( create_range ) {
 	
 	int arr[] = {1,2,3,4,5,6,7};  UNUSED_TEST_VARIABLE(arr);
-	std::vector<int> v {1,2,3,4,5,6,7,8};
+	tc::vector<int> v {1,2,3,4,5,6,7,8};
 	std::forward_list<int> l {1,2,3,4,5,6,7,8,9};
-	std::vector<int> exp_sub_r {3,4,5};
+	tc::vector<int> exp_sub_r {3,4,5};
 
 	char const* cch = "char const*"; UNUSED_TEST_VARIABLE(cch);
 	char ach[] = "char*";

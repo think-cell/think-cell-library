@@ -1,27 +1,40 @@
+//-----------------------------------------------------------------------------------------------------------------------------
+// think-cell public library
+// Copyright (C) 2016 think-cell Software GmbH
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+//
+// You should have received a copy of the GNU General Public License along with this program. 
+// If not, see <http://www.gnu.org/licenses/>. 
+//-----------------------------------------------------------------------------------------------------------------------------
+
 #pragma once
-#include "Range.h"
+#include "range.h"
+#include "container.h" // tc::vector
 
-#include <vector>
-
-namespace RANGE_PROPOSAL_NAMESPACE {
+namespace tc {
 
 	// this is for testing only, equivalent to slice(rng, begin(rng), end(rng)), but also works correctly on temporaries
 	template< typename Rng >
-	typename make_sub_range_result< Rng >::type slice(Rng&& rng) {
+	typename make_sub_range_result< Rng >::type slice(Rng&& rng) noexcept {
 		return typename make_sub_range_result< Rng >::type( std::forward<Rng>(rng), boost::begin(rng), boost::end(rng) );
 	}
 
 	// Do we want/need something like this as a generic tool?
 	template<typename Rng>
-	auto const_slice(Rng const& rng) return_decltype(slice(rng)) 
+	auto const_slice(Rng const& rng) noexcept return_decltype(slice(rng)) 
 
 
 	// create a generator range that gives the same values as the vector it takes (for testing)
 	template< typename Value_type>
-	struct generator_range_mock {
-		generator_range_mock(std::vector<Value_type> const & v) : m_values(v) {}
+	struct generator_range_mock final {
+		generator_range_mock(tc::vector<Value_type> const& v) noexcept : m_values(v) {}
 
-		template< typename Func > break_or_continue operator()(Func func) {
+		template< typename Func > break_or_continue operator()(Func func) noexcept {
 			break_or_continue bc=continue_;
 			auto const itEnd=boost::end(m_values);
 			for( auto it=boost::begin(m_values);
@@ -30,7 +43,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			return bc;
 		}
 
-		template< typename Func > break_or_continue operator()(Func func) const {
+		template< typename Func > break_or_continue operator()(Func func) const noexcept {
 			break_or_continue bc=continue_;
 			auto const itEnd=boost::end(m_values);
 			for( auto it=boost::begin(m_values);
@@ -39,12 +52,12 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			return bc;
 		}
 	private:
-		std::vector<Value_type> m_values;
+		tc::vector<Value_type> m_values;
 	
 	};
 
 	template< typename Value_type > 
-	generator_range_mock<Value_type> make_generator_range( std::vector<Value_type> const& v ) {
+	generator_range_mock<Value_type> make_generator_range( tc::vector<Value_type> const& v ) noexcept {
 		return generator_range_mock<Value_type>(v);
 	}
 }
@@ -57,7 +70,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 #ifndef RANGE_PROPOSAL_BUILD_STANDALONE
 
-#	include "UnitTest.h"
+#	include "Library/ErrorReporting/UnitTest.h"
 
 #else
 
@@ -95,13 +108,13 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 #include <ostream>
 #include <sstream>
 
-namespace RANGE_PROPOSAL_NAMESPACE {
+namespace tc {
 	//-------------------------------------------------------------------------------------------------------------------------
 	// print_range - debug helper
 	namespace detail {
 		template<typename OStream>
-		struct print_elem {
-			print_elem(OStream& os_, std::size_t max_elems) : os(os_), elems(max_elems) {} 
+		struct print_elem final {
+			print_elem(OStream& os_, std::size_t max_elems) noexcept : os(os_), elems(max_elems) {} 
 
 			template<typename Elem>
 			break_or_continue operator()(Elem&& e) {
@@ -117,7 +130,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 	}
 
 	template<typename Rng>
-	std::string dbg_print_rng(Rng&& rng, std::size_t max_elems = 50) {
+	std::string dbg_print_rng(Rng&& rng, std::size_t max_elems = 50) noexcept {
 
 		std::stringstream os;
 		os << "[";

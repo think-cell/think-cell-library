@@ -1,3 +1,17 @@
+//-----------------------------------------------------------------------------------------------------------------------------
+// think-cell public library
+// Copyright (C) 2016 think-cell Software GmbH
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+//
+// You should have received a copy of the GNU General Public License along with this program. 
+// If not, see <http://www.gnu.org/licenses/>. 
+//-----------------------------------------------------------------------------------------------------------------------------
+
 #pragma once
 
 #include "range_defines.h"
@@ -8,7 +22,7 @@
 #include <tuple>
 
 
-namespace RANGE_PROPOSAL_NAMESPACE {
+namespace tc {
 
 	namespace sparse_adaptor_adl_barrier {
 
@@ -25,33 +39,33 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		>
 		struct sparse_adaptor<RngPairIndexValue, TValue, false> {
 		protected:
-			reference_or_value< typename index_range<RngPairIndexValue>::type > m_baserng;
+			reference_or_value< index_range_t<RngPairIndexValue> > m_baserng;
 			std::size_t m_nEnd;
 			reference_or_value<TValue> m_default;
 
 		public:
 			template<typename Rhs, typename RHSValue>
-			sparse_adaptor(Rhs&& rngpairIndexValue, std::size_t nEnd, RHSValue&& defaultValue)
-				: m_baserng(reference_or_value< typename index_range<RngPairIndexValue>::type >(std::forward<Rhs>(rngpairIndexValue), aggregate_tag()))
+			sparse_adaptor(Rhs&& rngpairIndexValue, std::size_t nEnd, RHSValue&& defaultValue) noexcept
+				: m_baserng(reference_or_value< index_range_t<RngPairIndexValue> >(std::forward<Rhs>(rngpairIndexValue), aggregate_tag()))
 				, m_nEnd(nEnd)
 				, m_default(std::forward<RHSValue>(defaultValue), aggregate_tag())
 			{}
 
 		private:
 			template<typename Func>
-			struct FSparseRangeInput {
+			struct FSparseRangeInput final {
 				Func& m_func;
 				reference_or_value<TValue> const& m_default;
 				std::size_t& m_n;
 
-				FSparseRangeInput(Func& func, reference_or_value<TValue> const& defaultValue, std::size_t& n) :
+				FSparseRangeInput(Func& func, reference_or_value<TValue> const& defaultValue, std::size_t& n) noexcept :
 					m_func(func),
 					m_default(defaultValue),
 					m_n(n)
 				{}
 
 				template<typename PairIndexValue>
-				auto operator()(PairIndexValue&& pairindexvalue) const -> tc::break_or_continue {
+				auto operator()(PairIndexValue&& pairindexvalue) const MAYTHROW -> tc::break_or_continue {
 					for (; m_n < std::get<0>(pairindexvalue); ++m_n) {
 						RETURN_IF_BREAK(tc::continue_if_not_break(m_func, *m_default));
 					}
@@ -62,7 +76,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 
 		public:
 			template<typename Func>
-			auto operator()(Func func) const -> break_or_continue
+			auto operator()(Func func) const MAYTHROW -> break_or_continue
 			{
 				std::size_t n=0;
 				RETURN_IF_BREAK(tc::for_each(
@@ -80,19 +94,9 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		struct sparse_adaptor_index {
 			std::size_t m_n;
 			typename std::remove_reference<
-				typename index_range<Rng>::type
+				index_range_t<Rng>
 			>::type::index m_idxBase;
 		};
-
-		template<typename RngPairIndexValue, typename DefaultValue>
-		using sparse_adaptor_base = range_iterator_from_index<
-			sparse_adaptor<RngPairIndexValue, DefaultValue>,
-			sparse_adaptor_index<RngPairIndexValue>,
-			typename boost::range_detail::demote_iterator_traversal_tag<
-				boost::iterators::forward_traversal_tag, // could be bidirectional, no use-case yet
-				traversal_t<RngPairIndexValue>
-			>::type
-		>;
 
 		template<
 			typename RngPairIndexValue,
@@ -100,52 +104,55 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		>
 		struct sparse_adaptor<RngPairIndexValue, TValue, true> :
 			sparse_adaptor<RngPairIndexValue, TValue, false>,
-			sparse_adaptor_base<RngPairIndexValue, TValue>
+			range_iterator_from_index<
+				sparse_adaptor<RngPairIndexValue, TValue>,
+				sparse_adaptor_index<RngPairIndexValue>,
+				typename boost::range_detail::demote_iterator_traversal_tag<
+					boost::iterators::forward_traversal_tag, // could be bidirectional, no use-case yet
+					traversal_t<RngPairIndexValue>
+				>::type
+			>
 		{
 			using index=typename sparse_adaptor::index;
 
 			template<typename RhsRngPairIndexValue, typename RHSValue>
-			sparse_adaptor(RhsRngPairIndexValue&& rngpairIndexValue, std::size_t nEnd, RHSValue&& defaultValue) :
+			sparse_adaptor(RhsRngPairIndexValue&& rngpairIndexValue, std::size_t nEnd, RHSValue&& defaultValue) noexcept :
 				sparse_adaptor<RngPairIndexValue, TValue, false>(std::forward<RhsRngPairIndexValue>(rngpairIndexValue), nEnd, std::forward<RHSValue>(defaultValue))
 			{}
 
 		private:
 			using this_type = sparse_adaptor;
-			bool IndexIsDefault(index const& idx) const {
+			bool IndexIsDefault(index const& idx) const noexcept {
 				_ASSERT(idx.m_n < this->m_nEnd);
 				return this->m_baserng->at_end_index(idx.m_idxBase) ||
 					idx.m_n != tc::unsigned_cast(std::get<0>(this->m_baserng->dereference_index(idx.m_idxBase)));
 			}
 
 		public:
-			STATIC_FINAL(begin_index)() const -> index {
+			STATIC_FINAL(begin_index)() const noexcept -> index {
 				return {0, this->m_baserng->begin_index()};
 			}
 
-			STATIC_FINAL(end_index)() const -> index {
+			STATIC_FINAL(end_index)() const noexcept -> index {
 				return {this->m_nEnd, this->m_baserng->end_index()};
 			}
 
-			bool equal_index(index const& lhs, index const& rhs) const {
+			STATIC_FINAL(equal_index)(index const& lhs, index const& rhs) const noexcept -> bool {
 				return lhs.m_n == rhs.m_n;
 			}
 
-			STATIC_FINAL(increment_index)(index& idx) const -> void {
+			STATIC_FINAL(increment_index)(index& idx) const noexcept -> void {
 				if (!IndexIsDefault(idx)) {
 					this->m_baserng->increment_index(idx.m_idxBase);
 				}
 				++idx.m_n;
 			}
 
-			STATIC_FINAL(at_end_index)(index const& idx) const -> bool {
+			STATIC_FINAL(at_end_index)(index const& idx) const noexcept -> bool {
 				return idx.m_n == this->m_nEnd;
 			}
 
-			bool at_begin_index(index const& idx) const {
-				return 0 == idx.m_n;
-			}
-
-			STATIC_FINAL(dereference_index)(index const& idx) const return_decltype(
+			STATIC_FINAL(dereference_index)(index const& idx) const noexcept return_decltype(
 				IndexIsDefault(idx)
 					? *THIS_IN_DECLTYPE m_default
 					: std::get<1>(THIS_IN_DECLTYPE m_baserng->dereference_index(idx.m_idxBase))
@@ -161,8 +168,8 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		typename RngPairIndexValue,
 		typename TValue = typename std::tuple_element<1, typename tc::range_value<RngPairIndexValue>::type>::type
 	>
-	auto sparse_range(RngPairIndexValue&& rngpairindexvalue, std::size_t nsizerng, TValue&& valueDefault = TValue()) return_ctor(
-		sparse_adaptor< typename range_by_value<RngPairIndexValue>::type BOOST_PP_COMMA() TValue >,
+	auto sparse_range(RngPairIndexValue&& rngpairindexvalue, std::size_t nsizerng, TValue&& valueDefault = TValue()) noexcept return_ctor(
+		sparse_adaptor< range_by_value_t<RngPairIndexValue> BOOST_PP_COMMA() TValue >,
 		(std::forward<RngPairIndexValue>(rngpairindexvalue), nsizerng, std::forward<TValue>(valueDefault))
 	)
 }

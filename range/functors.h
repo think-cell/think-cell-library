@@ -1,3 +1,17 @@
+//-----------------------------------------------------------------------------------------------------------------------------
+// think-cell public library
+// Copyright (C) 2016 think-cell Software GmbH
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+//
+// You should have received a copy of the GNU General Public License along with this program. 
+// If not, see <http://www.gnu.org/licenses/>. 
+//-----------------------------------------------------------------------------------------------------------------------------
+
 #pragma once
 
 ////////////////////////////////
@@ -10,12 +24,22 @@
 #include <boost/preprocessor/seq/for_each_i.hpp>
 #include <boost/preprocessor/control/if.hpp>
 
+#include <cmath>
 #include <cstdlib>
+
+#pragma warning(push)
+#pragma warning( disable: 4267 )
+// warning C4267 : 'argument' : conversion from 'size_t' to 'int', possible loss of data
+// _Median(...) causes warning C4267 when difference_type is int and size_t is 64 bit. 
+// Stephan T. Lavavej [stl@exchange.microsoft.com] agrees this is a bug and filed DevDiv#1213041 
+// "<algorithm>: _Median() doesn't handle fancy difference types" to track the problem.
+#include <algorithm>
+#pragma warning(pop)
 
 // DEFINE_FN(func) always defines a function void func(define_fn_dummy)
 // If that function did not exist, -> decltype( func(...) ) would not be
 // a valid statement and clang complains about that.
-struct define_fn_dummy {};
+struct define_fn_dummy final {};
 
 #define DEFINE_FN2( func, name )                                                                      \
 	struct name {                                                                                     \
@@ -65,7 +89,7 @@ struct define_fn_dummy {};
 	};
 
 #define DEFINE_FN( func ) \
-	static void func(define_fn_dummy); \
+	static void func(define_fn_dummy) noexcept; \
 	DEFINE_FN2( func, fn_ ## func ) \
 	DEFINE_MEM_FN( func )
 
@@ -89,7 +113,7 @@ struct define_fn_dummy {};
 
 #define DEFINE_FN_TMPL( func, tmpl ) \
 	template< BOOST_PP_SEQ_FOR_EACH_I( MEM_FN_TEMPLATE_DECLARATION, _, tmpl ) > \
-	static void func(define_fn_dummy); \
+	static void func(define_fn_dummy) noexcept; \
 	DEFINE_FN2_TMPL( func, tmpl ) \
 	DEFINE_MEM_FN_TMPL( func, tmpl )
 
@@ -119,21 +143,21 @@ DEFINE_CAST_(const_cast)
 #undef DEFINE_CAST_
 
 namespace tc {
-	struct fn_subscript {
+	struct fn_subscript final {
 		template<typename Lhs, typename Rhs>
-		auto operator()( Lhs&& lhs, Rhs&& rhs ) const
+		auto operator()( Lhs&& lhs, Rhs&& rhs ) const noexcept
 			return_decltype_rvalue_by_ref( std::forward<Lhs>(lhs)[std::forward<Rhs>(rhs)] )
 	};
 
 	/* indirection operator, aka dereference operator */
-	struct fn_indirection {
+	struct fn_indirection final {
 		template<typename Lhs>
-		auto operator()( Lhs&& lhs ) const
+		auto operator()( Lhs&& lhs ) const noexcept
 			return_decltype_rvalue_by_ref( *std::forward<Lhs>(lhs))
 	};
-	std::true_type returns_reference_to_argument(fn_indirection); // mark as returning reference to argument
+	std::true_type returns_reference_to_argument(fn_indirection) noexcept; // mark as returning reference to argument
 
-	struct fn_logical_not {
+	struct fn_logical_not final {
 		template<typename Lhs>
 		auto operator()( Lhs&& lhs ) const
 			return_decltype_rvalue_by_ref( !std::forward<Lhs>(lhs))

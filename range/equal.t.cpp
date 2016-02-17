@@ -1,18 +1,32 @@
-#include "Range.h"
+//-----------------------------------------------------------------------------------------------------------------------------
+// think-cell public library
+// Copyright (C) 2016 think-cell Software GmbH
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+//
+// You should have received a copy of the GNU General Public License along with this program. 
+// If not, see <http://www.gnu.org/licenses/>. 
+//-----------------------------------------------------------------------------------------------------------------------------
+
+#include "range.h"
 #include "range.t.h"
 
 namespace {
 
 //---- Equal with vector<int> -------------------------------------------------------------------------------------------------
 UNITTESTDEF( equal_vec_int ) {
-	using namespace RANGE_PROPOSAL_NAMESPACE;
+	using namespace tc;
 
-	std::vector<int> ve;
-	std::vector<int> ve_1;
-	TEST_init_hack(std::vector, int, v123, {1,2,3});
-	TEST_init_hack(std::vector, int, v123_1, {1,2,3});
-	TEST_init_hack(std::vector, int, v143, {1,4,3});
-	TEST_init_hack(std::vector, int, v1234, {1,2,3,4});
+	tc::vector<int> ve;
+	tc::vector<int> ve_1;
+	TEST_init_hack(tc::vector, int, v123, {1,2,3});
+	TEST_init_hack(tc::vector, int, v123_1, {1,2,3});
+	TEST_init_hack(tc::vector, int, v143, {1,4,3});
+	TEST_init_hack(tc::vector, int, v1234, {1,2,3,4});
 	
 	TEST_RANGE_EQUAL(ve, ve);
 	TEST_RANGE_EQUAL(ve, ve_1);
@@ -30,10 +44,10 @@ UNITTESTDEF( equal_vec_int ) {
 }
 
 UNITTESTDEF( equal_vec_int_pred ) {
-	using namespace RANGE_PROPOSAL_NAMESPACE;
+	using namespace tc;
 
-	TEST_init_hack(std::vector, int, v123, {1,2,3});
-	TEST_init_hack(std::vector, int, v234, {2,3,4});
+	TEST_init_hack(tc::vector, int, v123, {1,2,3});
+	TEST_init_hack(tc::vector, int, v234, {2,3,4});
 
 	auto ofByOne = [](int rhs, int lhs){ return ((rhs + 1) == lhs); }; // unsymmetrical to uncover wrong order of argument application to the predicate
 
@@ -46,14 +60,14 @@ UNITTESTDEF( equal_vec_int_pred ) {
 //---- Equal with generators --------------------------------------------------------------------------------------------------
 
 UNITTESTDEF( equal_generator ) {
-	using namespace RANGE_PROPOSAL_NAMESPACE;
+	using namespace tc;
 
-	std::vector<int> ve;
-	std::vector<int> ve_1;
-	TEST_init_hack(std::vector, int, v123, {1,2,3});
-	TEST_init_hack(std::vector, int, v123_1, {1,2,3});
-	TEST_init_hack(std::vector, int, v143, {1,4,3});
-	TEST_init_hack(std::vector, int, v1234, {1,2,3,4});
+	tc::vector<int> ve;
+	tc::vector<int> ve_1;
+	TEST_init_hack(tc::vector, int, v123, {1,2,3});
+	TEST_init_hack(tc::vector, int, v123_1, {1,2,3});
+	TEST_init_hack(tc::vector, int, v143, {1,4,3});
+	TEST_init_hack(tc::vector, int, v1234, {1,2,3,4});
 
 	auto ge = make_generator_range(ve);
 	auto g123 = make_generator_range(v123);
@@ -82,10 +96,10 @@ UNITTESTDEF( equal_generator ) {
 }
 
 UNITTESTDEF( equal_generator_pred ) {
-	using namespace RANGE_PROPOSAL_NAMESPACE;
+	using namespace tc;
 
-	TEST_init_hack(std::vector, int, v123, {1,2,3});
-	TEST_init_hack(std::vector, int, v234, {2,3,4});
+	TEST_init_hack(tc::vector, int, v123, {1,2,3});
+	TEST_init_hack(tc::vector, int, v234, {2,3,4});
 
 	auto g123 = make_generator_range(v123);
 	auto g234 = make_generator_range(v234);

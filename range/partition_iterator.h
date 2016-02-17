@@ -1,73 +1,60 @@
+//-----------------------------------------------------------------------------------------------------------------------------
+// think-cell public library
+// Copyright (C) 2016 think-cell Software GmbH
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+//
+// You should have received a copy of the GNU General Public License along with this program. 
+// If not, see <http://www.gnu.org/licenses/>. 
+//-----------------------------------------------------------------------------------------------------------------------------
+
 #pragma once
 
 #include "range_defines.h"
 
-
-#include <boost/iterator/filter_iterator.hpp>
-#include <boost/iterator/indirect_iterator.hpp>
-#include <boost/iterator/reverse_iterator.hpp>
 #include <boost/iterator/transform_iterator.hpp>
-
 #include <boost/algorithm/string/compare.hpp>
-#include <boost/range/algorithm/sort.hpp>
-#include <boost/range/algorithm/reverse.hpp>
-#include <boost/range/adaptor/reversed.hpp>
 #include <boost/range/algorithm/mismatch.hpp>
 
 #include <boost/multi_index/ordered_index.hpp>
 
-#include <boost/shared_container_iterator.hpp>
+#include <functional>
 
-namespace RANGE_PROPOSAL_NAMESPACE {
+namespace tc {
 
 	namespace iterator {
 
-		template<typename It> It middle_point(It const&, It const&);
+		template<typename It> It middle_point(It const&, It const&) noexcept;
 
 		namespace adl {
 			// default forward iterator implementation
 			template<typename It>
 			It 
-			middle_point( It const& itBegin, It const& itEnd ) {
-				static_assert(std::is_same<It, It>::value, "provide more efficient middle_point or apply linear search");
+			middle_point( It const& itBegin, It const& itEnd ) noexcept {
+				// SEnumerateGapConstraints::SEnumerateGapConstraints calls intersect on transforms of counting ranges of tree iterators
+				// intersect calls tc::upper_bound
+				// TODO efficient implementation for tree iterators
+				// static_assert(!std::is_same<It, It>::value, "provide more efficient middle_point or apply linear search");
 				return itBegin;
 			}
 
-			template< typename UnaryPred, typename It >
-			boost::filter_iterator<UnaryPred, It>
-			middle_point( boost::filter_iterator<UnaryPred, It> const& itBegin, boost::filter_iterator<UnaryPred, It> const& itEnd ) {
-				_ASSERT( boost::end(itBegin)==boost::end(itEnd) ); // should point within the same range
-				boost::filter_iterator<UnaryPred, It> itMid( 
-					itBegin.predicate(),
-					tc::iterator::middle_point(
-						itBegin.base(),
-						itEnd.base()
-					),
-					boost::end(itBegin)
-				);
-				if( itMid==itEnd ) {
-					--itMid;
-				}
-				return itMid;
-			}
-
-			template< typename It >
-			boost::indirect_iterator<It>
-			middle_point( boost::indirect_iterator<It> const& itBegin, boost::indirect_iterator<It> const& itEnd ) {
-				_ASSERTNOTIFYFALSE; // untested
-				return boost::indirect_iterator<It>(
-					tc::iterator::middle_point(
-						itBegin.base(),
-						itEnd.base()
-					)
+			template< typename T, typename Traversal, typename Difference >
+			boost::iterators::counting_iterator<T, Traversal, Difference>
+			middle_point(boost::iterators::counting_iterator<T, Traversal, Difference> const& itBegin, boost::iterators::counting_iterator<T, Traversal, Difference> const& itEnd) noexcept {
+				return boost::iterators::counting_iterator<T, Traversal, Difference>(
+					tc::iterator::middle_point(itBegin.base(), itEnd.base())
 				);
 			}
 
 			template< typename It, typename UnaryPred >
-			boost::reverse_iterator<It>
-			middle_point( boost::reverse_iterator<It> const& itBegin, boost::reverse_iterator<It> const& itEnd ) {
-				_ASSERTNOTIFYFALSE; // untested
-				return boost::reverse_iterator<It>(
+			std::reverse_iterator<It>
+			middle_point(std::reverse_iterator<It> const& itBegin, std::reverse_iterator<It> const& itEnd ) noexcept {
+				static_assert(!std::is_same<It, It>::value, "This code has never been tested");
+				return std::reverse_iterator<It>(
 					tc::iterator::middle_point(
 						itEnd.base(),
 						itBegin.base()
@@ -75,9 +62,9 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				);
 			}
 
-			template<typename UnaryFunction, typename It, typename Reference, typename Value>
+/*			template<typename UnaryFunction, typename It, typename Reference, typename Value>
 			boost::transform_iterator<UnaryFunction, It, Reference, Value>
-			middle_point( boost::transform_iterator<UnaryFunction, It, Reference, Value> const& itBegin, boost::transform_iterator<UnaryFunction, It, Reference, Value> const& itEnd ) {
+			middle_point( boost::transform_iterator<UnaryFunction, It, Reference, Value> const& itBegin, boost::transform_iterator<UnaryFunction, It, Reference, Value> const& itEnd ) noexcept {
 				return boost::transform_iterator<UnaryFunction, It, Reference, Value>(
 					tc::iterator::middle_point(
 						itBegin.base(),
@@ -85,7 +72,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 					),
 					itBegin.functor()
 				);
-			}
+			}*/
 
 			// NodeBase is a base type of the multi_index_container's node (internal data
 			// structure used to store elements).
@@ -111,7 +98,7 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				middle_point( 
 					boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<AugmentPolicy, NodeBase> > itBegin,
 					boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<AugmentPolicy, NodeBase> > itEnd
-				)
+				) noexcept
 			#endif
 			{
 				using node_type = boost::multi_index::detail::ordered_index_node<AugmentPolicy, NodeBase>;
@@ -139,8 +126,8 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				TNodeVector vecpnodeEnd=PathToRoot(boost::prior(itEnd).get_node());
 				_ASSERTEQUAL( tc_back(vecpnodeBegin), tc_back(vecpnodeEnd) ); // both paths terminate at the root
 				node_type* pnodeCommon=*boost::prior( boost::mismatch(
-					boost::adaptors::reverse(vecpnodeBegin),
-					boost::adaptors::reverse(vecpnodeEnd)
+					tc::reverse(vecpnodeBegin),
+					tc::reverse(vecpnodeEnd)
 				).first ); // or second, same thing
 				#if defined(BOOST_MULTI_INDEX_ENABLE_SAFE_MODE)
 					return boost::multi_index::safe_mode::safe_iterator<boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<AugmentPolicy, NodeBase> >, OrderedIndex>(pnodeCommon, const_cast<OrderedIndex*>(itBegin.owner()));
@@ -149,34 +136,26 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 				#endif
 			}
 
-			template< typename Container >
-			boost::shared_container_iterator<Container> middle_point( boost::shared_container_iterator<Container> const& itBegin, boost::shared_container_iterator<Container> const& itEnd ) {
-				return boost::shared_container_iterator<Container>(
-					tc::iterator::middle_point( itBegin.base(), itEnd.base() ),
-					itBegin.container_ref
-				);
-			}
-
 			template<typename It>
-			It middle_point_dispatch( It const& itBegin, It const& itEnd, boost::iterators::forward_traversal_tag ) {
+			It middle_point_dispatch( It const& itBegin, It const& itEnd, boost::iterators::forward_traversal_tag ) noexcept {
 				return middle_point(itBegin,itEnd);
 			}
 
 			// default random-access iterator implementation
 			template<typename It>
-			It middle_point_dispatch( It const& itBegin, It const& itEnd, boost::iterators::random_access_traversal_tag ) {
+			It middle_point_dispatch( It const& itBegin, It const& itEnd, boost::iterators::random_access_traversal_tag ) noexcept {
 				return itBegin+(itEnd-itBegin)/2;
 			}
 
 		}
 
 		template<typename It>
-		It middle_point( It const& itBegin, It const& itEnd ) {
+		It middle_point( It const& itBegin, It const& itEnd ) noexcept {
 			return adl::middle_point_dispatch( itBegin, itEnd, typename boost::iterator_traversal<It>::type() );
 		}
 
 		template<typename It, typename UnaryPred>
-		It internal_partition_point( It itBegin, It itEnd, UnaryPred pred ) {
+		It internal_partition_point( It itBegin, It itEnd, UnaryPred pred ) noexcept {
 		#ifdef _DEBUG /* is pred a partitioning? All true must be before all false. */
 			It itPartitionPoint = itBegin;
 			while( itPartitionPoint!=itEnd && pred(itPartitionPoint) ) ++itPartitionPoint;
@@ -201,14 +180,14 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		}
 
 		template<typename It, typename UnaryPred>
-		It partition_point( It itBegin, It itEnd, UnaryPred pred ) {
+		It partition_point( It itBegin, It itEnd, UnaryPred pred ) noexcept {
 			return internal_partition_point( tc_move(itBegin), tc_move(itEnd), [&pred](It it){
 				return pred(*it);
 			} );
 		}
 
 		template<typename It, typename UnaryPred>
-		It partition_pair( It itBegin, It itEnd, UnaryPred pred ) {
+		It partition_pair( It itBegin, It itEnd, UnaryPred pred ) noexcept {
 			_ASSERT( itBegin!=itEnd );
 			--itEnd;
 			return internal_partition_point( tc_move(itBegin), tc_move(itEnd), [&pred](It it){
@@ -224,17 +203,17 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 		// We thus use boost::bind, which with explicit return type does not require any typedefs.
 
 		template< typename It, typename Value, typename UnaryPredicate >
-		It lower_bound(It itBegin,It itEnd,Value const& val,UnaryPredicate&& pred) {
+		It lower_bound(It itBegin,It itEnd,Value const& val,UnaryPredicate&& pred) noexcept {
 			return iterator::partition_point(itBegin,itEnd,boost::bind<bool>(std::forward<UnaryPredicate>(pred),_1,boost::cref(val)));
 		}
 
 		template< typename It, typename Value, typename UnaryPredicate >
-		It upper_bound(It itBegin,It itEnd,Value const& val,UnaryPredicate&& pred) {
+		It upper_bound(It itBegin,It itEnd,Value const& val,UnaryPredicate&& pred) noexcept {
 			return iterator::partition_point(itBegin,itEnd,!boost::bind<bool>(std::forward<UnaryPredicate>(pred),boost::cref(val),_1));
 		}
 
 		template< typename It, typename Value, typename SortPredicate >
-		std::pair<It,It> equal_range(It itBegin,It itEnd,Value const& val,SortPredicate pred) {
+		std::pair<It,It> equal_range(It itBegin,It itEnd,Value const& val,SortPredicate pred) noexcept {
 			// Construct std::pair<It,It> initialized so that transform_iterator functor
 			// does have to be neither default-constructible nor assignable. This is non-standard conformant,
 			// but may be practical.
@@ -242,23 +221,19 @@ namespace RANGE_PROPOSAL_NAMESPACE {
 			return std::pair<It,It>( itEqualBegin, iterator::upper_bound(itEqualBegin,itEnd,val,pred) );
 		}
 
-		// According to http://www.open-std.org/jtc1/sc22/wg21/docs/lwg-defects.html#270
-		// the less-than comparison may be carried out on unequal types. Thus 
-		// we use boost::is_less instead of std::less.
-
 		template< typename It, typename Value >
-		It lower_bound(It itBegin,It itEnd,Value const& val) {
-			return iterator::lower_bound( itBegin, itEnd, val, boost::is_less() );
+		It lower_bound(It itBegin,It itEnd,Value const& val) noexcept {
+			return iterator::lower_bound( itBegin, itEnd, val, std::less<>() );
 		}
 
 		template< typename It, typename Value >
-		It upper_bound(It itBegin,It itEnd,Value const& val) {
-			return iterator::upper_bound( itBegin, itEnd, val, boost::is_less() );
+		It upper_bound(It itBegin,It itEnd,Value const& val) noexcept {
+			return iterator::upper_bound( itBegin, itEnd, val, std::less<>() );
 		}
 
 		template< typename It, typename Value >
-		std::pair<It,It> equal_range(It itBegin,It itEnd,Value const& val) {
-			return iterator::equal_range( itBegin, itEnd, val, boost::is_less() );
+		std::pair<It,It> equal_range(It itBegin,It itEnd,Value const& val) noexcept {
+			return iterator::equal_range( itBegin, itEnd, val, std::less<>() );
 		}
 	}
 	using namespace iterator;

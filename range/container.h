@@ -12,24 +12,15 @@
 // If not, see <http://www.gnu.org/licenses/>. 
 //-----------------------------------------------------------------------------------------------------------------------------
 
-#include "range.h"
-#include "range.t.h"
+#pragma once
+#include <vector>
+#include <boost/container/vector.hpp>
+#include <boost/container/deque.hpp>
 
-namespace {
-	void static_tests() noexcept {
-		auto rngSize = tc::transform(tc::vector<int>(), [](int) { return 0; });
-		static_assert(tc::size_impl::has_size<decltype(rngSize)>::value, "");
+namespace tc {
+	template<typename T, typename Alloc=std::allocator<T> >
+	using vector=boost::container::vector<T,Alloc>;
 
-		auto rngNoSize = tc::transform(tc::filter(tc::vector<int>(), [](int){ return false; }), [](int) { return 0; });
-		static_assert(!tc::size_impl::has_size<decltype(rngNoSize)>::value, "");
-	}
-}
-
-UNITTESTDEF(vector_int_ref_need_sfinae_transform) {
-	tc::vector<int> vecn{1,2,3};
-	auto rgntrnsfn = tc::transform(vecn, [](int& n) {return n*n;});
-	auto it = boost::begin(rgntrnsfn);
-	_ASSERTEQUAL(*it++,1);
-	_ASSERTEQUAL(*it++,4);
-	_ASSERTEQUAL(*it++,9);
+	template<typename T, typename Alloc=std::allocator<T> >
+	using deque=boost::container::deque<T,Alloc>;
 }

@@ -1,3 +1,17 @@
+//-----------------------------------------------------------------------------------------------------------------------------
+// think-cell public library
+// Copyright (C) 2016 think-cell Software GmbH
+//
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+//
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+//
+// You should have received a copy of the GNU General Public License along with this program. 
+// If not, see <http://www.gnu.org/licenses/>. 
+//-----------------------------------------------------------------------------------------------------------------------------
+
 #pragma once
 
 #include <utility>
@@ -11,37 +25,37 @@
 
 #include "index_range.h"
 
-namespace RANGE_PROPOSAL_NAMESPACE {
+namespace tc {
 	template<typename Rng>
-	typename std::enable_if<
-		has_mem_fn_empty<std::decay_t<Rng>>::value,
-	bool >::type empty(Rng const& rng) {
+	std::enable_if_t<
+		has_mem_fn_empty<Rng const>::value,
+	bool > empty(Rng const& rng) noexcept {
 		return rng.empty();
 	}
 
 	template<typename Rng>
-	typename std::enable_if<
-		!has_mem_fn_empty<std::decay_t<Rng>>::value &&
-		is_range_with_iterators<Rng>::value &&
-		!has_index<std::decay_t<Rng>>::value,
-	bool >::type empty(Rng const& rng) {
+	std::enable_if_t<
+		!has_mem_fn_empty<Rng const>::value &&
+		is_range_with_iterators<Rng const>::value &&
+		!has_index<Rng>::value,
+	bool > empty(Rng const& rng) noexcept {
 		return boost::begin(rng)==boost::end(rng);
 	}
 
 	template<typename Rng>
-	typename std::enable_if<
-		!has_mem_fn_empty<std::decay_t<Rng>>::value &&
-		is_range_with_iterators<Rng>::value &&
-		has_index<std::decay_t<Rng>>::value,
-	bool >::type empty(Rng const& rngidx) {
+	std::enable_if_t<
+		!has_mem_fn_empty<Rng const>::value &&
+		is_range_with_iterators<Rng const>::value &&
+		has_index<Rng>::value,
+	bool > empty(Rng const& rngidx) noexcept {
 		return rngidx.at_end_index(rngidx.begin_index());
 	}
 
 	template<typename Rng>
-	typename std::enable_if<
-		!has_mem_fn_empty<std::decay_t<Rng>>::value &&
-		!is_range_with_iterators<Rng>::value,
-	bool >::type empty(Rng const& rng) {
+	std::enable_if_t<
+		!has_mem_fn_empty<Rng const>::value &&
+		!is_range_with_iterators<Rng const>::value,
+	bool > empty(Rng const& rng) noexcept {
 		return continue_==tc::for_each( rng, MAKE_CONSTEXPR_FUNCTION(break_) );
 	}
 
