@@ -2,14 +2,14 @@
 // think-cell public library
 // Copyright (C) 2016 think-cell Software GmbH
 //
-// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
-// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 //
-// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
-// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 //
-// You should have received a copy of the GNU General Public License along with this program. 
-// If not, see <http://www.gnu.org/licenses/>. 
+// You should have received a copy of the GNU General Public License along with this program.
+// If not, see <http://www.gnu.org/licenses/>.
 //-----------------------------------------------------------------------------------------------------------------------------
 
 #include "range.h"
@@ -30,7 +30,7 @@ namespace {
 	//-------------------------------------------------------------------------------------------------------------------------
 	// make_sub_range_result stanity checks
 	namespace sub_range_detail{
-		template< typename Rng > struct make_sub_range_result_tests final { 
+		template< typename Rng > struct make_sub_range_result_tests final {
 			template <typename Lhs, typename Rhs> static void test_const_ref_variants() noexcept {
 				//static_assert(std::is_same< typename make_sub_range_result<Lhs>::type, sub_range<Rhs> >::value, "make_sub_range_result(Rng) gives wrong result");
 				//static_assert(std::is_same< typename make_sub_range_result<Lhs&>::type, sub_range<Rhs&> >::value, "make_sub_range_result(Rng&) gives wrong result");
@@ -71,8 +71,8 @@ namespace {
 	//}
 
 	//void ref_test(SRVI & rng) {
-	//	CSRVI const_rng(rng);  
-	//	SRVI non_const_rng(rng); 
+	//	CSRVI const_rng(rng);
+	//	SRVI non_const_rng(rng);
 	//}
 
 	UNITTESTDEF( sub_range_array ) {
@@ -103,8 +103,8 @@ namespace {
 	}
 
 	void ref_test(SRVI & rng) noexcept {
-		CSRVI const_rng(rng);  
-		SRVI non_const_rng(rng); 
+		CSRVI const_rng(rng);
+		SRVI non_const_rng(rng);
 	}
 
 	UNITTESTDEF( const_sub_range ) {
@@ -118,10 +118,10 @@ namespace {
 		(void) csrvi;
 
 		SRVI non_const_rng(srvi);
-		
+
 		CSRVI const_rng(srvi);
 		//CSRVI const_rng2(tc::as_const(srvi));   // TODO: this fails, but shouldn't! sub_range does detect this, but range_adapter can't cope ...
-		
+
 		//auto sr = as_const(srvi);
 		//auto sr = slice(tc::as_const(srvi));
 		//auto sr = as_const(slice(v, boost::begin(v), boost::end(v))); // ??
@@ -140,7 +140,7 @@ namespace {
 	UNITTESTDEF( sub_sub_range_rvalue ) {
 
 		tc::vector<int> v;
-		
+
 		auto srvi = slice(v);
 		auto csrvi = slice(tc::as_const(v));
 
@@ -180,14 +180,14 @@ namespace {
 
 		TEST_init_hack(tc::vector, int, v, {1,2,3,4,5,6,7,8,9});
 		TEST_init_hack(tc::vector, int, exp36, {4,5,6});
-		
+
 		auto sr = slice(v);
 		auto csr = slice(tc::as_const(v));
 
 		// use range_difference to specify bounds
 		auto ssr1 = tc::slice_by_index(sr, 3, 6);
 		auto cssr1 = tc::slice_by_index(csr, 3, 6);
-		
+
 		//_ASSERTEQUAL(ssr1, exp36);
 		//_ASSERTEQUAL(cssr1, exp36);
 		static_assert(std::is_same<decltype(ssr1), decltype(sr)>::value, "Sub-sub-range does not flatten to sub-range");
@@ -201,13 +201,13 @@ namespace {
 
 		// don't try that at work! - Seriously: sub_range is build to work correctly in a variety of situations,
 		// but normaly it should not be necessary to manualy utter the type. Use slice and make_sub_range_result instead.
-		// if you do need to say the type (e.g. when deducting sth.)  ... 
+		// if you do need to say the type (e.g. when deducting sth.)  ...
 		//_ASSERT(false);
 		auto srvi = sub_range<tc::vector<int>&>(v);                                                      // create a sub range from unrelated range
 		auto ssrvi = sub_range<tc::vector<int>&>(sub_range<tc::vector<int>&>(v));                       // copy sub range
 		//auto s2rvi = sub_range<tc::vector<int>&>(sub_range<sub_range<tc::vector<int>&>>(v));            // flatten sub range
 
-		//auto s3rvi = sub_range<tc::vector<int>&>(sub_range<sub_range<sub_range<tc::vector<int>&>>>(v)); // recursive flatten 
+		//auto s3rvi = sub_range<tc::vector<int>&>(sub_range<sub_range<sub_range<tc::vector<int>&>>>(v)); // recursive flatten
 		//auto s4rvi = sub_range<tc::vector<int>&>(sub_range<sub_range<sub_range<sub_range<tc::vector<int>&>>>>(v));
 
 		// ... make sure to not build sub sub ranges (see below) - those should not occur in the wild.
@@ -361,7 +361,7 @@ namespace {
 			TEST_RANGE_EQUAL(
 				tc::make_initializer_list({ 2 }),
 				tc::untransform(tc::equal_range(rng, 4))
-			)
+			);
 		}
 
 		{
