@@ -30,7 +30,7 @@
 		#define _ASSERTDEBUG(...) _ASSERT((__VA_ARGS__))
 	#endif
 	#ifndef _ASSERTFALSE
-		#define _ASSERTFALSE _ASSERT(false);
+		#define _ASSERTFALSE _ASSERT(false)
 	#endif
 	#ifndef _ASSERTNOTIFYFALSE
 		#define _ASSERTNOTIFYFALSE _ASSERTFALSE
