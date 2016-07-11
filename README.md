@@ -18,4 +18,11 @@ Tested with:
 * clang 3.5
 * msvc 2015
 
+Usage on Windows:
+
+	#define NOMINMAX
+	#include <windows.h>
+	#define RANGE_PROPOSAL_BUILD_STANDALONE
+	#include "range/Range.h"
+
 
