@@ -69,7 +69,7 @@ set(Ranges
 	types.h
 	union_adaptor.h
 	unique_range_adaptor.h
-	Range.h
+	range.h
    )
 source_group(Ranges FILES ${Ranges})
 
