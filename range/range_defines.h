@@ -36,7 +36,7 @@
 		#define _ASSERTNOTIFYFALSE _ASSERTFALSE
 	#endif
 	#ifndef _ASSERTEQUAL
-			#define _ASSERTEQUAL(a, b) assert((a)==(b))
+			#define _ASSERTEQUAL(a, b) _ASSERT((a)==(b))
 	#endif
 	#ifndef _ASSERTINITIALIZED
 		#define _ASSERTINITIALIZED( expr ) (expr)
@@ -53,7 +53,12 @@
 	#ifndef NOBADALLOC
 		#define NOBADALLOC( expr ) (expr)
 	#endif
-
+	#ifndef _ASSERTPRINT
+		#define _ASSERTPRINT(...) _ASSERT((__VA_ARGS__))
+	#endif
+	#ifndef NOEXCEPT
+		#define NOEXCEPT noexcept
+	#endif
 	#define MAYTHROW noexcept(false)
 
 	#include <initializer_list>
