@@ -13,8 +13,9 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 
 #pragma once
+#include "type_traits.h"
 
 namespace tc {
 	template< typename T >
-	using decayed_result_of_t=std::decay_t< std::result_of_t< T > >;
+	using decayed_result_of_t=tc::decay_t< std::result_of_t< T > >;
 }

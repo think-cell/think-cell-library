@@ -46,27 +46,25 @@ namespace tc {
 	using order_t_adl_barrier::order;
 
 	// < involving NAN always returns false, so it is not even a partial order
-	template<typename T>
-	std::enable_if_t<std::is_floating_point<T>::value >
 	// specialization for wchar_t in MSVC does not have has_quiet_NAN:
 	// std::enable_if_t<std::numeric_limits<T>::has_quiet_NAN || std::numeric_limits<T>::has_signaling_NAN >
-	assert_isnan(T const& t) noexcept {
+	template<typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
+	void assert_not_isnan(T const& t) noexcept {
 		_ASSERT( !std::isnan(t) );
 	}
 
-	template<typename T>
-	std::enable_if_t<!std::is_floating_point<T>::value >
 	// specialization for wchar_t in MSVC does not have has_quiet_NAN:
 	// std::enable_if_t<!(std::numeric_limits<T>::has_quiet_NAN || std::numeric_limits<T>::has_signaling_NAN) >
-	assert_isnan(T const& t) noexcept {}
+	template<typename T, std::enable_if_t<!std::is_floating_point<T>::value>* = nullptr>
+	void assert_not_isnan(T const& t) noexcept {}
 }
 
 // not inside tc namespace, so that compare below has no chance seeing tc::compare
 namespace tc_compare_impl {
 	template< typename Lhs, typename Rhs >
 	tc::order compare( Lhs const& lhs, Rhs const& rhs ) noexcept {
-		tc::assert_isnan(lhs);
-		tc::assert_isnan(rhs);
+		tc::assert_not_isnan(lhs);
+		tc::assert_not_isnan(rhs);
 		if( lhs < rhs ) return tc::order::less;
 		else if ( rhs < lhs ) return  tc::order::greater;
 		else return tc::order::equal;
@@ -100,6 +98,7 @@ namespace tc {
 	#define COMPARE_EXPR( expr ) RETURN_IF_NOT_EQUAL( COMPARE_EXPR_BASE(lhs, rhs, expr) )
 	#define COMPARE_EXPR_REVERSE( expr ) RETURN_IF_NOT_EQUAL( COMPARE_EXPR_BASE(rhs, lhs, expr) )
 	#define COMPARE_EXPR_REVERSE_IF( cond, expr ) RETURN_IF_NOT_EQUAL(tc::negate_if(cond, COMPARE_EXPR_BASE(lhs, rhs, expr)))
+	#define COMPARE_EXPR_TIMES_SIGN( expr, sign ) RETURN_IF_NOT_EQUAL( COMPARE_EXPR_BASE(lhs, rhs, expr)*(sign) )
 
 	#define COMPARE_BASE( basetype ) \
 		COMPARE_EXPR( tc::base_cast<basetype>(_) );
@@ -183,21 +182,85 @@ namespace tc {
 		struct projected_impl final
 		{
 		public:
-			std::decay_t<Func> m_func;
-			std::decay_t<Transform> m_transform;
+			tc::decay_t<Func> m_func;
+			tc::decay_t<Transform> m_transform;
 
 		public:
 			template< typename ...Args >
-			auto operator()(Args&& ... args) const MAYTHROW return_decltype(
-				m_func( m_transform( std::forward<Args>(args) )... )
+			auto operator()(Args&& ... args) const& MAYTHROW -> tc::transform_return_t<
+				Func,
+				decltype(m_func(m_transform( std::forward<Args>(args) )...)),
+				decltype(m_transform(std::forward<Args>(args)))...
+			> {
+				return m_func( m_transform( std::forward<Args>(args) )... );
+			}
+		};
+
+		// special case: tc_front is a macro
+		template< typename Func>
+		struct projected_front_impl final
+		{
+		public:
+			tc::decay_t<Func> m_func;
+
+		public:
+			template< typename ...Args >
+			auto operator()(Args&& ... args) const& MAYTHROW return_decltype(
+				m_func( tc_front( std::forward<Args>(args) )... )
 			)
 		};
+
 	}
 
 	template< typename Func, typename Transform >
 	auto projected(Func&& func, Transform&& transform) noexcept return_ctor(
 		projected_impl_adl_barrier::projected_impl<Func BOOST_PP_COMMA() Transform>,{ std::forward<Func>(func), std::forward<Transform>(transform) }
 	)
+
+	template< typename Func>
+	auto projected_front(Func&& func) noexcept return_ctor(
+		projected_impl_adl_barrier::projected_front_impl<Func>,{ std::forward<Func>(func) }
+	)
+
+	///////////////////////////////////
+	// not_fn, will be available in c++17
+
+	namespace not_fn_impl_adl_barrier {
+		template<class F>
+		struct not_fn_t {
+			F f;
+			template<class... Args>
+			auto operator()(Args&&... args) &
+				noexcept(noexcept(!f(std::forward<Args>(args)...)))
+				-> decltype(!f(std::forward<Args>(args)...)) {
+				return !f(std::forward<Args>(args)...);
+			}
+ 
+			// cv-qualified overload for QoI
+			template<class... Args>
+			auto operator()(Args&&... args) const&
+				noexcept(noexcept(!f(std::forward<Args>(args)...)))
+				-> decltype(!f(std::forward<Args>(args)...)) {
+				return !f(std::forward<Args>(args)...);
+			}
+ 
+			template<class... Args>
+			auto operator()(Args&&... args) volatile &
+				noexcept(noexcept(!f(std::forward<Args>(args)...)))
+				-> decltype(!f(std::forward<Args>(args)...)) {
+				return !f(std::forward<Args>(args)...);
+			}
+			template<class... Args>
+			auto operator()(Args&&... args) const volatile &
+				noexcept(noexcept(!f(std::forward<Args>(args)...)))
+				-> decltype(!f(std::forward<Args>(args)...)) {
+				return !f(std::forward<Args>(args)...);
+			}
+		};
+	}
+ 
+	template<class F>
+	not_fn_impl_adl_barrier::not_fn_t<tc::decay_t<F>> not_fn(F&& f) { return { std::forward<F>(f) }; } 
 
 	////////////////////////////////
 	// Provide adapter from 3-way compare to 2-way compare
@@ -207,10 +270,9 @@ namespace tc {
 	private:
 		FCompare m_fnCompare;
 	public:
-		using result_type = bool;
 		F2wayFrom3way() noexcept {} // default-constructible if m_fnCompare is default-constructible, practical for using as STL container comparator template parameter
 		F2wayFrom3way( FCompare fnCompare ) noexcept : m_fnCompare(fnCompare) {}
-		template< typename Lhs, typename Rhs > bool operator()( Lhs&& lhs, Rhs&& rhs ) const noexcept {
+		template< typename Lhs, typename Rhs > bool operator()( Lhs&& lhs, Rhs&& rhs ) const& noexcept {
 			return tc::base_cast<Base>(*this)(m_fnCompare(std::forward<Lhs>(lhs), std::forward<Rhs>(rhs)), tc::order::equal);
 		}
 	};
@@ -223,4 +285,7 @@ namespace tc {
 		return F2wayFrom3way<FCompare, tc::fn_greater>( fnCompare );
 	}
 
+	template< typename FCompare> F2wayFrom3way<FCompare, tc::fn_equal_to> equalfrom3way( FCompare fnCompare ) noexcept {
+		return F2wayFrom3way<FCompare, tc::fn_equal_to>( fnCompare );
+	}
 } // namespace tc

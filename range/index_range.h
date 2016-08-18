@@ -30,7 +30,7 @@
 
 #include <boost/range/iterator_range.hpp>
 
-#ifdef TC_MAC
+#ifdef __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wshorten-64-to-32"
 #else
@@ -38,7 +38,7 @@
 #pragma warning( disable: 4244 )
 #endif
 #include <boost/iterator/counting_iterator.hpp>
-#ifdef TC_MAC
+#ifdef __clang__
 #pragma clang diagnostic pop
 #else
 #pragma warning( pop )
@@ -64,53 +64,6 @@ namespace tc {
 		template<typename It> It middle_point(It const&, It const&) noexcept;
 	}
 
-	template< typename It >
-	struct const_iterator_ final {
-	private:
-		struct wrapper final: public It {
-			using reference=std::conditional_t< std::is_lvalue_reference< typename std::iterator_traits<It>::reference >::value
-				, tc::add_const_also_to_ref_t<
-					typename std::iterator_traits<It>::reference
-				>
-				, typename std::iterator_traits<It>::value_type // TODO
-			>;
-			wrapper() noexcept {}
-			wrapper( It const& rhs ) noexcept
-				: It( rhs )
-			{}
-			wrapper( wrapper const& rhs ) noexcept
-				: It( tc::base_cast<It>(rhs) )
-			{}
-			wrapper& operator=( It const& rhs ) & noexcept {
-				It::operator=( rhs );
-				return *this;
-			}
-			wrapper& operator=( wrapper const& rhs ) & noexcept {
-				It::operator=( tc::base_cast<It>(rhs) );
-				return *this;
-			}
-			reference operator*() const noexcept {
-				return It::operator*();
-			}
-		};
-	public:
-		using type = wrapper;
-	};
-
-	template<typename T>
-	struct const_iterator_<T*> final {
-		using type = T const*;
-	};
-
-	template <
-		typename Incrementable
-		, typename CategoryOrTraversal
-		, typename Difference
-	>
-	struct const_iterator_<boost::iterators::counting_iterator<Incrementable,CategoryOrTraversal,Difference>> final {
-		using type = boost::iterators::counting_iterator<Incrementable,CategoryOrTraversal,Difference>;
-	};
-
 	template< typename It, typename ConstIt > struct iterator_base;
 
 	namespace index_from_iterator_impl {
@@ -126,7 +79,7 @@ namespace tc {
 			index_from_iterator() noexcept {}
 
 			template< typename Rhs >
-			index_from_iterator( Rhs&& rhs, aggregate_tag) noexcept
+			index_from_iterator( aggregate_tag, Rhs&& rhs) noexcept
 			:	m_it( std::forward<Rhs>(rhs) )
 			{}
 			template< typename Rhs >
@@ -147,11 +100,11 @@ namespace tc {
 	using index_from_iterator_impl::index_from_iterator;
 
 	template< typename It >
-	index_from_iterator<std::decay_t<It>> iterator2index( It const& it ) noexcept {
-		return index_from_iterator<std::decay_t<It>>(it, aggregate_tag());
+	index_from_iterator<tc::decay_t<It>> iterator2index( It const& it ) noexcept {
+		return index_from_iterator<tc::decay_t<It>>(aggregate_tag(), it);
 	}
 
-	template< typename It, typename ConstIt=typename const_iterator_<It>::type >
+	template< typename It, typename ConstIt=It >
 	struct iterator_base {
 		using iterator = It;
 		using const_iterator = ConstIt;
@@ -162,11 +115,11 @@ namespace tc {
 		explicit iterator_base( iterator_base<OtherIt,OtherConstIt> const&, std::enable_if_t<
 			std::is_convertible<OtherIt,It>::value && std::is_convertible<OtherConstIt,ConstIt>::value
 		, unused_arg > =unused_arg() ) {};
-		template< typename OtherIt, typename OtherConstIt > std::enable_if_t<
+		template< typename OtherIt, typename OtherConstIt, std::enable_if_t<
 			std::is_convertible<OtherIt,It>::value && std::is_convertible<OtherConstIt,ConstIt>::value
-		, iterator_base& > operator=( iterator_base<OtherIt,OtherConstIt> const& ) & noexcept { return *this; }
+		>* = nullptr> iterator_base& operator=( iterator_base<OtherIt,OtherConstIt> const& ) & noexcept { return *this; }
 */
-		typename std::iterator_traits<iterator>::reference dereference_index(index const& idx) noexcept {
+		typename std::iterator_traits<iterator>::reference dereference_index(index const& idx) & noexcept {
 			return *idx.m_it;
 		}
 
@@ -184,39 +137,39 @@ namespace tc {
 			>::value,
 			typename std::iterator_traits<const_iterator>::reference,
 			typename std::iterator_traits<iterator>::value_type
-		> dereference_index(index const& idx) const noexcept {
+		> dereference_index(index const& idx) const& noexcept {
 			return *idx.m_it;
 		}
 
-		bool equal_index(index const& idxLhs, index const& idxRhs) const noexcept {
+		bool equal_index(index const& idxLhs, index const& idxRhs) const& noexcept {
 			return idxLhs.m_it==idxRhs.m_it;
 		}
 
-		void increment_index(index& idx) const noexcept {
+		void increment_index(index& idx) const& noexcept {
 			++idx.m_it;
 		}
 
-		void decrement_index(index& idx) const noexcept {
+		void decrement_index(index& idx) const& noexcept {
 			--idx.m_it;
 		}
 
-		void advance_index(index& idx, typename std::iterator_traits<iterator>::difference_type d) const noexcept {
+		void advance_index(index& idx, typename std::iterator_traits<iterator>::difference_type d) const& noexcept {
 			idx.m_it+=d;
 		}
 
-		typename std::iterator_traits<iterator>::difference_type distance_to_index(index const& idxLhs, index const& idxRhs) const noexcept {
+		typename std::iterator_traits<iterator>::difference_type distance_to_index(index const& idxLhs, index const& idxRhs) const& noexcept {
 			return idxRhs.m_it-idxLhs.m_it;
 		}
 
-		void middle_point( index & idxBegin, index const& idxEnd ) const noexcept {
+		void middle_point( index & idxBegin, index const& idxEnd ) const& noexcept {
 			idxBegin.m_it=tc::iterator::middle_point( idxBegin.m_it, idxEnd.m_it );
 		}
 
-		iterator make_iterator( index idx ) noexcept {
+		iterator make_iterator( index idx ) & noexcept {
 			return idx.m_it;
 		}
 
-		const_iterator make_iterator( index idx ) const noexcept {
+		const_iterator make_iterator( index idx ) const& noexcept {
 			return idx.m_it;
 		}
 	};
@@ -240,12 +193,15 @@ namespace tc {
 			typename Chain=empty_chain
 		>
 		struct range_generator_from_index : Chain {
+		private:
+			using this_type = range_generator_from_index;
+		public:
 			STATIC_VIRTUAL(begin_index)
 			STATIC_VIRTUAL(end_index)
 			STATIC_VIRTUAL(at_end_index)
 
 			template< typename Func >
-			tc::break_or_continue operator()(Func func) MAYTHROW {
+			tc::break_or_continue operator()(Func func) /* no & */ MAYTHROW {
 				for( auto idx=begin_index();
 					!at_end_index(idx);
 					this->increment_index(idx)
@@ -256,7 +212,7 @@ namespace tc {
 			}
 
 			template< typename Func >
-			tc::break_or_continue operator()(Func func) const MAYTHROW {
+			tc::break_or_continue operator()(Func func) const /* no & */ MAYTHROW {
 				for( auto idx=begin_index();
 					!at_end_index(idx);
 					this->increment_index(idx)
@@ -277,7 +233,7 @@ namespace tc {
 			{}
 
 			template<typename Arg>
-			void operator()(Arg&& arg) noexcept {
+			void operator()(Arg&& arg) & noexcept {
 				static_assert(
 					!std::is_same<
 						decltype(m_func(std::forward<Arg>(arg))),
@@ -297,13 +253,14 @@ namespace tc {
 	struct index_range final {
 	private:
 		struct add_index_interface final : range_generator_from_index< add_index_interface, iterator_base<
-			typename boost::range_iterator< std::remove_reference_t<Rng> >::type,
-			typename boost::range_iterator< std::remove_reference_t<Rng> const >::type
+			typename boost::range_iterator< std::remove_reference_t< typename reference_or_value< Rng >::reference > >::type,
+			typename boost::range_iterator< std::remove_reference_t< typename reference_or_value< Rng >::const_reference > >::type
 		> > {
 		private:
+			using this_type = add_index_interface;
 			// add_index_interface is deliberately not a range itself, e.g., it is missing begin() and end().
 			// Users should use Rng directly instead, and use add_index_interface only to add the index interface.
-			using this_type = add_index_interface;
+			
 		public:
 			using index = typename this_type::index;
 
@@ -311,30 +268,34 @@ namespace tc {
 
 			template< typename Rhs, std::enable_if_t< !tc::is_base_of_decayed< add_index_interface, Rhs >::value>* =nullptr >
 			add_index_interface( Rhs&& rhs ) noexcept
-			:	m_rng( std::forward<Rhs>(rhs), aggregate_tag() )
+			:	m_rng( aggregate_tag(), std::forward<Rhs>(rhs) )
 			{}
 
-			STATIC_FINAL(begin_index)() const noexcept -> index {
-				return index( boost::begin(m_rng.best_access()), aggregate_tag() );
+			STATIC_FINAL(begin_index)() const& noexcept -> index {
+				return index( aggregate_tag(), boost::begin(m_rng.best_access()) );
 			}
 	
-			STATIC_FINAL(end_index)() const noexcept -> index {
-				return index( boost::end(m_rng.best_access()), aggregate_tag() );
+			STATIC_FINAL(end_index)() const& noexcept -> index {
+				return index( aggregate_tag(), boost::end(m_rng.best_access()) );
 			}
 
-			STATIC_FINAL(at_end_index)(index const& idx) const noexcept -> bool {
+			STATIC_FINAL(at_end_index)(index const& idx) const& noexcept -> bool {
 				return this->equal_index( idx, this->end_index() );
 			}
 
-			operator std::remove_reference_t<Rng> &() noexcept {
+			operator typename reference_or_value< Rng >::reference () & noexcept {
 				return *m_rng;
 			}
 
-			operator std::remove_reference_t<Rng> const&() const noexcept {
+			operator typename reference_or_value< Rng >::const_reference () const& noexcept {
 				return *m_rng;
 			}
 		private:
-			reference_or_value< std::conditional_t< std::is_rvalue_reference<Rng>::value, std::remove_reference_t<Rng>, Rng > > m_rng;
+			static_assert(
+				!std::is_rvalue_reference<Rng>::value
+				, "Rng is rvalue reference"
+			);
+			reference_or_value< Rng > m_rng;
 		};
 
 	public:

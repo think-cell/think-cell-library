@@ -13,6 +13,7 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 
 #pragma once 
+#include <type_traits>
 
 namespace tc {
 	template<typename T>
@@ -28,75 +29,64 @@ namespace tc {
 	};
 }
 
-template< typename T, bool bArray=std::is_array<T>::value >
-struct scoped_restorer;
+struct scoped_assign_tag final {};
 
 template< typename T >
-struct scoped_restorer< T, false >: private tc::nonmovable {
+struct scoped_restorer : private tc::nonmovable {
+	static_assert(!std::is_array<std::remove_reference_t<T>>::value, "");
+	static_assert(
+		std::is_lvalue_reference<T>::value,
+		"There may be use cases for non-lvalue types here. "
+		"But this assert has to stay at least until https://connect.microsoft.com/VisualStudio/Feedback/Details/2117239 is fixed"
+	);
 private:
-	T& m_data;
-	T m_dataSaved;
+	std::conditional_t< std::is_lvalue_reference<T>::value,
+		T, // regular reference
+		std::remove_reference_t<T> // proxy, store by value (and not as rvalue reference)
+	> m_data;
+	tc::decay_t<T> m_dataSaved;
 public:
-	scoped_restorer( T& data ) noexcept
-	:	m_data(data), 
+	scoped_restorer( T&& data ) noexcept
+	:	m_data(tc_move_if_owned(data)),
 		m_dataSaved(VERIFYINITIALIZED(data)) {}
-	scoped_restorer(T&& data) noexcept
-	:	m_data(data), 
-		m_dataSaved(VERIFYINITIALIZED(tc_move(data))) {}
+	scoped_restorer( T&& data, scoped_assign_tag ) noexcept
+	:	m_data(tc_move_if_owned(data)),
+		m_dataSaved(tc_move_always(VERIFYINITIALIZED(data))) {}
 	~scoped_restorer() {
 		m_data=tc_move_always(m_dataSaved);
 	}
 	// can be used to access/change saved value
-	T& operator=( T const& t ) & noexcept {
-		return m_dataSaved=t;
+	template<typename T2>
+	scoped_restorer& operator=( T2&& t ) & noexcept {
+		m_dataSaved=std::forward<T2>(t);
+		return *this;
 	}
-	T& operator=(T&& t) & noexcept {
-		return m_dataSaved=tc_move(t);
-	}
-	operator T const&() const noexcept {
+	operator tc::decay_t<T> const& () const& noexcept {
 		return m_dataSaved;
-	}
-};
-
-template< typename T >
-struct scoped_restorer< T, true >: private tc::nonmovable {
-private:
-	T& m_data;
-	T m_dataSaved;
-public:
-	scoped_restorer( T& data ) noexcept
-	:	m_data(data) 
-	{
-		tc::cont_assign( m_dataSaved, data );
-	}
-	scoped_restorer(T&& data) noexcept
-	:	m_data(data) 
-	{
-		tc::cont_assign( m_dataSaved, tc_move(data) );
-	}
-	~scoped_restorer() {
-		tc::cont_assign( m_data, m_dataSaved );
 	}
 };
 
 template< typename T >
 struct scoped_assigner
 :	scoped_restorer<T> {
-	scoped_assigner( T& data, T const& dataSet ) noexcept
-	:	scoped_restorer<T>( tc_move_always(data) )
+	template<typename T2>
+	explicit scoped_assigner( T&& data, T2&& dataSet ) noexcept
+	:	scoped_restorer<T>( tc_move_if_owned(data), scoped_assign_tag{} )
 	{
-		data=dataSet;
+		data=std::forward<T2>(dataSet);
 	}
-	T& operator=( T const& t ) & noexcept {
-		return scoped_restorer<T>::operator=( t );
-	}
-	T& operator=(T&& t) & noexcept {
-		return scoped_restorer<T>::operator=( tc_move(t) );
-	}
+	using scoped_restorer<T>::operator=;
 };
 
-#define restore_after_scope(var) scoped_restorer< std::remove_reference_t<decltype((var))> > UNIQUE_IDENTIFIER(var);
-#define scoped_assign(var,value) scoped_assigner< std::remove_reference_t<decltype((var))> > UNIQUE_IDENTIFIER((var),(value));
+#define restore_after_scope(var) scoped_restorer< decltype((var)) > UNIQUE_IDENTIFIER(var);
+#define scoped_assign(var,value) scoped_assigner< decltype((var)) > UNIQUE_IDENTIFIER((var),(value));
+
+#if _MSC_VER_FULL <= 190023026
+	#define scoped_assign_for_baseclass_member(var,value) scoped_assigner< decltype(var)& > UNIQUE_IDENTIFIER((var),(value));
+	#define restore_after_scope_for_baseclass_member(var) scoped_restorer< decltype(var)& > UNIQUE_IDENTIFIER(var);
+#else
+	#error "should be fixed: https://connect.microsoft.com/VisualStudio/Feedback/Details/2117239"
+#endif
 
 #define scope_exit_counter( unique, ... ) \
 auto BOOST_PP_CAT(scope_exit_lambda_, unique) = [&] { __VA_ARGS__ ; }; \

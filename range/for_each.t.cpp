@@ -50,11 +50,11 @@ namespace {
 			mock_reset();
 		}
 
-		void mock_reset(tc::vector<int> const& v = tc::vector<int>(), std::size_t break_at = 0, bool expect_break = true) noexcept {
-			if(!m_copyed_or_moved_from && !(m_index == std::min(m_expect.size(), (m_expect_break) ? m_break_at + 1 : m_expect.size()))) {
+		void mock_reset(tc::vector<int> const& v = tc::vector<int>(), std::size_t break_at = 0, bool expect_break = true) & noexcept {
+			if(!m_copyed_or_moved_from && !(m_index == tc::min(m_expect.size(), (m_expect_break) ? m_break_at + 1 : m_expect.size()))) {
 				TEST_OUTPUT( << "unexpectedly terminated before index " << m_index
-							 << " went to the expected index " << std::min(m_expect.size(), m_break_at + 1) << '\n');
-				_ASSERT(m_index == std::min(m_expect.size(), m_break_at + 1));
+							 << " went to the expected index " << tc::min(m_expect.size(), m_break_at + 1) << '\n');
+				_ASSERT(m_index == tc::min(m_expect.size(), m_break_at + 1));
 			}
 			m_index = 0;
 			m_expect = v;
@@ -63,7 +63,7 @@ namespace {
 			m_copyed_or_moved_from = false;
 		}
 
-		break_or_continue operator()(int val) noexcept {
+		break_or_continue operator()(int val) & noexcept {
 			if (m_copyed_or_moved_from) {
 				TEST_OUTPUT(<< "used copyed or moved consumer for real work!\n");
 			}
@@ -128,35 +128,35 @@ UNITTESTDEF( for_each ) {
 
 //---- test break behavior  ---------------------------------------------------------------------------------------------------
 	struct iterate final {
-		break_or_continue generator_break_consumer_break(function< break_or_continue(int) > func) const noexcept {
+		break_or_continue generator_break_consumer_break(function< break_or_continue(int) > func) const& noexcept {
 			for(int i = 1; i<11; ++i) {
 				if(func(i) == break_) { return break_; }
 			}
 			return continue_;
 		}
 
-		break_or_continue generator_break_consumer_nobreak(std::function<void (int)> func) const noexcept {
+		break_or_continue generator_break_consumer_nobreak(std::function<void (int)> func) const& noexcept {
 			for(int i = 1; i<11; ++i) {
 				func(i);
 			}
 			return continue_;
 		}
 
-		void generator_nobreak_consumer_nobreak(std::function<void (int)> func) const noexcept {
+		void generator_nobreak_consumer_nobreak(std::function<void (int)> func) const& noexcept {
 			for(int i = 1; i<11; ++i) {
 				func(i);
 			}
 			return;
 		}
 
-		void generator_nobreak_consumer_break_correct(function< break_or_continue(int) > func) const noexcept {
+		void generator_nobreak_consumer_break_correct(function< break_or_continue(int) > func) const& noexcept {
 			for(int i = 1; i<11; ++i) {
 				if(func(i) == break_) { return; }
 			}
 			return;
 		}
 
-		void generator_nobreak_consumer_break_incorrect(function< break_or_continue(int) > func) const noexcept {
+		void generator_nobreak_consumer_break_incorrect(function< break_or_continue(int) > func) const& noexcept {
 			for(int i = 1; i<11; ++i) {
 				func(i);
 			}
@@ -167,7 +167,7 @@ UNITTESTDEF( for_each ) {
 	struct consumer_break final {
 		consumer_break(tc::vector<int> const& v, std::size_t break_at = 0, bool expect_break = true) noexcept : m_mock(v, break_at, expect_break) {}
 
-		break_or_continue operator()(int i) noexcept { return m_mock(i); }
+		break_or_continue operator()(int i) /* no & */ noexcept { return m_mock(i); }
 		private:
 			all_called_mock m_mock;
 	};
@@ -176,9 +176,9 @@ UNITTESTDEF( for_each ) {
 		consumer_nobreak(tc::vector<int> const& v, std::size_t break_at = 0, bool expect_break = true) noexcept : m_mock(v, break_at, expect_break), m_accu(0) {}
 		~consumer_nobreak() {}
 
-		void operator()(int i) noexcept { m_mock(i); m_accu += i; }
+		void operator()(int i) /* no & */ noexcept { m_mock(i); m_accu += i; }
 
-		operator int() noexcept { return m_accu; }
+		operator int() & noexcept { return m_accu; }
 
 		private:
 			all_called_mock m_mock;
@@ -225,9 +225,9 @@ UNITTESTDEF(for_each_adjacent_triple_initialization_order) {
 			m_n[2] = 0;
 		}
 
-		void operator()(int const&, int const&, int const&) noexcept { ++m_n[0];}
-		void operator()(int&&, int const&, int const&) noexcept { ++m_n[1]; }
-		void operator()(int&&, int&&, int&&) noexcept { ++m_n[2]; }
+		void operator()(int const&, int const&, int const&) & noexcept { ++m_n[0];}
+		void operator()(int&&, int const&, int const&) & noexcept { ++m_n[1]; }
+		void operator()(int&&, int&&, int&&) & noexcept { ++m_n[2]; }
 	};
 #endif
 

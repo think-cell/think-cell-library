@@ -45,6 +45,7 @@
 #include "algorithm.h"
 #include "equal.h"
 #include "empty.h"
+#include "minmax.h"
 
 #include "casts.h"
 #include "reference_or_value.h"

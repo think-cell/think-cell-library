@@ -16,48 +16,63 @@
 
 #include "compare.h"
 #include "empty_chain.h"
+#include "type_traits.h"
+#include "return_decltype.h"
+#include <boost/mpl/has_xxx.hpp>
 
 namespace tc {
 	////////////////////////////////////////////////////////////////////////////////////
 	// curiously recurring template patterns mapping comparison operators to compare
-	namespace implements_compare_impl {
+	namespace equality_comparable_adl_barrier {
+		BOOST_MPL_HAS_XXX_TRAIT_DEF(equality_comparable_tag)
 
-		template< typename T, typename B=tc::empty_chain<T> >
-		struct implements_compare_partial : public B {
-			constexpr implements_compare_partial() noexcept {}
-			using B::B;
-			friend bool operator<( T const& lhs, T const& rhs ) noexcept {
-				return tc::compare( lhs, rhs )<tc::order::equal;
+		template< typename Derived >
+		struct equality_comparable {
+			using equality_comparable_tag = void;
+		};
+
+		template< typename Lhs, typename Rhs, std::enable_if_t<
+			has_equality_comparable_tag<Lhs>::value || has_equality_comparable_tag<Rhs>::value
+		>* = nullptr >
+		auto operator!=(Lhs const& lhs, Rhs const& rhs) noexcept return_decltype( !(lhs==rhs) )
+	}
+	using equality_comparable_adl_barrier::equality_comparable;
+
+	namespace implements_compare_adl_barrier {
+		template< typename T >
+		struct implements_compare_partial : public equality_comparable<T> {
+		private:
+			using base_ = equality_comparable<T>;
+		public:
+			using base_::base_;
+
+#pragma push_macro("DEFINE_COMPARISON_OP")
+#define DEFINE_COMPARISON_OP(op) \
+			friend bool operator op( T const& lhs, T const& rhs ) noexcept { \
+				return tc::compare( lhs, rhs ) op tc::order::equal; \
 			}
-			friend bool operator<=( T const& lhs, T const& rhs ) noexcept {
-				return tc::compare( lhs, rhs )<=tc::order::equal;
-			}
+
+			DEFINE_COMPARISON_OP(<)
+			DEFINE_COMPARISON_OP(<=)
 			// prefer < over > and <= over >= in our code
 #if 0
-			friend bool operator>( T const& lhs, T const& rhs ) noexcept {
-				return tc::order::equal<tc::compare( lhs, rhs );
-			}
-			friend bool operator>=( T const& lhs, T const& rhs ) noexcept {
-				return tc::order::equal<=tc::compare( lhs, rhs );
-			}
+			DEFINE_COMPARISON_OP(>)
+			DEFINE_COMPARISON_OP(>=)
 #endif
-			friend bool operator!=( T const& lhs, T const& rhs ) noexcept {
-				return !(lhs == rhs);
-			}
 		};
 
-		template< typename T, typename B=tc::empty_chain<T> >
-		struct implements_compare : implements_compare_partial<T,B> {
+		template< typename T >
+		struct implements_compare : implements_compare_partial<T> {
 		private:
-			using base_ = implements_compare_partial<T,B>;
+			using base_ = implements_compare_partial<T>;
 		public:
-			constexpr implements_compare() noexcept {}
 			using base_::base_;
-			friend bool operator==( T const& lhs, T const& rhs ) noexcept {
-				return tc::order::equal==tc::compare( lhs, rhs );
-			}
+
+			DEFINE_COMPARISON_OP(==)
 		};
+
+#pragma pop_macro("DEFINE_COMPARISON_OP")
 	}
-	using implements_compare_impl::implements_compare;
-	using implements_compare_impl::implements_compare_partial;
+	using implements_compare_adl_barrier::implements_compare;
+	using implements_compare_adl_barrier::implements_compare_partial;
 }

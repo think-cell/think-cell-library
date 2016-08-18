@@ -46,39 +46,28 @@ namespace tc {
 	}
 
 	template< typename T >
-	void renew(T& t) noexcept
-	{
-		// This check is not strict enough. The following struct is !std::is_trivially_default_constructible,
-		// but ctor_default does not initialize n to 0, while ctor_value does:
-		//	struct Foo {
-		//		std::string n; // has user-defined default ctor
-		//		int n; // has no user-defined default ctor
-		//	};
-		// static_assert( std::is_nothrow_default_constructible<T>::value, "");
+	void renew(T& t) noexcept {
 		static_assert(!std::is_trivially_default_constructible<T>::value, "You must decide between ctor_default and ctor_value!");
 		tc::dtor(t);
 		::new (static_cast<void*>(std::addressof(t))) T; // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
 	}
 
 	template< typename T >
-	void renew_default(T& t) noexcept
-	{
+	void renew_default(T& t) noexcept {
 		// static_assert( std::is_nothrow_default_constructible<T>::value, "");
 		tc::dtor(t);
 		::new (static_cast<void*>(std::addressof(t))) T; // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
 	}
 
 	template< typename T >
-	void renew_value(T& t) noexcept
-	{
+	void renew_value(T& t) noexcept	{
 		// static_assert( std::is_nothrow_default_constructible<T>::value, "");
 		tc::dtor(t);
 		::new (static_cast<void*>(std::addressof(t))) T(); // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
 	}
 
 	template<typename T, typename First, typename... Args>
-	T& renew(T& t, First&& first, Args&& ... args) noexcept
-	{
+	T& renew(T& t, First&& first, Args&& ... args) noexcept {
 		// static_assert( std::is_nothrow_constructible<T, First&&, Args&& ...>::value, "");
 		tc::dtor(t);
 		// In C++, new T(...) is direct initialization just like T t(...).
@@ -104,10 +93,10 @@ namespace tc {
 		  We adopt the same policy. \
 		- Values cannot alias. */ \
 		/* check for overlap of memory ranges, most general check for self-assignment I could come up with, even if it does not catch all cases, e.g., heap-allocated memory */ \
-		_ASSERT( std::min( \
+		_ASSERT( tc::min( \
 			reinterpret_cast<std::size_t>(this)+sizeof(*this), \
 			reinterpret_cast<std::size_t>(std::addressof(s))+sizeof(s) \
-		)<=std::max( \
+		)<=tc::max( \
 			reinterpret_cast<std::size_t>(this), \
 			reinterpret_cast<std::size_t>(std::addressof(s)) \
 		) ); \

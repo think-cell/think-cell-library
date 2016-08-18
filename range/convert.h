@@ -67,13 +67,14 @@ template<typename TTarget >
 struct SClassConversions {
 	static_assert( tc::is_decayed< TTarget >::value, "" );
 
+	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template<typename TSource>
 	std::enable_if_t<
 		(
 			std::is_class<TTarget>::value ||
 			std::is_class< std::remove_reference_t<TSource> >::value
 		) && tc::is_static_castable< TSource&&, TTarget >::value
-	, TTarget > operator() (TSource&& src) const noexcept {
+	, TTarget > operator() (TSource&& src) const& noexcept {
 		return static_cast<TTarget>(std::forward<TSource>(src));
 	}
 };
@@ -178,19 +179,21 @@ struct SStringRangeConverter;
 // in your TU do not add them here, it would create a cycle in the includes
 template<typename TContainer>
 struct SContainerConversionsHelper {
+	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template<typename Rng>
 	std::enable_if_t<
 		!tc::is_static_castable< Rng&&, TContainer >::value && // disable for trivial conversions to use move semantic / copy on write where possible
 		!tc::is_char< typename tc::range_value<TContainer>::type >::value
-	, TContainer > operator()(Rng&& rng) const noexcept {
+	, TContainer > operator()(Rng&& rng) const& noexcept {
 		return tc::make_container<TContainer>(tc::transform(std::forward<Rng>(rng), fn_Convert<typename tc::range_value<TContainer>::type>()));
 	}
 
+	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template<typename Rng>
 	std::enable_if_t<
 		!tc::is_static_castable< Rng&&, TContainer >::value && // disable for trivial conversions to use move semantic / copy on write where possible
 		tc::is_char< typename tc::range_value<TContainer>::type >::value
-	, TContainer > operator()(Rng&& rng) const noexcept {
+	, TContainer > operator()(Rng&& rng) const& noexcept {
 		TContainer cont;
 		SStringRangeConverter<typename tc::range_value<TContainer>::type, typename tc::range_value< std::remove_reference_t<Rng> >::type>::Append(cont, std::forward<Rng>(rng));
 		return cont;

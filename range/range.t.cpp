@@ -45,6 +45,7 @@ UNITTESTDEF( basic ) {
 			m_func(std::move(func)), m_breakorcontinue(breakorcontinue)
 		{}
 
+		// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 		template<typename Arg>
 		std::enable_if_t<
 			std::is_same<
@@ -52,12 +53,13 @@ UNITTESTDEF( basic ) {
 				break_or_continue
 			>::value
 		>
-		operator()(Arg&& arg) noexcept {
+		operator()(Arg&& arg) & noexcept {
 			if (continue_ == m_breakorcontinue) {
 				m_breakorcontinue = m_func(std::forward<Arg>(arg));
 			}
 		}
 
+		// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 		template<typename Arg>
 		typename std::enable_if<
 			!std::is_same<
@@ -65,7 +67,7 @@ UNITTESTDEF( basic ) {
 				break_or_continue
 			>::value
 		>::type
-		operator()(Arg&& arg) noexcept {
+		operator()(Arg&& arg) & noexcept {
 			if (continue_ == m_breakorcontinue) {
 				m_func(std::forward<Arg>(arg));
 			}
@@ -81,6 +83,7 @@ UNITTESTDEF( basic ) {
 
 		using base_ = std::remove_reference_t<Rng>;
 
+		// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 		template< typename Func >
 		std::enable_if_t<
 			!std::is_same<
@@ -89,12 +92,13 @@ UNITTESTDEF( basic ) {
 			>::value,
 			break_or_continue
 		>
-		operator()(Func&& func) noexcept {
+		operator()(Func&& func) & noexcept {
 			break_or_continue breakorcontinue = continue_;
 			base_::operator()(WrapVoidFunc<Func&&>(std::forward<Func>(func), breakorcontinue));
 			return breakorcontinue;
 		}
 
+		// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 		template< typename Func >
 		std::enable_if_t<
 			!std::is_same<
@@ -103,12 +107,13 @@ UNITTESTDEF( basic ) {
 			>::value,
 			break_or_continue
 		>
-		operator()(Func&& func) const noexcept {
+		operator()(Func&& func) const& noexcept {
 			break_or_continue breakorcontinue = continue_;
 			base_::operator()(WrapVoidFunc<Func&&>(std::forward<Func>(func), breakorcontinue));
 			return breakorcontinue;
 		}
 
+		// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 		template< typename Func >
 		std::enable_if_t<
 			std::is_same<
@@ -117,10 +122,11 @@ UNITTESTDEF( basic ) {
 			>::value,
 			break_or_continue
 		>
-		operator()(Func&& func) noexcept {
+		operator()(Func&& func) & noexcept {
 			return base_::operator()(std::forward<Func>(func));
 		}
-	
+
+		// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 		template< typename Func >
 		std::enable_if_t<
 			std::is_same<
@@ -129,7 +135,7 @@ UNITTESTDEF( basic ) {
 			>::value,
 			break_or_continue
 		>
-		operator()(Func&& func) const noexcept {
+		operator()(Func&& func) const& noexcept {
 			return base_::operator()(std::forward<Func>(func));
 		}
 	};
@@ -144,7 +150,7 @@ UNITTESTDEF( basic ) {
 namespace {
 	struct generator_range {
 		template< typename Func >
-		void operator()( Func func ) const noexcept {
+		void operator()( Func func ) const& noexcept {
 			for(int i=0;i<50;++i) {
 				func(i);
 			}
@@ -248,15 +254,14 @@ UNITTESTDEF( ensure_index_range_on_chars ) {
 	static_assert( tc::is_range_with_iterators<char* const&>::value, "" );
 
 	struct check_5_chars final {
-		check_5_chars() noexcept: m_cch(0) {}
 		void operator()( char ) {
 			++m_cch;
 		}
 		~check_5_chars() {
-			_ASSERTEQUAL(m_cch,5);
+			_ASSERTEQUAL(m_cch,5u);
 		}
 	private:
-		std::size_t m_cch;
+		std::size_t m_cch = 0;
 	};
 
 	{

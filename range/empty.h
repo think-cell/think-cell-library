@@ -26,36 +26,31 @@
 #include "index_range.h"
 
 namespace tc {
-	template<typename Rng>
-	std::enable_if_t<
-		has_mem_fn_empty<Rng const>::value,
-	bool > empty(Rng const& rng) noexcept {
+	template<typename Rng, std::enable_if_t<has_mem_fn_empty<Rng const>::value>* = nullptr>
+	bool empty(Rng const& rng) noexcept {
 		return rng.empty();
 	}
 
-	template<typename Rng>
-	std::enable_if_t<
+	template<typename Rng, std::enable_if_t<
 		!has_mem_fn_empty<Rng const>::value &&
 		is_range_with_iterators<Rng const>::value &&
-		!has_index<Rng>::value,
-	bool > empty(Rng const& rng) noexcept {
+		!has_index<Rng>::value>* = nullptr>
+	bool empty(Rng const& rng) noexcept {
 		return boost::begin(rng)==boost::end(rng);
 	}
 
-	template<typename Rng>
-	std::enable_if_t<
+	template<typename Rng, std::enable_if_t<
 		!has_mem_fn_empty<Rng const>::value &&
 		is_range_with_iterators<Rng const>::value &&
-		has_index<Rng>::value,
-	bool > empty(Rng const& rngidx) noexcept {
+		has_index<Rng>::value>* = nullptr>
+	bool empty(Rng const& rngidx) noexcept {
 		return rngidx.at_end_index(rngidx.begin_index());
 	}
 
-	template<typename Rng>
-	std::enable_if_t<
+	template<typename Rng, std::enable_if_t<
 		!has_mem_fn_empty<Rng const>::value &&
-		!is_range_with_iterators<Rng const>::value,
-	bool > empty(Rng const& rng) noexcept {
+		!is_range_with_iterators<Rng const>::value>* = nullptr>
+	bool empty(Rng const& rng) noexcept {
 		return continue_==tc::for_each( rng, MAKE_CONSTEXPR_FUNCTION(break_) );
 	}
 

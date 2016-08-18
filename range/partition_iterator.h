@@ -15,6 +15,7 @@
 #pragma once
 
 #include "range_defines.h"
+#include "reverse_adaptor.h"
 
 #include <boost/iterator/transform_iterator.hpp>
 #include <boost/algorithm/string/compare.hpp>
@@ -130,7 +131,7 @@ namespace tc {
 					tc::reverse(vecpnodeEnd)
 				).first ); // or second, same thing
 				#if defined(BOOST_MULTI_INDEX_ENABLE_SAFE_MODE)
-					return boost::multi_index::safe_mode::safe_iterator<boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<AugmentPolicy, NodeBase> >, OrderedIndex>(pnodeCommon, const_cast<OrderedIndex*>(itBegin.owner()));
+					return boost::multi_index::safe_mode::safe_iterator<boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<AugmentPolicy, NodeBase> >, OrderedIndex>(pnodeCommon, tc::make_mutable_ptr(itBegin.owner()));
 				#else
 					return boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<AugmentPolicy, NodeBase> >(pnodeCommon);
 				#endif
@@ -198,18 +199,14 @@ namespace tc {
 		////////////////////////////////////////////////////////////////////////
 		// Iterator functions forwarding to partition_point
 
-		// std::bind1st/2nd require argument_type to be defined, at least in Dinkumware's implementation.
-		// The standard does not require this for the predicate passed to lower_bound et. al.
-		// We thus use boost::bind, which with explicit return type does not require any typedefs.
-
 		template< typename It, typename Value, typename UnaryPredicate >
 		It lower_bound(It itBegin,It itEnd,Value const& val,UnaryPredicate&& pred) noexcept {
-			return iterator::partition_point(itBegin,itEnd,boost::bind<bool>(std::forward<UnaryPredicate>(pred),_1,boost::cref(val)));
+			return iterator::partition_point(itBegin,itEnd,std::bind(std::forward<UnaryPredicate>(pred),std::placeholders::_1,std::cref(val)));
 		}
 
 		template< typename It, typename Value, typename UnaryPredicate >
 		It upper_bound(It itBegin,It itEnd,Value const& val,UnaryPredicate&& pred) noexcept {
-			return iterator::partition_point(itBegin,itEnd,!boost::bind<bool>(std::forward<UnaryPredicate>(pred),boost::cref(val),_1));
+			return iterator::partition_point(itBegin,itEnd,tc::not_fn(std::bind(std::forward<UnaryPredicate>(pred),std::cref(val),std::placeholders::_1)));
 		}
 
 		template< typename It, typename Value, typename SortPredicate >

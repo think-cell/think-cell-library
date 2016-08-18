@@ -41,6 +41,9 @@
 	#ifndef _ASSERTINITIALIZED
 		#define _ASSERTINITIALIZED( expr ) (expr)
 	#endif
+	#ifndef _ASSERTPRINT
+		#define _ASSERTPRINT( cond, ... ) assert( cond )
+	#endif
 	#ifndef VERIFYEQUAL
 		#define VERIFYEQUAL( expr, constant ) (expr)
 	#endif
@@ -52,6 +55,12 @@
 	#endif
 	#ifndef NOBADALLOC
 		#define NOBADALLOC( expr ) (expr)
+	#endif
+	#ifndef NOEXCEPT
+		#define NOEXCEPT( ... ) \
+			[&]() noexcept -> decltype(auto) { \
+				return (__VA_ARGS__); \
+			}
 	#endif
 
 	#define MAYTHROW noexcept(false)
@@ -79,27 +88,13 @@
 #include "range_fwd.h"
 
 //-----------------------------------------------------------------------------------------------------------------------------
-// Compiler bug/missing feature workarounds
-#ifdef CLANG
-	#define HAS_VARIADIC_TEMPLATES
-	#define THIS_IN_DECLTYPE this->
-
-#else // this is currently MSVC
-	#define THIS_IN_DECLTYPE               // MSVC doesn't allow this in a decltype() context (but should)
-#endif
-
-//-----------------------------------------------------------------------------------------------------------------------------
 // STATIC_ASSERT_OVERLOAD_NOT_SELECTED
 //
 // see equal.h for a usage example
 
-namespace tc {
-	struct wrong_overload_selected final {};
-}
-
-#define STATIC_ASSERT_OVERLOAD_NOT_SELECTED(NAME, EXPR, MSG, RETURN_T, ...)                                                   \
-	std::enable_if_t< EXPR,  RETURN_T> NAME(__VA_ARGS__) noexcept {                                              \
-		static_assert(!(EXPR), MSG);                                                                                          \
-		return std::declval<RETURN_T>();                                                                                      \
+#define STATIC_ASSERT_OVERLOAD_NOT_SELECTED(NAME, EXPR, MSG, RETURN_T, ...) \
+	std::enable_if_t< EXPR,  RETURN_T> NAME(__VA_ARGS__) noexcept { \
+		static_assert(!(EXPR), MSG); \
+		return std::declval<RETURN_T>(); \
 	}
 

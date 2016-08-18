@@ -26,34 +26,46 @@ namespace tc {
 		template< typename T >
 		struct reference_or_value final {
 			static_assert( !std::is_reference<T>::value, "" );
+			static_assert( !std::is_const<T>::value, "T const seems to be strange. Are you serious?" );
 
 			using value_type = std::remove_cv_t<T>;
 			using reference = value_type&;
 			using const_reference = value_type const&;
 
 			reference_or_value() noexcept {} // m_t may be default-constructible
-		
+			reference_or_value(reference_or_value const&) = default;
+			reference_or_value(reference_or_value&&) = default;
+			
 			template< typename Rhs >
-			reference_or_value( Rhs&& rhs, aggregate_tag ) noexcept
+			reference_or_value( aggregate_tag, Rhs&& rhs ) noexcept
 			: m_t( std::forward<Rhs>(rhs) )
 			{}
 
-			template< typename Rhs >
-			void aggregate(Rhs&& rhs) noexcept {
-				m_t=std::forward<Rhs>(rhs);
+			// T may be a proxy with reference behavior (e.g. pair<X&,X&>): operator= may not be equivalent to copy ctor.
+			// operator=() with tc::renew for pointer semantics.
+			reference_or_value& operator=(reference_or_value const& other) & noexcept {
+				_ASSERT(this != std::addressof(other));
+				tc::renew(*this, aggregate_tag(), other.m_t);
+				return *this;
 			}
 
-			reference best_access() const noexcept {
+			reference_or_value& operator=(reference_or_value&& other) & noexcept {
+				_ASSERT(this != std::addressof(other));
+				tc::renew(*this, aggregate_tag(), tc_move(tc_move(other).m_t));
+				return *this;
+			}
+			
+			reference best_access() const& noexcept {
 				// When declaring m_t non-mutable and using const_cast here be undefined behavior in code like:
 				//	reference_or_value<T> _const_ foo;
 				//	foo.best_access();
 				// ?
 				return m_t;
 			}
-			value_type* operator->() noexcept {
+			value_type* operator->() & noexcept {
 				return std::addressof(m_t);
 			}
-			value_type const* operator->() const noexcept {
+			value_type const* operator->() const& noexcept {
 				return std::addressof(m_t);
 			}
 			reference operator*() & noexcept {
@@ -86,22 +98,91 @@ namespace tc {
 			using reference = T&;
 			using const_reference = reference;
 
-			reference_or_value(T& t, aggregate_tag) noexcept
+			reference_or_value(aggregate_tag, T& t) noexcept
 			:	m_pt(std::addressof(t))
 			{}
-			void aggregate(T& t) noexcept {
-				m_pt=std::addressof(t);
-			}
-			reference best_access() const noexcept {
+			reference best_access() const& noexcept {
 				return *m_pt;
 			}
-			T * operator->() const noexcept {
+			T * operator->() const& noexcept {
 				return m_pt;
 			}
-			reference operator*() const noexcept {
+			reference operator*() const& noexcept {
 				return *m_pt;
+			}
+		};
+
+		template< typename T >
+		struct reference_or_value<T&&> final {
+		private:
+			T* m_pt;
+
+		public:
+			using reference = T&&;
+			using const_reference = reference;
+
+			reference_or_value(aggregate_tag, T&& t) noexcept
+			:	m_pt(std::addressof(t))
+			{}
+			reference best_access() const& noexcept {
+				return tc_move_always(*m_pt);
+			}
+			T * operator->() const& noexcept { // no such thing as "pointer-to-rvalue"
+				return m_pt;
+			}
+			reference operator*() const& noexcept {
+				return tc_move_always(*m_pt);
 			}
 		};
 	}
 	using reference_or_value_adl_barrier::reference_or_value;
+
+	namespace stores_result_of_adl_barrier {
+		template< typename Func, typename Enable=void >
+		struct stores_result_of final {
+		private:
+			tc::reference_or_value< std::result_of_t< Func() > > m_t;
+
+		public:
+			stores_result_of( Func&& func ) MAYTHROW
+				: m_t(aggregate_tag(), std::forward<Func>(func)())
+			{}
+
+			auto get() const& noexcept ->decltype(auto) {
+				return *m_t;
+			}
+			auto get() & noexcept ->decltype(auto) {
+				return *m_t;
+			}
+			auto get() && noexcept ->decltype(auto) {
+				return *tc_move(m_t);
+			}
+			template<typename FuncTo>
+			auto pass_to(FuncTo&& functo) const& noexcept ->decltype(auto) {
+				return std::forward<FuncTo>(functo)(*m_t);
+			}
+			template<typename FuncTo>
+			auto pass_to(FuncTo&& functo) & noexcept ->decltype(auto) {
+				return std::forward<FuncTo>(functo)(*m_t);
+			}
+			template<typename FuncTo>
+			auto pass_to(FuncTo&& functo) && noexcept ->decltype(auto) {
+				return std::forward<FuncTo>(functo)(*tc_move(m_t));
+			}
+		};
+
+		template< typename Func >
+		struct stores_result_of<Func, std::enable_if_t< std::is_void< std::result_of_t< Func() > >::value > > final {
+			stores_result_of( Func&& func ) MAYTHROW {
+				std::forward<Func>(func)();
+			}
+
+			void get() const& noexcept {}
+			template<typename FuncTo>
+			auto pass_to(FuncTo&& functo) const& noexcept ->decltype(auto) {
+				return std::forward<FuncTo>(functo)();
+			}
+		};
+	}
+	using stores_result_of_adl_barrier::stores_result_of;
 }

@@ -45,10 +45,10 @@ namespace tc {
 
 		public:
 			template<typename Rhs, typename RHSValue>
-			sparse_adaptor(Rhs&& rngpairIndexValue, std::size_t nEnd, RHSValue&& defaultValue) noexcept
-				: m_baserng(reference_or_value< index_range_t<RngPairIndexValue> >(std::forward<Rhs>(rngpairIndexValue), aggregate_tag()))
+			explicit sparse_adaptor(Rhs&& rngpairIndexValue, std::size_t nEnd, RHSValue&& defaultValue) noexcept
+				: m_baserng(reference_or_value< index_range_t<RngPairIndexValue> >(aggregate_tag(), std::forward<Rhs>(rngpairIndexValue)))
 				, m_nEnd(nEnd)
-				, m_default(std::forward<RHSValue>(defaultValue), aggregate_tag())
+				, m_default(aggregate_tag(), std::forward<RHSValue>(defaultValue))
 			{}
 
 		private:
@@ -65,7 +65,7 @@ namespace tc {
 				{}
 
 				template<typename PairIndexValue>
-				auto operator()(PairIndexValue&& pairindexvalue) const MAYTHROW -> tc::break_or_continue {
+				auto operator()(PairIndexValue&& pairindexvalue) const& MAYTHROW -> tc::break_or_continue {
 					for (; m_n < std::get<0>(pairindexvalue); ++m_n) {
 						RETURN_IF_BREAK(tc::continue_if_not_break(m_func, *m_default));
 					}
@@ -76,7 +76,7 @@ namespace tc {
 
 		public:
 			template<typename Func>
-			auto operator()(Func func) const MAYTHROW -> break_or_continue
+			auto operator()(Func func) const& MAYTHROW -> break_or_continue
 			{
 				std::size_t n=0;
 				RETURN_IF_BREAK(tc::for_each(
@@ -116,46 +116,46 @@ namespace tc {
 			using index=typename sparse_adaptor::index;
 
 			template<typename RhsRngPairIndexValue, typename RHSValue>
-			sparse_adaptor(RhsRngPairIndexValue&& rngpairIndexValue, std::size_t nEnd, RHSValue&& defaultValue) noexcept :
+			explicit sparse_adaptor(RhsRngPairIndexValue&& rngpairIndexValue, std::size_t nEnd, RHSValue&& defaultValue) noexcept :
 				sparse_adaptor<RngPairIndexValue, TValue, false>(std::forward<RhsRngPairIndexValue>(rngpairIndexValue), nEnd, std::forward<RHSValue>(defaultValue))
 			{}
 
 		private:
 			using this_type = sparse_adaptor;
-			bool IndexIsDefault(index const& idx) const noexcept {
+			bool IndexIsDefault(index const& idx) const& noexcept {
 				_ASSERT(idx.m_n < this->m_nEnd);
 				return this->m_baserng->at_end_index(idx.m_idxBase) ||
 					idx.m_n != tc::unsigned_cast(std::get<0>(this->m_baserng->dereference_index(idx.m_idxBase)));
 			}
 
 		public:
-			STATIC_FINAL(begin_index)() const noexcept -> index {
+			STATIC_FINAL(begin_index)() const& noexcept -> index {
 				return {0, this->m_baserng->begin_index()};
 			}
 
-			STATIC_FINAL(end_index)() const noexcept -> index {
+			STATIC_FINAL(end_index)() const& noexcept -> index {
 				return {this->m_nEnd, this->m_baserng->end_index()};
 			}
 
-			STATIC_FINAL(equal_index)(index const& lhs, index const& rhs) const noexcept -> bool {
+			STATIC_FINAL(equal_index)(index const& lhs, index const& rhs) const& noexcept -> bool {
 				return lhs.m_n == rhs.m_n;
 			}
 
-			STATIC_FINAL(increment_index)(index& idx) const noexcept -> void {
+			STATIC_FINAL(increment_index)(index& idx) const& noexcept -> void {
 				if (!IndexIsDefault(idx)) {
 					this->m_baserng->increment_index(idx.m_idxBase);
 				}
 				++idx.m_n;
 			}
 
-			STATIC_FINAL(at_end_index)(index const& idx) const noexcept -> bool {
+			STATIC_FINAL(at_end_index)(index const& idx) const& noexcept -> bool {
 				return idx.m_n == this->m_nEnd;
 			}
 
-			STATIC_FINAL(dereference_index)(index const& idx) const noexcept return_decltype(
+			STATIC_FINAL(dereference_index)(index const& idx) const& noexcept return_decltype(
 				IndexIsDefault(idx)
-					? *THIS_IN_DECLTYPE m_default
-					: std::get<1>(THIS_IN_DECLTYPE m_baserng->dereference_index(idx.m_idxBase))
+					? *(this->m_default)
+					: std::get<1>(this->m_baserng->dereference_index(idx.m_idxBase))
 			)
 
 		};
@@ -169,7 +169,7 @@ namespace tc {
 		typename TValue = typename std::tuple_element<1, typename tc::range_value<RngPairIndexValue>::type>::type
 	>
 	auto sparse_range(RngPairIndexValue&& rngpairindexvalue, std::size_t nsizerng, TValue&& valueDefault = TValue()) noexcept return_ctor(
-		sparse_adaptor< range_by_value_t<RngPairIndexValue> BOOST_PP_COMMA() TValue >,
+		sparse_adaptor< view_by_value_t<RngPairIndexValue> BOOST_PP_COMMA() TValue >,
 		(std::forward<RngPairIndexValue>(rngpairindexvalue), nsizerng, std::forward<TValue>(valueDefault))
 	)
 }

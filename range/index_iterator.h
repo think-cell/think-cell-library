@@ -16,21 +16,28 @@
 #include "index_range.h"
 #include "range_defines.h"
 
+#pragma warning( push )
+#pragma warning( disable: 4146 )
+// warning C4146: unary minus operator applied to unsigned type, result still unsigned
+// iterator_facade::distance_from returns -iterator_facade::distance_to which causes warning C4146 if difference_type is std::size_t
+#include <boost/iterator/iterator_facade.hpp> 
+#pragma warning( pop )
+
 namespace tc {
 
 	template< typename DerivedConst >
 	struct delayed_difference_type {
-		using type = decltype(std::declval<DerivedConst const>().distance_to_index(std::declval<typename DerivedConst::index>(), std::declval<typename DerivedConst::index>()));
+		using type = decltype(std::declval<DerivedConst const&>().distance_to_index(std::declval<typename DerivedConst::index>(), std::declval<typename DerivedConst::index>()));
 	};
 
 	template< typename Rng >
 	struct range_traits {
-		using IndexRange = index_range_t<std::remove_reference_t<Rng>>;
+		using IndexRange = std::remove_reference_t<index_range_t<Rng>>;
 
-		using reference = decltype(std::declval<IndexRange>().dereference_index(std::declval<typename IndexRange::index>()));
-		using index = decltype(std::declval<IndexRange const>().begin_index());
+		using reference = decltype(std::declval<IndexRange&>().dereference_index(std::declval<typename IndexRange::index>()));
+		using index = decltype(std::declval<IndexRange const&>().begin_index());
 
-		using value_type = std::decay_t<reference>;
+		using value_type = tc::decay_t<reference>;
 
 		template<typename Traversal>
 		struct difference_type final {
@@ -48,6 +55,71 @@ namespace tc {
 
 	template<typename Rng, typename Traversal>
 	using range_difference_type = typename range_traits<Rng>::template difference_type<Traversal>::type;
+
+	template<typename T>
+	struct has_bool_cast {
+	private:
+		template<typename U> static auto test(int) -> decltype(static_cast<bool>(std::declval<U>()), std::true_type());
+		template<typename> static std::false_type test(...);
+	public:
+		static constexpr bool value = std::is_same<decltype(test<T>(0)), std::true_type>::value;
+	};
+
+	template<typename It, typename Enable=void >
+	struct element {
+		static_assert( tc::is_decayed<It>::value, "" );
+		struct type : It {
+			using difference_type=typename std::iterator_traits<It>::difference_type;
+			using value_type=typename std::iterator_traits<It>::value_type;
+			using pointer=typename std::iterator_traits<It>::pointer;
+			using reference=typename std::iterator_traits<It>::reference;
+			using iterator_category=typename std::iterator_traits<It>::iterator_category;
+
+			type() noexcept : m_bValid(false) {}
+
+			// no implicit conversion from It; we must ensure that It has the semantics of element rather than border before allowing the construction
+			explicit type(It const& it) noexcept : It(it), m_bValid(true) {}
+			explicit type(It && it) noexcept : It(tc_move(it)), m_bValid(true) {}
+
+			explicit operator bool() const& noexcept {
+				return m_bValid;
+			}
+
+			type& operator++() & noexcept {
+				_ASSERT(m_bValid);
+				++tc::base_cast<It>(*this);
+				return *this;
+			}
+
+			type& operator--() & noexcept {
+				_ASSERT(m_bValid);
+				--tc::base_cast<It>(*this);
+				return *this;
+			}
+
+			reference operator*() const& noexcept {
+				_ASSERT(m_bValid);
+				return *tc::base_cast<It>(*this);
+			}
+
+			pointer operator->() const& noexcept {
+				_ASSERT(m_bValid);
+				return tc::base_cast<It>(*this).operator->();
+			}
+
+		private:
+			bool m_bValid;
+		};
+	};
+
+	template<typename It>
+	struct element< It, std::enable_if_t< has_bool_cast<It>::value > > {
+		static_assert( tc::is_decayed<It>::value, "" );
+		using type=It;
+	};
+
+	template< typename It >
+	using element_t=typename element<It>::type;
 
 	namespace index_iterator_impl {
 		template<typename IndexRange, typename Traversal, bool bConst>
@@ -70,18 +142,11 @@ namespace tc {
 			, Traversal
 			, typename range_traits< conditional_const_t<IndexRange,bConst> >::reference
 			, range_difference_type< conditional_const_t<IndexRange,bConst>,Traversal>
-			>
+		>
 		{
-			static_assert( std::is_same< IndexRange, std::decay_t<IndexRange> >::value, "" );
+			static_assert( tc::is_decayed< IndexRange >::value, "" );
 
 		private:
-			using base_ = boost::iterators::iterator_facade<
-				index_iterator<IndexRange,Traversal,bConst>
-				, typename range_traits< conditional_const_t<IndexRange,bConst>>::value_type
-				, Traversal
-				, typename range_traits< conditional_const_t<IndexRange,bConst>>::reference
-				, range_difference_type< conditional_const_t<IndexRange,bConst>,Traversal>
-			>;
 			friend class boost::iterator_core_access;
 			friend struct index_iterator<IndexRange,Traversal,!bConst>;
 
@@ -95,8 +160,8 @@ namespace tc {
 			struct enabler final {};
 
 		public:
-			using reference = typename base_::reference;
-			using difference_type = typename base_::difference_type;
+			using reference = typename index_iterator::reference;
+			using difference_type = typename index_iterator::difference_type;
 
 			index_iterator() noexcept
 				: m_pidxrng(nullptr)
@@ -117,29 +182,33 @@ namespace tc {
 			: m_pidxrng(pidxrng)
 			, m_idx(tc_move(idx)) {}
 
-			reference dereference() const MAYTHROW {
+			reference dereference() const& MAYTHROW {
 				return VERIFY(m_pidxrng)->dereference_index(m_idx);
 			}
 
+			index const& get_index() const& noexcept {
+				return m_idx;
+			}
+
 			template<bool bConstOther>
-			bool equal(index_iterator<IndexRange,Traversal,bConstOther> const& itRhs) const noexcept {
+			bool equal(index_iterator<IndexRange,Traversal,bConstOther> const& itRhs) const& noexcept {
 				return VERIFYEQUAL(VERIFY(m_pidxrng),itRhs.m_pidxrng)->equal_index(m_idx,itRhs.m_idx);
 			}
 
-			void increment() noexcept {
+			void increment() & noexcept {
 				VERIFY(m_pidxrng)->increment_index(m_idx);
 			}
 
-			void decrement() noexcept {
+			void decrement() & noexcept {
 				VERIFY(m_pidxrng)->decrement_index(m_idx);
 			}
 
-			void advance(difference_type d) noexcept {
+			void advance(difference_type d) & noexcept {
 				VERIFY(m_pidxrng)->advance_index(m_idx,d);
 			}
 
 			template<bool bConstOther>
-			difference_type distance_to(index_iterator<IndexRange,Traversal,bConstOther> const& itRhs) const noexcept {
+			difference_type distance_to(index_iterator<IndexRange,Traversal,bConstOther> const& itRhs) const& noexcept {
 				return VERIFYEQUAL(VERIFY(m_pidxrng),itRhs.m_pidxrng)->distance_to_index(m_idx,itRhs.m_idx);
 			}
 
@@ -150,13 +219,18 @@ namespace tc {
 			}
 
 			template<typename IndexRange_ = IndexRange>
-			auto bound_base() const noexcept {
+			auto bound_base() const& noexcept {
 				return tc::as_const(VERIFY(m_pidxrng))->base_range().make_iterator(m_pidxrng->bound_base_index(m_idx));
 			}
 
 			template<typename IndexRange_ = IndexRange>
-			auto element_base() const noexcept {
-				return tc::as_const(VERIFY(m_pidxrng))->base_range().make_iterator(m_pidxrng->element_base_index(m_idx));
+			auto element_base() const& noexcept {
+				using It=tc::element_t< decltype( tc::as_const(VERIFY(m_pidxrng))->base_range().make_iterator(m_pidxrng->element_base_index(m_idx)) ) >;
+				if(m_pidxrng) {
+					return static_cast<It>( tc::as_const(VERIFY(m_pidxrng))->base_range().make_iterator(m_pidxrng->element_base_index(m_idx)) );
+				} else {
+					return It{};
+				}
 			}
 
 			// sub_range from iterator pair
@@ -164,7 +238,7 @@ namespace tc {
 				return typename tc::make_sub_range_result< conditional_const_t<IndexRange,bConst> & >::type( *VERIFYEQUAL(VERIFY(itBegin.m_pidxrng),itEnd.m_pidxrng), tc_move(itBegin).m_idx, tc_move(itEnd).m_idx );
 			}
 
-			explicit operator bool() const noexcept {
+			explicit operator bool() const& noexcept {
 				return tc::bool_cast(m_pidxrng);
 			}
 		};

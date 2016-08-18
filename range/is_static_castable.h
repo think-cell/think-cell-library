@@ -40,7 +40,7 @@ namespace tc {
 		};
 
 		struct Y {
-			explicit operator T const&() noexcept; 
+			explicit operator T const&() /* no & */ noexcept;
 		};
 
 		static_assert(is_static_castable<S*, T*>::value, "");

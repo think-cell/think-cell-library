@@ -16,44 +16,44 @@
 
 #include "noncopyable.h"
 #include "has_mem_fn.h"
-#include "remove_cvref.h"
+#include "type_traits.h"
 
-#define tc_in_place(expr) \
+#define tc_inplace(expr) \
 	(expr)=(expr)
 
 TC_HAS_MEM_FN_XXX_TRAIT_DEF( negate )
 TC_HAS_MEM_FN_XXX_TRAIT_DEF( bitwise_not )
 
 namespace tc {
-	namespace in_place_adl_barrier {
-		template< typename T >
-		std::enable_if_t< has_mem_fn_negate<T>::value > negate(T& t) noexcept {
+	namespace inplace_adl_barrier {
+		template< typename T, std::enable_if_t<has_mem_fn_negate<T>::value>* = nullptr>
+		void negate(T& t) noexcept {
 			t.negate();
 		}
-		template< typename T >
-		std::enable_if_t< !has_mem_fn_negate<T>::value > negate(T& t) noexcept {
+		template< typename T, std::enable_if_t<!has_mem_fn_negate<T>::value>* = nullptr>
+		void negate(T& t) noexcept {
 			t=-t;
 		}
-		template< typename T >
-		std::enable_if_t< has_mem_fn_bitwise_not<T>::value > bitwise_not(T& t) noexcept {
+		template< typename T, std::enable_if_t<has_mem_fn_bitwise_not<T>::value>* = nullptr>
+		void bitwise_not(T& t) noexcept {
 			t.bitwise_not();
 		}
-		template< typename T >
-		std::enable_if_t< !has_mem_fn_bitwise_not<T>::value > bitwise_not(T& t) noexcept {
+		template< typename T, std::enable_if_t<!has_mem_fn_bitwise_not<T>::value>* = nullptr>
+		void bitwise_not(T& t) noexcept {
 			t = ~t;
 		}
 		template< typename T >
-		struct in_place final : tc::noncopyable {
-			in_place(T& t) noexcept:m_t(t){}
-			in_place const& operator-() const noexcept {
+		struct inplace final : tc::noncopyable {
+			inplace(T& t) noexcept:m_t(t){}
+			inplace const& operator-() const& noexcept {
 				negate(m_t); // allow ADL
 				return *this;
 			}
-			in_place const& operator~() const noexcept {
+			inplace const& operator~() const& noexcept {
 				bitwise_not(m_t); // allow ADL
 				return *this;
 			}
-			in_place const& operator!() const noexcept {
+			inplace const& operator!() const& noexcept {
 				m_t=!m_t;
 				return *this;
 			}
@@ -62,7 +62,7 @@ namespace tc {
 		};
 	};
 	template< typename T >
-	in_place_adl_barrier::in_place<T> in_place(T& t) noexcept{
-		return in_place_adl_barrier::in_place<T>(t);
+	inplace_adl_barrier::inplace<T> inplace(T& t) noexcept{
+		return inplace_adl_barrier::inplace<T>(t);
 	}
 }

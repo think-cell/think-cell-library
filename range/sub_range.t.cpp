@@ -97,7 +97,7 @@ namespace {
 	using SSRVI = make_sub_range_result<make_sub_range_result<tc::vector<int>&>::type>::type;
 	using CSSRVI = make_sub_range_result<make_sub_range_result<tc::vector<int> const&>::type>::type;
 
-	void const_ref_test(SRVI const& rng) noexcept {
+	void const_ref_test(SRVI const& /*rng*/) noexcept {
 		//CSRVI const_rng(rng);    // same as const_rng2 below. TODO: this fails, but shouldn't!
 		//SRVI non_const_rng(rng); // same as non_const_rng4 below. fails to compile, as it should.
 	}
@@ -282,7 +282,7 @@ namespace {
 #ifdef _CHECKS
 	struct GenRange final {
 		template<typename Func>
-		auto operator()(Func func) const noexcept -> break_or_continue {
+		auto operator()(Func func) const& noexcept -> break_or_continue {
 			RETURN_IF_BREAK(func(1));
 			RETURN_IF_BREAK(func(3));
 			RETURN_IF_BREAK(func(5));
@@ -294,12 +294,12 @@ namespace {
 		tc::vector<double> m_vecf = tc::vector<double>({1,3,5});
 
 		template<typename Func>
-		auto operator()(Func func) noexcept -> break_or_continue {
+		auto operator()(Func func) & noexcept -> break_or_continue {
 			return tc::for_each(m_vecf, std::ref(func));
 		}
 
 		template<typename Func>
-		auto operator()(Func func) const noexcept -> break_or_continue {
+		auto operator()(Func func) const& noexcept -> break_or_continue {
 			return tc::for_each(m_vecf, std::ref(func));
 		}
 	};
@@ -623,7 +623,7 @@ namespace {
 			return *this;
 		}
 
-		operator int() const noexcept {return m_n;}
+		operator int() const& noexcept {return m_n;}
 	};
 #endif
 

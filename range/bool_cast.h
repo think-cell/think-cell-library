@@ -13,15 +13,12 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 
 #pragma once
-#include <boost/container/vector.hpp>
-#include <boost/container/deque.hpp>
-#include <memory>
-#include <stack>
+#include "type_traits.h"
 
 namespace tc {
-	template<typename T, typename Alloc=std::allocator<T> >
-	using vector=boost::container::vector<T,Alloc>;
-
-	template<typename T, typename Alloc=std::allocator<T> >
-	using simple_stack=std::stack<T, vector<T, Alloc> >;
+	template<typename T>
+	bool bool_cast(T const& t) noexcept {
+		static_assert( std::is_pointer<T>::value || std::is_class<T>::value || tc::is_bool<T>::value, "");
+		return static_cast<bool>( VERIFYINITIALIZED(t) );
+	}
 }

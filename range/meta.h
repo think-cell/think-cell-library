@@ -16,7 +16,6 @@
 
 #include "range_defines.h"
 #include "range_fwd.h"
-#include "remove_cvref.h"
 #include "type_traits.h"
 #include "functors.h"
 
@@ -67,7 +66,7 @@ namespace tc {
 	template< typename T >
 	T toasciiupper( T ch ) noexcept {
 		if( isasciilower(ch) ) {
-			return tc::sub( ch, 'a'-'A' );
+			return static_cast<T>( ch-('a'-'A') );
 		} else {
 			return ch;
 		}
@@ -75,7 +74,7 @@ namespace tc {
 	template< typename T >
 	T toasciilower( T ch ) noexcept {
 		if( isasciiupper(ch) ) {
-			return tc::add( ch, 'a'-'A' );
+			return static_cast<T>( ch+('a'-'A') );
 		} else {
 			return ch;
 		}
@@ -83,64 +82,67 @@ namespace tc {
 
 	DEFINE_FN(toasciilower)
 	DEFINE_FN(toasciiupper)
+	DEFINE_FN(isasciispace)
 
 	template< typename T >
 	struct range_value : boost::range_value<T> {};
 }
 
-namespace boost {
-	#pragma push_macro("CHAR_RANGE")
-	#define CHAR_RANGE( xchar ) \
-		template<> \
-		struct range_iterator<xchar*> { \
-			using type = xchar*; \
-		}; \
-		template<> \
-		struct range_mutable_iterator<xchar*> { \
-			using type = xchar*; \
-		}; \
-		template<> \
-		struct range_const_iterator<xchar*> { \
-			using type = std::add_const<xchar>::type*; \
-		}; \
-		template<> \
-		struct range_iterator<xchar* const> { \
-			using type = xchar*; \
-		}; \
-		template<> \
-		struct range_mutable_iterator<xchar* const> { \
-			using type = xchar*; \
-		}; \
-		template<> \
-		struct range_const_iterator<xchar* const> { \
-			using type = std::add_const<xchar>::type*; \
-		}; \
-		template<std::size_t N> \
-		struct range_mutable_iterator<xchar[N]> { \
-			using type = xchar*; \
-		}; \
-		/* support array-of-unknown-bounds incomplete type */ \
-		template<> \
-		struct range_mutable_iterator<xchar[]> { \
-			using type = xchar*; \
-		}; \
-		template<std::size_t N> \
-		struct range_const_iterator<xchar[N]> { \
-			using type = std::add_const<xchar>::type*; \
-		}; \
-		/* support array-of-unknown-bounds incomplete type */ \
-		template<> \
-		struct range_const_iterator<xchar[]> { \
-			using type = std::add_const<xchar>::type*; \
-		}; \
+#pragma push_macro("CHAR_RANGE")
+#define CHAR_RANGE( xchar ) \
+namespace boost { \
+	template<> \
+	struct range_mutable_iterator<xchar*> { \
+		using type = xchar*; \
+	}; \
+	template<> \
+	struct range_const_iterator<xchar*> { \
+		using type = xchar*; \
+	}; \
+	template<> \
+	struct range_mutable_iterator<xchar const*> { \
+		using type = xchar const*; \
+	}; \
+	template<> \
+	struct range_const_iterator<xchar const*> { \
+		using type = xchar const*; \
+	}; \
+	template<std::size_t N> \
+	struct range_mutable_iterator<xchar[N]> { \
+		using type = xchar*; \
+	}; \
+	template<std::size_t N> \
+	struct range_const_iterator<xchar[N]> { \
+		using type = xchar const*; \
+	}; \
+	/* support array-of-unknown-bounds incomplete type */ \
+	template<> \
+	struct range_mutable_iterator<xchar[]> { \
+		using type = xchar*; \
+	}; \
+	template<> \
+	struct range_const_iterator<xchar[]> { \
+		using type = xchar const*; \
+	}; \
+	namespace range_detail { \
 		inline xchar* range_begin(xchar* pch) { \
+			return pch; \
+		} \
+		inline xchar const* range_begin(xchar const* pch) { \
 			return pch; \
 		} \
 		template<std::size_t N> \
 		inline xchar* range_begin(xchar (&ach)[N]) { \
 			return ach; \
 		} \
+		template<std::size_t N> \
+		inline xchar const* range_begin(xchar const (&ach)[N]) { \
+			return ach; \
+		} \
 		inline xchar* range_end(xchar* pch) { \
+			return pch+tc::strlen(pch); \
+		} \
+		inline xchar const* range_end(xchar const* pch) { \
 			return pch+tc::strlen(pch); \
 		} \
 		template<std::size_t N> \
@@ -148,33 +150,37 @@ namespace boost {
 			std::size_t cch=tc::strlen(ach); \
 			_ASSERT(cch<N); \
 			return ach+cch; \
-		}
+		} \
+		template<std::size_t N> \
+		inline xchar const* range_end(xchar const(&ach)[N]) { \
+			std::size_t cch = tc::strlen(ach); \
+			_ASSERT(cch<N); \
+			return ach + cch; \
+		} \
+	} \
+}
 
-	CHAR_RANGE(char)
-	CHAR_RANGE(char const)
-	CHAR_RANGE(wchar_t)
-	CHAR_RANGE(wchar_t const)
+CHAR_RANGE(char)
+CHAR_RANGE(wchar_t)
 #ifndef BOOST_NO_CXX11_CHAR16_T
-		CHAR_RANGE(char16_t)
-		CHAR_RANGE(char16_t const)
+	CHAR_RANGE(char16_t)
 #endif
 #ifndef BOOST_NO_CXX11_CHAR32_T
-		CHAR_RANGE(char32_t)
-		CHAR_RANGE(char32_t const)
+	CHAR_RANGE(char32_t)
 #endif
-	#pragma pop_macro("CHAR_RANGE")
-}
+#pragma pop_macro("CHAR_RANGE")
+
 
 // Include the following after overloading range_begin/range_end
 // Clang already instantiates some calls to range_begin inside
 // iterator_range.hpp and does not see the char* overloads otherwise
-#ifdef TC_MAC
+#ifdef __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wsign-conversion"
-#endif
-
+#else
 #pragma warning(push)
 #pragma warning( disable: 4267 )
+#endif
 // warning C4267 : 'argument' : conversion from 'size_t' to 'int', possible loss of data
 // _Median(...) causes warning C4267 when difference_type is int and size_t is 64 bit. 
 // Stephan T. Lavavej [stl@exchange.microsoft.com] agrees this is a bug and filed DevDiv#1213041 
@@ -182,37 +188,18 @@ namespace boost {
 #include <boost/range/iterator_range.hpp>
 #include <boost/range/sub_range.hpp>
 #include <boost/range/any_range.hpp>
-#pragma warning(pop)
-
-#ifdef TC_MAC
+#ifdef __clang__
 #pragma clang diagnostic pop
-#endif 
+#else
+#pragma warning(pop)
+#endif
 
 #include <boost/range/has_range_iterator.hpp>
 
-namespace tc {
-	namespace is_range_with_iterators_detail {
+static_assert(boost::has_range_iterator<char*>::value, "");
 
-		template< typename Rng >
-		struct is_range_with_iterators : std::integral_constant< bool,
-			boost::has_range_const_iterator<Rng>::value ||
-			boost::has_range_iterator<Rng>::value
-		> {};
-
-		template<typename T>
-		struct is_range_with_iterators<T*> : tc::is_char<T>::type {};
-
-		template<typename T, std::size_t N>
-		struct is_range_with_iterators<T[N]> : std::true_type {};
-
-		/* support array-of-unknown-bounds incomplete type */
-		template<typename T>
-		struct is_range_with_iterators<T[]> : std::true_type {};
-	}
-	template<typename Rng>
-	struct is_range_with_iterators : is_range_with_iterators_detail::is_range_with_iterators<tc::remove_cvref_t<Rng>> {};
-
-	namespace is_range_of_impl {
+namespace tc{
+	namespace is_range_of_adl_barrier {
 		template<typename Rng, template<typename> class Pred, bool is_range_with_iterators>
 		struct is_range_of2;
 		
@@ -223,25 +210,30 @@ namespace tc {
 		struct is_range_of2<Rng, Pred, false> : std::false_type {};
 
 		template<typename Rng, template<typename> class Pred>
-		struct is_range_of1 : is_range_of2<Rng, Pred, is_range_with_iterators<Rng>::value >::type {};
-	};
-	template<typename Rng, template<typename> class Pred>
-	struct is_range_of : is_range_of_impl::is_range_of1< tc::remove_cvref_t<Rng>, Pred > {};
+		struct is_range_of1 : is_range_of2<Rng, Pred, tc::is_range_with_iterators<Rng>::value >::type {};
 
-	template<typename Rng>
-	struct is_char_range final : is_range_of<Rng, is_char> {};
+		template<typename Rng, template<typename> class Pred>
+		struct is_range_of : is_range_of1< std::remove_reference_t<Rng>, Pred > {};
+	};
+	using is_range_of_adl_barrier::is_range_of;
+
+	namespace is_char_range_adl_barrier {
+		template<typename Rng>
+		struct is_char_range final : is_range_of<Rng, is_char> {};
+	}
+	using is_char_range_adl_barrier::is_char_range;
 
 	static_assert( is_char_range<wchar_t const* const>::value, "" );
 
 	//////////////////////////////
-	// Traversables are either containers or ranges, which are references to consecutive elements in containers.
+	// Ranges are either containers or views, which are references to consecutive elements in containers.
 	//
-	//	Ranges are regular types with pointer copy-semantics:
-	//	- Modifying a copied range itself leaves the original unchanged.
+	//	Views are regular types with pointer copy-semantics:
+	//	- Modifying a copied view itself leaves the original unchanged.
 	//	- Modifying the pointed-to elements modifies the same elements the original is pointing to.
 	//	They are expected to be lightweight and passed by value.
-	//	Their iterators must not be live-limited to the range,
-	//	which outlaws iterators holding pointers to their range.
+	//	Their iterators must not be live-limited to the view,
+	//	which outlaws iterators holding pointers to their view.
 	//	Otherwise, the following would be illegal:
 	//	auto lowerbound( Range, t ) { return std::begin(equal_range( Range, t )); }
 	//
@@ -250,125 +242,62 @@ namespace tc {
 	//	They may not be copyable.
 	//	Containers have deep constness, so iterators of const containers are const_iterators.
 
-	// const_range<T>::type is the equivalent of T* -> T const*
-	// It makes the pointee const.
-	template< typename T >
-	struct const_range;
-
-	// boost::iterator_range and derived are ranges
-	template<typename T, bool is_range_with_iterators>
-	struct is_range_impl2;
-	template<typename T>
-	struct is_range_impl2<T, true> : std::integral_constant< bool, std::is_base_of< boost::iterator_range< typename boost::range_iterator<T>::type >, T >::value > {};
-	template<typename T>
-	struct is_range_impl2<T, false> : std::false_type {};
-	template<typename T>
-	struct is_range_impl : is_range_impl2<T, tc::is_range_with_iterators<T>::value >::type {};
-	template<typename It>
-	struct const_range<boost::iterator_range<It>> final {
-		using type = boost::iterator_range<typename const_iterator_<It>::type>;
-	};
-	template< typename T >
-	struct const_range<boost::sub_range<T>> final {
-		using type = boost::sub_range<T const>;
-	};
-	template<
-		class Value
-		, class Traversal
-		, class Reference
-		, class Difference
-		, class Buffer
-	>
-	struct const_range<boost::any_range<Value,Traversal,Reference,Difference,Buffer>> final {
-		using type = boost::any_range<Value,Traversal,Reference,Difference,Buffer>;
-	};
-	template<
-		class Value
-		, class Traversal
-		, class Reference
-		, class Difference
-		, class Buffer
-	>
-	struct const_range<boost::any_range<Value,Traversal,Reference&,Difference,Buffer>> final {
-		using type = boost::any_range<Value,Traversal,Reference const&,Difference,Buffer>;
-	};
-
-	// pointers to zero-terminated strings are ranges
-	template< typename T >
-	struct is_range_impl<T*> : is_char<T>::type {};
-	template< typename T >
-	struct const_range<T*> final {
-		using type = T const*;
-	};
-	// sub_ranges are ranges
-	template< typename T >
-	struct is_range_impl<sub_range<T>> : std::true_type {};
-	template< typename T >
-	struct const_range<sub_range<T>> final {
-		// sub_range of another range
-		using type = sub_range<typename const_range<T>::type>;
-	};
-	template< typename T >
-	struct const_range<sub_range<T&>> final {
-		// sub_range of a container, which is expected to have deep constness.
-		using type = sub_range<T const&>;
-	};
-	// iterator_base is range
-	template< typename It, typename ConstIt >
-	struct is_range_impl<iterator_base<It,ConstIt>> : std::true_type {};
-	template< typename It, typename ConstIt >
-	struct const_range<iterator_base<It,ConstIt>> final {
-		using type = iterator_base<ConstIt,ConstIt>;
-	};
-
-	// singleton_range<T&> is range
+	// singleton_range<T&> is view
 	template< typename T >
 	struct singleton_range;
 
-	template< typename T >
-	struct const_range<singleton_range<T&>> {
-		// singleton_range is a container, which is expected to have deep constness.
-		using type = singleton_range<T const&>;
-	};
-	template< typename T >
-	struct is_range_impl<singleton_range<T&>> : std::true_type{};
+	// boost::iterator_range and derived are ranges
+	namespace is_view_adl_barrier {
+		template<typename T, bool is_range_with_iterators>
+		struct is_view_impl2;
+		template<typename T>
+		struct is_view_impl2<T, true> : std::integral_constant< bool, std::is_base_of< boost::iterator_range< typename boost::range_iterator<T>::type >, T >::value > {};
+		template<typename T>
+		struct is_view_impl2<T, false> : std::false_type {};
+		template<typename T>
+		struct is_view_impl : is_view_impl2<T, tc::is_range_with_iterators<T>::value >::type {};
 
-	template< typename T >
-	struct is_range final : is_range_impl< std::decay_t<T> > {};
+		// pointers to zero-terminated strings are views
+		template< typename T >
+		struct is_view_impl<T*> : is_char<T>::type {};
 
-	namespace range_by_value_impl {
+		// sub_ranges are views
 		template< typename T >
-		struct range_by_value_for_range {
-			using type = std::decay_t<T>;
-		};
+		struct is_view_impl<sub_range<T>> : std::true_type {};
+
+		// iterator_base is view
+		template< typename It, typename ConstIt >
+		struct is_view_impl<iterator_base<It,ConstIt>> : std::true_type {};
+
 		template< typename T >
-		struct range_by_value_for_range<T const&> {
-			using type = typename tc::const_range< std::decay_t<T> >::type;
+		struct is_view_impl<singleton_range<T&>> : std::true_type{};
+
+		template< typename T >
+		struct is_view final : is_view_impl< tc::decay_t<T> > {};
+
+		template< typename T >
+		struct view_by_value final {
+			static_assert(!std::is_rvalue_reference<T>::value, "");
+			using type = std::conditional_t< is_view<T>::value
+				, tc::decay_t<T>
+				, T
+			>;
 		};
 	}
-	template< typename T >
-	struct range_by_value final {
-		static_assert( !std::is_rvalue_reference<T>::value, "" );
-		using type = typename boost::mpl::eval_if_c< is_range<T>::value
-			, range_by_value_impl::range_by_value_for_range<T>
-			, boost::mpl::identity<T>
-		>::type;
-	};
+	using is_view_adl_barrier::is_view;
+	using is_view_adl_barrier::view_by_value;
 
 	template<typename T>
-	using range_by_value_t = typename range_by_value<T>::type;
+	using view_by_value_t = typename view_by_value<T>::type;
 	
 	/////////////////////////////////////////////
-	// container type checks
+	// is_instance
 
-	template< typename T >
-	struct is_basic_string : std::false_type {};
-
-	template< typename Char, typename Alloc >
-	struct is_basic_string<std::basic_string<Char, std::char_traits<Char>, Alloc> > : std::true_type {};
-
-	template< typename T >
-	struct is_vector : std::false_type {};
+	template<template<typename...> class X, typename T> struct is_instance : public std::false_type {};
+	template<template<typename...> class X, typename T> struct is_instance<X, T const> : public is_instance<X, T> {};
+	template<template<typename...> class X, typename T> struct is_instance<X, T volatile> : public is_instance<X, T> {};
+	template<template<typename...> class X, typename T> struct is_instance<X, T const volatile> : public is_instance<X, T> {};
+	template<template<typename...> class X, typename... Y> struct is_instance<X, X<Y...>> : public std::true_type {};
 
 	/////////////////////////////////////////////
 	// verify_class

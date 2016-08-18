@@ -14,15 +14,19 @@
 
 #pragma once
 
+#include "bool_cast.h"
+#include <boost/range/range_fwd.hpp>
 #include <type_traits>
 
 namespace tc {
-	template< typename T >
-	struct is_range;
-	
-	template<typename Rng>
-	struct is_range_with_iterators;
-	
+	namespace is_range_with_iterators_adl_barrier {
+		template< typename Rng >
+		struct is_range_with_iterators : std::integral_constant< bool,
+			boost::has_range_iterator<Rng>::value
+		> {};
+	}
+	using is_range_with_iterators_adl_barrier::is_range_with_iterators;
+
 	template<typename It>
 	struct const_iterator_;
 
@@ -44,18 +48,12 @@ namespace tc {
 	template< typename Rng, typename Enable=void >
 	struct make_sub_range_result;
 
-	template<typename T>
-	bool bool_cast(T const& t) noexcept {
-		static_assert( std::is_pointer<T>::value || std::is_class<T>::value || std::is_same<T,bool>::value, "");
-		return static_cast<bool>( VERIFYINITIALIZED(t) );
-	}
-
 	struct bool_context final {
 		template< typename T >
 		bool_context(T const& t) noexcept
 			: m_b(tc::bool_cast(t))
 		{}
-		operator bool() const noexcept { return m_b; }
+		operator bool() const& noexcept { return m_b; }
 	private:
 		bool const m_b;
 	};

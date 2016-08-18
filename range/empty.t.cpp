@@ -37,11 +37,11 @@ UNITTESTDEF( empty_range ) {
 		_ASSERT( !tc::empty(vec) );
 	}
 	{ // test iterator range
-		static_assert( !has_mem_fn_empty<std::decay_t<decltype("")> >::value, "" );
+		static_assert( !has_mem_fn_empty<tc::decay_t<decltype("")> >::value, "" );
 		static_assert( tc::is_range_with_iterators<decltype("")>::value, "" );
 		_ASSERT( tc::empty("") );
 
-		static_assert( !has_mem_fn_empty<std::decay_t<decltype("x")> >::value, "" );
+		static_assert( !has_mem_fn_empty<tc::decay_t<decltype("x")> >::value, "" );
 		static_assert( tc::is_range_with_iterators<decltype("x")>::value, "" );
 		_ASSERT( !tc::empty("x") );
 	}

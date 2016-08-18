@@ -47,10 +47,10 @@ namespace tc {
 
 		public:
 			template<typename Rhs0, typename Rhs1, typename Comp>
-			union_adaptor(Rhs0&& rhs0, Rhs1&& rhs1, Comp&& comp) noexcept
+			explicit union_adaptor(Rhs0&& rhs0, Rhs1&& rhs1, Comp&& comp) noexcept
 				: m_baserng(
-					reference_or_value< index_range_t<Rng0> >(std::forward<Rhs0>(rhs0), aggregate_tag()),
-					reference_or_value< index_range_t<Rng1> >(std::forward<Rhs1>(rhs1), aggregate_tag())
+					reference_or_value< index_range_t<Rng0> >(aggregate_tag(), std::forward<Rhs0>(rhs0)),
+					reference_or_value< index_range_t<Rng1> >(aggregate_tag(), std::forward<Rhs1>(rhs1))
 				),
 				m_comp(std::forward<Comp>(comp))
 			{}
@@ -72,7 +72,7 @@ namespace tc {
 
 		public:
 			template< typename Func >
-			auto operator()(Func func) const MAYTHROW -> break_or_continue
+			auto operator()(Func func) const/* no & */ MAYTHROW -> break_or_continue
 			{
 				return tc::interleave(
 					boost::implicit_cast<Rng0 const&>(*std::get<0>(m_baserng)),
@@ -85,7 +85,7 @@ namespace tc {
 			}
 
 			template< typename Func >
-			auto operator()(Func func) MAYTHROW -> break_or_continue
+			auto operator()(Func func) /* no & */ MAYTHROW -> break_or_continue
 			{
 				return tc::interleave(
 					boost::implicit_cast<Rng0&>(*std::get<0>(m_baserng)),
@@ -136,28 +136,26 @@ namespace tc {
 						index_range_t<Rng1>
 					>::index
 				>,
-				typename boost::range_detail::demote_iterator_traversal_tag<
+				tc::demote_iterator_traversal_tag_t<
 					boost::iterators::bidirectional_traversal_tag,
-					typename boost::range_detail::demote_iterator_traversal_tag<
-						traversal_t<Rng0>,
-						traversal_t<Rng1>
-					>::type
-				>::type
+					traversal_t<Rng0>,
+					traversal_t<Rng1>
+				>
 			>
 		{
+		private:
+			using this_type = union_adaptor;
 
+		public:
 			using index = typename union_adaptor::index;
 
 			template<typename Rhs0, typename Rhs1, typename Comp>
-			union_adaptor(Rhs0&& rhs0, Rhs1&& rhs1, Comp&& comp) noexcept
+			explicit union_adaptor(Rhs0&& rhs0, Rhs1&& rhs1, Comp&& comp) noexcept
 				: union_adaptor<Comp, Rng0, Rng1, false>(std::forward<Rhs0>(rhs0), std::forward<Rhs1>(rhs1), std::forward<Comp>(comp))
 			{}
 
 		private:
-
-			using this_type = union_adaptor;
-
-			void find_order(index& idx) const noexcept {
+			void find_order(index& idx) const& noexcept {
 				if (at_end_index_fwd<0>(idx)) {
 					idx.m_order = at_end_index_fwd<1>(idx) ? tc::order::less : tc::order::greater;
 				} else if (at_end_index_fwd<1>(idx)) {
@@ -168,88 +166,88 @@ namespace tc {
 			}
 
 			template<int N, typename Index>
-			auto get_idx(Index&& index) noexcept return_decltype(
+			auto get_idx(Index&& index) & noexcept return_decltype(
 				std::get<N>(index.m_tplindex)
 			)
 
 			template<int N, typename Index>
-			auto get_idx(Index&& index) const noexcept return_decltype(
+			auto get_idx(Index&& index) const& noexcept return_decltype(
 				std::get<N>(index.m_tplindex)
 			)
 
 			template<int N>
-			auto baserng() noexcept return_decltype(
-				std::get<N>(THIS_IN_DECLTYPE m_baserng)
+			auto baserng() & noexcept return_decltype(
+				std::get<N>(this->m_baserng)
 			)
 
 			template<int N>
-			auto baserng() const noexcept return_decltype(
-				std::get<N>(THIS_IN_DECLTYPE m_baserng)
+			auto baserng() const& noexcept return_decltype(
+				std::get<N>(this->m_baserng)
 			)
 
 			template<int N>
-			void increment_index_fwd(index& idx) const noexcept {
+			void increment_index_fwd(index& idx) const& noexcept {
 				baserng<N>()->increment_index(get_idx<N>(idx));
 			}
 
 			template<int N>
-			void decrement_index_fwd(index& idx) const noexcept {
+			void decrement_index_fwd(index& idx) const& noexcept {
 				baserng<N>()->decrement_index(get_idx<N>(idx));
 			}
 
 			template<int N>
-			bool at_end_index_fwd(index const& idx) const noexcept {
+			bool at_end_index_fwd(index const& idx) const& noexcept {
 				return baserng<N>()->at_end_index(get_idx<N>(idx));
 			}
 
 			template<int N>
-			bool at_begin_index(index const& idx) const noexcept {
+			bool at_begin_index(index const& idx) const& noexcept {
 				return baserng<N>()->equal_index(get_idx<N>(idx), std::get<N>(this->m_baserng)->begin_index());
 			}
 
 			template<int N>
-			bool equal_index_fwd(index const& lhs, index const& rhs) const noexcept {
+			bool equal_index_fwd(index const& lhs, index const& rhs) const& noexcept {
 				return baserng<N>()->equal_index(get_idx<N>(lhs), get_idx<N>(rhs));
 			}
 
 			template<int N>
-			auto dereference_index_fwd(index const& idx) const noexcept return_decltype(
-				std::get<N>(THIS_IN_DECLTYPE m_baserng)->dereference_index(get_idx<N>(idx))
+			auto dereference_index_fwd(index const& idx) const& noexcept return_decltype(
+				std::get<N>(this->m_baserng)->dereference_index(get_idx<N>(idx))
 			)
 
 		public:
 
-			STATIC_FINAL(at_end_index)(index const& idx) const noexcept -> bool {
+			STATIC_FINAL(at_end_index)(index const& idx) const& noexcept -> bool {
 				return tc::order::less == idx.m_order && at_end_index_fwd<0>(idx);
 			}
 
-			STATIC_FINAL(begin_index)() const noexcept -> index {
+			STATIC_FINAL(begin_index)() const& noexcept -> index {
 				index idx(baserng<0>()->begin_index(), baserng<1>()->begin_index());
 				find_order(idx);
 				return idx;
 			}
 
-			STATIC_FINAL(dereference_index)(index const& idx) const noexcept ->
-			typename reference_type<
-				typename range_traits<std::remove_reference_t<Rng0> const>::reference,
-				typename range_traits<std::remove_reference_t<Rng1> const>::reference
-			>::type {
+			STATIC_FINAL(dereference_index)(index const& idx) const& noexcept ->
+			tc::lvalue_or_decay_t<common_reference_t<
+				typename range_traits<Rng0>::reference,
+				typename range_traits<Rng1>::reference
+			>> {
 				return VERIFYINITIALIZED(idx.m_order) < tc::order::greater
 					? dereference_index_fwd<0>(idx)
 					: dereference_index_fwd<1>(idx);
 			}
 
-			STATIC_FINAL(end_index)() const noexcept -> index {
+			STATIC_FINAL(end_index)() const& noexcept -> index {
 				index idx(tc::order::less, baserng<0>()->end_index(), baserng<1>()->end_index());
 				return idx;
 			}
 
-			STATIC_FINAL(equal_index)(index const& idxLhs, index const& idxRhs) const noexcept -> bool {
+			STATIC_FINAL(equal_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> bool {
 				return equal_index_fwd<0>(idxLhs, idxRhs) &&
 					equal_index_fwd<1>(idxLhs, idxRhs);
 			}
 
-			STATIC_FINAL(increment_index)(index& idx) const noexcept -> void {
+			STATIC_FINAL(increment_index)(index& idx) const& noexcept -> void {
 				switch_no_default( VERIFYINITIALIZED(idx.m_order) ) {
 					case tc::order::less:
 						increment_index_fwd<0>(idx);
@@ -265,7 +263,7 @@ namespace tc {
 				find_order(idx);
 			}
 
-			STATIC_FINAL(decrement_index)(index& idx) const noexcept -> void {
+			STATIC_FINAL(decrement_index)(index& idx) const& noexcept -> void {
 				if (at_begin_index<0>(idx)) {
 					_ASSERT(!at_begin_index<1>(idx));
 					decrement_index_fwd<1>(idx);
@@ -293,7 +291,7 @@ namespace tc {
 			}
 
 			// partition_point would be a more efficient customization point
-			STATIC_FINAL(middle_point)(index& idx, index const& idxEnd) const noexcept -> void {
+			STATIC_FINAL(middle_point)(index& idx, index const& idxEnd) const& noexcept -> void {
 				if (equal_index_fwd<0>(idx, idxEnd)) {
 					baserng<1>()->middle_point(get_idx<1>(idx), get_idx<1>(idxEnd));
 					idx.m_order = tc::order::greater;
@@ -306,7 +304,7 @@ namespace tc {
 							std::get<1>(tc::as_mutable(this->m_baserng))->make_iterator(get_idx<1>(idx)),
 							std::get<1>(tc::as_mutable(this->m_baserng))->make_iterator(get_idx<1>(idxEnd)),
 							ref0,
-							tc::greaterfrom3way(boost::bind<tc::order>(std::ref(this->m_comp), _2, _1))
+							tc::greaterfrom3way(std::bind(std::ref(this->m_comp), std::placeholders::_2, std::placeholders::_1))
 						)
 					);
 
@@ -357,7 +355,7 @@ namespace tc {
 
 	template<typename Rng0, typename Rng1, typename Comp>
 	auto union_range(Rng0&& rng0, Rng1&& rng1, Comp&& comp) noexcept return_ctor(
-		union_adaptor< std::decay_t<Comp> BOOST_PP_COMMA() range_by_value_t<Rng0> BOOST_PP_COMMA() range_by_value_t<Rng1>>,
+		union_adaptor< tc::decay_t<Comp> BOOST_PP_COMMA() view_by_value_t<Rng0> BOOST_PP_COMMA() view_by_value_t<Rng1>>,
 		(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1), std::forward<Comp>(comp))
 	)
 

@@ -20,15 +20,15 @@
 template< typename Func >
 struct lazy_impl final {
 private:
-	std::decay_t<Func> m_func;
+	tc::decay_t<Func> m_func;
 public:
 	lazy_impl(Func&& func) noexcept
 	:	m_func(std::forward<Func>(func))
 	{}
-	operator std::result_of_t< std::decay_t<Func>() > () const MAYTHROW {
+	operator std::result_of_t< tc::decay_t<Func> const&() > () const& MAYTHROW {
 		return m_func();
 	}
-	std::result_of_t< std::decay_t<Func>() > operator()() const MAYTHROW {
+	std::result_of_t< tc::decay_t<Func> const&() > operator()() const& MAYTHROW {
 		return m_func();
 	}
 };

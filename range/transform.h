@@ -25,7 +25,7 @@
 namespace tc {
 	template<typename Rng, typename Func>
 	auto transform(Rng&& rng, Func&& func) MAYTHROW
-		return_ctor( transform_adaptor<std::decay_t<Func> BOOST_PP_COMMA() range_by_value_t<Rng> >, (std::forward<Rng>(rng),std::forward<Func>(func)) )
+		return_ctor( transform_adaptor<tc::decay_t<Func> BOOST_PP_COMMA() view_by_value_t<Rng> >, (std::forward<Rng>(rng),std::forward<Func>(func)) )
 
 	template<typename Rng>
 	auto transform_asciiupper(Rng const& rng) noexcept

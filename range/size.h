@@ -19,6 +19,7 @@
 
 #include "casts.h"
 #include "round.h"
+#include "meta.h"
 #include <type_traits>
 #include <limits>
 #include <boost/range/traversal.hpp>
@@ -29,10 +30,12 @@ namespace tc {
 		template< typename T > struct size_proxy;
 	}
 	using namespace size_impl;
-	
+
+	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template< typename T >
 	std::enable_if_t<!std::numeric_limits<T>::is_integer, T > make_size_proxy(T t) noexcept;
-	
+
+	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template< typename T >
 	std::enable_if_t< std::numeric_limits<T>::is_integer, size_proxy<T> > make_size_proxy(T t) noexcept;
 
@@ -43,13 +46,20 @@ namespace tc {
 		struct size_proxy final {
 			static_assert(tc::is_actual_integer<T>::value, "");
 		private:
-			void AssertInvariant() noexcept {
+			void AssertInvariant() & noexcept {
 				// npos should only be represented by a signed number. Otherwise casts to (larger) unsigned types may not preserve npos as static_cast<T>(-1)
 				_ASSERT( static_cast<T>(-1)==m_t ? std::is_signed<T>::value : 0<=m_t );
 			}
 		public:
 			T m_t;
 			explicit size_proxy(T t) noexcept : m_t(t) {
+				AssertInvariant();
+			}
+
+			template<typename S>
+			explicit size_proxy(size_proxy<S> const& other) noexcept
+				: m_t(tc::numeric_cast<T>(other.m_t))
+			{
 				AssertInvariant();
 			}
 
@@ -62,7 +72,7 @@ namespace tc {
 
 
 #define CONVERT( S ) \
-			operator S() const noexcept { \
+			operator S() const& noexcept { \
 				_ASSERT(  /*good idea to require signed?*/ std::is_signed<S>::value && static_cast<T>(-1)==m_t || tc::unsigned_cast(m_t)<=tc::unsigned_cast(std::numeric_limits<S>::max()) ); \
 				return static_cast<S>(m_t); \
 			}
@@ -80,10 +90,11 @@ namespace tc {
 #undef CONVERT
 
 			template< typename U >
-			operator size_proxy<U>() const noexcept {
+			operator size_proxy<U>() const& noexcept {
 				return size_proxy<U>(boost::implicit_cast<U>(*this));
 			}
 
+// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 #define operator_bool( op ) \
 			template< typename S > friend std::enable_if_t< tc::is_actual_integer<S>::value, bool > operator op( size_proxy const& lhs, S const& rhs ) noexcept \
 						{ return tc::prepare_argument< T,S >::prepare(lhs.m_t) op tc::prepare_argument< T,S >::prepare(rhs); } \
@@ -133,15 +144,13 @@ namespace tc {
 #undef operator_size_proxy
 		
 #define assign_operator_size_proxy( assign_op, op ) \
-		template< typename Lhs, typename Rhs > \
-		std::enable_if_t< std::is_integral<Lhs>::value, \
-		Lhs& > operator assign_op ( Lhs& lhs, size_proxy<Rhs> const& rhs ) noexcept { \
+		template< typename Lhs, typename Rhs, std::enable_if_t< std::is_integral<Lhs>::value >* = nullptr > \
+		Lhs& operator assign_op ( Lhs& lhs, size_proxy<Rhs> const& rhs ) noexcept { \
 			lhs=tc:: op (tc::as_const(lhs),rhs.m_t); \
 			return lhs; \
 		} \
-		template< typename Lhs, typename Rhs > \
-		std::enable_if_t< !std::is_integral<Lhs>::value, \
-		Lhs& > operator assign_op ( Lhs& lhs, size_proxy<Rhs> const& rhs ) noexcept { \
+		template< typename Lhs, typename Rhs, std::enable_if_t< !std::is_integral<Lhs>::value >* = nullptr > \
+		Lhs& operator assign_op ( Lhs& lhs, size_proxy<Rhs> const& rhs ) noexcept { \
 			lhs assign_op rhs.m_t; \
 			return lhs; \
 		}
@@ -150,9 +159,8 @@ namespace tc {
 		assign_operator_size_proxy(-=,sub)
 #undef assign_operator_size_proxy
 
-		template< typename Lhs, typename Rhs >
-		std::enable_if_t< tc::is_actual_integer<Lhs>::value,
-		Lhs& > operator %= ( Lhs& lhs, size_proxy<Rhs> const& rhs ) noexcept {
+		template< typename Lhs, typename Rhs, std::enable_if_t<tc::is_actual_integer<Lhs>::value>* = nullptr>
+		Lhs& operator %= ( Lhs& lhs, size_proxy<Rhs> const& rhs ) noexcept {
 			lhs%=rhs.m_t;
 			return lhs;
 		}
@@ -161,20 +169,35 @@ namespace tc {
 		struct is_random_access_range final : std::false_type {};
 
 		template<typename T>
-		struct is_random_access_range<T, typename std::enable_if_t<is_range_with_iterators<std::remove_reference_t<T>>::value>> final :
+		struct is_random_access_range<T, typename std::enable_if_t<tc::is_range_with_iterators<std::remove_reference_t<T>>::value>> final :
 			std::is_convertible<typename boost::range_traversal<std::remove_reference_t<T>>::type, boost::iterators::random_access_traversal_tag>
 		{};
 	}
 
+	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template< typename T >
 	std::enable_if_t<!std::numeric_limits<T>::is_integer, T > make_size_proxy(T t) noexcept {
 		return t;
 	}
 
+	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template< typename T >
 	std::enable_if_t< std::numeric_limits<T>::is_integer, size_proxy<T> > make_size_proxy(T t) noexcept {
 		return size_proxy<T>(t);
 	}
+
+	template<typename T0, typename T1>
+	struct common_type_decayed<tc::size_proxy<T0>, tc::size_proxy<T1>> {
+		using type = tc::size_proxy<common_type_decayed_t<T0,T1>>;
+	};
+
+	template<typename T0, typename T1>
+	struct common_type_decayed<tc::size_proxy<T0>, T1> {
+		using type = T1;
+	};
+
+	template<typename T0, typename T1>
+	struct common_type_decayed<T0, tc::size_proxy<T1>> final : common_type_decayed<tc::size_proxy<T1>, T0> {};
 
 	namespace size_impl {
 		// tc::size() requires a range with either:
@@ -214,11 +237,27 @@ namespace tc {
 		template <typename T>
 		struct has_size final : decltype(test_has_size<T>(0)) {
 		};
+
+		template<typename Rng, std::enable_if_t<!tc::size_impl::has_size< Rng const >::value>* =nullptr>
+		auto linear_size(Rng const& rng) noexcept return_decltype(
+			boost::distance(rng)
+		)
+
+		template<typename Rng, std::enable_if_t<tc::size_impl::has_size< Rng const >::value>* =nullptr>
+		auto linear_size(Rng const& rng) noexcept return_decltype(
+			tc::size_impl::size(rng)
+		)
 	}
 
 	template<typename T>
 	auto size(T&& t) noexcept return_decltype(
 		make_size_proxy(tc::size_impl::size(std::forward<T>(t)))
 	)
+
+	template<typename T>
+	auto linear_size(T&& t) noexcept return_decltype(
+		make_size_proxy(tc::size_impl::linear_size(std::forward<T>(t)))
+	)
+
 }
 

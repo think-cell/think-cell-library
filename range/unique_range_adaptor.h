@@ -47,43 +47,43 @@ namespace tc {
 				typename RngRef,
 				typename EqualsRef
 			>
-			unique_adaptor(RngRef&& rng, EqualsRef&& equals) noexcept
-				: m_baserng(reference_or_value< index_range_t<Rng> >(std::forward<RngRef>(rng), aggregate_tag()))
+			explicit unique_adaptor(RngRef&& rng, EqualsRef&& equals) noexcept
+				: m_baserng(reference_or_value< index_range_t<Rng> >(aggregate_tag(), std::forward<RngRef>(rng)))
 				, m_equals(std::forward<EqualsRef>(equals))
 			{}
 
 		private:
 			using this_type = unique_adaptor;
 			reference_or_value< index_range_t<Rng> > m_baserng;
-            Equals m_equals;
+			Equals m_equals;
 
 		public:
 
-			STATIC_FINAL(begin_index)() const noexcept -> index {
+			STATIC_FINAL(begin_index)() const& noexcept -> index {
 				return m_baserng->begin_index();
 			}
 
-			STATIC_FINAL(end_index)() const noexcept -> index {
+			STATIC_FINAL(end_index)() const& noexcept -> index {
 				return m_baserng->end_index();
 			}
 
-			STATIC_FINAL(at_end_index)(index const& idx) const noexcept -> bool {
+			STATIC_FINAL(at_end_index)(index const& idx) const& noexcept -> bool {
 				return m_baserng->at_end_index(idx);
 			}
 
-			STATIC_FINAL(dereference_index)(index const& idx) const noexcept return_decltype(
+			STATIC_FINAL(dereference_index)(index const& idx) const& noexcept return_decltype(
 				m_baserng->dereference_index(idx)
 			)
 
-			STATIC_FINAL(dereference_index)(index const& idx) noexcept return_decltype(
+			STATIC_FINAL(dereference_index)(index const& idx) & noexcept return_decltype(
 				m_baserng->dereference_index(idx)
 			)
 
-			STATIC_FINAL(equal_index)(index const& idxLhs, index const& idxRhs) const noexcept -> bool {
+			STATIC_FINAL(equal_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> bool {
 				return m_baserng->equal_index(idxLhs, idxRhs);
 			}
 
-			STATIC_FINAL(increment_index)(index& idx0) const noexcept -> void {
+			STATIC_FINAL(increment_index)(index& idx0) const& noexcept -> void {
 				using RefType = tc::reference_or_value<decltype(this->dereference_index(idx0))>;
 
 				_ASSERT(!this->at_end_index(idx0));
@@ -91,10 +91,10 @@ namespace tc {
 				auto idx1=idx0;
 				m_baserng->increment_index(idx0);
 				if (!m_baserng->at_end_index(idx0)) {
-					RefType ref1(this->dereference_index(idx1), aggregate_tag());
+					RefType ref1(aggregate_tag(), this->dereference_index(idx1));
 
 					for (;;) {
-						RefType ref0(this->dereference_index(idx0), aggregate_tag());
+						RefType ref0(aggregate_tag(), this->dereference_index(idx0));
 						if (!this->m_equals(*ref1, *ref0)) {
 							break;
 						}
@@ -104,7 +104,7 @@ namespace tc {
 						if (m_baserng->at_end_index(idx0)) {
 							break;
 						}
-						ref1 = RefType(this->dereference_index(idx0), aggregate_tag());
+						ref1 = RefType(aggregate_tag(), this->dereference_index(idx0));
 						if (!this->m_equals(*ref0, *ref1)) {
 							break;
 						}
@@ -118,19 +118,19 @@ namespace tc {
 				}
 			}
 
-			STATIC_FINAL(decrement_index)(index& idx0) const noexcept -> void {
+			STATIC_FINAL(decrement_index)(index& idx0) const& noexcept -> void {
 				using RefType = tc::reference_or_value<decltype(this->dereference_index(idx0))>;
 
 				_ASSERT(!this->equal_index(this->begin_index(),idx0));
 
 				m_baserng->decrement_index(idx0);
 				if (!this->equal_index(this->begin_index(),idx0)) {
-					RefType ref0(this->dereference_index(idx0), aggregate_tag());
+					RefType ref0(aggregate_tag(), this->dereference_index(idx0));
 
 					for (;;) {
 						auto idx1=idx0;
 						m_baserng->decrement_index(idx1);
-						RefType ref1(this->dereference_index(idx1), aggregate_tag());
+						RefType ref1(aggregate_tag(), this->dereference_index(idx1));
 						if (!this->m_equals(*ref1, *ref0)) {
 							break;
 						}
@@ -141,7 +141,7 @@ namespace tc {
 
 						idx0 = idx1;
 						m_baserng->decrement_index(idx0);
-						ref0 = RefType(this->dereference_index(idx0), aggregate_tag());
+						ref0 = RefType(aggregate_tag(), this->dereference_index(idx0));
 						if (!this->m_equals(*ref0, *ref1)) {
 							idx0 = tc_move(idx1);
 							break;
@@ -153,15 +153,15 @@ namespace tc {
 				}
 			}
 
-			auto element_base_index(index const& idx) const noexcept {
+			auto element_base_index(index const& idx) const& noexcept {
 				return idx;
 			}
 
-			auto base_range() noexcept return_decltype(
+			auto base_range() & noexcept return_decltype(
 				*m_baserng
 			)
 
-			auto base_range() const noexcept return_decltype(
+			auto base_range() const & noexcept return_decltype(
 				*m_baserng
 			)
 		};
@@ -206,40 +206,40 @@ namespace tc {
 				typename RngRef,
 				typename EqualsRef
 			>
-			unique_range_adaptor(RngRef&& rng, EqualsRef&& equals) noexcept
-				: m_baserng(reference_or_value< index_range_t<Rng> >(std::forward<RngRef>(rng), aggregate_tag()))
+			explicit unique_range_adaptor(RngRef&& rng, EqualsRef&& equals) noexcept
+				: m_baserng(reference_or_value< index_range_t<Rng> >(aggregate_tag(), std::forward<RngRef>(rng)))
 				, m_equals(std::forward<EqualsRef>(equals))
 			{}
 
 			STATIC_VIRTUAL(FindSubRangeEnd)
 
-			STATIC_OVERRIDE(begin_index)() const noexcept -> index {
+			STATIC_OVERRIDE(begin_index)() const& noexcept -> index {
 				auto idxBegin = m_baserng->begin_index();
 				return {idxBegin, FindSubRangeEnd(idxBegin) };
 			}
 
-			STATIC_OVERRIDE(end_index)() const noexcept -> index {
+			STATIC_OVERRIDE(end_index)() const& noexcept -> index {
 				return {m_baserng->end_index(), m_baserng->end_index()};
 			}
 
-			STATIC_OVERRIDE(increment_index)(index& idx) const noexcept -> void {
+			STATIC_OVERRIDE(increment_index)(index& idx) const& noexcept -> void {
 				idx.m_idxBegin = tc_move(idx.m_idxEnd);
 				idx.m_idxEnd = FindSubRangeEnd(idx.m_idxBegin);
 			}
 
-			STATIC_OVERRIDE(at_end_index)(index const& idx) const noexcept -> bool {
+			STATIC_OVERRIDE(at_end_index)(index const& idx) const& noexcept -> bool {
 				return m_baserng->at_end_index(idx.m_idxBegin);
 			}
 
-			STATIC_OVERRIDE(dereference_index)(index const& idx) const noexcept return_decltype(
+			STATIC_OVERRIDE(dereference_index)(index const& idx) const& noexcept return_decltype(
 				tc::slice(*m_baserng, idx.m_idxBegin, idx.m_idxEnd)
 			)
 
-			STATIC_OVERRIDE(dereference_index)(index const& idx) noexcept return_decltype(
+			STATIC_OVERRIDE(dereference_index)(index const& idx) & noexcept return_decltype(
 				tc::slice(*m_baserng, idx.m_idxBegin, idx.m_idxEnd)
 			)
 
-			STATIC_OVERRIDE(equal_index)(index const& idxLhs, index const& idxRhs) const noexcept -> bool {
+			STATIC_OVERRIDE(equal_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> bool {
 				return m_baserng->equal_index(idxLhs.m_idxBegin, idxRhs.m_idxBegin);
 			}
 
@@ -252,18 +252,20 @@ namespace tc {
 		struct unique_range_front_adaptor
 			: unique_range_adaptor<unique_range_front_adaptor<Rng, Equals>, Rng, Equals>
 		{
+		private:
+			using this_type = unique_range_front_adaptor;
 			friend struct unique_range_adaptor<unique_range_front_adaptor<Rng, Equals>, Rng, Equals>;
 
+		public:
 			template<typename RhsRng, typename RhsEquals>
-			unique_range_front_adaptor(RhsRng&& rng, RhsEquals&& equals) noexcept : unique_range_adaptor<unique_range_front_adaptor, Rng, Equals>(std::forward<RhsRng>(rng), std::forward<RhsEquals>(equals))
+			explicit unique_range_front_adaptor(RhsRng&& rng, RhsEquals&& equals) noexcept : unique_range_adaptor<unique_range_front_adaptor, Rng, Equals>(std::forward<RhsRng>(rng), std::forward<RhsEquals>(equals))
 			{}
 
 			using index = typename unique_range_front_adaptor::index;
 
 		private:
 			using index_base = typename index::index_base;
-			using this_type = unique_range_front_adaptor;
-			STATIC_FINAL(FindSubRangeEnd)(index_base const& idx) const noexcept -> index_base {
+			STATIC_FINAL(FindSubRangeEnd)(index_base const& idx) const& noexcept -> index_base {
 				if (this->m_baserng->at_end_index(idx)) return idx;
 
 				auto idxEnd = idx;
@@ -283,19 +285,21 @@ namespace tc {
 		struct unique_range_adjacent_adaptor
 			: unique_range_adaptor<unique_range_adjacent_adaptor<Rng, Equals>, Rng, Equals>
 		{
+		private:
+			using this_type = unique_range_adjacent_adaptor;
 			friend struct unique_range_adaptor<unique_range_adjacent_adaptor<Rng, Equals>, Rng, Equals>;
 
+		public:
 			template<typename RhsRng, typename RhsEquals>
-			unique_range_adjacent_adaptor(RhsRng&& rng, RhsEquals&& equals) noexcept : unique_range_adaptor<unique_range_adjacent_adaptor, Rng, Equals>(std::forward<RhsRng>(rng), std::forward<RhsEquals>(equals))
+			explicit unique_range_adjacent_adaptor(RhsRng&& rng, RhsEquals&& equals) noexcept : unique_range_adaptor<unique_range_adjacent_adaptor, Rng, Equals>(std::forward<RhsRng>(rng), std::forward<RhsEquals>(equals))
 			{}
 
 			using index = typename unique_range_adjacent_adaptor::index;
 
 		private:
 			using index_base = typename index::index_base;
-			using this_type = unique_range_adjacent_adaptor;
 
-			STATIC_FINAL(FindSubRangeEnd)(index_base const& idx) const noexcept -> index_base {
+			STATIC_FINAL(FindSubRangeEnd)(index_base const& idx) const& noexcept -> index_base {
 				if (this->m_baserng->at_end_index(idx)) return idx;
 
 				for(auto idxEnd = idx;;) {
@@ -319,7 +323,7 @@ namespace tc {
 		typename Equals
 	>
 	auto front_unique_range(Rng&& rng, Equals&& equals) noexcept return_ctor(
-		unique_range_front_adaptor< range_by_value_t<Rng> BOOST_PP_COMMA() std::decay_t<Equals> >,
+		unique_range_front_adaptor< view_by_value_t<Rng> BOOST_PP_COMMA() tc::decay_t<Equals> >,
 		(std::forward<Rng>(rng), std::forward<Equals>(equals))
 	)
 
@@ -333,7 +337,7 @@ namespace tc {
 		typename Equals
 	>
 	auto adjacent_unique_range(Rng&& rng, Equals&& equals) noexcept return_ctor(
-		unique_range_adjacent_adaptor< range_by_value_t<Rng> BOOST_PP_COMMA() std::decay_t<Equals> >,
+		unique_range_adjacent_adaptor< view_by_value_t<Rng> BOOST_PP_COMMA() tc::decay_t<Equals> >,
 		(std::forward<Rng>(rng), std::forward<Equals>(equals))
 	)
 
@@ -351,7 +355,7 @@ namespace tc {
 		typename Equals
 	>
 	auto adjacent_unique(Rng&& rng, Equals&& equals) noexcept return_ctor(
-		unique_adaptor< range_by_value_t<Rng> BOOST_PP_COMMA() std::decay_t<Equals> >,
+		unique_adaptor< view_by_value_t<Rng> BOOST_PP_COMMA() tc::decay_t<Equals> >,
 		(std::forward<Rng>(rng), std::forward<Equals>(equals))
 	)
 

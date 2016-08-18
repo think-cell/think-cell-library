@@ -17,15 +17,21 @@
 #include "index_iterator.h"
 #include "range_defines.h"
 #include "meta.h"
+#include "types.h"
 
 #include "casts.h"
 #include "static_polymorphism.h"
 
-#include <boost/iterator/iterator_facade.hpp>
+#pragma warning( push )
+#pragma warning( disable: 4146 )
+// warning C4146: unary minus operator applied to unsigned type, result still unsigned
+// iterator_facade::distance_from returns -iterator_facade::distance_to which causes warning C4146 if difference_type is std::size_t
+#include <boost/iterator/iterator_facade.hpp> 
+#pragma warning( pop )
+
 #include <boost/mpl/has_xxx.hpp>
 
 #include <type_traits>
-#include <boost/range/detail/demote_iterator_traversal_tag.hpp>
 
 namespace tc {
 
@@ -66,37 +72,37 @@ namespace tc {
 			STATIC_VIRTUAL(distance_to_index)
 			STATIC_VIRTUAL(middle_point)
 
-			const_iterator make_iterator( index idx ) const noexcept {
+			const_iterator make_iterator( index idx ) const &  noexcept {
 				return const_iterator(tc::derived_cast<Derived>(this),tc_move(idx));
 			}
 
-			const_iterator begin() const noexcept {
+			const_iterator begin() const& MAYTHROW {
 				return make_iterator(begin_index());
 			}
 
-			const_iterator end() const noexcept {
+			const_iterator end() const& MAYTHROW {
 				return make_iterator(end_index());
 			}
 
-			iterator make_iterator( index idx ) noexcept {
+			iterator make_iterator( index idx ) & noexcept {
 				return iterator(tc::derived_cast<Derived>(this),tc_move(idx));
 			}
 
-			iterator begin() noexcept {
+			iterator begin() & MAYTHROW {
 				return make_iterator(begin_index());
 			}
 
-			iterator end() noexcept {
+			iterator end() & MAYTHROW {
 				return make_iterator(end_index());
 			}
 
-			bool empty() const noexcept {
+			bool empty() const& MAYTHROW {
 				return at_end_index(
 					begin_index()
 				);
 			}
 
-			STATIC_OVERRIDE(at_end_index)(index const& idx) const noexcept -> bool {
+			STATIC_OVERRIDE(at_end_index)(index const& idx) const& MAYTHROW -> bool {
 				return equal_index(idx, end_index());
 			}
 		};
@@ -118,7 +124,7 @@ namespace tc {
 	namespace range_adaptor_impl {
 		struct range_adaptor_access final {
 			template< typename Derived, typename... Args>
-			auto operator()(Derived&& derived, Args&& ... args) MAYTHROW return_decltype(
+			auto operator()(Derived&& derived, Args&& ... args) /* no & */ MAYTHROW return_decltype(
 				std::forward<Derived>(derived).apply(std::forward<Args>(args)...) // MAYTHROW
 			)
 		};
@@ -168,13 +174,11 @@ namespace tc {
 			using BaseRange=std::remove_reference_t< index_range_t<Rng> >;
 
 		protected:
-			range_adaptor() noexcept
-				// m_baserng may be default-constructible
-			{}
+			range_adaptor()=default;
 
 			template< typename Rhs >
-			range_adaptor( Rhs&& rhs, aggregate_tag ) noexcept
-			:	m_baserng( std::forward<Rhs>(rhs), aggregate_tag() )
+			explicit range_adaptor( aggregate_tag, Rhs&& rhs ) noexcept
+			:	m_baserng( aggregate_tag(), std::forward<Rhs>(rhs) )
 			{}
 			template< typename Rhs >
 			range_adaptor( Rhs&& rhs ) noexcept
@@ -187,11 +191,11 @@ namespace tc {
 			{}
 
 		public:
-			auto base_range() noexcept return_decltype(
+			auto base_range() & noexcept return_decltype(
 				*m_baserng
 			)
 
-			auto base_range() const noexcept return_decltype(
+			auto base_range() const & noexcept return_decltype(
 				*m_baserng
 			)
 
@@ -206,16 +210,16 @@ namespace tc {
 
 			template< typename Func >
 			struct adaptor<Func, true> final {
-            private:
+		private:
 				Derived const& m_derived;
-				std::decay_t<Func> mutable m_func;
+				tc::decay_t<Func> mutable m_func;
 
 			public:
-				adaptor(Derived const& derived, Func&& func) noexcept
+				explicit adaptor(Derived const& derived, Func&& func) noexcept
 				: m_derived( derived )
 				, m_func( std::forward<Func>(func) ) {}
 
-				template<typename... Args> break_or_continue operator()(Args&& ... args) const MAYTHROW {
+				template<typename... Args> break_or_continue operator()(Args&& ... args) const& MAYTHROW {
 					return continue_if_not_break(
 						range_adaptor_access(),
 						m_derived,
@@ -227,17 +231,17 @@ namespace tc {
 
 			template< typename Func >
 			struct adaptor<Func, false> final {
-            private:
+			private:
 				Derived const& m_derived;
-				std::decay_t<Func> mutable m_func;
+				tc::decay_t<Func> mutable m_func;
 
 			public:
-				adaptor(Derived const& derived, Func&& func) noexcept
+				explicit adaptor(Derived const& derived, Func&& func) noexcept
 					: m_derived( derived )
 					, m_func( std::forward<Func>(func) ) {}
 
 				template<typename... Args>
-				void operator()(Args&& ... args) const MAYTHROW {
+				void operator()(Args&& ... args) const& MAYTHROW {
 					static_assert(
 						// Note: Instead of the following static_assert it would be possible to
 						// use return_decltype() and let the functor check in ensure_index_range
@@ -256,58 +260,57 @@ namespace tc {
 
 		public:
 
-			template< typename Func >
-			std::enable_if_t<
+			template< typename Func, std::enable_if_t<
 				std::is_same<
-					std::result_of_t<BaseRange(adaptor<Func, true>)>,
+					std::result_of_t<BaseRange&(adaptor<Func, true>)>,
 					break_or_continue
-				>::value,
-				break_or_continue
-			>
-			operator()(Func&& func) MAYTHROW {
+				>::value>* = nullptr>
+			break_or_continue operator()(Func&& func) /* no & */ MAYTHROW {
 				return base_range()(adaptor<Func, true>(derived_cast<Derived>(*this), std::forward<Func>(func)));
 			}
 		
-			template< typename Func >
-			std::enable_if_t<
+			template< typename Func, std::enable_if_t<
 				!std::is_same<
 					std::result_of_t<BaseRange(adaptor<Func, true>)>,
 					break_or_continue
-				>::value &&
-				std::is_same<
-					std::result_of_t<BaseRange(adaptor<Func, false>)>,
-					void
 				>::value
-			>
-			operator()(Func&& func) MAYTHROW {
-				return base_range()(adaptor<Func, false>(derived_cast<Derived>(*this), std::forward<Func>(func)));
+			>* = nullptr>
+			void operator()(Func&& func) /* no & */ MAYTHROW {
+				static_assert(
+					std::is_same<
+						std::result_of_t<BaseRange&(adaptor<Func, false>)>,
+						void
+					>::value,
+					"Generator range must return either tc::break_or_continue or void"
+				);
+
+				base_range()(adaptor<Func, false>(derived_cast<Derived>(*this), std::forward<Func>(func)));
 			}
 
-			template< typename Func >
-			std::enable_if_t<
+			template< typename Func, std::enable_if_t<
 				std::is_same<
-					std::result_of_t<BaseRange(adaptor<Func, true>)>,
+					std::result_of_t<BaseRange const&(adaptor<Func, true>)>,
 					break_or_continue
-				>::value,
-				break_or_continue
-			>
-			operator()(Func&& func) const MAYTHROW {
+				>::value>* = nullptr>
+			break_or_continue operator()(Func&& func) const/* no & */ MAYTHROW {
 				return base_range()(adaptor<Func, true>(derived_cast<Derived>(*this), std::forward<Func>(func)));
 			}
 
-			template< typename Func >
-			std::enable_if_t<
+			template< typename Func, std::enable_if_t<
 				!std::is_same<
-					std::result_of_t<BaseRange(adaptor<Func, true>)>,
+					std::result_of_t<BaseRange const&(adaptor<Func, true>)>,
 					break_or_continue
-				>::value &&
-				std::is_same<
-					std::result_of_t<BaseRange(adaptor<Func, false>)>,
-					void
 				>::value
-			>
-			operator()(Func&& func) const MAYTHROW {
-				return base_range()(adaptor<Func, false>(derived_cast<Derived>(*this), std::forward<Func>(func)));
+			>* = nullptr>
+			void operator()(Func&& func) const/* no & */ MAYTHROW {
+				static_assert(
+					std::is_same<
+						std::result_of_t<BaseRange const&(adaptor<Func, false>)>,
+						void
+					>::value,
+					"Generator range must return either tc::break_or_continue or void"
+				);
+				base_range()(adaptor<Func, false>(derived_cast<Derived>(*this), std::forward<Func>(func)));
 			}
 		};
 		//-------------------------------------------------------------------------------------------------------------------------
@@ -337,25 +340,22 @@ namespace tc {
 					, boost::iterators::random_access_traversal_tag
 					, Traversal
 				>,
-				typename boost::iterator_traversal<
-					typename boost::range_iterator<std::remove_reference_t<Rng>>::type
-				>::type
+				tc::traversal_t<Rng>
 			>::type
 		>
 		{
 		private:
-			using base_ = range_adaptor<Derived,Rng,Traversal,false>;
 			using this_type = range_adaptor;
+			using base_ = range_adaptor<Derived,Rng,Traversal,false>;
+			
 		protected:
 			using typename base_::BaseRange;
 
-			range_adaptor() noexcept
-				// m_baserng may be default-constructible
-			{}
+			range_adaptor()=default;
 
 			template< typename Rhs >
-			range_adaptor( Rhs&& rhs, aggregate_tag ) noexcept
-			:	base_(std::forward<Rhs>(rhs), aggregate_tag())
+			explicit range_adaptor( aggregate_tag, Rhs&& rhs ) noexcept
+			:	base_(aggregate_tag(), std::forward<Rhs>(rhs))
 			{}
 
 			template< typename Rhs >
@@ -370,45 +370,47 @@ namespace tc {
 		public:
 			using index = typename BaseRange::index;
 
-			STATIC_OVERRIDE(begin_index)() const noexcept -> index {
+			STATIC_OVERRIDE(begin_index)() const& MAYTHROW -> index {
 				return this->base_range().begin_index();
 			}
 
-			STATIC_OVERRIDE(end_index)() const noexcept -> index {
+			STATIC_OVERRIDE(end_index)() const& MAYTHROW -> index {
 				return this->base_range().end_index();
 			}
 
-			STATIC_OVERRIDE(at_end_index)(index const& idx) const noexcept -> bool {
+			STATIC_OVERRIDE(at_end_index)(index const& idx) const& MAYTHROW -> bool {
 				return this->base_range().at_end_index(idx);
 			}
 
-			STATIC_OVERRIDE(dereference_index)(index const& idx) noexcept
-				return_decltype( THIS_IN_DECLTYPE base_range().dereference_index(idx) )
+			STATIC_OVERRIDE(dereference_index)(index const& idx) & MAYTHROW ->decltype(auto) {
+				return this->base_range().dereference_index(idx);
+			}
 
-			STATIC_OVERRIDE(dereference_index)(index const& idx) const noexcept
-				return_decltype( tc::as_const(THIS_IN_DECLTYPE base_range()).dereference_index(idx) )
+			STATIC_OVERRIDE(dereference_index)(index const& idx) const& MAYTHROW ->decltype(auto) {
+				return this->base_range().dereference_index(idx);
+			}
 
-			STATIC_OVERRIDE(equal_index)(index const& idxLhs, index const& idxRhs) const noexcept -> bool {
+			STATIC_OVERRIDE(equal_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> bool {
 				return this->base_range().equal_index(idxLhs,idxRhs);
 			}
 
-			STATIC_OVERRIDE(increment_index)(index& idx) const noexcept -> void {
+			STATIC_OVERRIDE(increment_index)(index& idx) const& MAYTHROW -> void {
 				this->base_range().increment_index(idx);
 			}
 
-			STATIC_OVERRIDE(decrement_index)(index& idx) const noexcept -> void {
+			STATIC_OVERRIDE(decrement_index)(index& idx) const& MAYTHROW -> void {
 				this->base_range().decrement_index(idx);
 			}
 
-			STATIC_OVERRIDE(advance_index)(index& idx, typename boost::range_difference<std::remove_reference_t<Rng>>::type d) const noexcept -> void {
+			STATIC_OVERRIDE(advance_index)(index& idx, typename boost::range_difference<std::remove_reference_t<Rng>>::type d) const& MAYTHROW -> void {
 				this->base_range().advance_index(idx,d);
 			}
 
-			STATIC_OVERRIDE(distance_to_index)(index const& idxLhs, index const& idxRhs) const noexcept -> typename boost::range_difference<std::remove_reference_t<Rng>>::type {
+			STATIC_OVERRIDE(distance_to_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> typename boost::range_difference<std::remove_reference_t<Rng>>::type {
 				return this->base_range().distance_to_index(idxLhs,idxRhs);
 			}
 
-			STATIC_OVERRIDE(middle_point)( index & idxBegin, index const& idxEnd ) const noexcept -> void {
+			STATIC_OVERRIDE(middle_point)( index & idxBegin, index const& idxEnd ) const& noexcept -> void {
 				this->base_range().middle_point(idxBegin,idxEnd);
 			}
 		};

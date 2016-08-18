@@ -18,7 +18,6 @@
 #include "tc_move.h"
 
 #include "return_decltype.h"
-#include "remove_cvref.h"
 #include "type_traits.h"
 
 #include <boost/implicit_cast.hpp>
@@ -140,7 +139,7 @@ namespace tc {
 		any_ptr( void* pv ) noexcept 
 		:	m_pv(pv)
 		{}
-		template<typename T> operator T() const noexcept {
+		template<typename T> operator T() const& noexcept {
 			static_assert(sizeof(T)==sizeof(void*), "" );
 			static_assert( std::is_pointer<T>::value || std::is_member_pointer<T>::value, "" );
 			T t;
@@ -156,7 +155,7 @@ namespace tc {
 		any_const_ptr( void const* pv ) noexcept 
 		:	m_pv(pv)
 		{}
-		template<typename T> operator T const*() const noexcept {
+		template<typename T> operator T const*() const& noexcept {
 			return static_cast<T const*>(m_pv);
 		}
 	};
@@ -170,12 +169,12 @@ namespace tc {
 			explicit type(same_cvref_t<unsigned char,T*> pb) noexcept
 			: m_pb(pb)
 			{}
-			operator std::remove_cv_t<T>() const noexcept {
+			operator std::remove_cv_t<T>() const& noexcept {
 				std::remove_cv_t<T> t;
 				std::memcpy( std::addressof(t), m_pb, sizeof(t) );
 				return t;
 			}
-			type const& operator=( std::remove_cv_t<T> const& rhs ) const noexcept {
+			type const& operator=( std::remove_cv_t<T> const& rhs ) const& noexcept {
 				boost::copy( tc::as_blob(rhs), m_pb );
 				return *this;
 			}
@@ -224,14 +223,14 @@ namespace tc {
 			explicit type(T* pt) noexcept
 			: m_pb(reinterpret_cast<same_cvref_t<unsigned char,T*>>(pt))
 			{}
-			explicit operator bool() const noexcept {
+			explicit operator bool() const& noexcept {
 				return m_pb;
 			}
 			type& operator=(std::nullptr_t) & noexcept {
 				m_pb=nullptr;
 				return *this;
 			}
-			typename aliasing_ref<T>::type operator*() const noexcept {
+			typename aliasing_ref<T>::type operator*() const& noexcept {
 				return aliasing_ref<T>::construct(m_pb);
 			}
 			type& operator+=( std::ptrdiff_t n ) & noexcept {
@@ -247,7 +246,7 @@ namespace tc {
 			template< typename Offset > friend type operator-( type ptr, Offset n ) noexcept {
 				return ptr-=n;
 			}
-			typename aliasing_ref<T>::type operator[]( std::ptrdiff_t n ) const noexcept {
+			typename aliasing_ref<T>::type operator[]( std::ptrdiff_t n ) const& noexcept {
 				return *(*this+n);
 			}
 		};
@@ -279,10 +278,10 @@ namespace tc {
 	};
 
 	// no danger of aliasing because Src is not a pointer:
-	template< typename Dst, typename Src >
-	std::enable_if_t<!(
+	template< typename Dst, typename Src, std::enable_if_t<!(
 		std::is_pointer<Src>::value && std::is_pointer<Dst>::value
-	), Dst > bit_cast( Src const& src ) noexcept {
+	)>* = nullptr>
+	Dst bit_cast( Src const& src ) noexcept {
 		static_assert( std::is_same< tc::remove_cvref_t<Dst>, Dst >::value, "" );
 		static_assert(sizeof(Dst)==sizeof(Src),"bit_cast source and destination must be same size");
 		static_assert(
@@ -296,29 +295,28 @@ namespace tc {
 	}
 
 	// danger of aliasing because Src is a pointer:
-	template< typename Dst, typename Src >
-	std::enable_if_t<
+	template< typename Dst, typename Src, std::enable_if_t<
 		std::is_pointer<Src>::value && std::is_pointer<Dst>::value
-	, typename aliasing_ptr< std::remove_pointer_t<Dst> >::type > bit_cast( Src const& src ) noexcept {
+	>* = nullptr>
+	typename aliasing_ptr< std::remove_pointer_t<Dst> >::type bit_cast( Src const& src ) noexcept {
 		static_assert( std::is_same< tc::remove_cvref_t<Dst>, Dst >::value, "" );
 		return typename aliasing_ptr< std::remove_pointer_t<Dst> >::type(reinterpret_cast<Dst>(src));
 	}
 
-	template< typename T >
-	auto unsigned_modulo_cast( T t ) noexcept
+	template< typename T, std::enable_if_t<tc::is_char<T>::value>* =nullptr>
+	auto unsigned_char_cast( T t ) noexcept
 		return_decltype( static_cast<std::make_unsigned_t<T>>(t) )
 
 	// gcc (4.8.3) does not like the string literals inside _ASSERTE so:
-	template< typename T >
-	std::make_unsigned_t<T> unsigned_cast(T t) noexcept {
-		_ASSERT( 0<=t );
-		return tc::unsigned_modulo_cast(t);
-	}
+	template< typename T, std::enable_if_t<tc::is_actual_integer<T>::value>* =nullptr>
+	auto unsigned_cast(T t) noexcept code_return_decltype( 
+		_ASSERT( 0<=t );,
+		static_cast<std::make_unsigned_t<T>>(t)
+	)
 
 	// gcc (4.8.3) does not like the string literals inside _ASSERTE so:
-	template< typename T >
+	template< typename T, std::enable_if_t<tc::is_actual_integer<T>::value>* =nullptr>
 	std::make_signed_t<T> signed_cast(T t) noexcept {
-		static_assert(tc::is_actual_integer<T>::value, "");
 		_ASSERT( std::is_signed<T>::value || t<=tc::unsigned_cast( std::numeric_limits<std::make_signed_t<T>>::max() ) );
 		return static_cast<std::make_signed_t<T>>(t);
 	}
@@ -350,10 +348,10 @@ namespace tc {
 	template<typename Func>
 	struct make_arg_mutable_impl final {
 	private:
-		std::decay_t<Func> m_func;
+		tc::decay_t<Func> m_func;
 	public:
 		make_arg_mutable_impl(Func&& func) noexcept : m_func(std::forward<Func>(func)) {}
-		template<typename T> auto operator()(T const& t) const MAYTHROW return_decltype( m_func( as_mutable(t) ) )
+		template<typename T> auto operator()(T const& t) const& MAYTHROW return_decltype( m_func( as_mutable(t) ) )
 	};
 
 	template<typename Func>
@@ -411,19 +409,13 @@ namespace tc {
 	// reluctant_static_cast
 	// Returns a reference to its argument whenever possible, otherwise performs an explicit conversion.
 
-	template<typename TTarget, typename TSource>
-	std::enable_if_t<
-		tc::is_base_of_decayed<TTarget, TSource>::value,
-		TSource&&
-	> reluctant_static_cast(TSource&& src) noexcept {
+	template<typename TTarget, typename TSource, std::enable_if_t<tc::is_base_of_decayed<TTarget, TSource>::value>* = nullptr>
+	TSource&& reluctant_static_cast(TSource&& src) noexcept {
 		return std::forward<TSource>(src);
 	}
 
-	template<typename TTarget, typename TSource>
-	std::enable_if_t<
-		!tc::is_base_of_decayed<TTarget, TSource>::value,
-		TTarget
-	> reluctant_static_cast(TSource&& src) noexcept {
+	template<typename TTarget, typename TSource, std::enable_if_t<!tc::is_base_of_decayed<TTarget, TSource>::value>* = nullptr>
+	TTarget reluctant_static_cast(TSource&& src) noexcept {
 		return static_cast<TTarget>(std::forward<TSource>(src));
 	}
 }

@@ -15,7 +15,6 @@
 #pragma once
 #include "functors.h"
 #include "return_decltype.h"
-#include <boost/bind.hpp>
 #include <atomic>
 
 /////////////////////////////////////////////////////////////////////
@@ -29,50 +28,72 @@ namespace tc {
 // Unlike std::less<> et. al., they are special-made for comparisons, so they only use operator== and operator< with constant arguments and expect noexcept and a bool return
 // This avoids types having to support operator> and operator>=, which we do not want to use in our code.
 
+// overloadable version of operator==
+template<typename Lhs, typename Rhs, std::enable_if_t< !(tc::is_actual_arithmetic<Lhs>::value && tc::is_actual_arithmetic<Rhs>::value) >* =nullptr >
+bool equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
+	return lhs==rhs;
+}
+
+template<typename Lhs, typename Rhs, std::enable_if_t< tc::is_actual_arithmetic<Lhs>::value && tc::is_actual_arithmetic<Rhs>::value >* =nullptr >
+bool equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
+	return tc::numeric_cast<decltype(lhs+rhs)>(lhs)==tc::numeric_cast<decltype(lhs+rhs)>(rhs);
+}
+
+// overloadable version of operator<
+template<typename Lhs, typename Rhs, std::enable_if_t< !(tc::is_actual_arithmetic<Lhs>::value && tc::is_actual_arithmetic<Rhs>::value) >* =nullptr >
+bool less(Lhs const& lhs, Rhs const& rhs) noexcept {
+	return lhs<rhs;
+}
+
+template<typename Lhs, typename Rhs, std::enable_if_t< tc::is_actual_arithmetic<Lhs>::value && tc::is_actual_arithmetic<Rhs>::value >* =nullptr >
+bool less(Lhs const& lhs, Rhs const& rhs) noexcept {
+	return tc::numeric_cast<decltype(lhs+rhs)>(lhs)<tc::numeric_cast<decltype(lhs+rhs)>(rhs);
+}
+
 struct fn_equal_to {
 	template<typename Lhs, typename Rhs>
-	bool operator()(Lhs const& lhs, Rhs const& rhs) const noexcept {
-		return lhs==rhs;
+	bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
+		return equal_to(lhs,rhs);
 	}
 	using is_transparent=void;
 };
 
 struct fn_not_equal_to {
 	template<typename Lhs, typename Rhs>
-	bool operator()(Lhs const& lhs, Rhs const& rhs) const noexcept {
-		return !boost::implicit_cast<bool>(lhs == rhs);
+	bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
+		return !equal_to(lhs,rhs);
 	}
 	using is_transparent = void;
 };
 
 struct fn_less {
 	template<typename Lhs, typename Rhs>
-	bool operator()(Lhs const& lhs, Rhs const& rhs) const noexcept {
-		return lhs<rhs;
+	bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
+		return less(lhs,rhs);
 	}
 	using is_transparent = void;
 };
 
 struct fn_greater_equal {
 	template<typename Lhs, typename Rhs>
-	bool operator()(Lhs const& lhs, Rhs const& rhs) const noexcept {
-		return !boost::implicit_cast<bool>(lhs<rhs);
+	bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
+		return !less(lhs,rhs);
 	}
 	using is_transparent = void;
 };
 
 struct fn_greater {
 	template<typename Lhs, typename Rhs>
-	bool operator()(Lhs const& lhs, Rhs const& rhs) const noexcept {
-		return rhs<lhs;
+	bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
+		return less(rhs,lhs);
 	}
 	using is_transparent = void;
 };
 
 struct fn_less_equal {
 	template<typename Lhs, typename Rhs>
-	bool operator()(Lhs const& lhs, Rhs const& rhs) const noexcept {
-		return !boost::implicit_cast<bool>(rhs<lhs);
+	bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
+		return !less(rhs,lhs);
 	}
 	using is_transparent = void;
 };
@@ -106,13 +127,13 @@ bool assign_better( std::atomic<Var>&& var, Val&& val, Better better ) noexcept 
 
 template< typename Var, typename Val >
 bool change( Var&& var, Val&& val ) noexcept {
-	return tc::assign_better( std::forward<Var>(var), std::forward<Val>(val), !boost::bind<bool>(tc::fn_equal_to(), _2, _1) ); // var==val, not val==var
+	return tc::assign_better( std::forward<Var>(var), std::forward<Val>(val), std::bind(tc::fn_not_equal_to(), std::placeholders::_2, std::placeholders::_1) ); // var==val, not val==var
 }
 
 template< typename Var, typename Val >
 bool change( std::atomic<Var> & var, Val&& val ) noexcept {
 	_ASSERTINITIALIZED( val );
-	return !boost::implicit_cast<bool>( var.exchange(val)==val );
+	return !tc::equal_to(var.exchange(val),val);
 }
 
 template< typename Var, typename Val >
@@ -120,7 +141,7 @@ bool change( std::atomic<Var>&& var, Val&& val ) noexcept; // make passing rvalu
 
 template< typename Var, typename Val >
 bool assign_max( Var&& var, Val&& val ) noexcept {
-	return tc::assign_better( std::forward<Var>(var), std::forward<Val>(val), tc::fn_greater() ); // use operator< for comparison just like std::min/max
+	return tc::assign_better( std::forward<Var>(var), std::forward<Val>(val), tc::fn_greater() ); // use operator< for comparison just like tc::min/max
 }
 
 template< typename Var, typename Val >

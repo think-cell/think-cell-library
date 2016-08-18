@@ -134,14 +134,14 @@ UNITTESTDEF( make_vector_on_r_vector_is_identity ) {
 
 UNITTESTDEF(find_closest_if) {
 	struct IntCompareOnce final : boost::noncopyable {
-		IntCompareOnce(int n) noexcept :m_n(n), m_bCompared(false) { }
-		bool operator==(int n) const noexcept {
+		IntCompareOnce(int n) noexcept :m_n(n) { }
+		bool operator==(int n) const& noexcept {
 			_ASSERT( change(m_bCompared, true) );
 			return m_n==n;
 		}
 	private:
 		int m_n;
-		bool mutable m_bCompared;
+		bool mutable m_bCompared = false;
 	};
 
 	auto find=[](auto const& rngn, int iStart, int nTarget, int nComparisonsMax) {

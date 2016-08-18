@@ -40,30 +40,31 @@ struct fundamental_base<void> {};
 
 template<typename Base>
 struct fundamental_base<Base,std::enable_if_t<!std::is_class< Base >::value >> {
-	operator Base const&() const noexcept {
+	operator Base const&() const& noexcept {
 		return _get();
 	}
 
-	operator Base &() noexcept {
+	operator Base &() & noexcept {
 		return _get();
 	}
 
 private:
 	Base m_base;
 
-protected:
+public:
 	fundamental_base() noexcept {}
 
+protected:
 	template< typename A1 >
 	fundamental_base(A1&& a1) noexcept
 	:	m_base(std::forward<A1>(a1))
 	{}
 
-	Base const& _get() const noexcept {
+	Base const& _get() const& noexcept {
 		return m_base;
 	}
 
-	Base & _get() noexcept {
+	Base & _get() & noexcept {
 		return m_base;
 	}
 };
@@ -73,11 +74,11 @@ struct fundamental_base<Base,std::enable_if_t< std::is_class< Base >::value >>
 	: public Base
 {
 protected:
-	Base const& _get() const noexcept {
+	Base const& _get() const& noexcept {
 		return tc::base_cast<Base>(*this);
 	}
 
-	Base & _get() noexcept {
+	Base & _get() & noexcept {
 		return tc::base_cast<Base>(*this);
 	}
 
@@ -87,9 +88,8 @@ public:
 };
 
 template<typename Value, typename Accumulate>
-struct FAccumulator final : fundamental_base< std::decay_t<Value> > {
-	using fundamental_base = fundamental_base< std::decay_t<Value> >;
-	using result_type = void;
+struct FAccumulator final : fundamental_base< tc::decay_t<Value> > {
+	using fundamental_base = fundamental_base< tc::decay_t<Value> >;
 
 	FAccumulator(Value&& value, Accumulate&& accumulate) noexcept
 	:	fundamental_base( std::forward<Value>(value) )
@@ -97,12 +97,12 @@ struct FAccumulator final : fundamental_base< std::decay_t<Value> > {
 	{}
 
 	template<typename... Args>
-	void operator() (Args&& ... args) noexcept {
+	void operator() (Args&& ... args) & noexcept {
 		m_accumulate(this->_get(), std::forward<Args>(args)...);
 	}
 
 private:
-	std::decay_t<Accumulate> m_accumulate;
+	tc::decay_t<Accumulate> m_accumulate;
 };
 
 ///////////////////////////////////////////////

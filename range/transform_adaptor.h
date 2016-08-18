@@ -32,8 +32,7 @@ namespace tc {
 		struct transform_adaptor_access final {
 			template< typename Func, typename Rng, bool bHasIterator >
 			static Func&& get_func(transform_adaptor<Func,Rng,bHasIterator>&& rng) noexcept {
-#if defined(_MSC_VER) && !defined(_DEBUG) && _MSC_VER==1900
-				static_assert(_MSC_FULL_VER == 190023026, "reinvestigate workaround");
+#if !defined(__clang__) && !defined(_DEBUG) && _MSC_VER==1900 && _MSC_FULL_VER == 190023026
 				// workaround for compiler bug https://connect.microsoft.com/VisualStudio/feedback/details/1706489
 				return tc_move(rng.m_func);
 #else
@@ -42,14 +41,10 @@ namespace tc {
 			}
 		};
 
-		template< typename Func >
-		struct delayed_returns_reference_to_argument {
-			using type=decltype(returns_reference_to_argument(std::declval<Func>())); // invoke ADL
-		};
 
 		template< typename Func, typename Rng >
 		struct transform_adaptor<Func,Rng,false> : public range_adaptor<transform_adaptor<Func,Rng>, Rng > {
-        private:
+		private:
 			using base_ = range_adaptor<transform_adaptor<Func,Rng>, Rng >;
 
 		protected:
@@ -62,33 +57,26 @@ namespace tc {
 			friend struct range_adaptor_impl::range_adaptor_access;
 			friend struct transform_adaptor_impl::transform_adaptor_access;
 			template< typename Apply, typename... Args>
-			auto apply(Apply&& apply, Args&& ... args) const MAYTHROW return_decltype (
+			auto apply(Apply&& apply, Args&& ... args) const& MAYTHROW return_decltype (
 				std::forward<Apply>(apply)( m_func(std::forward<Args>(args)...) )
 			)
 
 		public:
-			// default ctor
-			transform_adaptor() = default;
-			transform_adaptor( transform_adaptor&& rng ) = default;
-			transform_adaptor& operator=( transform_adaptor && rng ) & = default;
-			transform_adaptor( transform_adaptor const& rng ) = default;
-			transform_adaptor& operator=( transform_adaptor const& rng ) & = default;
-
 			// other ctors
 			template< typename RngOther, typename FuncOther >
 			explicit transform_adaptor( RngOther&& rng, FuncOther&& func ) noexcept
-				: base_(std::forward<RngOther>(rng), aggregate_tag())
+				: base_(aggregate_tag(), std::forward<RngOther>(rng))
 				, m_func(std::forward<FuncOther>(func))
 			{}
 
 			template< typename Rng2 = Rng >
-			auto size() const noexcept return_decltype(tc::size_impl::size(boost::implicit_cast<std::remove_reference_t<Rng2> const&>(THIS_IN_DECLTYPE base_range())))
+			auto size() const& noexcept return_decltype(tc::size_impl::size(boost::implicit_cast<std::remove_reference_t<Rng2> const&>(this->base_range())))
 		};
 
 		template< typename Func, typename Rng >
 		struct transform_adaptor<Func,Rng,true> : public transform_adaptor<Func,Rng,false> {
 			static_assert( 
-				std::is_same< Rng, range_by_value_t<Rng> >::value,
+				std::is_same< Rng, view_by_value_t<Rng> >::value,
 				"adaptors must hold ranges by value"
 			);
         private:
@@ -98,29 +86,6 @@ namespace tc {
 			friend struct range_adaptor_impl::range_adaptor_access;
 		public:
 			using typename base_::index;
-
-			// default ctor
-			transform_adaptor() {}
-
-			transform_adaptor( transform_adaptor&& rng )
-				: base_(tc::base_cast<base_>(tc_move(rng)))
-			{}
-
-			transform_adaptor& operator=( transform_adaptor&& rng ) & {
-				base_::operator=(tc::base_cast<base_>(tc_move(rng)));
-				return *this;
-			}
-
-			transform_adaptor( transform_adaptor const& rng )
-				: base_(tc::base_cast<base_>(rng))
-			{}
-
-			transform_adaptor& operator=( transform_adaptor const& rng ) & {
-				base_::operator=(tc::base_cast<base_>(rng));
-				return *this;
-			}
-
-			// other ctors
 
 			// ctor from range and functor
 			template< typename RngOther, typename FuncOther >
@@ -137,54 +102,31 @@ namespace tc {
 				: base_(tc::slice(tc_move(rng).base_range_move(),itBegin.bound_base(),itEnd.bound_base()), transform_adaptor_access::get_func(tc_move(rng)))
 			{}
 
-/*			template< typename RngOther, typename FuncOther >
-			explicit transform_adaptor( transform_adaptor< FuncOther, RngOther, true >&& rng
-				, typename boost::range_size< transform_adaptor< FuncOther, RngOther, true > >::type iBegin
-				, typename boost::range_size< transform_adaptor< FuncOther, RngOther, true > >::type iEnd
-			) noexcept
-				: base_(tc::slice(tc_move(rng).base_range_move(),iBegin,iEnd), transform_adaptor_access::get_func(tc_move(rng)))
-			{}*/
-
-		private:
-
-			template<typename SourceExpr, typename TargetExpr>
-			struct transform_return final {
-				static bool const bDecay=boost::mpl::eval_if_c<
-					!std::is_reference<SourceExpr>::value && std::is_rvalue_reference<TargetExpr>::value
-					, delayed_returns_reference_to_argument<Func>
-					, boost::mpl::identity<std::false_type>
-				>::type::value;
-				using type=std::conditional_t<
-					bDecay
-					, std::decay_t<TargetExpr>
-					, TargetExpr
-				>;
-			};
-		public:
-
 			template<typename Func=Func/*enable SFINAE*/>
-			auto STATIC_VIRTUAL_METHOD_NAME(dereference_index)(index const& idx) MAYTHROW -> typename transform_return<
-				decltype(std::declval<range_adaptor &>().STATIC_VIRTUAL_METHOD_NAME(dereference_index)(std::declval<index const&>())),
-				decltype(std::declval<Func const&>()(std::declval<range_adaptor &>().STATIC_VIRTUAL_METHOD_NAME(dereference_index)(std::declval<index const&>())))
-			>::type {
+			auto STATIC_VIRTUAL_METHOD_NAME(dereference_index)(index const& idx) & MAYTHROW -> tc::transform_return_t<
+				Func,
+				decltype(std::declval<Func const&>()(std::declval<range_adaptor &>().STATIC_VIRTUAL_METHOD_NAME(dereference_index)(std::declval<index const&>()))),
+				decltype(std::declval<range_adaptor &>().STATIC_VIRTUAL_METHOD_NAME(dereference_index)(std::declval<index const&>()))
+			> {
 				// always call operator() const, which is assumed to be thread-safe
 				return tc::as_const(this->m_func)(base_::STATIC_VIRTUAL_METHOD_NAME(dereference_index)(idx));
 			}
 
 			template<typename Func=Func/*enable SFINAE*/>
-			auto STATIC_VIRTUAL_METHOD_NAME(dereference_index)(index const& idx) const MAYTHROW -> typename transform_return<
-				decltype(std::declval<range_adaptor const &>().STATIC_VIRTUAL_METHOD_NAME(dereference_index)(std::declval<index const&>())),
-				decltype(std::declval<Func const&>()(std::declval<range_adaptor const&>().STATIC_VIRTUAL_METHOD_NAME(dereference_index)(std::declval<index const&>())))
-			>::type {
+			auto STATIC_VIRTUAL_METHOD_NAME(dereference_index)(index const& idx) const& MAYTHROW -> tc::transform_return_t<
+				Func,
+				decltype(std::declval<Func const&>()(std::declval<range_adaptor const&>().STATIC_VIRTUAL_METHOD_NAME(dereference_index)(std::declval<index const&>()))),
+				decltype(std::declval<range_adaptor const&>().STATIC_VIRTUAL_METHOD_NAME(dereference_index)(std::declval<index const&>()))
+			> {
 				// always call operator() const, which is assumed to be thread-safe
 				return tc::as_const(this->m_func)(base_::STATIC_VIRTUAL_METHOD_NAME(dereference_index)(idx));
 			}
 
-			auto bound_base_index(index const& idx) const noexcept {
+			auto bound_base_index(index const& idx) const& noexcept {
 				return idx;
 			}
 
-			auto element_base_index(index const& idx) const noexcept {
+			auto element_base_index(index const& idx) const& noexcept {
 				return idx;
 			}
 		};
@@ -196,8 +138,8 @@ namespace tc {
 		template< typename Func, typename T >
 		struct replace_if final {
 		private:
-			std::decay_t<Func> m_func;
-			std::decay_t<T> m_t;
+			tc::decay_t<Func> m_func;
+			tc::decay_t<T> m_t;
 			
 		public:
 			replace_if(Func&& func, T&& t) noexcept
@@ -205,7 +147,7 @@ namespace tc {
 				, m_t(std::forward<T>(t))
 			{}
 			template< typename S >
-			auto operator()(S&& s) const MAYTHROW
+			auto operator()(S&& s) const& MAYTHROW
 				return_decltype( m_func(s) ? m_t : std::forward<S>(s) )
 		};
 	}
@@ -216,7 +158,7 @@ namespace tc {
 
 	template<typename Rng, typename S, typename T>
 	auto replace(Rng&& rng, S&& s, T&& t) noexcept
-		return_decltype( tc::replace_if( std::forward<Rng>(rng), boost::bind<bool>( tc::fn_equal_to(), _1, std::forward<S>(s) ), std::forward<T>(t) ) )
+		return_decltype( tc::replace_if( std::forward<Rng>(rng), std::bind( tc::fn_equal_to(), std::placeholders::_1, std::forward<S>(s) ), std::forward<T>(t) ) )
 
 	template <typename Rng, typename Func, typename T>
 	Rng& replace_if_inplace(Rng& rng, Func func, T const& t) noexcept {
@@ -226,6 +168,11 @@ namespace tc {
 			}
 		});
 		return rng;
+	}
+
+	template<typename Rng, typename S, typename T>
+	Rng& replace_inplace(Rng& rng, S&& s, T const& t) noexcept {
+		return tc::replace_if_inplace( rng, std::bind( tc::fn_equal_to(), std::placeholders::_1, std::forward<S>(s) ), t );
 	}
 }
 

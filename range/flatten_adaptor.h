@@ -13,15 +13,37 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 
 #pragma once
-#include <boost/container/vector.hpp>
-#include <boost/container/deque.hpp>
-#include <memory>
-#include <stack>
+
+#include "range_defines.h"
 
 namespace tc {
-	template<typename T, typename Alloc=std::allocator<T> >
-	using vector=boost::container::vector<T,Alloc>;
+	namespace flatten_adaptor_adl_barrier {
+		template<
+			typename Rng
+		>
+		struct flatten_adaptor {
+		private:
+			reference_or_value<index_range_t<Rng>> m_baserng;
 
-	template<typename T, typename Alloc=std::allocator<T> >
-	using simple_stack=std::stack<T, vector<T, Alloc> >;
+		public:
+			template<typename Rhs>
+			explicit flatten_adaptor(aggregate_tag, Rhs&& rhs) noexcept
+				: m_baserng( aggregate_tag(), std::forward<Rhs>(rhs) )
+			{}
+
+			template< typename Func >
+			auto operator()(Func func) const& MAYTHROW {
+				return tc::for_each(*m_baserng, std::bind(tc::fn_for_each(), std::placeholders::_1, std::ref(func)));
+			}
+		};
+	}
+
+	using flatten_adaptor_adl_barrier::flatten_adaptor;
+
+	template<typename Rng>
+	auto flatten(Rng&& rng) noexcept return_ctor(
+		flatten_adaptor< view_by_value_t<Rng> >,
+		(aggregate_tag(), std::forward<Rng>(rng))
+	)
+
 }

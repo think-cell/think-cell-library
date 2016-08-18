@@ -15,15 +15,12 @@
 #pragma once
 
 #include "return_decltype.h"
-#include "in_place.h"
+#include "inplace.h"
 #include "type_traits.h"
-#include <boost/integer.hpp>
-#include <boost/numeric/conversion/is_subranged.hpp>
-#include <boost/numeric/conversion/converter.hpp>
 #include <type_traits>
 #include <chrono>
 
-#ifdef TC_MAC
+#ifdef __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wsign-conversion"
 #pragma clang diagnostic ignored "-Wconversion"
@@ -32,41 +29,27 @@
 #pragma warning( disable: 4459 ) // declaration hides global declaration
 #endif
 #include <boost/multiprecision/cpp_int.hpp>
-#ifdef TC_MAC
+#ifdef __clang__
 #pragma clang diagnostic pop
 #else
 #pragma warning(pop)
 #endif
 
-namespace std {
-	template<unsigned MinBits,unsigned MaxBits,boost::multiprecision::cpp_integer_type SignType,boost::multiprecision::cpp_int_check_type Checked,typename Allocator>
-	struct is_integral<boost::multiprecision::number<
-		boost::multiprecision::cpp_int_backend<
-			MinBits,
-			MaxBits,
-			SignType,
-			Checked,
-			Allocator
-		>
-	>> : std::true_type {};
-	template<unsigned MinBits,unsigned MaxBits,boost::multiprecision::cpp_integer_type SignType,boost::multiprecision::cpp_int_check_type Checked,typename Allocator>
-	struct is_signed<boost::multiprecision::number<
-		boost::multiprecision::cpp_int_backend<
-			MinBits,
-			MaxBits,
-			SignType,
-			Checked,
-			Allocator
-		>
-	>> : std::integral_constant<bool,SignType==boost::multiprecision::signed_magnitude> {};
-}
-
 namespace tc {
 	template<typename T>
-	struct is_floating_point_or_similar final : std::integral_constant<
-		bool,
-		std::is_floating_point<T>::value
-	> {};
+	struct is_actual_integer_like final : tc::is_actual_integer<T> {};
+	template<unsigned MinBits,unsigned MaxBits,boost::multiprecision::cpp_integer_type SignType,boost::multiprecision::cpp_int_check_type Checked,typename Allocator>
+	struct is_actual_integer_like<boost::multiprecision::number<
+		boost::multiprecision::cpp_int_backend<
+			MinBits,
+			MaxBits,
+			SignType,
+			Checked,
+			Allocator
+		>
+	>> final : std::true_type {};
+	template<typename T>
+	struct is_floating_point_like final : std::is_floating_point<T> {};
 
 	// checks whether arithmetic operations Lhs op Rhs preserve values of Lhs and Rhs (vs. silently converting one to unsigned)
 	template< typename Lhs, typename Rhs >
@@ -131,52 +114,67 @@ namespace tc {
 	template< typename Dst, typename Src >
 	Dst char_cast(Src src) noexcept {
 		static_assert( tc::is_decayed< Dst >::value, "" );
-		_ASSERT( char_limits<Src>::in_range(tc::unsigned_modulo_cast(src)) );
-		_ASSERT( char_limits<Dst>::in_range(tc::unsigned_modulo_cast(src)) );
+		_ASSERT( char_limits<Src>::in_range(tc::unsigned_char_cast(src)) );
+		_ASSERT( char_limits<Dst>::in_range(tc::unsigned_char_cast(src)) );
 		return static_cast<Dst>(src);
 	}
 
 	//////////////////////////////
 	// numeric_cast
+	// - various cases are similar to the ones in is_safely_convertible_between_arithmetic_values
 
-	template<typename TTarget, typename TSource>
-	void range_check( TSource const& src ) noexcept {
-		_ASSERTPRINT( (boost::numeric::cInRange==boost::numeric::converter<TTarget, TSource,
-			boost::numeric::conversion_traits<TTarget, TSource>,
-			boost::numeric::silent_overflow_handler, // only use type::out_of_range(src) result for our asserts
-			boost::numeric::Trunc< TTarget > // corresponds to builtin conversion from float to integer
-		>::out_of_range(src)), src );
+	template<typename TTarget, typename TSource, std::enable_if_t<
+		std::is_floating_point<TTarget>::value && tc::is_actual_arithmetic<TSource>::value>* = nullptr>
+	TTarget numeric_cast(TSource src) noexcept {
+		return static_cast<TTarget>(src);
 	}
 
-	template<typename TTarget, unsigned MinBits,unsigned MaxBits,boost::multiprecision::cpp_integer_type SignType,boost::multiprecision::cpp_int_check_type Checked,typename Allocator>
-	void range_check(boost::multiprecision::number<
-		boost::multiprecision::cpp_int_backend<
-			MinBits,
-			MaxBits,
-			SignType,
-			Checked,
-			Allocator
-		>
-	> const& ) noexcept {}
-
-	template<typename TTarget, typename TSource>
-	std::enable_if_t<
-		tc::is_actual_integer<TTarget>::value && std::is_floating_point<TSource>::value,
-	TTarget > numeric_cast(TSource src) noexcept {
-		range_check<TTarget>(src);
+	template<typename TTarget, typename TSource, std::enable_if_t<
+		tc::is_actual_integer<TTarget>::value && std::is_floating_point<TSource>::value>* = nullptr>
+	TTarget numeric_cast(TSource src) noexcept {
 		TTarget target=static_cast<TTarget>(src);
 		_ASSERTEQUAL( target,src ); // default round-to-zero from floating point to integer is wrong most of the time, so we force rounding first
 		return target;
 	}
 
-	template<typename TTarget, typename TSource>
-	std::enable_if_t<
-		tc::is_actual_integer<TTarget>::value && tc::is_actual_integer<TSource>::value ||
-		std::is_floating_point<TTarget>::value && tc::is_actual_integer<TSource>::value ||
-		std::is_floating_point<TTarget>::value && std::is_floating_point<TSource>::value,
-	TTarget > numeric_cast(TSource src) noexcept {
-		range_check<TTarget>(src);
+#ifdef __clang__
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wsign-compare"
+#else
+#pragma warning(push)
+#pragma warning(disable:4018) // signed/unsigned mismatch
+#endif
+	template<typename TTarget, typename TSource, std::enable_if_t<
+		tc::is_actual_integer<TTarget>::value && tc::is_actual_integer<TSource>::value>* = nullptr>
+	TTarget numeric_cast(TSource src) noexcept {
+		_ASSERTPRINT(
+			(
+				!std::is_signed<TSource>::value ||
+				( std::is_signed<TTarget>::value 
+					? std::numeric_limits<TTarget>::lowest() <= src
+					: /*must be signed 0 to avoid conversion of src to unsigned*/0 <= src
+				)
+			) &&
+			// conversion to unsigned (Warning 4018) is ok here:
+			src <= std::numeric_limits<TTarget>::max()
+		, src);
 		return static_cast<TTarget>(src);
+	}
+#ifdef __clang__
+#pragma clang diagnostic pop
+#else
+#pragma warning( pop )
+#endif
+
+	template<typename T>
+	struct is_boost_multiprecision_number : std::false_type {};
+
+	template<typename BackEnd, boost::multiprecision::expression_template_option e>
+	struct is_boost_multiprecision_number< boost::multiprecision::number<BackEnd,e> > : std::true_type {};
+
+	template<typename TTarget, typename TSource, std::enable_if_t< is_boost_multiprecision_number< TTarget >::value || is_boost_multiprecision_number< TSource >::value>* =nullptr >
+	TTarget numeric_cast( TSource const& src ) {
+		return NOEXCEPT( static_cast<TTarget>(src) );
 	}
 
 	template<typename TTarget, typename State>
@@ -184,19 +182,13 @@ namespace tc {
 		return numeric_cast<TTarget>(boost::implicit_cast<std::streamoff>(src));
 	}
 
-	template<typename TTarget, typename TSource>
-	std::enable_if_t<
-		tc::is_base_of_decayed<TTarget, TSource>::value,
-		TSource&&
-	> reluctant_numeric_cast(TSource&& src) noexcept {
+	template<typename TTarget, typename TSource, std::enable_if_t<tc::is_base_of_decayed<TTarget, TSource>::value>* = nullptr>
+	TSource&& reluctant_numeric_cast(TSource&& src) noexcept {
 		return std::forward<TSource>(src);
 	}
 
-	template<typename TTarget, typename TSource>
-	std::enable_if_t<
-		!tc::is_base_of_decayed<TTarget, TSource>::value,
-		TTarget
-	> reluctant_numeric_cast(TSource&& src) noexcept {
+	template<typename TTarget, typename TSource, std::enable_if_t<!tc::is_base_of_decayed<TTarget, TSource>::value>* = nullptr>
+	TTarget reluctant_numeric_cast(TSource&& src) noexcept {
 		return numeric_cast<TTarget>(std::forward<TSource>(src));
 	}
 
@@ -212,7 +204,8 @@ namespace tc {
 	//////////////////////////////
 	// type-safe multiplication and division
 
-	template< int nBits, bool bBuiltIn=nBits<=sizeof(std::uintmax_t)*CHAR_BIT >
+	// TInt<nBits> must be able to represent -2^(nBits-1) and 2^(nBits-1)-1
+	template< int nBits, bool bBuiltIn=nBits<=std::numeric_limits<std::uintmax_t>::digits >
 	struct TInt;
 
 	template< int nBits >
@@ -223,7 +216,7 @@ namespace tc {
 
 	template< int nBits >
 	struct TInt<nBits,false> final {
-		using signed_=boost::multiprecision::number<boost::multiprecision::cpp_int_backend<nBits, nBits, boost::multiprecision::signed_magnitude, boost::multiprecision::unchecked, void> >;
+		using signed_=boost::multiprecision::number<boost::multiprecision::cpp_int_backend<nBits/*not -1 due to signed magnitude representation*/, nBits/*not -1 due to signed magnitude representation*/, boost::multiprecision::signed_magnitude, boost::multiprecision::unchecked, void> >;
 		using unsigned_=boost::multiprecision::number<boost::multiprecision::cpp_int_backend<nBits, nBits, boost::multiprecision::unsigned_magnitude, boost::multiprecision::unchecked, void> >;
 	};
 
@@ -232,20 +225,26 @@ namespace tc {
 
 	template< typename T1, typename T2 >
 	struct TMultiply<T1, T2, std::enable_if_t< 
-		tc::is_actual_integer< T1 >::value && 
-		tc::is_actual_integer< T2 >::value &&
-		( std::is_signed<T1>::value || std::is_signed<T2>::value )
+		tc::is_actual_integer_like< T1 >::value && 
+		tc::is_actual_integer_like< T2 >::value &&
+		( std::numeric_limits<T1>::is_signed || std::numeric_limits<T2>::is_signed )
 	>> final {
-		using type=typename TInt< ( sizeof(T1)+sizeof(T2) )*CHAR_BIT >::signed_;
+		using type=typename TInt< std::numeric_limits<T1>::digits+std::numeric_limits<T2>::digits 
+			// For 2s complement representation,
+			// in case of both operands signed, -(2^31) * -(2^31) = -2^62, which needs 63 bits to be represented.
+			// digits is length-1 for signed numbers, so 31+31+1=63, OK!
+			// In case of one unsigned and one signed, (2^32-1) * -2^31 = -2^63 + 2^31, which needs 63 bits to be represented.
+			// digits is length for unsigned and length-1 for signed numbers, so 32+31=63, OK!
+			+( std::numeric_limits<T1>::is_signed && std::numeric_limits<T2>::is_signed ) >::signed_;
 	};
 
 	template< typename T1, typename T2 >
 	struct TMultiply<T1, T2, std::enable_if_t< 
-		tc::is_actual_integer< T1 >::value && 
-		tc::is_actual_integer< T2 >::value &&
-		std::is_unsigned<T1>::value && std::is_unsigned<T2>::value
+		tc::is_actual_integer_like< T1 >::value && 
+		tc::is_actual_integer_like< T2 >::value &&
+		!std::numeric_limits<T1>::is_signed && !std::numeric_limits<T2>::is_signed
 	>> final {
-		using type=typename TInt< ( sizeof(T1)+sizeof(T2) )*CHAR_BIT >::unsigned_;
+		using type=typename TInt< std::numeric_limits<T1>::digits+std::numeric_limits<T2>::digits >::unsigned_;
 	};
 
 	template< typename T1, typename T2 >
@@ -268,58 +267,54 @@ namespace tc {
 		return static_cast<double>(num)/static_cast<double>(den);
 	}
 
-	template< typename Lhs, typename Rhs>
-	std::enable_if_t<
-		( tc::is_actual_integer<Lhs>::value || tc::is_char<Lhs>::value ) &&
+	template< typename Lhs, typename Rhs, std::enable_if_t<
+		tc::is_actual_integer<Lhs>::value &&
 		tc::is_actual_integer<Rhs>::value &&
 		!std::is_signed<Lhs>::value
-	, Lhs > add( Lhs lhs, Rhs rhs ) noexcept {
+	>* = nullptr>
+	Lhs add( Lhs lhs, Rhs rhs ) noexcept {
 		// modulo semantics, both arguments are zero- or sign-extended to unsigned and the result truncated
 		return static_cast<Lhs>(lhs+rhs);
 	}
 
-	template< typename Lhs, typename Rhs>
-	std::enable_if_t<
-		( tc::is_actual_integer<Lhs>::value || tc::is_char<Lhs>::value ) &&
+	template< typename Lhs, typename Rhs, std::enable_if_t<
+		tc::is_actual_integer<Lhs>::value &&
 		tc::is_actual_integer<Rhs>::value &&
 		!std::is_signed<Lhs>::value
-	, Lhs > sub( Lhs lhs, Rhs rhs ) noexcept {
+	>* = nullptr>
+	Lhs sub( Lhs lhs, Rhs rhs ) noexcept {
 		// modulo semantics, both arguments are zero- or sign-extended to unsigned and the result truncated
 		return static_cast<Lhs>(lhs-rhs);
 	}
 
-	template< typename Lhs, typename Rhs>
-	std::enable_if_t<
-		( tc::is_actual_integer<Lhs>::value || tc::is_char<Lhs>::value ) &&
+	template< typename Lhs, typename Rhs, std::enable_if_t<
+		tc::is_actual_integer<Lhs>::value &&
 		tc::is_actual_integer<Rhs>::value &&
 		std::is_signed<Lhs>::value
-	, Lhs > add( Lhs lhs, Rhs rhs ) noexcept {
+	>* = nullptr>
+	Lhs add( Lhs lhs, Rhs rhs ) noexcept {
 		// does not rely on implementation-defined truncation of integers
-		auto result=lhs+tc::numeric_cast< std::make_signed_t<decltype(lhs+rhs)>>(rhs);
-		range_check<Lhs>(result);
-		return static_cast<Lhs>(result);
+		return tc::numeric_cast<Lhs>( lhs+tc::numeric_cast< std::make_signed_t<decltype(lhs+rhs)>>(rhs) );
 	}
 
-	template< typename Lhs, typename Rhs>
-	std::enable_if_t<
-		( tc::is_actual_integer<Lhs>::value || tc::is_char<Lhs>::value ) &&
+	template< typename Lhs, typename Rhs, std::enable_if_t<
+		tc::is_actual_integer<Lhs>::value &&
 		tc::is_actual_integer<Rhs>::value &&
 		std::is_signed<Lhs>::value
-	, Lhs > sub( Lhs lhs, Rhs rhs ) noexcept {
+	>* = nullptr>
+	Lhs sub( Lhs lhs, Rhs rhs ) noexcept {
 		// does not rely on implementation-defined truncation of integers
-		auto result=lhs-tc::numeric_cast< std::make_signed_t<decltype(lhs-rhs)>>(rhs);
-		range_check<Lhs>(result);
-		return static_cast<Lhs>(result);
+		return tc::numeric_cast<Lhs>( lhs-tc::numeric_cast< std::make_signed_t<decltype(lhs-rhs)>>(rhs) );
 	}
 }
 
 struct SRoundFloor final {
-	template< typename T >
-	std::enable_if_t< std::is_integral<T>::value, T > operator()( T t ) const noexcept {
+	template< typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
+	T operator()( T t ) const& noexcept {
 		return t;
 	}
-	template< typename T >
-	std::enable_if_t< std::is_floating_point<T>::value, T > operator()( T t ) const noexcept {
+	template< typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
+	T operator()( T t ) const& noexcept {
 		return std::floor(t);
 	}
 	template< typename T >
@@ -333,12 +328,12 @@ struct SRoundFloor final {
 } const roundFLOOR{};
 
 struct SRoundNearest final {
-	template< typename T >
-	std::enable_if_t< std::is_integral<T>::value, T > operator()( T t ) const noexcept {
+	template< typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
+	T operator()( T t ) const& noexcept {
 		return t;
 	}
-	template< typename T >
-	std::enable_if_t< std::is_floating_point<T>::value, T > operator()( T t ) const noexcept {
+	template< typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
+	T operator()( T t ) const& noexcept {
 		return tc::round(t);
 	}
 	template< typename T >
@@ -352,12 +347,12 @@ struct SRoundNearest final {
 } const roundNEAREST{};
 
 struct SRoundCeil final {
-	template< typename T >
-	std::enable_if_t< std::is_integral<T>::value, T > operator()( T t ) const noexcept {
+	template< typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
+	T operator()( T t ) const& noexcept {
 		return t;
 	}
-	template< typename T >
-	std::enable_if_t< std::is_floating_point<T>::value, T > operator()( T t ) const noexcept {
+	template< typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
+	T operator()( T t ) const& noexcept {
 		return std::ceil(t);
 	}
 	template< typename T >
@@ -379,9 +374,9 @@ namespace tc {
 		// [expr.mul]/4 (oder 5.6/4) 
 		template< typename Num, typename Denom, typename Round >
 		Num idiv( Num num, Denom denom, Round round ) noexcept {
-			static_assert( tc::is_actual_integer<Num>::value, "" );
-			static_assert( tc::is_actual_integer< Denom >::value, "" );
-			static_assert( std::is_signed<Num>::value==std::is_signed<Denom>::value, "" );
+			static_assert( tc::is_actual_integer_like<Num>::value, "" );
+			static_assert( tc::is_actual_integer_like< Denom >::value, "" );
+			static_assert( std::numeric_limits<Num>::is_signed==std::numeric_limits<Denom>::is_signed, "" );
 			_ASSERT( 0<denom );
 			return tc::numeric_cast<Num>( ( num<0 ? num-Round::NegativeOffset(denom) : num+Round::PositiveOffset(denom) )/denom );
 		}
@@ -390,7 +385,7 @@ namespace tc {
 		Num idiv( Num num, Denom denom, SRoundBanker ) noexcept {
 			static_assert( tc::is_actual_integer<Num>::value, "" );
 			static_assert( tc::is_actual_integer< Denom >::value, "" );
-			static_assert( std::is_signed<Num>::value==std::is_signed<Denom>::value, "" );
+			static_assert( std::numeric_limits<Num>::is_signed==std::numeric_limits<Denom>::is_signed, "" );
 			_ASSERT( 0<denom );
 			auto halfdenom=std::div(denom,2);
 			if( 0==halfdenom.rem ) {
@@ -416,40 +411,36 @@ namespace tc {
 		}
 	}
 
-	template< typename Num, typename Denom, typename Round >
-	std::enable_if_t<
-		tc::is_actual_integer< Denom >::value && std::is_signed<Num>::value==std::is_signed<Denom>::value
-	,Num> idiv( Num num, Denom denom, Round round ) noexcept {
-		static_assert( tc::is_actual_integer<Num>::value, "" );
+	template< typename Num, typename Denom, typename Round, std::enable_if_t<
+		tc::is_actual_integer_like<Num>::value && tc::is_actual_integer_like< Denom >::value && std::numeric_limits<Num>::is_signed==std::numeric_limits<Denom>::is_signed
+	>* = nullptr>
+	Num idiv( Num num, Denom denom, Round round ) noexcept {
 		_ASSERT( 0!=denom );
 		if( denom<0 ) { // optimized away for unsigned denom
-			-tc::in_place(num);
-			-tc::in_place(denom);
+			-tc::inplace(num);
+			-tc::inplace(denom);
 		}
 		return idiv_impl::idiv( num, denom, round );
 	}
 
-	template< typename Num, typename Denom, typename Round >
-	std::enable_if_t<
-		tc::is_actual_integer< Denom >::value && std::is_signed<Num>::value && !std::is_signed<Denom>::value
-	,Num> idiv( Num num, Denom denom, Round round ) noexcept {
-		static_assert( tc::is_actual_integer<Num>::value, "" );
+	template< typename Num, typename Denom, typename Round, std::enable_if_t<
+		tc::is_actual_integer_like<Num>::value && tc::is_actual_integer_like< Denom >::value && std::numeric_limits<Num>::is_signed && !std::numeric_limits<Denom>::is_signed
+	>* = nullptr>
+	Num idiv( Num num, Denom denom, Round round ) noexcept {
 		return idiv_impl::idiv( num, tc::signed_cast(denom), round );
 	}
 
-	template< typename Num, typename Denom, typename Round >
-	std::enable_if_t<
-		tc::is_actual_integer< Denom >::value && !std::is_signed<Num>::value && std::is_signed<Denom>::value
-	,Num> idiv( Num num, Denom denom, Round round ) noexcept {
-		static_assert( tc::is_actual_integer<Num>::value, "" );
+	template< typename Num, typename Denom, typename Round, std::enable_if_t<
+		tc::is_actual_integer_like<Num>::value && tc::is_actual_integer_like< Denom >::value && !std::numeric_limits<Num>::is_signed && std::numeric_limits<Denom>::is_signed
+	>* = nullptr>
+	Num idiv( Num num, Denom denom, Round round ) noexcept {
 		return idiv_impl::idiv( num, tc::unsigned_cast(denom), round );
 	}
 
-	template< typename Num, typename Denom, typename Round >
-	std::enable_if_t<
-		std::is_floating_point< Denom >::value
-	,Num>	idiv( Num num, Denom denom, Round round ) noexcept {
-		static_assert( tc::is_actual_integer<Num>::value, "" );
+	template< typename Num, typename Denom, typename Round, std::enable_if_t<
+		tc::is_actual_integer_like<Num>::value && std::is_floating_point< Denom >::value
+	>* = nullptr>
+	Num idiv( Num num, Denom denom, Round round ) noexcept {
 		return tc::numeric_cast<Num>(round(num/denom));
 	}
 
@@ -505,24 +496,24 @@ namespace tc {
 	/////////////////////////////////
 	// scale_mul
 
-	template<typename T, typename Factor>
-	std::enable_if_t<
+	template<typename T, typename Factor, std::enable_if_t<
 		tc::is_actual_integer< T >::value && std::is_integral< Factor >::value
-	,T> scale_mul(T t, Factor factor, SRoundNearest ) noexcept {
+	>* = nullptr>
+	T scale_mul(T t, Factor factor, SRoundNearest ) noexcept {
 		return tc::numeric_cast<T>(tc::prepare_argument<T,Factor>::prepare(t)*tc::prepare_argument<T,Factor>::prepare(factor));
 	}
 
-	template<typename T, typename Factor, typename TRound>
-	std::enable_if_t<
+	template<typename T, typename Factor, typename TRound, std::enable_if_t<
 		tc::is_actual_integer< T >::value && std::is_floating_point< Factor >::value
-	,T> scale_mul(T t, Factor factor, TRound round) noexcept {
+	>* = nullptr>
+	T scale_mul(T t, Factor factor, TRound round) noexcept {
 		return tc::numeric_cast<T>(round(t*factor));
 	}
 
-	template<typename T, typename Factor>
-	std::enable_if_t<
+	template<typename T, typename Factor, std::enable_if_t<
 		std::is_floating_point< T >::value
-	,T> scale_mul(T t, Factor factor, SRoundNearest ) noexcept {
+	>* = nullptr>
+	T scale_mul(T t, Factor factor, SRoundNearest ) noexcept {
 		return tc::numeric_cast<T>(t*factor);
 	}
 
@@ -534,31 +525,31 @@ namespace tc {
 	/////////////////////////////////
 	// scale_muldiv
 
-	template<typename T, typename Num, typename Den, typename TRound>
-	std::enable_if_t<
+	template<typename T, typename Num, typename Den, typename TRound, std::enable_if_t<
 		tc::is_actual_integer< T >::value && tc::is_actual_integer< Num >::value && tc::is_actual_integer< Den >::value
-	,T> scale_muldiv(T t, Num num, Den den, TRound round) noexcept {
+	>* = nullptr>
+	T scale_muldiv(T t, Num num, Den den, TRound round) noexcept {
 		return tc::reluctant_numeric_cast<T>(idiv(mul(t, num), den, round));
 	}
 
-	template<typename T, typename Num, typename Den, typename TRound>
-	std::enable_if_t<
-		tc::is_actual_integer< T >::value && tc::is_actual_integer< Num >::value && tc::is_floating_point_or_similar< Den >::value
-		, T> scale_muldiv(T t, Num num, Den den, TRound round) noexcept {
+	template<typename T, typename Num, typename Den, typename TRound, std::enable_if_t<
+		tc::is_actual_integer< T >::value && tc::is_actual_integer< Num >::value && tc::is_floating_point_like< Den >::value
+		>* = nullptr>
+	T scale_muldiv(T t, Num num, Den den, TRound round) noexcept {
 		return tc::reluctant_numeric_cast<T>(round(mul(t, num) / den));
 	}
 
-	template<typename T, typename Num, typename Den, typename TRound>
-	std::enable_if_t<
-		tc::is_actual_integer< T >::value && tc::is_floating_point_or_similar< Num >::value
-		, T> scale_muldiv(T t, Num num, Den den, TRound round) noexcept {
+	template<typename T, typename Num, typename Den, typename TRound, std::enable_if_t<
+		tc::is_actual_integer< T >::value && tc::is_floating_point_like< Num >::value
+		>* = nullptr>
+	T scale_muldiv(T t, Num num, Den den, TRound round) noexcept {
 		return tc::reluctant_numeric_cast<T>(round(t * tc::fdiv(num, den)));
 	}
 
-	template<typename T, typename Num, typename Den>
-	std::enable_if_t<
-		tc::is_floating_point_or_similar< T >::value
-	,T> scale_muldiv(T t, Num num, Den den, SRoundNearest) noexcept {
+	template<typename T, typename Num, typename Den, std::enable_if_t<
+		tc::is_floating_point_like< T >::value
+	>* = nullptr>
+	T scale_muldiv(T t, Num num, Den den, SRoundNearest) noexcept {
 		return tc::reluctant_numeric_cast<T>(t * tc::fdiv(num, den));
 	}
 

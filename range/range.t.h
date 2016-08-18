@@ -34,7 +34,7 @@ namespace tc {
 	struct generator_range_mock final {
 		generator_range_mock(tc::vector<Value_type> const& v) noexcept : m_values(v) {}
 
-		template< typename Func > break_or_continue operator()(Func func) noexcept {
+		template< typename Func > break_or_continue operator()(Func func) & noexcept {
 			break_or_continue bc=continue_;
 			auto const itEnd=boost::end(m_values);
 			for( auto it=boost::begin(m_values);
@@ -43,7 +43,7 @@ namespace tc {
 			return bc;
 		}
 
-		template< typename Func > break_or_continue operator()(Func func) const noexcept {
+		template< typename Func > break_or_continue operator()(Func func) const& noexcept {
 			break_or_continue bc=continue_;
 			auto const itEnd=boost::end(m_values);
 			for( auto it=boost::begin(m_values);
@@ -69,7 +69,7 @@ namespace tc {
 #endif
 
 #ifndef RANGE_PROPOSAL_BUILD_STANDALONE
-
+#	include "Library/ErrorReporting/_Assert.h" // required by _ASSERTPRINT
 #	include "Library/ErrorReporting/UnitTest.h"
 
 #else

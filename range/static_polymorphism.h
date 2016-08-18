@@ -19,13 +19,22 @@
 
 #define STATIC_VIRTUAL( Name ) \
 	using Name ## _derived_type = Derived; \
+	using Name ## _declaring_type = this_type; \
 	template<typename... Args> \
-	decltype(auto) Name(Args&& ...args) { \
-		return tc::derived_cast<Derived>(*this).STATIC_VIRTUAL_METHOD_NAME( Name )(std::forward<Args>(args)...); \
+	decltype(auto) Name(Args&& ...args) & MAYTHROW { \
+		return tc::derived_cast<Derived>(*this). STATIC_VIRTUAL_METHOD_NAME(Name) (std::forward<Args>(args)...); \
 	} \
 	template<typename... Args> \
-	decltype(auto) Name(Args&& ...args) const { \
-		return tc::derived_cast<Derived>(*this).STATIC_VIRTUAL_METHOD_NAME( Name )(std::forward<Args>(args)...); \
+	decltype(auto) Name(Args&& ...args) const& MAYTHROW { \
+		return tc::derived_cast<Derived>(*this). STATIC_VIRTUAL_METHOD_NAME(Name) (std::forward<Args>(args)...); \
+	} \
+	template<typename... Args> \
+	decltype(auto) Name(Args&& ...args) && MAYTHROW { \
+		return tc_move_always(tc::derived_cast<Derived>(*this)). STATIC_VIRTUAL_METHOD_NAME(Name) (std::forward<Args>(args)...); \
+	} \
+	template<typename... Args> \
+	decltype(auto) Name(Args&& ...args) const&& MAYTHROW { \
+		return std::move(tc::derived_cast<Derived>(*this)). STATIC_VIRTUAL_METHOD_NAME(Name) (std::forward<Args>(args)...); \
 	}
 
 #define STATIC_VIRTUAL_WITH_DEFAULT_IMPL_MOD(Mod, Name) \
@@ -36,7 +45,25 @@
 #define STATIC_VIRTUAL_WITH_DEFAULT_IMPL( Name ) \
 	STATIC_VIRTUAL_WITH_DEFAULT_IMPL_MOD( BOOST_PP_EMPTY(), Name )
 
+#ifdef _MSC_VER
+	// MSVC does not support the use of typename outside of templates
+	// On the other hand, it accepts `friend simple-type-specifier` even if the type specifier is a dependent type name.
+	// Even so, it shows a warning mistakenly complaining about it being a deprecated access-declaration.
+	#define STATIC_VIRTUAL_ACCESS(Name) \
+		__pragma(warning(push)); \
+		__pragma(warning(disable:4517)) \
+		friend this_type::Name ## _declaring_type; \
+		__pragma(warning(pop));
+#else
+	// This form should be ok in all circumstances on standard-compliant compilers
+	//  - The typename is needed, when this_type is a dependent type name
+	//  - Since C++11, typename is not restricted to templates anymore, meaning this form can also be used on non-dependent type names.
+	#define STATIC_VIRTUAL_ACCESS(Name) \
+		friend typename this_type::Name ## _declaring_type;
+#endif
+
 #define STATIC_FINAL_MOD(Mod, Name) \
+	STATIC_VIRTUAL_ACCESS(Name); \
 	static_assert( \
 		std::is_same< \
 			typename this_type::Name ## _derived_type, \
@@ -50,13 +77,19 @@
 #define STATIC_FINAL(Name) \
 	STATIC_FINAL_MOD(BOOST_PP_EMPTY(), Name)
 
-#define STATIC_OVERRIDE_MOD(Mod, Name) \
-	static_assert( \
-		std::is_same<typename this_type::Name ## _derived_type, Derived>::value, \
-		"Static polymorphism error" \
-	); \
-	Mod \
+#define STATIC_OVERRIDE_MOD_BASE(Name, ...) \
+	STATIC_VIRTUAL_ACCESS(Name); \
+	__VA_ARGS__ \
 	auto STATIC_VIRTUAL_METHOD_NAME( Name )
+
+#define STATIC_OVERRIDE_MOD(Mod, Name) \
+	STATIC_OVERRIDE_MOD_BASE(Name, \
+		static_assert( \
+			std::is_same<typename this_type::Name ## _derived_type, Derived>::value, \
+			"Static polymorphism error" \
+		); \
+		Mod \
+	)
 
 #define STATIC_OVERRIDE( Name ) \
 	STATIC_OVERRIDE_MOD( BOOST_PP_EMPTY(), Name )

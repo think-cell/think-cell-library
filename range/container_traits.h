@@ -38,7 +38,6 @@ TC_HAS_MEM_FN_XXX_TRAIT_DEF( emplace_back )
 TC_HAS_MEM_FN_XXX_TRAIT_DEF(pop_front)
 TC_HAS_MEM_FN_XXX_TRAIT_DEF(pop_back)
 TC_HAS_MEM_FN_XXX_TRAIT_DEF( hash_function ) // indicate the datastructure is a hashset/hashtable
-TC_HAS_MEM_FN_XXX_TRAIT_DEF( saturated_length ) // indicate the datastructure is a interval
 
 BOOST_MPL_HAS_XXX_TRAIT_DEF(efficient_erase)
 

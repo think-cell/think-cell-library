@@ -28,7 +28,7 @@ namespace tc {
 
 	namespace range {
 		template< template<typename> class RangeReturn, typename Rng,
-				  class UnaryPredicate >
+				typename UnaryPredicate >
 		typename RangeReturn<Rng>::type
 		partition_point(Rng&& rng, UnaryPredicate&& pred) noexcept {
 			return RangeReturn<Rng>::

@@ -16,7 +16,7 @@
 
 #include "return_decltype.h"
 
-#ifdef TC_MAC
+#ifdef __clang__
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wshorten-64-to-32"
 #else
@@ -24,7 +24,7 @@
 #pragma warning( disable: 4244 )
 #endif
 #include <boost/iterator/counting_iterator.hpp>
-#ifdef TC_MAC
+#ifdef __clang__
 #pragma clang diagnostic pop
 #else
 #pragma warning( pop )
@@ -35,20 +35,22 @@
 // Most pragmatically, difference_type should reflect the type of a-b, thus counting_iterator<int>::difference_type is int,
 // and counting_iterator<unsigned short (or anything else shorter than int)>::difference_type is int.
 
-template< typename T >
-struct delayed_iterator_difference_type {
-	using type=std::make_signed_t< decltype(std::declval<T>()-std::declval<T>()) >;
-};
+namespace tc {
+	namespace default_counting_iterator_adl_barrier {
+		template< typename T >
+		struct delayed_iterator_difference_type {
+			using type=std::make_signed_t< decltype(std::declval<T>()-std::declval<T>()) >;
+		};
 
-template< typename T >
-struct default_counting_iterator {
+		template< typename T >
+		struct default_counting_iterator {
 	// Force counting_iterators over enums to have random_access_traversal,
 	// otherwise use default traversal for type T.
-	using default_traversal=std::conditional_t< std::is_enum<T>::value,
+			using default_traversal = std::conditional_t< std::is_enum<T>::value,
 		boost::iterators::random_access_traversal_tag,
 		boost::iterators::use_default
 	>;
-	
+
 	// For random_access_iterator, use delayed_iterator_difference
 	template<typename Traversal>
 	using difference_type = typename boost::mpl::eval_if_c<
@@ -56,25 +58,57 @@ struct default_counting_iterator {
 		delayed_iterator_difference_type<T>,
 		boost::mpl::identity< boost::iterators::use_default >
 	>::type;
-	
+
 	// Evaluate default traversal for type T
 	using traversal = typename boost::iterators::detail::counting_iterator_base<
 		T, default_traversal, difference_type<default_traversal>
 	>::traversal;
-	
+
 	using type = boost::iterators::counting_iterator<
 		T,
 		traversal,
 		difference_type<traversal>
 	>;
-};
+		};
+	}
 
-template<typename TBegin, typename TEnd>
-auto make_counting_range(TBegin const& tBegin, TEnd const& tEnd) noexcept {
-	using T = typename default_counting_iterator<typename std::common_type<TBegin, TEnd>::type >::type;
-	return tc::make_iterator_range(static_cast<T>(tBegin), static_cast<T>(tEnd));
+	template<typename T>
+	using counting_iterator= typename default_counting_iterator_adl_barrier::default_counting_iterator<T>::type;
+
+	template<typename TBegin, typename TEnd>
+	auto make_counting_range(TBegin const& tBegin, TEnd const& tEnd) noexcept {
+		using T = tc::counting_iterator<tc::common_type_t<TBegin, TEnd> >;
+		return tc::make_iterator_range(static_cast<T>(tBegin), static_cast<T>(tEnd));
+	}
+
+	namespace range_of_iterators_adl_barrier {
+		template<typename Rng>
+		struct range_of_iterators {
+			using const_iterator=counting_iterator< decltype(boost::begin(*std::declval<tc::reference_or_value<Rng> const&>())) >;
+			using iterator=counting_iterator< decltype(boost::begin(*std::declval<tc::reference_or_value<Rng>&>())) >;
+
+			template<typename Rhs>
+			range_of_iterators(aggregate_tag, Rhs&& rhs) noexcept
+				: m_rng(aggregate_tag(), std::forward<Rhs>(rhs))
+			{}
+			
+			auto begin() const& noexcept
+				return_ctor(const_iterator, (boost::begin(*m_rng)))
+			
+			auto end() const& noexcept
+				return_ctor(const_iterator, (boost::end(*m_rng)))
+			
+			auto begin() & noexcept
+				return_ctor(iterator, (boost::begin(*m_rng)))
+
+			auto end() & noexcept
+				return_ctor(iterator, (boost::end(*m_rng)))
+
+		private:
+			tc::reference_or_value<Rng> m_rng;
+		};
+	}
+	template<typename Rng>
+	auto make_range_of_iterators(Rng&& rng) noexcept
+		return_ctor( range_of_iterators_adl_barrier::range_of_iterators< view_by_value_t<Rng> >, (aggregate_tag(), std::forward<Rng>(rng)) )
 }
-
-template<typename Rng, std::enable_if_t<!has_mem_fn_saturated_length<std::remove_reference_t<Rng>>::value>* = nullptr>
-auto make_counting_range(Rng&& rng) noexcept
-	return_decltype( make_counting_range(boost::begin(rng), boost::end(rng) ) )

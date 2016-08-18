@@ -33,7 +33,7 @@ namespace tc {
 		std::remove_const_t<T>* uninitialized_addressof() noexcept {
 			return reinterpret_cast< std::remove_const_t<T>*>(&m_buffer);
 		}
-		void ctor() noexcept {
+		void ctor() & noexcept {
 			// This check is not strict enough. The following struct is !std::is_trivially_default_constructible,
 			// but ctor_default does not initialize n to 0, while ctor_value does:
 			//	struct Foo {
@@ -43,34 +43,37 @@ namespace tc {
 			static_assert(!std::is_trivially_default_constructible<T>::value, "You must decide between ctor_default and ctor_value!");
 			::new (static_cast<void*>(&m_buffer)) T; // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
 		}
-		void ctor_default() noexcept {
+		void ctor_default() & noexcept {
 			::new (static_cast<void*>(&m_buffer)) T; // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
 		}
 		template<typename... Args> // ctor_value with non-empty argument list is useful in generic code
-		void ctor_value(Args&& ... args) noexcept {
+		void ctor_value(Args&& ... args) & noexcept {
 			::new (static_cast<void*>(&m_buffer)) T(std::forward<Args>(args)...); // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
 		}
 		template<typename First, typename... Args>
-		void ctor(First&& first, Args&& ... args) noexcept {
+		void ctor(First&& first, Args&& ... args) & noexcept {
 			// In C++, new T(...) is direct initialization just like T t(...).
 			// For non-class types, only implicit conversions are considered, so it is equivalent to T t=...
 			// For class types, explicit conversions are considered, unlike for T t=...
 			::new (static_cast<void*>(&m_buffer)) T(std::forward<First>(first), std::forward<Args>(args)...); // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
 		}
-		T const* operator->() const noexcept {
+		T const* operator->() const& noexcept {
 			return std::addressof(**this);
 		}
-		T* operator->() noexcept {
+		T* operator->() & noexcept {
 			return std::addressof(**this);
 		}
-		T const& operator*() const noexcept {
+		T const& operator*() const& noexcept {
 			static_assert( sizeof(*this)==sizeof(T), "" ); // no extra members, important for arrays
 			return reinterpret_cast<T const&>(m_buffer);
 		}
-		T& operator*() noexcept {
+		T& operator*() & noexcept {
 			return  tc::as_mutable(*(tc::as_const(*this)));
 		}
-		void dtor() const noexcept {
+		T&& operator*() && noexcept {
+			return  tc_move_always(**this);
+		}
+		void dtor() const& noexcept {
 			(**this).~T();
 		}
 	};
@@ -84,7 +87,7 @@ namespace tc {
 		~storage_for() noexcept {
 			check_pattern();
 		}
-		void ctor() noexcept(noexcept(storage_for_without_dtor <T>::ctor())) {
+		void ctor() & noexcept(noexcept(storage_for_without_dtor <T>::ctor())) {
 			check_pattern();
 			try {
 				storage_for_without_dtor <T>::ctor();
@@ -93,7 +96,7 @@ namespace tc {
 				throw;
 			}
 		}
-		void ctor_default() noexcept(noexcept(storage_for_without_dtor <T>::ctor_default())) {
+		void ctor_default() & noexcept(noexcept(storage_for_without_dtor <T>::ctor_default())) {
 			check_pattern();
 			try {
 				storage_for_without_dtor <T>::ctor_default();
@@ -103,7 +106,7 @@ namespace tc {
 			}
 		}
 		template<typename... Args> // ctor_value with non-empty argument list is useful in generic code
-		void ctor_value(Args&& ... args) noexcept(noexcept(storage_for_without_dtor <T>::ctor_value(std::forward<Args>(args)...))) {
+		void ctor_value(Args&& ... args) & noexcept(noexcept(storage_for_without_dtor <T>::ctor_value(std::forward<Args>(args)...))) {
 			check_pattern();
 			try {
 				storage_for_without_dtor <T>::ctor_value(std::forward<Args>(args)...);
@@ -113,7 +116,7 @@ namespace tc {
 			}
 		}
 		template<typename First, typename... Args>
-		void ctor(First&& first, Args&& ... args) noexcept(noexcept(storage_for_without_dtor <T>::ctor(std::forward<First>(first), std::forward<Args>(args)...))) {
+		void ctor(First&& first, Args&& ... args) & noexcept(noexcept(storage_for_without_dtor <T>::ctor(std::forward<First>(first), std::forward<Args>(args)...))) {
 			check_pattern();
 			try {
 				storage_for_without_dtor <T>::ctor(std::forward<First>(first), std::forward<Args>(args)...);
@@ -122,13 +125,13 @@ namespace tc {
 				throw;
 			}
 		}
-		void dtor() const noexcept {
+		void dtor() const& noexcept {
 			storage_for_without_dtor <T>::dtor();
 			tc::fill_with_dead_pattern(tc::as_mutable(this->m_buffer));
 		}
 
 	private:
-		void check_pattern() const noexcept {
+		void check_pattern() const& noexcept {
 			// RT#12004: g_mtxSharedHeap's destructor fails this check in the Excel insider build 16.0.6568.2036
 			// because this version does not realease all its locks on CTCAddInModule so that CSharedHeap::ShutDown()
 			// and thus g_mtxSharedHeap.dtor() are never called. This build appears to be broken. It throws and does
@@ -146,18 +149,18 @@ namespace tc {
 		static_assert(!std::is_reference<T>::value, "");
 		T* m_pt;
 	public:
-		void ctor(T& t) noexcept {
+		void ctor(T& t) & noexcept {
 			m_pt=std::addressof(t);
 		}
 
 		// referenece semantics == no deep constness
-		T* operator->() const noexcept {
+		T* operator->() const& noexcept {
 			return m_pt;
 		}
-		T& operator*() const noexcept {
+		T& operator*() const& noexcept {
 			return *m_pt;
 		}
-		void dtor() const noexcept {}
+		void dtor() const& noexcept {}
 	};
 
 	template< typename T >
@@ -169,11 +172,11 @@ namespace tc {
 		~storage_for() noexcept {
 			_ASSERTDEBUG(!this->m_pt);
 		}
-		void ctor(T& t) noexcept {
+		void ctor(T& t) & noexcept {
 			_ASSERTDEBUG(!this->m_pt);
 			storage_for_without_dtor <T&>::ctor(t);
 		}
-		void dtor() noexcept {
+		void dtor() & noexcept {
 			_ASSERTDEBUG(this->m_pt);
 			storage_for_without_dtor <T&>::dtor();
 			this->m_pt=nullptr;

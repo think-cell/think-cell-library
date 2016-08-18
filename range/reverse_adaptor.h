@@ -36,17 +36,18 @@ namespace tc {
 		>
 		{
 			reference_or_value< index_range_t<Rng> > m_baserng;
-
+		private:
 			using this_type = reverse_adaptor;
+		public:
 			using index = typename reverse_adaptor::index;
 
 			template<typename RngRef>
-			reverse_adaptor(RngRef&& rng) :
-				m_baserng(reference_or_value< index_range_t<Rng> >(std::forward<RngRef>(rng), aggregate_tag{}))
+			explicit reverse_adaptor(aggregate_tag, RngRef&& rng) :
+				m_baserng(reference_or_value< index_range_t<Rng> >(aggregate_tag(), std::forward<RngRef>(rng)))
 			{}
 
 			template< typename Func >
-			tc::break_or_continue operator()(Func func) MAYTHROW {
+			tc::break_or_continue operator()(Func func) /* no & */ MAYTHROW {
 				auto const itBegin=boost::begin(boost::implicit_cast<std::remove_reference_t<Rng>&>(*m_baserng));
 				auto itEnd=boost::end(boost::implicit_cast<std::remove_reference_t<Rng>&>(*m_baserng));
 				while( itEnd!=itBegin ) {
@@ -57,7 +58,7 @@ namespace tc {
 			}
 
 			template< typename Func >
-			tc::break_or_continue operator()(Func func) const MAYTHROW {
+			tc::break_or_continue operator()(Func func) const/* no & */ MAYTHROW {
 				auto const itBegin=boost::begin(boost::implicit_cast<std::remove_reference_t<Rng> const&>((*m_baserng)));
 				auto itEnd=boost::end(boost::implicit_cast<std::remove_reference_t<Rng> const&>(*m_baserng));
 				while( itEnd!=itBegin ) {
@@ -67,20 +68,20 @@ namespace tc {
 				return continue_;
 			}
 
-			STATIC_FINAL(begin_index)() const noexcept -> index {
+			STATIC_FINAL(begin_index)() const& noexcept -> index {
 				auto idx = m_baserng->end_index();
 				return m_baserng->equal_index(m_baserng->begin_index(),idx) ? boost::none : ( m_baserng->decrement_index(idx), boost::make_optional(idx) );
 			}
 
-			STATIC_FINAL(end_index)() const noexcept -> index {
+			STATIC_FINAL(end_index)() const& noexcept -> index {
 				return boost::none;
 			}
 
-			STATIC_FINAL(at_end_index)(index const& idx) const noexcept -> bool {
+			STATIC_FINAL(at_end_index)(index const& idx) const& noexcept -> bool {
 				return !tc::bool_cast(idx);
 			}
 
-			STATIC_FINAL(increment_index)(index& idx) const noexcept -> void {
+			STATIC_FINAL(increment_index)(index& idx) const& noexcept -> void {
 				if (m_baserng->equal_index(m_baserng->begin_index(), *idx)) {
 					idx = boost::none;
 				} else {
@@ -88,7 +89,7 @@ namespace tc {
 				}
 			}
 
-			STATIC_FINAL(decrement_index)(index& idx) const noexcept -> void {
+			STATIC_FINAL(decrement_index)(index& idx) const& noexcept -> void {
 				if (idx) {
 					m_baserng->increment_index(*idx);
 				} else {
@@ -96,25 +97,25 @@ namespace tc {
 				}
 			}
 
-			STATIC_FINAL(dereference_index)(index const& idx) const noexcept return_decltype(
+			STATIC_FINAL(dereference_index)(index const& idx) const& noexcept return_decltype(
 				m_baserng->dereference_index(*idx)
 			)
 
-			STATIC_FINAL(dereference_index)(index const& idx) noexcept return_decltype(
+			STATIC_FINAL(dereference_index)(index const& idx) & noexcept return_decltype(
 				m_baserng->dereference_index(*idx)
 			)
 
-			STATIC_FINAL(equal_index)(index const& idxLhs, index const& idxRhs) const noexcept -> bool {
+			STATIC_FINAL(equal_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> bool {
 				return tc::bool_cast(idxLhs) == tc::bool_cast(idxRhs) && (!idxLhs || m_baserng->equal_index(*idxLhs, *idxRhs));
 			}
 
 			using difference_type = range_difference_type<Rng,traversal_t<Rng>>;
 
-			STATIC_FINAL(distance_to_index)(index const& idxLhs, index const& idxRhs) const noexcept -> difference_type {
+			STATIC_FINAL(distance_to_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> difference_type {
 				return m_baserng->distance_to_index(idxRhs ? *idxRhs : m_baserng->begin_index(), idxLhs ? *idxLhs : m_baserng->begin_index()) +  (idxRhs ? 0 : 1) + (idxLhs ? 0 : -1);
 			}
 
-			STATIC_FINAL(advance_index)(index& idx, difference_type d) const noexcept -> void {
+			STATIC_FINAL(advance_index)(index& idx, difference_type d) const& noexcept -> void {
 				if (idx) {
 					m_baserng->advance_index(*idx, -(d-1));
 					if (m_baserng->equal_index(m_baserng->begin_index(), *idx)) {
@@ -131,24 +132,24 @@ namespace tc {
 				}
 			}
 
-			auto bound_base_index(index const& idx) const noexcept {
+			auto bound_base_index(index const& idx) const& noexcept {
 				return idx ? modified(*idx, m_baserng->increment_index(_)) : m_baserng->begin_index();
 			}
 
-			auto element_base_index(index const& idx) const noexcept {
+			auto element_base_index(index const& idx) const& noexcept {
 				_ASSERT(!this->at_end_index(idx));
 				return *idx;
 			}
 
-			auto base_range() noexcept {
+			auto base_range() & noexcept {
 				return *m_baserng;
 			}
 
-			auto base_range() const noexcept {
+			auto base_range() const & noexcept {
 				return *m_baserng;
 			}
 
-			STATIC_FINAL(middle_point)(index & idx, index const& idxEnd ) const noexcept -> void {
+			STATIC_FINAL(middle_point)(index & idx, index const& idxEnd ) const& noexcept -> void {
 				auto idxBeginBase = bound_base_index(idxEnd);
 				m_baserng->middle_point(idxBeginBase, bound_base_index(idx));
 				idx = idxBeginBase;
@@ -169,8 +170,8 @@ namespace tc {
 
 	template<typename Rng>
 	auto reverse(Rng&& rng) noexcept return_ctor(
-		reverse_adaptor< range_by_value_t<Rng> >,
-		(std::forward<Rng>(rng))
+		reverse_adaptor< view_by_value_t<Rng> >,
+		(aggregate_tag(), std::forward<Rng>(rng))
 	)
 
 

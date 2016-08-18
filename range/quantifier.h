@@ -17,7 +17,6 @@
 #include "range_fwd.h"
 #include "transform_adaptor.h"
 #include "break_or_continue.h"
-#include <boost/bind.hpp>
 #include <utility>
 
 /////////////////////////////////////////////
@@ -35,7 +34,7 @@ bool any_of(Rng&& rng) noexcept {
 
 template< typename Rng >
 bool all_of(Rng&& rng) noexcept {
-	//return tc::empty( tc::filter( std::forward<Rng>(rng), !boost::bind<bool>(tc::fn_bool_cast(), _1) ) );
+	//return tc::empty( tc::filter( std::forward<Rng>(rng), tc::not_fn(tc::fn_bool_cast()) ) );
 	return tc::continue_==tc::for_each(std::forward<Rng>(rng), [](bool_context b) noexcept {return tc::continue_if(b);});
 }
 

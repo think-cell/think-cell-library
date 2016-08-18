@@ -39,10 +39,10 @@ namespace tc {
 
 		public:
 			template<typename Rhs0, typename Rhs1, typename Comp>
-			intersection_difference_adaptor(Rhs0&& rhs0, Rhs1&& rhs1, Comp&& comp) noexcept
+			explicit intersection_difference_adaptor(Rhs0&& rhs0, Rhs1&& rhs1, Comp&& comp) noexcept
 				: m_baserng(
-					reference_or_value< index_range_t<Rng0> >(std::forward<Rhs0>(rhs0), aggregate_tag()),
-					reference_or_value< index_range_t<Rng1> >(std::forward<Rhs1>(rhs1), aggregate_tag())
+					reference_or_value< index_range_t<Rng0> >(aggregate_tag(), std::forward<Rhs0>(rhs0)),
+					reference_or_value< index_range_t<Rng1> >(aggregate_tag(), std::forward<Rhs1>(rhs1))
 				),
 				m_comp(std::forward<Comp>(comp))
 			{}
@@ -56,7 +56,7 @@ namespace tc {
 				{}
 
 				template<typename T0, typename T1>
-				tc::break_or_continue operator()(T0&& arg0, T1&&) const MAYTHROW {
+				tc::break_or_continue operator()(T0&& arg0, T1&&) const& MAYTHROW {
 					return tc::continue_if_not_break(m_func, std::forward<T0>(arg0));
 				}
 
@@ -64,7 +64,7 @@ namespace tc {
 
 		public:
 			template< typename Func >
-			auto operator()(Func func) const MAYTHROW -> break_or_continue
+			auto operator()(Func func) const& MAYTHROW -> break_or_continue
 			{
 #pragma warning ( push )
 #pragma warning( disable: 4127 ) // conditional expression is constant
@@ -96,7 +96,7 @@ namespace tc {
 
 	template<typename Rng0, typename Rng1, typename Comp>
 	auto intersect(Rng0&& rng0, Rng1&& rng1, Comp&& comp) noexcept return_ctor(
-		intersection_difference_adaptor< true BOOST_PP_COMMA() std::decay_t<Comp> BOOST_PP_COMMA() range_by_value_t<Rng0> BOOST_PP_COMMA() range_by_value_t<Rng1>>,
+		intersection_difference_adaptor< true BOOST_PP_COMMA() tc::decay_t<Comp> BOOST_PP_COMMA() view_by_value_t<Rng0> BOOST_PP_COMMA() view_by_value_t<Rng1>>,
 		(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1), std::forward<Comp>(comp))
 	)
 
@@ -107,7 +107,7 @@ namespace tc {
 
 	template<typename Rng0, typename Rng1, typename Comp>
 	auto difference(Rng0&& rng0, Rng1&& rng1, Comp&& comp) noexcept return_ctor(
-		intersection_difference_adaptor< false BOOST_PP_COMMA() std::decay_t<Comp> BOOST_PP_COMMA() range_by_value_t<Rng0> BOOST_PP_COMMA() range_by_value_t<Rng1>>,
+		intersection_difference_adaptor< false BOOST_PP_COMMA() tc::decay_t<Comp> BOOST_PP_COMMA() view_by_value_t<Rng0> BOOST_PP_COMMA() view_by_value_t<Rng1>>,
 		(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1), std::forward<Comp>(comp))
 	)
 

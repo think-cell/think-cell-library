@@ -38,27 +38,26 @@ namespace tc{
 			is_equal_elem(Rng const& rng, Pred&& pred_) noexcept : it(boost::begin(rng)), end(boost::end(rng)), pred(std::forward<Pred>(pred_)), equal(true) {}
 
 			template<typename Elem>
-			break_or_continue operator()(Elem const& elem) noexcept {
+			break_or_continue operator()(Elem const& elem) & noexcept {
 				if (it == end || !tc::bool_cast(pred(elem, *it))) { equal = false; return break_; }
 				++it;
 				return continue_;
 			}
 
-			bool result() const noexcept { return equal && it == end; }
+			bool result() const& noexcept { return equal && it == end; }
 
 			private:
 				using iterator_type = typename boost::range_iterator<Rng const>::type;
 
 				iterator_type it;
 				iterator_type end;
-				std::decay_t<Pred> pred;
+				tc::decay_t<Pred> pred;
 				bool equal;
 		};
 	}
 
-	template<typename LRng, typename RRng, typename Pred>
-		std::enable_if_t< is_range_with_iterators< RRng >::value,
-	bool > equal(LRng const& lrng, RRng const& rrng, Pred&& pred) noexcept {
+	template<typename LRng, typename RRng, typename Pred, std::enable_if_t<is_range_with_iterators< RRng >::value>* = nullptr>
+		bool equal(LRng const& lrng, RRng const& rrng, Pred&& pred) noexcept {
 
 		equal_impl::is_equal_elem<RRng, Pred> equalpred(rrng, std::forward<Pred>(pred));
 		tc::for_each(lrng, std::ref(equalpred));
@@ -67,17 +66,15 @@ namespace tc{
 	}
 
 	// forward to the symetric case above
-	template<typename LRng, typename RRng, typename Pred>
-		std::enable_if_t< !is_range_with_iterators< RRng >::value && is_range_with_iterators< LRng >::value,
-	bool > equal(LRng const& lrng, RRng const& rrng, Pred pred) noexcept {
+	template<typename LRng, typename RRng, typename Pred, std::enable_if_t<!is_range_with_iterators< RRng >::value && is_range_with_iterators< LRng >::value>* = nullptr>
+		bool equal(LRng const& lrng, RRng const& rrng, Pred pred) noexcept {
 		return tc::equal(rrng, lrng, std::bind(pred, std::placeholders::_2, std::placeholders::_1)); 
 	}
 
 	// is_arithmetic helpful for generic programming
 	// only do if semantics are clear-cut
-	template<typename T, typename Pred>
-		std::enable_if_t< std::is_arithmetic< T >::value,
-	bool > equal(T const& lhs, T const& rhs, Pred pred) noexcept {
+	template<typename T, typename Pred, std::enable_if_t<std::is_arithmetic< T >::value>* = nullptr>
+		bool equal(T const& lhs, T const& rhs, Pred pred) noexcept {
 		return pred(lhs,rhs);
 	}
 

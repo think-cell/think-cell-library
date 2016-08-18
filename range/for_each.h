@@ -21,8 +21,8 @@
 #include "index_range.h"
 #include "meta.h"
 #include "empty.h"
-#include "reverse_adaptor.h"
 #include "array.h"
+#include "scope.h"
 
 #include <boost/optional.hpp>
 #include <boost/range/begin.hpp>
@@ -32,8 +32,17 @@
 
 namespace tc {
 
+	namespace tuple_for_each_detail {
+		template <typename Tuple, typename Func, std::size_t... Is>
+		void tuple_for_each_impl(Tuple&& tuple, Func func, std::index_sequence<Is...>) noexcept {
+			using swallow = int[];
+			swallow{(func(std::get<Is>(std::forward<Tuple>(tuple))), 0)...};
+		}
+	}
+
 	//-------------------------------------------------------------------------------------------------------------------------
 	// for_each	
+	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template<typename Rng, typename Func>
 	std::enable_if_t<
 		is_range_with_iterators< Rng >::value &&
@@ -44,7 +53,8 @@ namespace tc {
 		}
 		return continue_;
 	}
-
+	
+	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template<typename Rng, typename Func>
 	std::enable_if_t<
 		!(is_range_with_iterators< Rng >::value &&
@@ -55,6 +65,7 @@ namespace tc {
 		return continue_;
 	}
 
+	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template<typename Rng, typename Func>
 	std::enable_if_t<
 		!(is_range_with_iterators< Rng >::value &&
@@ -64,13 +75,28 @@ namespace tc {
 		return std::forward<Rng>(rng)( std::forward<Func>(func));
 	}
 
+	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
+	template<typename Tuple, typename Func>
+	std::enable_if_t<
+		is_instance<std::tuple, std::remove_reference_t<Tuple>>::value,
+	break_or_continue > for_each(Tuple&& tuple, Func func) MAYTHROW {
+		tuple_for_each_detail::tuple_for_each_impl(
+			std::forward<Tuple>(tuple), 
+			void_generator_type_check_impl::ensure_non_break_or_continue_functor<Func>(func), 
+			std::make_index_sequence<std::tuple_size<std::remove_reference_t<Tuple>>::value>()
+		);
+		return continue_;
+	}
+
+	DEFINE_FN(for_each);
+
 	/////////////////////////////////////////////////////
 	// for_each_may_remove_current
 
 	// enable_if to ensure that removal preserves iterators would be nice, but is difficult for adapted ranges.
 	template< typename Rng, typename Func >
 	break_or_continue for_each_may_remove_current(Rng&& rng, Func func) MAYTHROW {
-		static_assert( !tc::is_vector< std::remove_reference_t<Rng> >::value, "" ); // tc::vector is among the types that cannot be used with for_each_may_remove_current
+		static_assert( !tc::range_filter_by_move_element< std::remove_reference_t<Rng> >::value, "" );
 		auto it=boost::begin(rng);
 		auto const itEnd=boost::end(rng);
 		while( it!=itEnd ) {
@@ -78,6 +104,8 @@ namespace tc {
 		}
 		return continue_;
 	}
+
+	DEFINE_FN(for_each_may_remove_current);
 
 	/////////////////////////////////////////////////////
 	// for_each_adjacent_tuple<2>
@@ -92,12 +120,12 @@ namespace tc {
 		public:
 			iterator_cache(It it) noexcept
 				: m_it(tc_move(it))
-				, m_ref(*m_it,tc::aggregate_tag())
+				, m_ref(aggregate_tag(), *m_it)
 			{}
 
 			iterator_cache& operator=(It it) & noexcept {
 				m_it=tc_move(it);
-				m_ref.aggregate(*m_it);
+				tc::renew(m_ref, aggregate_tag(), *m_it);
 				return *this;
 			}
 
@@ -118,15 +146,29 @@ namespace tc {
 		} else {
 			auto const itEnd = boost::end(rng);
 			auto it = boost::begin(rng);
-			tc::array<tc::iterator_cache< typename boost::range_iterator<std::remove_reference_t<Rng>>::type >, N> ait(tc::func_tag(), [&](std::size_t) { return it++; });
+			// TODO C++17: remove storage_for and use aggregate initialization: ait(tc::func_tag(), [&](std::size_t) { return it++; })
+			// This workaround is only needed because GCC and Clang require a copy ctor for aggregate initialization, which we cannot provide for iterator_cache.
+			// C++17 should solve this, because copy elision is mandatory then.
+			tc::array<
+				tc::storage_for<
+					tc::iterator_cache< 
+						typename boost::range_iterator<std::remove_reference_t<Rng>>::type
+					>
+				>,
+				N
+			> ait;
+			for(std::size_t n=0; n<N; n++) {
+				ait[n].ctor(it++);
+			}
+			scope_exit(	tc::for_each(ait, [](auto const& it) { it.dtor(); }) )
 
 			for (;;) {
 				for (int n = 0; n<N; ++n) {
 					if (it == itEnd) {
-						return continue_if_not_break(func, *tc_move_always(ait[n]), *tc_move_always(ait[(n + i + 1) % N])...);
+						return continue_if_not_break(func, *tc_move_always(*ait[n]), *tc_move_always(*ait[(n + i + 1) % N])...);
 					}
-					RETURN_IF_BREAK(continue_if_not_break(func, *tc_move_always(ait[n]), *ait[(n + i + 1) % N]...));
-					ait[n] = it;
+					RETURN_IF_BREAK(continue_if_not_break(func, *tc_move_always(*ait[n]), **ait[(n + i + 1) % N]...));
+					*ait[n] = it;
 					++it;
 				}
 			}
@@ -142,7 +184,7 @@ namespace tc {
 	tc::break_or_continue for_each_ordered_pair(Rng const& rng, Func func) MAYTHROW {
 		auto const itEndRng = boost::end(rng);
 		for(auto itEnd = boost::begin(rng); itEnd != itEndRng; ++itEnd) {
-			tc::reference_or_value<typename boost::range_reference<Rng const>::type> ref(*itEnd, tc::aggregate_tag());
+			tc::reference_or_value<typename boost::range_reference<Rng const>::type> ref(aggregate_tag(), *itEnd);
 			
 			RETURN_IF_BREAK(
 				tc::for_each(
@@ -164,23 +206,23 @@ namespace tc {
 			m_variant = tc_move(t);
 			return *this;
 		}
-		explicit operator bool() const noexcept {
+		explicit operator bool() const& noexcept {
 			return m_variant.which();
 		}
-		T const& operator*() noexcept {
+		T const& operator*() & noexcept {
 			return boost::apply_visitor( FnDerefence(), m_variant );
 		}
 	private:
 		struct empty {};
 		struct FnDerefence final : boost::static_visitor<T const&> {
-			T const& operator()(empty) const noexcept {
+			T const& operator()(empty) const& noexcept {
 				_ASSERTFALSE;
 				return *boost::implicit_cast<T const*>(nullptr);
 			}
-			T const& operator()(T const* p) const noexcept {
+			T const& operator()(T const* p) const& noexcept {
 				return *p;
 			}
-			T const& operator()(T const& t) const noexcept {
+			T const& operator()(T const& t) const& noexcept {
 				return t;
 			}
 		};
@@ -194,14 +236,14 @@ namespace tc {
 			Fn(Func& func) noexcept
 				: m_func(func)
 			{}
-			break_or_continue operator()(T const& t) MAYTHROW {
+			break_or_continue operator()(T const& t) & MAYTHROW {
 				if( m_param && break_==continue_if_not_break(m_func, *m_param, t) ) {
 					return break_;
 				}
 				m_param = t;
 				return continue_;
 			}
-			break_or_continue operator()(T&& t) MAYTHROW {
+			break_or_continue operator()(T&& t) & MAYTHROW {
 				if( m_param && break_==continue_if_not_break(m_func, *m_param, t) ) {
 					return break_;
 				}
@@ -214,9 +256,8 @@ namespace tc {
 		};
 	}
 
-	template<typename T, typename Rng, typename Func>
-	std::enable_if_t< !is_range_with_iterators<Rng>::value,
-	break_or_continue > for_each_adjacent_pair(Rng const& rng, Func func) MAYTHROW {
+	template<typename T, typename Rng, typename Func, std::enable_if_t<!is_range_with_iterators<Rng>::value>* = nullptr>
+	break_or_continue for_each_adjacent_pair(Rng const& rng, Func func) MAYTHROW {
 		return tc::for_each( rng, for_each_adjacent_pair_adl_barrier::Fn<T, Func>(func) );
 	}
 
@@ -232,26 +273,22 @@ namespace tc {
 			:  m_pt(std::addressof(t)), m_paccuop(std::addressof(accuop))
 			{}
 
-			template< typename S >
-			std::enable_if_t<
+			template< typename S, std::enable_if_t<
 				std::is_same<
-					std::result_of_t<AccuOp(T&, S &&)>,
+					std::result_of_t<AccuOp const&(T&, S &&)>,
 					break_or_continue
-				>::value,
-				break_or_continue
-			>
-			operator()(S&& s) const MAYTHROW {
+				>::value>* = nullptr>
+			break_or_continue operator()(S&& s) const& MAYTHROW {
 				return (*m_paccuop)( *m_pt, std::forward<S>(s) );
 			}
 
-			template< typename S >
-			std::enable_if_t<
+			template< typename S, std::enable_if_t<
 				!std::is_same<
-					std::result_of_t<AccuOp(T&, S &&)>,
+					std::result_of_t<AccuOp const&(T&, S &&)>,
 					break_or_continue
 				>::value
-			>
-			operator()(S&& s) const MAYTHROW {
+			>* = nullptr>
+			void operator()(S&& s) const& MAYTHROW {
 				(*m_paccuop)( *m_pt, std::forward<S>(s) );
 			}
 		};
@@ -272,7 +309,7 @@ namespace tc {
 			:  m_t(t), m_accuop(accuop)
 			{}
 			template< typename S >
-			break_or_continue operator()( S&& s ) MAYTHROW {
+			break_or_continue operator()( S&& s ) /* no & */ MAYTHROW {
 				if( m_t ) {
 					return continue_if_not_break( m_accuop, *m_t, std::forward<S>(s) );
 				} else {
@@ -301,4 +338,43 @@ namespace tc {
 		tc::for_each(std::forward<Rng>(rng), tc::make_accumulator_with_front(t,std::forward<AccuOp>(accuop)));
 		return t;
 	}
+
+	/////////////////////////////////////////////////////
+	// partial_sum
+
+	namespace partial_sum_adl_barrier {
+		template <typename Rng, typename T, typename AccuOp>
+		struct partial_sum_adaptor {
+		private:
+			reference_or_value< Rng > m_baserng;
+			reference_or_value< T > m_init;
+			tc::decay_t<AccuOp> m_accuop;
+		public:
+			template <typename RngRef, typename TRef, typename AccuOpRef>
+			explicit partial_sum_adaptor(RngRef&& rng, TRef&& init, AccuOpRef&& accuop) noexcept
+				: m_baserng(aggregate_tag(), std::forward<RngRef>(rng))
+				, m_init(aggregate_tag(), std::forward<TRef>(init))
+				, m_accuop(std::forward<AccuOpRef>(accuop))
+			{}
+
+			template <typename Func>
+			auto operator()(Func func) const& MAYTHROW {
+				tc::decay_t<T> accu = *m_init;
+				return tc::for_each( *m_baserng, [&] (auto&& arg) {
+					m_accuop(accu, tc_move_if_owned(arg));
+					return func(accu);
+				});
+			}
+
+			auto size() const& noexcept return_decltype(
+				tc::size(*m_baserng)
+			)
+		};
+	}
+	using partial_sum_adl_barrier::partial_sum_adaptor;
+
+	template <typename Rng, typename T, typename AccuOp>
+	auto partial_sum(Rng&& rng, T&& init, AccuOp&& accuop) noexcept return_ctor(
+		partial_sum_adaptor<view_by_value_t<Rng> BOOST_PP_COMMA() T BOOST_PP_COMMA() AccuOp >, (std::forward<Rng>(rng), std::forward<T>(init), std::forward<AccuOp>(accuop))
+	)
 }

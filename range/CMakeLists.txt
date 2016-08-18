@@ -84,13 +84,11 @@ set(TC_Utils
 	counting_range.h
 	empty_chain.h
 	implements_compare.h
-	in_place.h
 	is_static_castable.h
 	make_lazy.h
 	modified.h
 	noncopyable.h
 	reference_or_value.h
-	remove_cvref.h
 	renew.h
 	return_decltype.h
 	trivial_functors.h

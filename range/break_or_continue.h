@@ -41,48 +41,44 @@ namespace tc {
 
 	//// continue_if_not_break ///////////////////////////////////////////////////////////////////////////
 	// Func returns break_or_continue
-	template <typename Func, typename ...Args>
-	std::enable_if_t<
+	template <typename Func, typename ...Args, std::enable_if_t<
 		std::is_same< tc::break_or_continue,
 					  std::result_of_t< Func( Args... ) >
-					>::value,
-	tc::break_or_continue > continue_if_not_break(Func&& func, Args&& ... args) MAYTHROW {
+					>::value>* = nullptr>
+	tc::break_or_continue continue_if_not_break(Func&& func, Args&& ... args) MAYTHROW {
 		return std::forward<Func>(func)(std::forward<Args>(args)...);
 	}
 
 	// Func does not return break_or_continue
-	template <typename Func, typename ...Args>
-	std::enable_if_t< !
+	template <typename Func, typename ...Args, std::enable_if_t< !
 		std::is_same< tc::break_or_continue,
 					  std::result_of_t< Func( Args... ) >
-					>::value,
-	tc::break_or_continue > continue_if_not_break(Func&& func, Args&& ... args) MAYTHROW {
+					>::value>* = nullptr>
+	tc::break_or_continue continue_if_not_break(Func&& func, Args&& ... args) MAYTHROW {
 		std::forward<Func>(func)(std::forward<Args>(args)...);
 		return tc::continue_;
 	}
 
 	//// returns_void ///////////////////////////////////////////////////////////////////////////////
 	// returns_void helps when changing existing for_each implementations to support continue_if_not_break
-	template <typename Func, typename ...Args>
-		std::enable_if_t< std::is_void< std::result_of_t< Func(Args...) > >::value,
-	void > returns_void(Func&& func, Args && ... args) MAYTHROW {
+	template <typename Func, typename ...Args, std::enable_if_t<std::is_void< std::result_of_t< Func(Args...) > >::value>* = nullptr>
+	void returns_void(Func&& func, Args && ... args) MAYTHROW {
 		std::forward<Func>(func)(std::forward<Args>(args)...);
 	}
 
 	//// make_return_continue /////////////////////////////////////////////////////////////////////////
 	template<typename Func>
-	struct make_return_continue final : tc::fundamental_base< std::decay_t<Func> > {
-		using result_type = tc::break_or_continue;
-		make_return_continue(Func&& func) noexcept : tc::fundamental_base< std::decay_t<Func> >(std::forward<Func>(func)) {}
+	struct make_return_continue final : tc::fundamental_base< tc::decay_t<Func> > {
+		make_return_continue(Func&& func) noexcept : tc::fundamental_base< tc::decay_t<Func> >(std::forward<Func>(func)) {}
 
 		template<typename... Args>
-		tc::break_or_continue operator()(Args&& ... args) MAYTHROW {
+		tc::break_or_continue operator()(Args&& ... args) & MAYTHROW {
 			this->_get()(std::forward<Args>(args)...);
 			return tc::continue_;
 		}
 
 		template<typename... Args>
-		tc::break_or_continue operator()(Args&& ... args) const MAYTHROW {
+		tc::break_or_continue operator()(Args&& ... args) const& MAYTHROW {
 			this->_get()(std::forward<Args>(args)...);
 			return tc::continue_;
 		}
@@ -106,7 +102,6 @@ namespace tc {
     private:
 		using base_ = std::function< tc::break_or_continue(Args...) >;
 	public:
-		using result_type = tc::break_or_continue;
 		template< typename Func >
 		function(Func&& func, std::enable_if_t< tc::is_base_of_decayed< base_, Func >::value, unused_arg> =unused_arg()) MAYTHROW
 			: base_( base_cast< base_ >( std::forward<Func>(func) ) )

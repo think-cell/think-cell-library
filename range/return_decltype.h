@@ -13,22 +13,19 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 
 #pragma once
-#include <type_traits>
+#include "type_traits.h"
 
 namespace tc {
-	template< typename Var, typename Expr, typename Sfinae >
+	template< typename Var, typename Expr>
 	struct return_decltype_retval final {
 		static_assert( std::is_same< Var, Expr >::value, "choose between return_variable_by_ref and return_by_val" );
 		static_assert( !std::is_rvalue_reference< Expr >::value, "choose between return_decltype_rvalue_by_ref and return_decltype_rvalue_by_val");
 		using type=Expr;
 	};
-	template< typename Var, typename Expr, typename Sfinae=void >
-	using return_decltype_retval_t = typename tc::return_decltype_retval<Var, Expr, Sfinae>::type;
+	template< typename Var, typename Expr>
+	using return_decltype_retval_t = typename tc::return_decltype_retval<Var, Expr>::type;
 
 #define return_decltype(...) -> tc::return_decltype_retval_t< decltype(__VA_ARGS__),decltype((__VA_ARGS__)) > { \
-	return (__VA_ARGS__); \
-}
-#define return_decltype_sfinae(T__,...) -> tc::return_decltype_retval_t< decltype(__VA_ARGS__),decltype((__VA_ARGS__)), T__ > { \
 	return (__VA_ARGS__); \
 }
 #define code_return_decltype(code,...) -> tc::return_decltype_retval_t< decltype(__VA_ARGS__),decltype((__VA_ARGS__)) > { \
@@ -36,7 +33,7 @@ namespace tc {
 	return (__VA_ARGS__); \
 }
 
-#define return_by_val(...) -> std::decay_t<decltype(__VA_ARGS__)> { \
+#define return_by_val(...) -> tc::decay_t<decltype(__VA_ARGS__)> { \
 	return (__VA_ARGS__); \
 }
 
@@ -45,7 +42,7 @@ namespace tc {
 		static_assert( std::is_lvalue_reference< Expr >::value, "use return_variable_by_ref only for variables");
 		using type=Expr; // rvalue references behave like lvalues
 		/* DOES NOT COMPILE
-			void foo(int&& n) noexcept {}
+			void foo(int&& n) & noexcept {}
  
 			int m;
 			int&& n=std::move(m);
@@ -72,20 +69,20 @@ namespace tc {
 }
 
 	template< typename Expr >
-	using return_decltype_rvalue_by_val_variable_by_ref_retval_t =
+	using lvalue_or_decay_t =
 		std::conditional_t<
-			std::is_rvalue_reference<Expr>::value,
-			std::decay_t<Expr>,
-			Expr
+			std::is_lvalue_reference<Expr>::value,
+			Expr,
+			tc::decay_t<Expr>
 		>;
 
-#if defined _MSC_VER && _MSC_VER==1900
+#ifndef __clang__
 	// workaround for compiler bug https://connect.microsoft.com/VisualStudio/feedback/details/1657760
 #define return_decltype_rvalue_by_val_variable_by_ref(...) -> decltype(auto) {\
-	return boost::implicit_cast<tc::return_decltype_rvalue_by_val_variable_by_ref_retval_t< decltype((__VA_ARGS__)) >>((__VA_ARGS__)); \
+	return boost::implicit_cast<tc::lvalue_or_decay_t< decltype((__VA_ARGS__)) >>((__VA_ARGS__)); \
 }
 #else
-#define return_decltype_rvalue_by_val_variable_by_ref(...) -> tc::return_decltype_rvalue_by_val_variable_by_ref_retval_t< decltype((__VA_ARGS__)) > { \
+#define return_decltype_rvalue_by_val_variable_by_ref(...) -> tc::lvalue_or_decay_t< decltype((__VA_ARGS__)) > { \
 	return (__VA_ARGS__); \
 }
 #endif
@@ -94,17 +91,17 @@ namespace tc {
 namespace decltype_return_test {
 	struct A{
 		int a;
-		void access_a() noexcept {
+		void access_a() & noexcept {
 			static_assert( std::is_same<decltype(a),int>::value, "");
 			static_assert( std::is_same<decltype((a)),int&>::value, "");
 		}
 		int& b;
-		void access_b() noexcept {
+		void access_b() & noexcept {
 			static_assert( std::is_same<decltype(b),int&>::value, "");
 			static_assert( std::is_same<decltype((b)),int&>::value, "");
 		}
 		int&& c;
-		void access_c() noexcept {
+		void access_c() & noexcept {
 			static_assert( std::is_same<decltype(c),int&&>::value, "");
 			static_assert( std::is_same<decltype((b)),int&>::value, "");
 		}
@@ -112,3 +109,7 @@ namespace decltype_return_test {
 }
 
 #define return_ctor(T,...) ->T { return T __VA_ARGS__ ; }
+#define code_return_ctor(code, T, ...) ->T { \
+	code \
+	return T __VA_ARGS__ ; \
+}

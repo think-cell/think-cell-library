@@ -62,7 +62,7 @@ namespace {
 		struct wrapped final {
 			explicit wrapped(T const& t) noexcept : m_t(t) {}
 			wrapped(wrapped<T> const& t) noexcept : m_t(t.m_t) {}
-			T getT() const noexcept { return m_t; }
+			T getT() const& noexcept { return m_t; }
 
 			T m_t;
 		};
@@ -73,10 +73,10 @@ namespace {
 
 		using WlList = tc::vector< wrapped_long > const&;
 		//using WlList = tc::vector< wrapped_long >;        // works!
-		WlList getWlList() const noexcept { return m_list; } 
+		WlList getWlList() const& noexcept { return m_list; } 
 	
 		using WlFilterdList = filter_adaptor<decltype(&filter35), WlList>;
-		auto getWlFilterdList() const noexcept return_decltype ( tc::filter(getWlList(), &filter35) )
+		auto getWlFilterdList() const& noexcept return_decltype ( tc::filter(getWlList(), &filter35) )
 
 		// This is were it gets wiered, as soon as you somehow use has_range_iterator<WlFilterdList> (here at class scope)
 		// things go crashing down, even though has_range_iterator<WlFilterdList> is perfectly fine one line later at funtion scope
@@ -84,7 +84,7 @@ namespace {
 		using WlFilterdTransformedList = transform_adaptor<decltype(&transf_times_100), WlFilterdList, true>; STATIC_ASSERT(is_range_with_iterators<WlFilterdList>::value);
 		//using WlFilterdTransformedList = transform_adaptor<decltype(&transf_times_100), WlFilterdList, is_range_with_iterators<WlFilterdList>::value>;
 		//using WlFilterdTransformedList = transform_adaptor<decltype(&transf_times_100), WlFilterdList>;
-		WlFilterdTransformedList getWlFilterdTransformedList() const noexcept {
+		WlFilterdTransformedList getWlFilterdTransformedList() const& noexcept {
 			STATIC_ASSERT(is_range_with_iterators<WlFilterdList>::value);
 			STATIC_ASSERT(is_range_with_iterators<WlFilterdTransformedList>::value);
 		
@@ -158,14 +158,14 @@ UNITTESTDEF( boost_range_traits_compat ) {
 
 struct inner final {
 	inner(int id) noexcept : i(id) {}
-	int id() const noexcept { return i*100; }
+	int id() const& noexcept { return i*100; }
 private:
 	friend struct free_id;
 	int i;
 };
 
-struct free_id final { int operator()(inner const& in) const noexcept { return in.id(); } };
-struct filter_stub final { template<typename T> bool operator()(T const&) const noexcept { return true; } };
+struct free_id final { int operator()(inner const& in) const& noexcept { return in.id(); } };
+struct filter_stub final { template<typename T> bool operator()(T const&) const& noexcept { return true; } };
 
 struct outer final {
 	tc::vector<inner> m_in;
@@ -176,7 +176,7 @@ struct outer final {
 	}
 
 	using TRange = tc::filter_adaptor< filter_stub, tc::transform_adaptor< free_id, tc::vector<inner> const& , true>, true >;
-	TRange trans_range() noexcept {
+	TRange trans_range() & noexcept {
 		return tc::filter( tc::transform(tc::as_const(m_in), free_id()), filter_stub() );
 	}
 };

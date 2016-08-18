@@ -23,6 +23,8 @@
 #include <boost/type_traits/has_dereference.hpp>
 #include <boost/preprocessor/seq/for_each_i.hpp>
 #include <boost/preprocessor/control/if.hpp>
+#include <boost/range/begin.hpp>
+
 
 #include <cmath>
 #include <cstdlib>
@@ -53,7 +55,7 @@ struct define_fn_dummy final {};
 	auto operator()( O&& o, __A&& ... __a ) const                                                   \
 		return_decltype_rvalue_by_ref( std::forward<O>(o) __VA_ARGS__ ( std::forward<__A>(__a)... ) )
 
-// boost::mem_fn (C++11 standard 20.8.2) knows the type it can apply its member function pointer to and
+// std::mem_fn (C++11 standard 20.8.2) knows the type it can apply its member function pointer to and
 // dereferences via operator* until it reaches that something of that type. We cannot do that because
 // we have no type. Merely checking for the presence of the member function name is dangerous because
 // changes in otherwise unrelated types (the iterator and its pointee) would influence the lookup. 
@@ -117,8 +119,6 @@ struct define_fn_dummy final {};
 	DEFINE_FN2_TMPL( func, tmpl ) \
 	DEFINE_MEM_FN_TMPL( func, tmpl )
 
-DEFINE_FN2( std::max, fn_std_max );
-DEFINE_FN2( std::min, fn_std_min );
 DEFINE_FN2( std::abs, fn_std_abs );
 DEFINE_FN2( operator delete, fn_operator_delete )
 
@@ -126,6 +126,9 @@ DEFINE_FN( first );
 DEFINE_FN( second );
 
 DEFINE_FN(emplace_back);
+
+DEFINE_FN2( boost::begin, fn_boost_begin );
+template<int N> DEFINE_FN2( std::get<N>, fn_std_get );
 
 // Cannot use DEFINE_FN2_TMPL here, since casts are build in and the compiler
 //(both clang and MSVC) does not accept passing a parameter pack to *_cast
@@ -145,14 +148,14 @@ DEFINE_CAST_(const_cast)
 namespace tc {
 	struct fn_subscript final {
 		template<typename Lhs, typename Rhs>
-		auto operator()( Lhs&& lhs, Rhs&& rhs ) const noexcept
+		auto operator()( Lhs&& lhs, Rhs&& rhs ) const& noexcept
 			return_decltype_rvalue_by_ref( std::forward<Lhs>(lhs)[std::forward<Rhs>(rhs)] )
 	};
 
 	/* indirection operator, aka dereference operator */
 	struct fn_indirection final {
 		template<typename Lhs>
-		auto operator()( Lhs&& lhs ) const noexcept
+		auto operator()( Lhs&& lhs ) const& noexcept
 			return_decltype_rvalue_by_ref( *std::forward<Lhs>(lhs))
 	};
 	std::true_type returns_reference_to_argument(fn_indirection) noexcept; // mark as returning reference to argument
