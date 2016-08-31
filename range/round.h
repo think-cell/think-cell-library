@@ -192,6 +192,11 @@ namespace tc {
 		return numeric_cast<TTarget>(std::forward<TSource>(src));
 	}
 
+	template<typename Lhs, typename Rhs>
+	void assign_numeric_cast(Lhs& lhs, Rhs&& rhs) noexcept {
+		lhs=tc::numeric_cast<Lhs>(std::forward<Rhs>(rhs));
+	}
+
 	//////////////////////////////
 	// round
 

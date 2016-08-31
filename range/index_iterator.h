@@ -56,15 +56,6 @@ namespace tc {
 	template<typename Rng, typename Traversal>
 	using range_difference_type = typename range_traits<Rng>::template difference_type<Traversal>::type;
 
-	template<typename T>
-	struct has_bool_cast {
-	private:
-		template<typename U> static auto test(int) -> decltype(static_cast<bool>(std::declval<U>()), std::true_type());
-		template<typename> static std::false_type test(...);
-	public:
-		static constexpr bool value = std::is_same<decltype(test<T>(0)), std::true_type>::value;
-	};
-
 	template<typename It, typename Enable=void >
 	struct element {
 		static_assert( tc::is_decayed<It>::value, "" );

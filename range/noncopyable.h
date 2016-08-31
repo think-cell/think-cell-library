@@ -38,8 +38,6 @@ namespace tc {
 
 			nonmovable(nonmovable const&) = delete;
 			nonmovable& operator=(nonmovable const&) = delete;
-			nonmovable(nonmovable &&) = delete;
-			nonmovable& operator=(nonmovable &&) = delete;
 		};
 	}
 	using nonmovable_adl_barrier::nonmovable;

@@ -163,26 +163,34 @@ namespace tc {
 	}
 
 	template < template<typename> class RangeReturn, typename Rng, typename It, typename Pred>
-	typename RangeReturn<Rng>::type find_closest_if(Rng&& rng, It it, Pred pred) noexcept {
+	typename RangeReturn<Rng>::type find_closest_if(Rng&& rng, It it, bool bSkipSelf, Pred pred) noexcept {
 		auto const itEnd = boost::end(rng);
 		auto const itBegin = boost::begin(rng);
 		auto itForward = it;
-		for (;;) {
-			if (itEnd == itForward) { 
-				for (; it != itBegin; ) {
-					--it;
-					auto && ref = *it;
-					if (pred(ref)) return RangeReturn<Rng>::pack_element(it, std::forward<Rng>(rng), tc_move_if_owned(ref));
-				}
-				return RangeReturn<Rng>::pack_no_element(std::forward<Rng>(rng));
-			}
-			{
-				auto && ref = *itForward;
+
+		auto OnEnd = [&]() {
+			for (; it != itBegin; ) {
+				--it;
+				auto && ref = *it;
 				if (pred(ref)) {
-					return RangeReturn<Rng>::pack_element(itForward, std::forward<Rng>(rng), tc_move_if_owned(ref));
+					return RangeReturn<Rng>::pack_element(it, std::forward<Rng>(rng), tc_move_if_owned(ref));
 				}
-				++itForward;
 			}
+			return RangeReturn<Rng>::pack_no_element(std::forward<Rng>(rng));
+		};
+
+		if (itEnd == itForward) {
+			return OnEnd();
+		}
+		if( !bSkipSelf ) {
+			auto && ref = *itForward;
+			if (pred(ref)) {
+				return RangeReturn<Rng>::pack_element(itForward, std::forward<Rng>(rng), tc_move_if_owned(ref));
+			}
+		}
+		++itForward;
+
+		for (;;) {
 			if (itBegin == it) {
 				for (; itForward != itEnd; ++itForward) {
 					auto && ref = *itForward;
@@ -193,10 +201,20 @@ namespace tc {
 				return RangeReturn<Rng>::pack_no_element(std::forward<Rng>(rng));
 			}
 			--it;
-			auto && ref = *it;
-			if (pred(ref)) {
-				return RangeReturn<Rng>::pack_element(it, std::forward<Rng>(rng), tc_move_if_owned(ref));
+			{
+				auto && ref = *it;
+				if (pred(ref)) {
+					return RangeReturn<Rng>::pack_element(it, std::forward<Rng>(rng), tc_move_if_owned(ref));
+				}
 			}
+			if (itEnd == itForward) {
+				 return OnEnd();
+			}
+			auto && ref = *itForward;
+			if (pred(ref)) {
+				return RangeReturn<Rng>::pack_element(itForward, std::forward<Rng>(rng), tc_move_if_owned(ref));
+			}
+			++itForward;
 		}
 	}
 
@@ -1094,7 +1112,9 @@ namespace tc {
 			m_itFirstValid=it;
 			++m_itFirstValid;
 #endif
-			*m_itOutput=tc_move_always(*it);
+			if (it != m_itOutput) { // self assignment with r-value-references is not allowed (17.6.4.9)
+				*m_itOutput=tc_move_always(*it);
+			}
 			++m_itOutput;
 		}
 

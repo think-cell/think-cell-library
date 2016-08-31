@@ -81,6 +81,30 @@ UNITTESTDEF( sort_accumulate_each_unique_range_2 ) {
 	}
 }
 
+UNITTESTDEF(filter_no_self_assignment_of_rvalues) {
+	struct S {
+		S() {}
+
+		S(S const&){}
+
+		S& operator=(S&& other) {
+			_ASSERT(&other != this);
+			return *this;
+		}
+	};
+
+	tc::vector<S> vs{5,S{}};
+	tc::sort_accumulate_each_unique_range(
+		vs,
+		[&](auto const&, auto const&) {
+			return false;
+		},
+		[&](auto&, auto const&) {
+		}
+	);
+}
+
+
 UNITTESTDEF( trim_leftright_if ) {
 	tc::vector<int> v{1,2,3,4,5,6,7,7,7};
 	auto rng = trim_left_if(v, [] (int n) {return n<4;});
@@ -146,7 +170,7 @@ UNITTESTDEF(find_closest_if) {
 
 	auto find=[](auto const& rngn, int iStart, int nTarget, int nComparisonsMax) {
 		int nComparisons = 0;
-		return tc::find_closest_if<tc::return_element_index_or_npos>(rngn, tc::begin_next(rngn,iStart), [&](IntCompareOnce const& n) {
+		return tc::find_closest_if<tc::return_element_index_or_npos>(rngn, tc::begin_next(rngn, iStart), /*bSkipSelf*/false, [&](IntCompareOnce const& n) {
 			_ASSERT(++nComparisons<=nComparisonsMax);
 			return n==nTarget;
 		});

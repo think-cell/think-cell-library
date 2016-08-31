@@ -20,7 +20,7 @@
 #include "casts.h"
 #include "round.h"
 #include "meta.h"
-#include <type_traits>
+#include "type_traits.h"
 #include <limits>
 #include <boost/range/traversal.hpp>
 
@@ -33,11 +33,11 @@ namespace tc {
 
 	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template< typename T >
-	std::enable_if_t<!std::numeric_limits<T>::is_integer, T > make_size_proxy(T t) noexcept;
+	std::enable_if_t<!tc::is_actual_integer<T>::value, T > make_size_proxy(T t) noexcept;
 
 	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template< typename T >
-	std::enable_if_t< std::numeric_limits<T>::is_integer, size_proxy<T> > make_size_proxy(T t) noexcept;
+	std::enable_if_t< tc::is_actual_integer<T>::value, size_proxy<T> > make_size_proxy(T t) noexcept;
 
 	////////////////////////////////
 	// tc::size_proxy in ADL barrier
@@ -65,7 +65,7 @@ namespace tc {
 
 			template< typename S >
 			size_proxy& operator=(S&& s) & noexcept {
-				m_t = tc::numeric_cast<T>(std::forward<S>(s));
+				tc::assign_numeric_cast(m_t,std::forward<S>(s));
 				AssertInvariant();
 				return *this;
 			}
@@ -119,17 +119,24 @@ namespace tc {
 #define operator_size_proxy( op ) \
 		template< \
 			typename Lhs, typename Rhs, \
-			std::enable_if_t<std::is_arithmetic<Rhs>::value || std::is_enum<Rhs>::value || std::numeric_limits<Rhs>::is_integer>* = nullptr \
+			std::enable_if_t<tc::is_actual_integer<Rhs>::value >* = nullptr \
 		> auto operator op( size_proxy<Lhs> const& lhs, Rhs const& rhs ) \
 		return_decltype( \
 			make_size_proxy( lhs.m_t op rhs ) \
 		) \
 		template< \
 			typename Lhs, typename Rhs, \
-			std::enable_if_t<std::is_arithmetic<Lhs>::value || std::is_enum<Lhs>::value || std::numeric_limits<Lhs>::is_integer>* = nullptr \
+			std::enable_if_t<tc::is_actual_arithmetic<Lhs>::value >* = nullptr \
 		> auto operator op( Lhs const& lhs, size_proxy<Rhs> const& rhs ) \
 		return_decltype( \
-			make_size_proxy( lhs op rhs.m_t ) \
+			tc::numeric_cast<Lhs>(lhs op rhs.m_t) \
+		) \
+		template< \
+			typename Lhs, typename Rhs, \
+			std::enable_if_t<!tc::is_actual_arithmetic<Lhs>::value >* = nullptr \
+		> auto operator op( Lhs const& lhs, size_proxy<Rhs> const& rhs ) \
+		return_decltype( \
+			lhs op rhs.m_t \
 		) \
 		template< typename Lhs, typename Rhs > auto operator op( size_proxy<Lhs> const& lhs, size_proxy<Rhs> const& rhs ) \
 		return_decltype( \
@@ -176,13 +183,13 @@ namespace tc {
 
 	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template< typename T >
-	std::enable_if_t<!std::numeric_limits<T>::is_integer, T > make_size_proxy(T t) noexcept {
+	std::enable_if_t<!tc::is_actual_integer<T>::value, T > make_size_proxy(T t) noexcept {
 		return t;
 	}
 
 	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template< typename T >
-	std::enable_if_t< std::numeric_limits<T>::is_integer, size_proxy<T> > make_size_proxy(T t) noexcept {
+	std::enable_if_t< tc::is_actual_integer<T>::value, size_proxy<T> > make_size_proxy(T t) noexcept {
 		return size_proxy<T>(t);
 	}
 

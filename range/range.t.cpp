@@ -150,7 +150,7 @@ UNITTESTDEF( basic ) {
 namespace {
 	struct generator_range {
 		template< typename Func >
-		void operator()( Func func ) const& noexcept {
+		void operator()(Func func) const& noexcept {
 			for(int i=0;i<50;++i) {
 				func(i);
 			}
@@ -171,7 +171,7 @@ UNITTESTDEF( generator_range ) {
 namespace {
 	struct generator_range_break final {
 		template< typename Func >
-		tc::break_or_continue operator()( Func func ) {
+		tc::break_or_continue operator()(Func func) {
 			using namespace tc;
 			for(int i=0;i<5000;++i) {
 				if (func(i)==break_) { return break_; }

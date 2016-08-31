@@ -16,9 +16,17 @@
 #include "type_traits.h"
 
 namespace tc {
-	template<typename T>
-	bool bool_cast(T const& t) noexcept {
-		static_assert( std::is_pointer<T>::value || std::is_class<T>::value || tc::is_bool<T>::value, "");
+	template<typename T, std::enable_if_t<std::is_pointer<T>::value || std::is_class<T>::value || tc::is_bool<T>::value>* =nullptr>
+	auto bool_cast(T const& t) noexcept ->/*to trigger SFINAE*/decltype(static_cast<bool>(t)) {
 		return static_cast<bool>( VERIFYINITIALIZED(t) );
 	}
+
+	template<typename T>
+	struct has_bool_cast {
+	private:
+		template<typename U> static auto test(int) -> decltype(tc::bool_cast(std::declval<U>()), std::true_type());
+		template<typename> static std::false_type test(...);
+	public:
+		static constexpr bool value = std::is_same<decltype(test<T>(0)), std::true_type>::value;
+	};
 }

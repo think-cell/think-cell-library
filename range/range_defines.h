@@ -32,6 +32,9 @@
 	#ifndef _ASSERTFALSE
 		#define _ASSERTFALSE _ASSERT(false)
 	#endif
+	#ifndef _ASSERTNOTIFY
+		#define _ASSERTNOTIFY(...) _ASSERT((__VA_ARGS__))
+	#endif
 	#ifndef _ASSERTNOTIFYFALSE
 		#define _ASSERTNOTIFYFALSE _ASSERTFALSE
 	#endif
@@ -76,12 +79,11 @@
 
 	#define RANGE_UNITTEST_OUTPUT
 
-    #define SWITCH_NO_DEFAULT( ... ) \
-	switch( __VA_ARGS__ ) { \
+	#define switch_no_default(...) \
+	switch( auto const& /*lifetime extended until end of switch block*/ __switch=(__VA_ARGS__) ) \
 	default: \
-		_ASSERT( false );
-
-	#define switch_no_default( ... ) SWITCH_NO_DEFAULT( __VA_ARGS__ ) /##/
+		if ( _ASSERTFALSE, false ) {std::terminate(); /*never executed, but the compiler might complain about this code path not returning a value*/} \
+		else
 
 #endif
 

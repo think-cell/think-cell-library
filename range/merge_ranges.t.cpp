@@ -12,13 +12,11 @@
 // If not, see <http://www.gnu.org/licenses/>. 
 //-----------------------------------------------------------------------------------------------------------------------------
 
-#include "Library/ErrorReporting/decl.h"
-#include "Library/ErrorReporting/UnitTest.h"
-#include "Library/HeaderOnly/Public/range.t.h"
-#include "Library/HeaderOnly/Public/compare.h"
+#include "range.h"
+#include "range.t.h"
+#include "compare.h"
 
 #include <boost/fusion/include/make_fused_function_object.hpp>
-#include "Library/GeometryTypes/_TGeometryTraits.h"
 #include "merge_ranges.h"
 
 UNITTESTDEF(merge_ranges_with_simple_usecase) {

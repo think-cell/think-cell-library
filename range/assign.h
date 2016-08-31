@@ -160,13 +160,6 @@ void change_with_or(Var&& var, Val&& val, bool& bChanged) noexcept {
 	}
 }
 
-template< typename Var, typename Val, typename Func >
-bool assign_max_if_impl( Var&& var, Val&& val, Func func ) noexcept {
-	return tc::assign_better( std::forward<Var>(var), std::forward<Val>(val), [&func](Val const& val, Var const& var) { return var < val && tc::bool_cast(func()); } );
-}
-
-#define tc_assign_max_if(var, val, expr) (tc::assign_max_if_impl( (var), (val), MAKE_LAZY(expr)  ))
-
 DEFINE_FN( assign_max );
 DEFINE_FN( assign_min );
 DEFINE_FN( assign_better );
