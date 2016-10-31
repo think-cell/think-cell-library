@@ -2,14 +2,14 @@
 // think-cell public library
 // Copyright (C) 2016 think-cell Software GmbH
 //
-// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
-// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 //
-// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
-// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 //
-// You should have received a copy of the GNU General Public License along with this program. 
-// If not, see <http://www.gnu.org/licenses/>. 
+// You should have received a copy of the GNU General Public License along with this program.
+// If not, see <http://www.gnu.org/licenses/>.
 //-----------------------------------------------------------------------------------------------------------------------------
 
 #pragma once
@@ -25,6 +25,7 @@
 #include "size.h"
 #include "assign.h"
 
+#include <boost/optional.hpp>
 #include <type_traits>
 
 namespace tc {
@@ -36,7 +37,7 @@ namespace tc {
 	struct make_sub_range_result final {
 		using type = sub_range< Rng >;
 	};
-	
+
 	template< typename Rng >
 	struct make_sub_range_result< Rng, std::enable_if_t<
 		!std::is_same< Rng, view_by_value_t<Rng> >::value
@@ -51,7 +52,7 @@ namespace tc {
 	};
 
 	// put transform_adaptor outside of sub_range (to allow tc::equal_range( tc::transform( rng, func ) ).base_range())
-	template< typename Func, typename Rng > 
+	template< typename Func, typename Rng >
 	struct make_sub_range_result< transform_adaptor<Func,Rng,true> > final {
 		using type = transform_adaptor<Func, typename make_sub_range_result<
 			Rng
@@ -61,7 +62,7 @@ namespace tc {
 	//-------------------------------------------------------------------------------------------------------------------------
 	template<typename T>
 	T* raw_ptr(T* t) noexcept { return t; } // overloaded e.g. for boost::interprocess::offset_ptr
-	
+
 	template<typename Rng, std::enable_if_t<std::is_pointer< typename boost::range_iterator< std::remove_reference_t<Rng> >::type >::value>* = nullptr>
 	auto ptr_begin(Rng&& rng) noexcept return_decltype(
 		boost::begin(rng) // not std::forward<Rng>(rng) : there is no overload for boost::begin(Rng&&), rvalues bind to boost::begin(Rng const&)
@@ -71,46 +72,46 @@ namespace tc {
 		boost::end(rng) // not std::forward<Rng>(rng) : there is no overload for boost::end(Rng&&), rvalues bind to boost::end(Rng const&)
 	)
 
-	template<typename Rng, 
+	template<typename Rng,
 		std::enable_if_t<
-			!std::is_pointer< typename boost::range_iterator< std::remove_reference_t<Rng> >::type >::value 
+			!std::is_pointer< typename boost::range_iterator< std::remove_reference_t<Rng> >::type >::value
 			&& !(tc::is_instance<std::basic_string,std::remove_reference_t<Rng>>::value && !std::is_const<std::remove_reference_t<Rng> >::value )
 		>* = nullptr
 	>
 	auto ptr_begin(Rng&& rng) noexcept return_decltype(
 		raw_ptr( rng.data() )
 	)
-	template<typename Rng, 
+	template<typename Rng,
 		std::enable_if_t<
-			!std::is_pointer< typename boost::range_iterator< std::remove_reference_t<Rng> >::type >::value 
+			!std::is_pointer< typename boost::range_iterator< std::remove_reference_t<Rng> >::type >::value
 			&& !(tc::is_instance<std::basic_string,std::remove_reference_t<Rng>>::value && !std::is_const<std::remove_reference_t<Rng> >::value )
 		>* = nullptr
 	>
 	auto ptr_end(Rng&& rng) noexcept return_decltype(
 		raw_ptr( rng.data() ) + rng.size()
 	)
-	
-	template<typename Rng, 
+
+	template<typename Rng,
 		std::enable_if_t<
-			!std::is_pointer< typename boost::range_iterator< std::remove_reference_t<Rng> >::type >::value 
+			!std::is_pointer< typename boost::range_iterator< std::remove_reference_t<Rng> >::type >::value
 			&& tc::is_instance<std::basic_string,std::remove_reference_t<Rng>>::value && !std::is_const<std::remove_reference_t<Rng> >::value
 		>* = nullptr
 	>
 	auto ptr_begin(Rng&& rng) noexcept return_decltype(
 		tc::make_mutable_ptr(raw_ptr( rng.data() ))
 	)
-	template<typename Rng, 
+	template<typename Rng,
 		std::enable_if_t<
-			!std::is_pointer< typename boost::range_iterator< std::remove_reference_t<Rng> >::type >::value 
+			!std::is_pointer< typename boost::range_iterator< std::remove_reference_t<Rng> >::type >::value
 			&& tc::is_instance<std::basic_string,std::remove_reference_t<Rng>>::value && !std::is_const<std::remove_reference_t<Rng> >::value
 		>* = nullptr
 	>
 	auto ptr_end(Rng&& rng) noexcept return_decltype(
 		tc::make_mutable_ptr(raw_ptr( rng.data() )) + rng.size()
 	)
-	
+
 	//-------------------------------------------------------------------------------------------------------------------------
-	// fwd decls 
+	// fwd decls
 	template< typename Cont >
 	Cont& take_inplace( Cont & cont, typename boost::range_iterator< std::remove_reference_t<Cont> >::type it ) noexcept;
 
@@ -239,7 +240,7 @@ namespace tc {
 		private:
 			index m_idxBegin;
 			index m_idxEnd;
-			
+
 			template<typename RngOther>
 			struct delayed_test_conversion_to_index {
 				using type=std::is_constructible<
@@ -254,7 +255,7 @@ namespace tc {
 			template<std::size_t N>
 			struct delayed_test_conversion_to_index<sub_range(&)[N]> : std::false_type {};
 #endif
-			
+
 			template<typename RngOther>
 			using is_compatible_range =
 				typename boost::mpl::eval_if_c<
@@ -267,18 +268,18 @@ namespace tc {
 			sub_range() noexcept
 			{}
 
-			template<typename RngOther, std::enable_if_t< is_compatible_range<RngOther>::value >* =nullptr> 
+			template<typename RngOther, std::enable_if_t< is_compatible_range<RngOther>::value >* =nullptr>
 			sub_range( RngOther&& rng ) noexcept
 				: base_( aggregate_tag(), whole_range_sub_range_helper<Rng>::base_range(
-					ctor_base_cast<sub_range,sub_range>( std::forward<RngOther>(rng) ) 
+					ctor_base_cast<sub_range,sub_range>( std::forward<RngOther>(rng) )
 				) )
 				, m_idxBegin(whole_range_sub_range_helper<Rng>::begin_index(
 					base_cast<base_>(*this),
-					ctor_base_cast<sub_range,sub_range>( std::forward<RngOther>(rng) ) 
+					ctor_base_cast<sub_range,sub_range>( std::forward<RngOther>(rng) )
 				))
 				, m_idxEnd(whole_range_sub_range_helper<Rng>::end_index(
 					base_cast<base_>(*this),
-					ctor_base_cast<sub_range,sub_range>( std::forward<RngOther>(rng) ) 
+					ctor_base_cast<sub_range,sub_range>( std::forward<RngOther>(rng) )
 				))
 			{}
 
@@ -833,7 +834,7 @@ namespace tc {
 		const_iterator end() const& noexcept {
 			return begin() + 1;
 		}
-		
+
 		auto size() const& noexcept return_decltype(
 			1U
 		)
@@ -1336,7 +1337,7 @@ namespace tc {
 	tc::ptr_range<unsigned char const> as_blob(T const& t) noexcept {
 		auto const& rng=tc::as_pointers(t);
 		static_assert( std::is_trivially_copyable< typename tc::range_value< std::remove_reference_t< decltype( rng ) > >::type >::value, "as_blob only works on std::is_trivially_copyable types" );
-		return tc::make_iterator_range( 
+		return tc::make_iterator_range(
 			reinterpret_cast<unsigned char const*>( tc::ptr_begin(rng) ),
 			reinterpret_cast<unsigned char const*>( tc::ptr_end(rng) )
 		);
@@ -1347,7 +1348,7 @@ namespace tc {
 		static_assert( tc::is_decayed<T>::value, "" );
 		static_assert( std::is_trivially_copyable<T>::value, "" );
 		_ASSERT( 0==tc::size(rng)%sizeof(T) );
-		return tc::make_iterator_range( 
+		return tc::make_iterator_range(
 			reinterpret_cast<T const*>(tc::ptr_begin(rng) ),
 			reinterpret_cast<T const*>(tc::ptr_end(rng) )
 		);
