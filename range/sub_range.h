@@ -2,14 +2,14 @@
 // think-cell public library
 // Copyright (C) 2016 think-cell Software GmbH
 //
-// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as
-// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
 //
-// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
-// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
 //
-// You should have received a copy of the GNU General Public License along with this program.
-// If not, see <http://www.gnu.org/licenses/>.
+// You should have received a copy of the GNU General Public License along with this program. 
+// If not, see <http://www.gnu.org/licenses/>. 
 //-----------------------------------------------------------------------------------------------------------------------------
 
 #pragma once
@@ -26,6 +26,7 @@
 #include "assign.h"
 
 #include <boost/optional.hpp>
+
 #include <type_traits>
 
 namespace tc {
@@ -37,7 +38,7 @@ namespace tc {
 	struct make_sub_range_result final {
 		using type = sub_range< Rng >;
 	};
-
+	
 	template< typename Rng >
 	struct make_sub_range_result< Rng, std::enable_if_t<
 		!std::is_same< Rng, view_by_value_t<Rng> >::value
@@ -52,7 +53,7 @@ namespace tc {
 	};
 
 	// put transform_adaptor outside of sub_range (to allow tc::equal_range( tc::transform( rng, func ) ).base_range())
-	template< typename Func, typename Rng >
+	template< typename Func, typename Rng > 
 	struct make_sub_range_result< transform_adaptor<Func,Rng,true> > final {
 		using type = transform_adaptor<Func, typename make_sub_range_result<
 			Rng
@@ -62,7 +63,7 @@ namespace tc {
 	//-------------------------------------------------------------------------------------------------------------------------
 	template<typename T>
 	T* raw_ptr(T* t) noexcept { return t; } // overloaded e.g. for boost::interprocess::offset_ptr
-
+	
 	template<typename Rng, std::enable_if_t<std::is_pointer< typename boost::range_iterator< std::remove_reference_t<Rng> >::type >::value>* = nullptr>
 	auto ptr_begin(Rng&& rng) noexcept return_decltype(
 		boost::begin(rng) // not std::forward<Rng>(rng) : there is no overload for boost::begin(Rng&&), rvalues bind to boost::begin(Rng const&)
@@ -72,46 +73,46 @@ namespace tc {
 		boost::end(rng) // not std::forward<Rng>(rng) : there is no overload for boost::end(Rng&&), rvalues bind to boost::end(Rng const&)
 	)
 
-	template<typename Rng,
+	template<typename Rng, 
 		std::enable_if_t<
-			!std::is_pointer< typename boost::range_iterator< std::remove_reference_t<Rng> >::type >::value
+			!std::is_pointer< typename boost::range_iterator< std::remove_reference_t<Rng> >::type >::value 
 			&& !(tc::is_instance<std::basic_string,std::remove_reference_t<Rng>>::value && !std::is_const<std::remove_reference_t<Rng> >::value )
 		>* = nullptr
 	>
 	auto ptr_begin(Rng&& rng) noexcept return_decltype(
 		raw_ptr( rng.data() )
 	)
-	template<typename Rng,
+	template<typename Rng, 
 		std::enable_if_t<
-			!std::is_pointer< typename boost::range_iterator< std::remove_reference_t<Rng> >::type >::value
+			!std::is_pointer< typename boost::range_iterator< std::remove_reference_t<Rng> >::type >::value 
 			&& !(tc::is_instance<std::basic_string,std::remove_reference_t<Rng>>::value && !std::is_const<std::remove_reference_t<Rng> >::value )
 		>* = nullptr
 	>
 	auto ptr_end(Rng&& rng) noexcept return_decltype(
 		raw_ptr( rng.data() ) + rng.size()
 	)
-
-	template<typename Rng,
+	
+	template<typename Rng, 
 		std::enable_if_t<
-			!std::is_pointer< typename boost::range_iterator< std::remove_reference_t<Rng> >::type >::value
+			!std::is_pointer< typename boost::range_iterator< std::remove_reference_t<Rng> >::type >::value 
 			&& tc::is_instance<std::basic_string,std::remove_reference_t<Rng>>::value && !std::is_const<std::remove_reference_t<Rng> >::value
 		>* = nullptr
 	>
 	auto ptr_begin(Rng&& rng) noexcept return_decltype(
 		tc::make_mutable_ptr(raw_ptr( rng.data() ))
 	)
-	template<typename Rng,
+	template<typename Rng, 
 		std::enable_if_t<
-			!std::is_pointer< typename boost::range_iterator< std::remove_reference_t<Rng> >::type >::value
+			!std::is_pointer< typename boost::range_iterator< std::remove_reference_t<Rng> >::type >::value 
 			&& tc::is_instance<std::basic_string,std::remove_reference_t<Rng>>::value && !std::is_const<std::remove_reference_t<Rng> >::value
 		>* = nullptr
 	>
 	auto ptr_end(Rng&& rng) noexcept return_decltype(
 		tc::make_mutable_ptr(raw_ptr( rng.data() )) + rng.size()
 	)
-
+	
 	//-------------------------------------------------------------------------------------------------------------------------
-	// fwd decls
+	// fwd decls 
 	template< typename Cont >
 	Cont& take_inplace( Cont & cont, typename boost::range_iterator< std::remove_reference_t<Cont> >::type it ) noexcept;
 
@@ -130,99 +131,89 @@ namespace tc {
 	namespace sub_range_impl {
 		template< typename Rng >
 		struct whole_range_sub_range_helper_base {
-			using base_ = range_adaptor< sub_range<Rng>, Rng >;
-
 			template<typename Rhs>
 			static auto base_range(Rhs&& rhs) noexcept
 				return_decltype_rvalue_by_ref( std::forward<Rhs>(rhs) )
 			template<typename Rhs>
-			static auto begin_index(base_ & base, Rhs&&) noexcept
-				return_decltype( base.STATIC_VIRTUAL_METHOD_NAME(begin_index)() )
+			static auto begin_index(sub_range<Rng>& lhs, Rhs&&) noexcept
+				return_decltype( tc::base_cast<range_adaptor< sub_range<Rng>, Rng > >(lhs).STATIC_VIRTUAL_METHOD_NAME(begin_index)() )
 			template<typename Rhs>
-			static auto end_index(base_ & base, Rhs&&) noexcept
-				return_decltype( base.STATIC_VIRTUAL_METHOD_NAME(end_index)() )
+			static auto end_index(sub_range<Rng>& lhs, Rhs&&) noexcept
+				return_decltype( tc::base_cast<range_adaptor< sub_range<Rng>, Rng > >(lhs).STATIC_VIRTUAL_METHOD_NAME(end_index)() )
 		};
 
 		template< typename It >
 		struct whole_range_sub_range_helper_base<iterator_base<It>> {
-			using base_ = range_adaptor< sub_range<iterator_base<It>>, iterator_base<It> >;
-
 			template<typename Rhs>
 			static auto base_range(Rhs &&) noexcept
 				return_decltype( iterator_base<It>() )
 			template<typename Rhs>
-			static auto begin_index(base_ &, Rhs&& rng) noexcept
+			static auto begin_index(sub_range<iterator_base<It>>&, Rhs&& rng) noexcept
 				return_decltype( tc::iterator2index(boost::begin(rng)) )
 			template<typename Rhs>
-			static auto end_index(base_ &, Rhs&& rng) noexcept
+			static auto end_index(sub_range<iterator_base<It>>&, Rhs&& rng) noexcept
 				return_decltype( tc::iterator2index(boost::end(rng)) )
 		};
 
 		template< typename T >
 		struct whole_range_sub_range_helper_base<iterator_base<T*>> {
-			using base_ = range_adaptor< sub_range<iterator_base<T*>>, iterator_base<T*> >;
-
 			template<typename Rhs>
 			static auto base_range(Rhs &&) noexcept
 				return_decltype( iterator_base<T*>() )
 			template<typename Rhs>
-			static auto begin_index(base_ &, Rhs&& rng) noexcept
+			static auto begin_index(sub_range<iterator_base<T*>>&, Rhs&& rng) noexcept
 				return_decltype( tc::iterator2index(ptr_begin(rng)) )
 			template<typename Rhs>
-			static auto end_index(base_ &, Rhs&& rng) noexcept
+			static auto end_index(sub_range<iterator_base<T*>>&, Rhs&& rng) noexcept
 				return_decltype( tc::iterator2index(ptr_end(rng)) )
 		};
 
 		template< typename Rng >
 		struct whole_range_sub_range_helper final : whole_range_sub_range_helper_base<Rng> {
-			using typename whole_range_sub_range_helper_base<Rng>::base_;
 			using whole_range_sub_range_helper_base<Rng>::base_range;
 			using whole_range_sub_range_helper_base<Rng>::begin_index;
 			using whole_range_sub_range_helper_base<Rng>::end_index;
 
 			template<typename Rhs>
-			static auto base_range(sub_range<sub_range<Rhs>>&& rhs)
-				return_decltype_rvalue_by_ref( whole_range_sub_range_helper<Rng>::base_range( tc_move(rhs).base_range_move().base_range_move() ) )
-			template<typename Rhs>
 			static auto base_range(sub_range<Rhs>&& rhs) noexcept
 				return_decltype_rvalue_by_ref( whole_range_sub_range_helper<Rng>::base_range( tc_move(rhs).base_range_move() ) )
 			template<typename Rhs>
-			static auto begin_index(base_ &, sub_range<Rhs>&& rhs) noexcept
+			static auto begin_index(sub_range<Rng>&, sub_range<Rhs>&& rhs) noexcept
 				return_decltype( rhs.begin_index() )
 			template<typename Rhs>
-			static auto end_index(base_ &, sub_range<Rhs>&& rhs) noexcept
+			static auto end_index(sub_range<Rng>&, sub_range<Rhs>&& rhs) noexcept
 				return_decltype( rhs.end_index() )
 
 			template<typename Rhs>
 			static auto base_range(sub_range<Rhs> const& rhs) noexcept
 				return_decltype( whole_range_sub_range_helper<Rng>::base_range( rhs.base_range() ) )
 			template<typename Rhs>
-			static auto begin_index(base_ &, sub_range<Rhs> const& rhs) noexcept
+			static auto begin_index(sub_range<Rng>&, sub_range<Rhs> const& rhs) noexcept
 				return_decltype( rhs.begin_index() )
 			template<typename Rhs>
-			static auto end_index(base_ &, sub_range<Rhs> const& rhs) noexcept
+			static auto end_index(sub_range<Rng>&, sub_range<Rhs> const& rhs) noexcept
 				return_decltype( rhs.end_index() )
 
 			template<typename Rhs>
-			static auto base_range(sub_range<Rhs> & rhs) noexcept
+			static auto base_range(sub_range<Rhs>& rhs) noexcept
 				return_decltype( whole_range_sub_range_helper<Rng>::base_range( rhs.base_range() ) )
 			template<typename Rhs>
-			static auto begin_index(base_ &, sub_range<Rhs> & rhs) noexcept
+			static auto begin_index(sub_range<Rng>&, sub_range<Rhs>& rhs) noexcept
 				return_decltype( rhs.begin_index() )
 			template<typename Rhs>
-			static auto end_index(base_ &, sub_range<Rhs> & rhs) noexcept
+			static auto end_index(sub_range<Rng>&, sub_range<Rhs>& rhs) noexcept
 				return_decltype( rhs.end_index() )
 
 			// Fallback for is_compatible_range below
 			struct incompatible_index final {};
-			static incompatible_index begin_index(base_&, ...) noexcept;
+			static incompatible_index begin_index(sub_range<Rng>&, ...) noexcept;
 		};
 
 		template< typename Rng >
 		struct sub_range : range_adaptor< sub_range<Rng>, Rng > {
 			static_assert(
 				!tc::is_view<Rng>::value || std::is_same< Rng, view_by_value_t<Rng> >::value,
-				"sub_range must hold ranges by value."
+				"sub_range must hold views by value."
 			);
 			static_assert(
 				tc::is_view<Rng>::value || std::is_reference<Rng>::value,
@@ -240,22 +231,25 @@ namespace tc {
 		private:
 			index m_idxBegin;
 			index m_idxEnd;
-
+			
 			template<typename RngOther>
 			struct delayed_test_conversion_to_index {
 				using type=std::is_constructible<
 					index,
 					decltype( whole_range_sub_range_helper<Rng>::begin_index(
-						std::declval<base_&>(),
-						ctor_base_cast<sub_range,sub_range>(std::declval<RngOther>())
+						std::declval<this_type&>(),
+						std::declval<RngOther>()
 					) )>;
 			};
 
 #ifdef _MSC_VER // compiler bug ?
 			template<std::size_t N>
 			struct delayed_test_conversion_to_index<sub_range(&)[N]> : std::false_type {};
-#endif
 
+			template<std::size_t N>
+			struct delayed_test_conversion_to_index<sub_range const(&)[N]> : std::false_type {};
+#endif
+			
 			template<typename RngOther>
 			using is_compatible_range =
 				typename boost::mpl::eval_if_c<
@@ -268,38 +262,38 @@ namespace tc {
 			sub_range() noexcept
 			{}
 
-			template<typename RngOther, std::enable_if_t< is_compatible_range<RngOther>::value >* =nullptr>
+			template<typename RngOther, std::enable_if_t< is_compatible_range<RngOther>::value >* =nullptr> 
 			sub_range( RngOther&& rng ) noexcept
 				: base_( aggregate_tag(), whole_range_sub_range_helper<Rng>::base_range(
-					ctor_base_cast<sub_range,sub_range>( std::forward<RngOther>(rng) )
+					std::forward<RngOther>(rng) 
 				) )
 				, m_idxBegin(whole_range_sub_range_helper<Rng>::begin_index(
-					base_cast<base_>(*this),
-					ctor_base_cast<sub_range,sub_range>( std::forward<RngOther>(rng) )
+					*this,
+					std::forward<RngOther>(rng) 
 				))
 				, m_idxEnd(whole_range_sub_range_helper<Rng>::end_index(
-					base_cast<base_>(*this),
-					ctor_base_cast<sub_range,sub_range>( std::forward<RngOther>(rng) )
+					*this,
+					std::forward<RngOther>(rng) 
 				))
 			{}
 
 			// some user-defined copy ctor to disable implicit one, with same semantics as templated copy ctor
 			sub_range( sub_range const& rng) noexcept
 				: base_( aggregate_tag(), whole_range_sub_range_helper<Rng>::base_range(
-					ctor_base_cast<sub_range,sub_range>(rng)
+					rng
 				) )
 				, m_idxBegin(whole_range_sub_range_helper<Rng>::begin_index(
-					base_cast<base_>(*this),
-					ctor_base_cast<sub_range,sub_range>(rng)
+					*this,
+					rng
 				))
 				, m_idxEnd(whole_range_sub_range_helper<Rng>::end_index(
-					base_cast<base_>(*this),
-					ctor_base_cast<sub_range,sub_range>(rng)
+					*this,
+					rng
 				))
 			{}
 
 			template<typename Rhs>
-			sub_range( Rhs&& rng,
+			explicit sub_range( Rhs&& rng,
 				index idxBegin,
 				index idxEnd ) noexcept
 			: base_(aggregate_tag(), whole_range_sub_range_helper<Rng>::base_range(
@@ -310,7 +304,7 @@ namespace tc {
 			{}
 
 			template<typename Rhs>
-			sub_range( Rhs&& rng,
+			explicit sub_range( Rhs&& rng,
 				typename boost::range_iterator< std::remove_reference_t<Rng> >::type itBegin,
 				typename boost::range_iterator< std::remove_reference_t<Rng> >::type itEnd ) noexcept
 			: base_(aggregate_tag(), whole_range_sub_range_helper<Rng>::base_range(
@@ -834,7 +828,7 @@ namespace tc {
 		const_iterator end() const& noexcept {
 			return begin() + 1;
 		}
-
+		
 		auto size() const& noexcept return_decltype(
 			1U
 		)
@@ -1337,7 +1331,7 @@ namespace tc {
 	tc::ptr_range<unsigned char const> as_blob(T const& t) noexcept {
 		auto const& rng=tc::as_pointers(t);
 		static_assert( std::is_trivially_copyable< typename tc::range_value< std::remove_reference_t< decltype( rng ) > >::type >::value, "as_blob only works on std::is_trivially_copyable types" );
-		return tc::make_iterator_range(
+		return tc::make_iterator_range( 
 			reinterpret_cast<unsigned char const*>( tc::ptr_begin(rng) ),
 			reinterpret_cast<unsigned char const*>( tc::ptr_end(rng) )
 		);
@@ -1348,7 +1342,7 @@ namespace tc {
 		static_assert( tc::is_decayed<T>::value, "" );
 		static_assert( std::is_trivially_copyable<T>::value, "" );
 		_ASSERT( 0==tc::size(rng)%sizeof(T) );
-		return tc::make_iterator_range(
+		return tc::make_iterator_range( 
 			reinterpret_cast<T const*>(tc::ptr_begin(rng) ),
 			reinterpret_cast<T const*>(tc::ptr_end(rng) )
 		);

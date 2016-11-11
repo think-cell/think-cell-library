@@ -15,6 +15,7 @@
 #pragma once
 
 #include "range_defines.h"
+#include "range_fwd.h"
 #include "result_of.h"
 #include "accumulator.h"
 
@@ -33,7 +34,7 @@ namespace tc {
 		continue_
 	};
 
-	inline tc::break_or_continue continue_if(bool bCondition) noexcept {
+	inline tc::break_or_continue continue_if(tc::bool_context bCondition) noexcept {
 		return bCondition ? tc::continue_ : tc::break_;
 	}
 

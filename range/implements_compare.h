@@ -18,26 +18,12 @@
 #include "empty_chain.h"
 #include "type_traits.h"
 #include "return_decltype.h"
+#include "equality_comparable.h"
 #include <boost/mpl/has_xxx.hpp>
 
 namespace tc {
 	////////////////////////////////////////////////////////////////////////////////////
 	// curiously recurring template patterns mapping comparison operators to compare
-	namespace equality_comparable_adl_barrier {
-		BOOST_MPL_HAS_XXX_TRAIT_DEF(equality_comparable_tag)
-
-		template< typename Derived >
-		struct equality_comparable {
-			using equality_comparable_tag = void;
-		};
-
-		template< typename Lhs, typename Rhs, std::enable_if_t<
-			has_equality_comparable_tag<Lhs>::value || has_equality_comparable_tag<Rhs>::value
-		>* = nullptr >
-		auto operator!=(Lhs const& lhs, Rhs const& rhs) noexcept return_decltype( !(lhs==rhs) )
-	}
-	using equality_comparable_adl_barrier::equality_comparable;
-
 	namespace implements_compare_adl_barrier {
 		template< typename T >
 		struct implements_compare_partial : public equality_comparable<T> {

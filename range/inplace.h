@@ -44,7 +44,7 @@ namespace tc {
 		}
 		template< typename T >
 		struct inplace final : tc::noncopyable {
-			inplace(T& t) noexcept:m_t(t){}
+			inplace(T& t) noexcept:m_t(VERIFYINITIALIZED(t)){}
 			inplace const& operator-() const& noexcept {
 				negate(m_t); // allow ADL
 				return *this;

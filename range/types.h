@@ -16,6 +16,7 @@
 
 #include "range_defines.h"
 
+#include <boost/range/iterator.hpp>
 #include <boost/range/detail/demote_iterator_traversal_tag.hpp>
 
 namespace tc {

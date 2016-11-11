@@ -111,7 +111,7 @@ namespace tc {
 
 				// The parent of the root of the tree is a special header node (representing end()) whose
 				// parent is again the root node.
-				auto PathToRoot=[]( node_type* pnode )->TNodeVector {
+				auto PathToRoot=[]( node_type* pnode ) noexcept ->TNodeVector {
 					TNodeVector vecpnode;
 					node_type* pnodeParent=node_type::from_impl(pnode->parent());
 
@@ -182,7 +182,7 @@ namespace tc {
 
 		template<typename It, typename UnaryPred>
 		It partition_point( It itBegin, It itEnd, UnaryPred pred ) noexcept {
-			return internal_partition_point( tc_move(itBegin), tc_move(itEnd), [&pred](It it){
+			return internal_partition_point( tc_move(itBegin), tc_move(itEnd), [&pred](It it) noexcept {
 				return pred(*it);
 			} );
 		}
@@ -191,7 +191,7 @@ namespace tc {
 		It partition_pair( It itBegin, It itEnd, UnaryPred pred ) noexcept {
 			_ASSERT( itBegin!=itEnd );
 			--itEnd;
-			return internal_partition_point( tc_move(itBegin), tc_move(itEnd), [&pred](It it){
+			return internal_partition_point( tc_move(itBegin), tc_move(itEnd), [&pred](It it) noexcept {
 				return pred(*it,*boost::next(it));
 			} );
 		}

@@ -185,11 +185,6 @@ namespace tc {
 			:	m_baserng(std::forward<Rhs>(rhs).m_baserng)
 			{}
 
-			// explicitly define the copy constructor to do what the template above does, as it would if the implicit copy consturctor wouldn't interfere
-			range_adaptor( range_adaptor const& rhs) noexcept
-			:	m_baserng(rhs.m_baserng)
-			{}
-
 		public:
 			auto base_range() & noexcept return_decltype(
 				*m_baserng
@@ -363,10 +358,6 @@ namespace tc {
 			:	base_(std::forward<Rhs>(rhs))
 			{}
 
-			range_adaptor( range_adaptor const& rhs ) noexcept
-			:	base_(rhs)
-			{}
-		
 		public:
 			using index = typename BaseRange::index;
 

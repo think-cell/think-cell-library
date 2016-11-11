@@ -17,6 +17,7 @@
 #include "range_fwd.h"
 #include "transform_adaptor.h"
 #include "break_or_continue.h"
+#include "for_each.h"
 #include <utility>
 
 /////////////////////////////////////////////
@@ -27,42 +28,42 @@ namespace tc {
 DEFINE_FN(bool_cast)
 
 template< typename Rng >
-bool any_of(Rng&& rng) noexcept {
+bool any_of(Rng&& rng) MAYTHROW {
 	//return !tc::empty( tc::filter( std::forward<Rng>(rng), tc::fn_bool_cast() ) );
 	return tc::break_==tc::for_each(std::forward<Rng>(rng), [](bool_context b) noexcept {return tc::continue_if(!b);});
 }
 
 template< typename Rng >
-bool all_of(Rng&& rng) noexcept {
+bool all_of(Rng&& rng) MAYTHROW {
 	//return tc::empty( tc::filter( std::forward<Rng>(rng), tc::not_fn(tc::fn_bool_cast()) ) );
 	return tc::continue_==tc::for_each(std::forward<Rng>(rng), [](bool_context b) noexcept {return tc::continue_if(b);});
 }
 
 template< typename Rng, typename Pred >
-bool any_of(Rng&& rng, Pred&& pred) noexcept {
+bool any_of(Rng&& rng, Pred&& pred) MAYTHROW {
 	return any_of( tc::transform( std::forward<Rng>(rng), std::forward<Pred>(pred) ) );
 }
 
 template< typename Rng, typename Pred >
-bool all_of(Rng&& rng, Pred&& pred) noexcept {
+bool all_of(Rng&& rng, Pred&& pred) MAYTHROW {
 	return all_of( tc::transform( std::forward<Rng>(rng), std::forward<Pred>(pred) ) );
 }
 
 template< typename Rng >
-bool none_of(Rng&& rng) noexcept {
+bool none_of(Rng&& rng) MAYTHROW {
 	return !any_of( std::forward<Rng>(rng) );
 }
 
 template< typename Rng, typename Pred >
-bool none_of(Rng&& rng, Pred&& pred) noexcept {
+bool none_of(Rng&& rng, Pred&& pred) MAYTHROW {
 	return !any_of( std::forward<Rng>(rng), std::forward<Pred>(pred) );
 }
 
 // pair is in same order as if minmax_element( ..., operator<( bool, bool ) ) would have been used.
 template< typename Rng >
-std::pair<bool,bool> all_any_of( Rng const& rng ) noexcept {
+std::pair<bool,bool> all_any_of( Rng const& rng ) MAYTHROW {
 	std::pair<bool,bool> pairb(true,false);
-	tc::for_each(rng, [&](bool b) {
+	tc::for_each(rng, [&](bool b) noexcept {
 		pairb.first=pairb.first && b;
 		pairb.second=pairb.second || b;
 		return continue_if( pairb.first || !pairb.second );
@@ -71,16 +72,16 @@ std::pair<bool,bool> all_any_of( Rng const& rng ) noexcept {
 }
 
 template< typename Rng, typename Pred >
-std::pair<bool,bool> all_any_of(Rng const& rng, Pred&& pred) noexcept {
+std::pair<bool,bool> all_any_of(Rng const& rng, Pred&& pred) MAYTHROW {
 	return all_any_of( tc::transform(rng,std::forward<Pred>(pred)) );
 }
 
-inline bool eager_or(std::initializer_list<tc::bool_context> ab) noexcept {
+inline bool eager_or(std::initializer_list<tc::bool_context> ab) MAYTHROW {
 	// use initializer list instead of variadic template: initializer list guarantees evaluation in order of appearance
 	return tc::any_of(ab);
 }
 
-inline bool eager_and(std::initializer_list<tc::bool_context> ab) noexcept {
+inline bool eager_and(std::initializer_list<tc::bool_context> ab) MAYTHROW {
 	// use initializer list instead of variadic template: initializer list guarantees evaluation in order of appearance
 	return tc::all_of(ab);
 }

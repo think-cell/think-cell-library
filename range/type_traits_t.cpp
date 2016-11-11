@@ -377,14 +377,14 @@ UNITTESTDEF(minTest) {
 				tc::transform(
 					tc::transform(
 						tc::make_counting_range(0,1),
-						[&](int n) -> S&& {
+						[&](int n) noexcept -> S&& {
 							return std::move(s2[n]);
 						}
 					),
 					tc::fn_min()
 				)
 			),
-			[&](auto it) {
+			[&](auto it) noexcept {
 				auto const& elem = *it;
 				elem;
 			}
@@ -404,7 +404,7 @@ UNITTESTDEF(minTest) {
 		S s2[2];
 		tc::projected(
 			tc::fn_min(),
-			[&](int n) -> S&& {
+			[&](int n) noexcept -> S&& {
 				return std::move(s2[n]);
 			}
 		)(0,1).foo();
@@ -413,7 +413,7 @@ UNITTESTDEF(minTest) {
 	{
 		tc::projected(
 			tc::fn_min(),
-			[](S&& s)->S&& {
+			[](S&& s) noexcept ->S&& {
 				return static_cast<S&&>(s);
 			}
 		)(createS(1), createS(2));

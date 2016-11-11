@@ -14,41 +14,25 @@
 
 #pragma once
 
-#include "range_defines.h"
-#include "reference_or_value.h"
-#include "index_range.h"
-#include "for_each.h"
-
-#include <functional>
+#include "return_decltype.h"
+#include <boost/mpl/has_xxx.hpp>
+#include <type_traits>
 
 namespace tc {
-	namespace flatten_adaptor_adl_barrier {
-		template<
-			typename Rng
-		>
-		struct flatten_adaptor {
-		private:
-			reference_or_value<index_range_t<Rng>> m_baserng;
+	////////////////////////////////////////////////////////////////////////////////////
+	// curiously recurring template patterns mapping comparison operators to compare
+	namespace equality_comparable_adl_barrier {
+		BOOST_MPL_HAS_XXX_TRAIT_DEF(equality_comparable_tag)
 
-		public:
-			template<typename Rhs>
-			explicit flatten_adaptor(aggregate_tag, Rhs&& rhs) noexcept
-				: m_baserng( aggregate_tag(), std::forward<Rhs>(rhs) )
-			{}
-
-			template< typename Func >
-			auto operator()(Func func) const& MAYTHROW {
-				return tc::for_each(*m_baserng, std::bind(tc::fn_for_each(), std::placeholders::_1, std::ref(func)));
-			}
+		template< typename Derived >
+		struct equality_comparable {
+			using equality_comparable_tag = void;
 		};
+
+		template< typename Lhs, typename Rhs, std::enable_if_t<
+			has_equality_comparable_tag<Lhs>::value || has_equality_comparable_tag<Rhs>::value
+		>* = nullptr >
+		auto operator!=(Lhs const& lhs, Rhs const& rhs) noexcept return_decltype( !(lhs==rhs) )
 	}
-
-	using flatten_adaptor_adl_barrier::flatten_adaptor;
-
-	template<typename Rng>
-	auto flatten(Rng&& rng) noexcept return_ctor(
-		flatten_adaptor< view_by_value_t<Rng> >,
-		(aggregate_tag(), std::forward<Rng>(rng))
-	)
-
+	using equality_comparable_adl_barrier::equality_comparable;
 }

@@ -26,7 +26,7 @@ UNITTESTDEF( basic ) {
 
 	TEST_init_hack(tc::vector, int, v, {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20});
 
-	auto evenvr = tc::filter(v, [](int const& v){ return (v%2==0);});
+	auto evenvr = tc::filter(v, [](int const& v) noexcept { return (v%2==0);});
 
 	TEST_init_hack(tc::vector, int, vexp, {2, 4, 6, 8, 10, 12, 14, 16, 18, 20});
 	TEST_RANGE_EQUAL(vexp, evenvr);
@@ -163,8 +163,8 @@ UNITTESTDEF( generator_range ) {
    
    TEST_init_hack(tc::vector, int, vexp, {0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48});
 
-   TEST_RANGE_EQUAL(vexp, tc::filter( void_range(generator_range()), [](int i){ return i%2==0; } ));
-   TEST_RANGE_EQUAL(tc::filter( void_range(generator_range()), [](int i){ return i%2==0; } ), vexp);
+   TEST_RANGE_EQUAL(vexp, tc::filter( void_range(generator_range()), [](int i) noexcept { return i%2==0; } ));
+   TEST_RANGE_EQUAL(tc::filter( void_range(generator_range()), [](int i) noexcept { return i%2==0; } ), vexp);
 }
 
 //---- Generator Range (with break) -------------------------------------------------------------------------------------------
@@ -186,7 +186,7 @@ namespace {
 //   using namespace tc;
 //
 //   TEST_init_hack(tc::vector, int, vexp, {0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50});
-//   TEST_RANGE_EQUAL(vexp, tc::filter( generator_range_break(), [](int i){ return i%2==0; } ));
+//   TEST_RANGE_EQUAL(vexp, tc::filter( generator_range_break(), [](int i) noexcept { return i%2==0; } ));
 //}
 
 //---- N3752 filters examples  ------------------------------------------------------------------------------------------------
@@ -197,9 +197,9 @@ UNITTESTDEF( N3752 ) {
 
    auto r =  tc::filter( tc::filter( tc::filter(
                                 v,
-                                [](int i){ return i%2!=0; } ),
-                                [](int i){ return i%3!=0; } ),
-                                [](int i){ return i%5!=0; } );
+                                [](int i) noexcept { return i%2!=0; } ),
+                                [](int i) noexcept { return i%3!=0; } ),
+                                [](int i) noexcept { return i%5!=0; } );
 
    TEST_init_hack(tc::vector, int, vexp, {1, 7, 11, 13, 17, 19});
    TEST_RANGE_EQUAL(vexp, r);
@@ -219,9 +219,9 @@ UNITTESTDEF( N3752 ) {
 //   TEST_init_hack(tc::vector, int, vexp, {1, 7, 11, 13, 17, 19});
 //   TEST_RANGE_EQUAL(vexp, tc::filter( tc::filter( tc::filter(
 //                               generator_range_break(),
-//                               [](int i){ return i%2!=0; } ),
-//                               [](int i){ return i%3!=0; } ),
-//                               [](int i){ return i%5!=0; } ));
+//                               [](int i) noexcept { return i%2!=0; } ),
+//                               [](int i) noexcept { return i%3!=0; } ),
+//                               [](int i) noexcept { return i%5!=0; } ));
 //}
 
 UNITTESTDEF( zero_termination ) {
@@ -319,5 +319,20 @@ UNITTESTDEF( ensure_index_range_on_chars ) {
 	}
 }
 
+UNITTESTDEF( construct_array_from_range ) {
+	auto rng=make_counting_range(0, 10);
+	tc::array<int, 10> an=rng;
+	tc::array<int, 10> anCopy=an;
+	tc::array<std::vector<int>, 10> avecn(an);
+	tc::array<std::vector<int>&, 10> avecnRef=avecn;
+	tc::array<std::vector<int>, 10> avecnMoved=tc_move_always(avecn);
+	tc::for_each(rng, [&](int n) {
+		_ASSERTEQUAL(an[n], n);
+		_ASSERTEQUAL(anCopy[n], n);
+		_ASSERTEQUAL(tc::size(avecn[n]), 0);
+		_ASSERTEQUAL(tc::size(avecnRef[n]), 0);
+		_ASSERTEQUAL(tc::size(avecnMoved[n]), n);
+	});
 }
 
+}

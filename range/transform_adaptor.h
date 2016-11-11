@@ -130,9 +130,10 @@ namespace tc {
 				return idx;
 			}
 		};
+
+		template<typename Func, typename Rng, bool b>
+		auto constexpr_size(transform_adaptor<Func, Rng, b> const& rng) -> decltype(constexpr_size(rng.base_range()));
 	}
-
-
 
 	namespace replace_if_impl {
 		template< typename Func, typename T >
@@ -147,8 +148,9 @@ namespace tc {
 				, m_t(std::forward<T>(t))
 			{}
 			template< typename S >
-			auto operator()(S&& s) const& MAYTHROW
-				return_decltype( m_func(s) ? m_t : std::forward<S>(s) )
+			auto operator()(S&& s) const& MAYTHROW ->decltype(auto) {
+				return tc::conditional(m_func(s),m_t,std::forward<S>(s));
+			}
 		};
 	}
 
@@ -162,7 +164,7 @@ namespace tc {
 
 	template <typename Rng, typename Func, typename T>
 	Rng& replace_if_inplace(Rng& rng, Func func, T const& t) noexcept {
-		for_each(rng, [&](decltype(*boost::begin(rng)) v) {
+		for_each(rng, [&](decltype(*boost::begin(rng)) v) noexcept {
 			if (func(tc::as_const(v))) {
 				v = t;
 			}

@@ -33,11 +33,11 @@ namespace tc {
 
 	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template< typename T >
-	std::enable_if_t<!tc::is_actual_integer<T>::value, T > make_size_proxy(T t) noexcept;
+	constexpr std::enable_if_t<!tc::is_actual_integer<T>::value, T > make_size_proxy(T t) noexcept;
 
 	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template< typename T >
-	std::enable_if_t< tc::is_actual_integer<T>::value, size_proxy<T> > make_size_proxy(T t) noexcept;
+	constexpr std::enable_if_t< tc::is_actual_integer<T>::value, size_proxy<T> > make_size_proxy(T t) noexcept;
 
 	////////////////////////////////
 	// tc::size_proxy in ADL barrier
@@ -52,8 +52,8 @@ namespace tc {
 			}
 		public:
 			T m_t;
-			explicit size_proxy(T t) noexcept : m_t(t) {
-				AssertInvariant();
+			constexpr explicit size_proxy(T t) noexcept : m_t(t) {
+				// AssertInvariant(); // not constexpr :-(
 			}
 
 			template<typename S>
@@ -171,7 +171,9 @@ namespace tc {
 			lhs%=rhs.m_t;
 			return lhs;
 		}
+	}
 
+	namespace is_random_access_range_adl_barrier {
 		template<typename T, typename = void>
 		struct is_random_access_range final : std::false_type {};
 
@@ -180,16 +182,17 @@ namespace tc {
 			std::is_convertible<typename boost::range_traversal<std::remove_reference_t<T>>::type, boost::iterators::random_access_traversal_tag>
 		{};
 	}
+	using is_random_access_range_adl_barrier::is_random_access_range;
 
 	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template< typename T >
-	std::enable_if_t<!tc::is_actual_integer<T>::value, T > make_size_proxy(T t) noexcept {
+	constexpr std::enable_if_t<!tc::is_actual_integer<T>::value, T > make_size_proxy(T t) noexcept {
 		return t;
 	}
 
 	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template< typename T >
-	std::enable_if_t< tc::is_actual_integer<T>::value, size_proxy<T> > make_size_proxy(T t) noexcept {
+	constexpr std::enable_if_t< tc::is_actual_integer<T>::value, size_proxy<T> > make_size_proxy(T t) noexcept {
 		return size_proxy<T>(t);
 	}
 
@@ -219,7 +222,7 @@ namespace tc {
 		template<typename Rng, std::enable_if_t<
 			!has_mem_fn_size< Rng const >::value &&
 			!std::is_pointer<std::decay_t<Rng>>::value &&
-			size_impl::is_random_access_range<Rng>::value
+			is_random_access_range<Rng>::value
 		>* = nullptr>
 		auto size(Rng const& rng) noexcept return_decltype(
 			boost::size(rng)
@@ -231,7 +234,7 @@ namespace tc {
 		)
 
 		template<typename T, std::size_t N, std::enable_if_t<!tc::is_char< T >::value>* = nullptr>
-		auto size(T (&)[N]) noexcept return_decltype(
+		constexpr auto size(T (&)[N]) noexcept return_decltype(
 			N
 		)
 
@@ -246,15 +249,18 @@ namespace tc {
 		};
 
 		template<typename Rng, std::enable_if_t<!tc::size_impl::has_size< Rng const >::value>* =nullptr>
-		auto linear_size(Rng const& rng) noexcept return_decltype(
+		auto size_linear(Rng const& rng) noexcept return_decltype(
 			boost::distance(rng)
 		)
 
 		template<typename Rng, std::enable_if_t<tc::size_impl::has_size< Rng const >::value>* =nullptr>
-		auto linear_size(Rng const& rng) noexcept return_decltype(
+		auto size_linear(Rng const& rng) noexcept return_decltype(
 			tc::size_impl::size(rng)
 		)
 	}
+
+	template<typename T, std::size_t N>
+	auto constexpr_size(T (&)[N]) -> std::integral_constant<std::size_t, N>;
 
 	template<typename T>
 	auto size(T&& t) noexcept return_decltype(
@@ -262,8 +268,8 @@ namespace tc {
 	)
 
 	template<typename T>
-	auto linear_size(T&& t) noexcept return_decltype(
-		make_size_proxy(tc::size_impl::linear_size(std::forward<T>(t)))
+	auto size_linear(T&& t) noexcept return_decltype(
+		make_size_proxy(tc::size_impl::size_linear(std::forward<T>(t)))
 	)
 
 }

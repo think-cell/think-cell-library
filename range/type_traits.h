@@ -157,11 +157,13 @@ namespace tc {
 
 	// Both boost::is_base_of<X,X> and std::is_base_of<X,X> inherit from true_type if and only if X is a class type.
 	template<typename Base, typename Derived>
-	using is_base_of=std::integral_constant< bool,
-		std::is_same< std::remove_cv_t<Base>, std::remove_cv_t<Derived> >::value ||
-		std::is_base_of<Base, Derived>::value
-	>;
-
+	struct is_base_of_impl : std::integral_constant< bool,
+		std::is_same<Base,Derived>::value || std::is_base_of<Base, Derived>::value
+	> {};
+	
+	template<typename Base, typename Derived>
+	using is_base_of=tc::is_base_of_impl< std::remove_cv_t<Base>, std::remove_cv_t<Derived> >;
+	
 	template<typename Base, typename Derived>
 	struct is_base_of_decayed : std::integral_constant< bool,
 		tc::is_base_of< Base, tc::decay_t<Derived> >::value
@@ -414,7 +416,7 @@ struct construction_restrictiveness : std::integral_constant<
 // - implicit construction == is_constructible && is_convertible,
 // - explicit construction == is_constructible && !is_convertible.
 // However, we make some unsafe conversions explicit or do not allow them at all.
-// TODO: exlicit construction, if there is a sensible definition for Convert<TTarget>(TSource) 
+// TODO: exlicit construction, if there is a sensible definition for tc::explicit_cast<TTarget>(TSource) 
 template<typename TTarget, typename TSource>
 struct construction_restrictiveness<TTarget, TSource> : std::integral_constant<
 	int,
@@ -462,7 +464,7 @@ namespace tc {
 	using common_type_decayed_t = typename common_type_decayed<Args...>::type;
 
 	template<typename... Args>
-	using common_type_t = typename common_type_decayed<tc::decay_t<Args>...>::type;
+	using common_type_t = typename common_type_decayed<typename tc::decay<Args>::type...>::type; // decay_t triggers a compiler bug https://connect.microsoft.com/VisualStudio/Feedback/Details/2173269 when used from tc::make_array (passing parameter pack from template alias to template alias)
 
 	template<typename T>
 	struct common_type_decayed<T> {
@@ -595,7 +597,7 @@ namespace tc {
 	template<typename head, typename... tail>
 	struct common_reference<head,tail...> : common_reference<head, common_reference_t<tail...>> {};
 
-	namespace conjunction_adl_barrier {
+	namespace other_trait_operations_adl_barrier {
 		// c++17 std::conjunction
 		template<typename...>
 		struct conjunction : std::true_type { };
@@ -605,8 +607,17 @@ namespace tc {
 		template<typename B1, typename... Bn>
 		struct conjunction<B1, Bn...> : std::conditional_t<B1::value != false, conjunction<Bn...>, B1>  {};
 
+		// c++17 std::disjunction
+		template<typename...>
+		struct disjunction : std::false_type { };
+
+		template<typename B1> struct disjunction<B1> : B1 { };
+
+		template<typename B1, typename... Bn>
+		struct disjunction<B1, Bn...> : std::conditional_t<B1::value != false, B1, disjunction<Bn...>>  {};
 	}
-	using conjunction_adl_barrier::conjunction;
+	using other_trait_operations_adl_barrier::conjunction;
+	using other_trait_operations_adl_barrier::disjunction;
 
 	template< typename Func >
 	struct delayed_returns_reference_to_argument {
@@ -616,7 +627,7 @@ namespace tc {
 	namespace transform_return_adl_barrier {
 		template<typename Func, typename TargetExpr, typename... SourceExpr>
 		struct transform_return final {
-			static bool const bDecay=boost::mpl::eval_if_c<
+			static constexpr bool bDecay=boost::mpl::eval_if_c<
 				!tc::conjunction<std::is_reference<SourceExpr>...>::value && std::is_rvalue_reference<TargetExpr>::value
 				, delayed_returns_reference_to_argument<Func>
 				, boost::mpl::identity<std::false_type>

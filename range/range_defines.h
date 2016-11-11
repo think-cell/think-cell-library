@@ -14,7 +14,7 @@
 
 #pragma once
 
-#ifndef RANGE_PROPOSAL_BUILD_STANDALONE
+#ifdef TC_PRIVATE
 	#include "Library/ErrorReporting/assert_fwd.h"
 #else
 
@@ -68,17 +68,6 @@
 
 	#define MAYTHROW noexcept(false)
 
-	#include <initializer_list>
-
-	namespace tc {
-		template<typename T>
-		std::initializer_list<T> make_initializer_list(std::initializer_list<T> il) noexcept {
-			return il;
-		}
-	}
-
-	#define RANGE_UNITTEST_OUTPUT
-
 	#define switch_no_default(...) \
 	switch( auto const& /*lifetime extended until end of switch block*/ __switch=(__VA_ARGS__) ) \
 	default: \
@@ -86,17 +75,3 @@
 		else
 
 #endif
-
-#include "range_fwd.h"
-
-//-----------------------------------------------------------------------------------------------------------------------------
-// STATIC_ASSERT_OVERLOAD_NOT_SELECTED
-//
-// see equal.h for a usage example
-
-#define STATIC_ASSERT_OVERLOAD_NOT_SELECTED(NAME, EXPR, MSG, RETURN_T, ...) \
-	std::enable_if_t< EXPR,  RETURN_T> NAME(__VA_ARGS__) noexcept { \
-		static_assert(!(EXPR), MSG); \
-		return std::declval<RETURN_T>(); \
-	}
-

@@ -78,15 +78,6 @@ namespace tc{
 		return pred(lhs,rhs);
 	}
 
-		/*
-	// rule out the case we cannot handle (this would need coroutines to work)
-	template<typename LRng, typename RRng, typename Pred>
-	STATIC_ASSERT_OVERLOAD_NOT_SELECTED ( equal, 
-											!is_range_with_iterators< LRng >::value && !is_range_with_iterators< RRng >::value,
-											 "cannot traverse two generator ranges simultaneously!",
-											 bool, LRng const&, RRng const&, Pred&&
-										)
-										*/
 	// forward the non predicate version
 	template<typename LRng, typename RRng>
 	bool equal(LRng const& lrng, RRng const& rrng) noexcept {

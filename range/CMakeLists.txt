@@ -53,20 +53,23 @@ set(Header
 	compare.h
 	container.h
 	container_traits.h
-	convert.h
 	counting_range.h
 	empty_chain.h
 	empty.h
 	equal.h
+	equality_comparable.h
+	explicit_cast.h
 	filter_adaptor.h
 	flatten_adaptor.h
 	for_each.h
+	for_each_adjacent_tuple.h
 	functors.h
 	has_mem_fn.h
 	implements_compare.h
 	index_iterator.h
 	index_range.h
 	inherit_ctors.h
+	initializer_list.h
 	inplace.h
 	intersection_adaptor.h
 	is_static_castable.h

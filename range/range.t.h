@@ -15,6 +15,7 @@
 #pragma once
 #include "range.h"
 #include "container.h" // tc::vector
+#include "initializer_list.h"
 
 namespace tc {
 
@@ -64,23 +65,24 @@ namespace tc {
 
 //-----------------------------------------------------------------------------------------------------------------------------
 // Unit test macros and output
-#ifdef RANGE_UNITTEST_OUTPUT
-#	define UNITTEST_OUTPUT
-#endif
 
-#ifndef RANGE_PROPOSAL_BUILD_STANDALONE
-#	include "Library/ErrorReporting/_Assert.h" // required by _ASSERTPRINT
-#	include "Library/ErrorReporting/UnitTest.h"
+#ifdef TC_PRIVATE
+
+#include "Library/ErrorReporting/_Assert.h" // required by _ASSERTPRINT
+#include "Library/ErrorReporting/UnitTest.h"
+
+#define TEST_RANGE_EQUAL(EXPECT, IS) _ASSERT(tc::equal(EXPECT, IS))
+#define TEST_EQUAL(EXPECT, IS) _ASSERT(EXPECT == IS);
+#define TEST_OUTPUT(...)
 
 #else
 
-#	ifdef UNITTEST_OUTPUT
-#		include <iostream>
-#		define UNITTEST_PRINT_NAME(testname) std::cerr << "Running Unit test '" << #testname << "' ..." << std::endl;
-#	else
-#		define UNITTEST_PRINT_NAME(testname)
-#	endif
-#	define UNITTESTDEF(testname)                                                                                              \
+#include <ostream>
+#include <sstream>
+#include <iostream>
+#define UNITTEST_PRINT_NAME(testname) std::cerr << "Running Unit test '" << #testname << "' ..." << std::endl;
+
+#define UNITTESTDEF(testname)                                                                                                 \
 	void testname##UnitTest();                                                                                                \
 	struct C##testname##UnitTest{                                                                                             \
 		C##testname##UnitTest() {                                                                                             \
@@ -91,22 +93,6 @@ namespace tc {
 	C##testname##UnitTest g_unittest##testname;                                                                               \
 	void testname##UnitTest()
 
-#endif
-
-
-
-#define TEST_init_hack(CTYPE, ETYPE, NAME, ...)                                                                               \
-	ETYPE internal_array_##NAME[] = __VA_ARGS__;                                                                              \
-	auto NAME = CTYPE<ETYPE>(internal_array_##NAME,                                                                           \
-									internal_array_##NAME + sizeof(internal_array_##NAME)/sizeof(ETYPE));
-
-
-#define UNUSED_TEST_VARIABLE(v) (v)
-
-#ifdef RANGE_UNITTEST_OUTPUT
-
-#include <ostream>
-#include <sstream>
 
 namespace tc {
 	//-------------------------------------------------------------------------------------------------------------------------
@@ -156,11 +142,14 @@ namespace tc {
 											}}
 #	define TEST_OUTPUT(...) std::cerr __VA_ARGS__
 
-#else
-#	define TEST_RANGE_EQUAL(EXPECT, IS) _ASSERT(tc::equal(EXPECT, IS))
-#	define TEST_EQUAL(EXPECT, IS) _ASSERT(EXPECT == IS);
-#	define TEST_OUTPUT(...)
 #endif
+
+#define TEST_init_hack(CTYPE, ETYPE, NAME, ...)                                                                               \
+	ETYPE internal_array_##NAME[] = __VA_ARGS__;                                                                              \
+	auto NAME = CTYPE<ETYPE>(internal_array_##NAME,                                                                           \
+									internal_array_##NAME + sizeof(internal_array_##NAME)/sizeof(ETYPE));
+
+#define UNUSED_TEST_VARIABLE(v) (v)
 
 #define TEST_RANGE_LENGTH(RNG, LENGTH) _ASSERT(tc::size(RNG) == LENGTH)
 #define TEST_RANGE_NOT_EQUAL(EXPECT, IS) _ASSERT(!tc::equal(EXPECT, IS))
@@ -168,4 +157,3 @@ namespace tc {
 
 #define TEST_OUTPUT_RANGE(Rng) TEST_OUTPUT( << #Rng << " = " << dbg_print_rng(Rng) << std::endl)
 #define STATIC_ASSERT(...) static_assert((__VA_ARGS__), #__VA_ARGS__ " is not true.")
-

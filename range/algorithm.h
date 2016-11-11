@@ -29,6 +29,8 @@
 #include "counting_range.h"
 #include "minmax.h"
 #include "scope.h"
+#include "compare.h"
+#include "for_each_adjacent_tuple.h"
 
 #include "storage_for.h"
 #include "functors.h"
@@ -36,6 +38,7 @@
 #include "scope.h"
 #endif
 #include "container.h" // tc::vector
+#include "for_each_adjacent_tuple.h"
 #include <boost/algorithm/string/compare.hpp>
 #include <boost/preprocessor/repetition/enum.hpp>
 #include <boost/utility.hpp>
@@ -63,7 +66,7 @@
 namespace tc {
 	template< typename Rng, typename Less, std::enable_if_t< is_range_with_iterators<Rng>::value >* = nullptr >
 	bool is_strictly_sorted(Rng const& rng, Less&& less) noexcept {
-		return tc::continue_==tc::for_each_adjacent_tuple<2>(rng,[&](auto const& first, auto const& second){ return tc::continue_if(less(first,second)); });
+		return tc::continue_==tc::for_each_adjacent_tuple<2>(rng,[&](auto const& first, auto const& second) noexcept { return tc::continue_if(less(first,second)); });
 	}
 	template< typename Rng, std::enable_if_t< is_range_with_iterators<Rng>::value >* = nullptr >
 	bool is_strictly_sorted(Rng const& rng) noexcept {
@@ -71,7 +74,7 @@ namespace tc {
 	}
 	template< typename Rng, typename Less, std::enable_if_t< is_range_with_iterators<Rng>::value >* = nullptr >
 	bool is_sorted(Rng const& rng, Less&& less) noexcept {
-		return tc::continue_ == tc::for_each_adjacent_tuple<2>(rng, [&](auto const& first, auto const& second) { return tc::continue_if(!less(second, first)); });
+		return tc::continue_ == tc::for_each_adjacent_tuple<2>(rng, [&](auto const& first, auto const& second) noexcept { return tc::continue_if(!less(second, first)); });
 	}
 	template< typename Rng, std::enable_if_t< is_range_with_iterators<Rng>::value >* = nullptr >
 	bool is_sorted(Rng const& rng) noexcept {
@@ -80,7 +83,7 @@ namespace tc {
 
 	template<typename T, typename Rng, typename Less, std::enable_if_t< !is_range_with_iterators<Rng>::value >* = nullptr >
 	bool is_strictly_sorted(Rng const& rng, Less&& less) noexcept {
-		return tc::continue_ == tc::for_each_adjacent_pair<T>(rng, [&](auto const& first, auto const& second) { return tc::continue_if(less(first, second)); });
+		return tc::continue_ == tc::for_each_adjacent_pair<T>(rng, [&](auto const& first, auto const& second) noexcept { return tc::continue_if(less(first, second)); });
 	}
 	template<typename T, typename Rng, std::enable_if_t< !is_range_with_iterators<Rng>::value >* = nullptr >
 	bool is_strictly_sorted(Rng const& rng) noexcept {
@@ -88,7 +91,7 @@ namespace tc {
 	}
 	template<typename T, typename Rng, typename Less, std::enable_if_t< !is_range_with_iterators<Rng>::value >* = nullptr >
 	bool is_sorted(Rng const& rng, Less&& less) noexcept {
-		return tc::continue_ == tc::for_each_adjacent_pair<T>(rng, [&](auto const& first, auto const& second) { return tc::continue_if(!less(second, first)); });
+		return tc::continue_ == tc::for_each_adjacent_pair<T>(rng, [&](auto const& first, auto const& second) noexcept { return tc::continue_if(!less(second, first)); });
 	}
 	template<typename T, typename Rng, std::enable_if_t< !is_range_with_iterators<Rng>::value >* = nullptr >
 	bool is_sorted(Rng const& rng) noexcept {
@@ -168,7 +171,7 @@ namespace tc {
 		auto const itBegin = boost::begin(rng);
 		auto itForward = it;
 
-		auto OnEnd = [&]() {
+		auto OnEnd = [&]() noexcept {
 			for (; it != itBegin; ) {
 				--it;
 				auto && ref = *it;
@@ -291,7 +294,7 @@ namespace tc {
 	auto size_bounded(Rng const& rng, unsigned int const nBound, std::enable_if_t<!tc::is_range_with_iterators<Rng>::value>* = nullptr) noexcept {
 		unsigned int n = 0;
 		if (0 < nBound) {
-			auto Enumerate = [&](auto const&){ return tc::continue_if(nBound!=++n); };
+			auto Enumerate = [&](auto const&) noexcept { return tc::continue_if(nBound!=++n); };
 			static_assert(std::is_same<tc::break_or_continue, decltype(rng(Enumerate))>::value, "size_bounded only works with interruptible generators");
 			tc::for_each(rng, Enumerate);
 		}
@@ -442,18 +445,29 @@ namespace tc {
 		return cont;
 	}
 
-	template< typename Cont, std::enable_if_t<!has_mem_fn_reserve<Cont>::value>* = nullptr>
+	template< typename Cont
+#ifdef _CHECKS
+		, std::enable_if_t<!has_mem_fn_capacity<Cont>::value>* = nullptr
+#endif
+	>
 	Cont& cont_clear( Cont& cont ) noexcept {
 		cont.clear();
 		return cont;
 	}
 
-	// erase elements in vector-like container to keep allocated memory
-	template< typename Cont, std::enable_if_t<has_mem_fn_reserve<Cont>::value>* = nullptr>
+#ifdef _CHECKS
+	// In some older version of dinkumware's STL, std::vector::clear used to release the allocated memory.
+	// Therefore, we did cont.erase(boost::begin(cont), boost::end(cont)) to keep the storage. According to the standard,
+	// clear does _not_ change the capacity of a vector, see http://en.cppreference.com/w/cpp/container/vector/clear .
+	// It seems that this has been fixed now, so we always use cont.clear() which may be more performant for some containers.
+	template< typename Cont, std::enable_if_t<has_mem_fn_capacity<Cont>::value>* = nullptr>
 	Cont& cont_clear( Cont& cont ) noexcept {
-		cont.erase(boost::begin(cont),boost::end(cont));
+		auto const nCapacityBefore=cont.capacity();
+		cont.clear();
+		_ASSERTEQUAL(nCapacityBefore, cont.capacity());
 		return cont;
 	}
+#endif
 
 	template< typename Cont >
 	typename boost::range_iterator<Cont>::type safe_cont_erase( Cont& cont, typename boost::range_iterator<Cont const>::type it ) noexcept {
@@ -554,7 +568,7 @@ namespace tc {
 		};
 	}
 
-	// do not use Cont::insert() or Cont(it, it)
+	// in general, do not use Cont::insert() or Cont(it, it)
 	// iterators are slower than for_each in many cases (eg. filter ranges)
 
 	// cont_append for target containers without reserve() member:
@@ -578,10 +592,26 @@ namespace tc {
 		}
 	}
 
+	// cont_append for target containers with reserve() member, appending random-access iterator range:
+	// use Cont::insert(), give insert the opportunity for optimizations
+	template< template<typename> class RangeReturn, typename Cont, typename Rng, std::enable_if_t<has_mem_fn_reserve<Cont>::value && tc::is_random_access_range<Rng>::value>* = nullptr >
+	typename RangeReturn<Cont&>::type cont_append(Cont& cont, Rng&& rng) MAYTHROW {
+		typename Cont::size_type const nOffset = cont.size();
+		try {
+			return RangeReturn<Cont&>::pack_bound(
+				cont.insert(boost::end(cont), boost::begin(rng), boost::end(rng)),
+				cont
+			);
+		} catch(...) {
+			tc::take_first_inplace(cont, nOffset);
+			throw;
+		}
+	}
+
 	// cont_append for target containers with reserve() member and input range without tc::size():
 	// just run a for_each over the input
 	// assume random_access on container, and get iterator from offset
-	template< template<typename> class RangeReturn, typename Cont, typename Rng, std::enable_if_t<has_mem_fn_reserve<Cont>::value && !tc::size_impl::has_size<Rng>::value>* = nullptr >
+	template< template<typename> class RangeReturn, typename Cont, typename Rng, std::enable_if_t<has_mem_fn_reserve<Cont>::value && !tc::is_random_access_range<Rng>::value && !tc::size_impl::has_size<Rng>::value>* = nullptr >
 	typename RangeReturn<Cont&>::type cont_append(Cont& cont, Rng&& rng) MAYTHROW {
 		typename Cont::size_type const nOffset = cont.size();
 		try {
@@ -598,7 +628,7 @@ namespace tc {
 
 	// cont_append for target containers with reserve() member and input range with tc::size():
 	// same as above, but do a reserve() on the target container first
-	template< template<typename> class RangeReturn, typename Cont, typename Rng, std::enable_if_t<has_mem_fn_reserve<Cont>::value && tc::size_impl::has_size<Rng>::value>* = nullptr >
+	template< template<typename> class RangeReturn, typename Cont, typename Rng, std::enable_if_t<has_mem_fn_reserve<Cont>::value && !tc::is_random_access_range<Rng>::value && tc::size_impl::has_size<Rng>::value>* = nullptr >
 	typename RangeReturn<Cont&>::type cont_append(Cont& cont, Rng&& rng) MAYTHROW {
 		auto const nOffset = cont.size();
 		tc::cont_reserve(cont, nOffset + tc::size(rng));
@@ -616,21 +646,26 @@ namespace tc {
 
 	struct no_reference final {};
 
-	template< template<typename> class RangeReturn, typename Cont, typename Arg >
-	auto cont_find(Cont& cont, Arg&& arg) noexcept -> typename RangeReturn<Cont&>::type {
-		auto it=cont.find(std::forward<Arg>(arg));
-		if( it==boost::end(cont) ) {
-			return RangeReturn<Cont&>::pack_no_element(
-				cont
-			);
-		} else {
-			return RangeReturn<Cont&>::pack_element(
-				it,
-				cont,
-				*it
-			);
+	namespace cont_find_adl_barrier {
+		template< template<typename> class RangeReturn, typename Cont>
+		auto cont_find_impl(Cont& cont, typename boost::range_iterator< Cont >::type it) noexcept -> typename RangeReturn<Cont&>::type {
+			if( it==boost::end(cont) ) {
+				return RangeReturn<Cont&>::pack_no_element(
+					cont
+				);
+			} else {
+				return RangeReturn<Cont&>::pack_element(
+					it,
+					cont,
+					*it
+				);
+			}
 		}
 	}
+
+	template< template<typename> class RangeReturn, typename Cont, typename Arg >
+	auto cont_find(Cont& cont, Arg&& arg) noexcept
+		return_decltype( cont_find_adl_barrier::cont_find_impl<RangeReturn>(cont, cont.find(std::forward<Arg>(arg))) );
 
 #ifdef _DEBUG
 	namespace static_vector_adl_barrier {
@@ -689,7 +724,7 @@ namespace tc {
 			for (;;) {
 				auto const nSize =
 #ifdef _DEBUG
-				 [&] {
+				 [&]() noexcept {
 					tc::uninitialize(tc_back(cont));
 					scope_exit( _ASSERTDEBUG( !tc::check_initialized(tc_back(cont))) );
 					return 
@@ -735,7 +770,7 @@ namespace tc {
 			for (;;) {
 				auto const nSize = 
 #ifdef _DEBUG
-				 [&] {
+				 [&]() MAYTHROW {
 					tc::fill_with_dead_pattern(tc_back(cont));
 					scope_exit( tc::assert_dead_pattern(tc_back(cont)) );
 					return 
@@ -931,8 +966,11 @@ namespace tc {
 	}
 
 	template< typename Cont >
-	void cont_try_erase(Cont& cont, typename Cont::key_type const& data) noexcept {
-		VERIFY( cont.erase(data)<=1 );
+	bool cont_try_erase(Cont& cont, typename Cont::key_type const& data) noexcept {
+		switch_no_default(cont.erase(data)) {
+			case 0: return false;
+			case 1: return true;
+		};
 	}
 
 	template<typename Cont, typename Enable=void>
@@ -1222,7 +1260,7 @@ namespace tc {
 	template<typename Cont, typename Pred>
 	typename tc::size_proxy< typename boost::range_size<Cont>::type > remove_count_erase_if( Cont& cont, Pred pred ) noexcept {
 		typename boost::range_size<Cont>::type count=0;
-		tc::filter_inplace( cont, [&]( typename boost::range_reference<Cont>::type t )->bool {
+		tc::filter_inplace( cont, [&]( typename boost::range_reference<Cont>::type t ) noexcept ->bool {
 			bool const b=pred(tc_move_if_owned(t));
 			count+=boost::implicit_cast<
 #ifdef __clang__
@@ -1365,7 +1403,7 @@ namespace tc {
 					cont,
 					tc_move(less)
 				),
-				[&accu,&rngfilter]( typename make_sub_range_result< std::add_lvalue_reference_t<Rng> >::type rngEqualSubRange ) {
+				[&accu,&rngfilter]( typename make_sub_range_result< std::add_lvalue_reference_t<Rng> >::type rngEqualSubRange ) noexcept {
 					for(
 						auto it=tc::begin_next(rngEqualSubRange);
 						it!=boost::end(rngEqualSubRange);
@@ -1387,11 +1425,11 @@ namespace tc {
 			tc::for_each(
 				tc::transform(
 					tc::front_unique_range(cont, std::forward<Equals>(pred)),
-					[](auto subrange) { // fn_boost_begin does not work, need subrange as lvalue to get non-const iterator
+					[](auto subrange) noexcept { // fn_boost_begin does not work, need subrange as lvalue to get non-const iterator
 						return boost::begin(subrange);
 					}
 				),
-				[&](typename boost::range_iterator<Cont>::type it) { // auto it causes Internal Compiler Error
+				[&](typename boost::range_iterator<Cont>::type it) noexcept { // auto it causes Internal Compiler Error
 					rngfilter.keep(it);
 				}
 			);
@@ -1409,7 +1447,7 @@ namespace tc {
 			tc::range_filter< tc::decay_t<Cont> > rngfilter(cont);
 			tc::for_each_may_remove_current(
 				tc::make_range_of_iterators(tc::adjacent_unique(cont, std::forward<Equals>(pred))),
-				[&](auto it) {
+				[&](auto it) noexcept {
 					rngfilter.keep(it.element_base());
 				}
 			);
@@ -1668,5 +1706,10 @@ namespace tc {
 	template< template<typename> class RangeReturn, typename Rng >
 	typename RangeReturn<Rng>::type max_element(Rng && rng) MAYTHROW {
 		return best_element<RangeReturn>(std::forward<Rng>(rng), tc::fn_greater());
+	}
+
+	template< template<typename> class RangeReturn, typename Rng, typename T >
+	typename RangeReturn<Rng>::type closest_element(Rng && rng, T const& t) MAYTHROW {
+		return best_element<RangeReturn>(std::forward<Rng>(rng), tc::projected(tc::fn_less(), [&](T const& t1) MAYTHROW { return std::abs(t - t1); }));
 	}
 }

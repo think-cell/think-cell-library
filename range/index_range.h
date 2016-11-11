@@ -110,8 +110,7 @@ namespace tc {
 		using const_iterator = ConstIt;
 		using index = index_from_iterator<It>;
 
-/*		iterator_base(iterator_base const&) noexcept {}
-		template< typename OtherIt, typename OtherConstIt >
+/*		template< typename OtherIt, typename OtherConstIt >
 		explicit iterator_base( iterator_base<OtherIt,OtherConstIt> const&, std::enable_if_t<
 			std::is_convertible<OtherIt,It>::value && std::is_convertible<OtherConstIt,ConstIt>::value
 		, unused_arg > =unused_arg() ) {};
@@ -249,6 +248,9 @@ namespace tc {
 		};
 	}
 
+	template<typename Rng>
+	struct constexpr_size_proxy : decltype(constexpr_size(std::declval<Rng>())) {};
+
 	template< typename Rng >
 	struct index_range final {
 	private:
@@ -296,6 +298,8 @@ namespace tc {
 				, "Rng is rvalue reference"
 			);
 			reference_or_value< Rng > m_rng;
+
+			friend constexpr_size_proxy<decltype(*m_rng)> constexpr_size(add_index_interface const&);
 		};
 
 	public:

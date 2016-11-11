@@ -57,7 +57,7 @@ UNITTESTDEF(tc_reverse_binary_search) {
 	_ASSERT(
 		tc::binary_find_unique<tc::return_bool>(
 			tc::reverse(
-				tc::filter(vecn,[](auto){return true;})
+				tc::filter(vecn,[](auto) noexcept {return true;})
 			),
 			32,
 			tc::fn_greater()

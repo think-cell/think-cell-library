@@ -53,7 +53,7 @@ bool less(Lhs const& lhs, Rhs const& rhs) noexcept {
 struct fn_equal_to {
 	template<typename Lhs, typename Rhs>
 	bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
-		return equal_to(lhs,rhs);
+		return tc::equal_to(lhs,rhs);
 	}
 	using is_transparent=void;
 };
@@ -61,7 +61,7 @@ struct fn_equal_to {
 struct fn_not_equal_to {
 	template<typename Lhs, typename Rhs>
 	bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
-		return !equal_to(lhs,rhs);
+		return !tc::equal_to(lhs,rhs);
 	}
 	using is_transparent = void;
 };
@@ -69,7 +69,7 @@ struct fn_not_equal_to {
 struct fn_less {
 	template<typename Lhs, typename Rhs>
 	bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
-		return less(lhs,rhs);
+		return tc::less(lhs,rhs);
 	}
 	using is_transparent = void;
 };
@@ -77,7 +77,7 @@ struct fn_less {
 struct fn_greater_equal {
 	template<typename Lhs, typename Rhs>
 	bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
-		return !less(lhs,rhs);
+		return !tc::less(lhs,rhs);
 	}
 	using is_transparent = void;
 };
@@ -85,7 +85,7 @@ struct fn_greater_equal {
 struct fn_greater {
 	template<typename Lhs, typename Rhs>
 	bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
-		return less(rhs,lhs);
+		return tc::less(rhs,lhs);
 	}
 	using is_transparent = void;
 };
@@ -93,7 +93,7 @@ struct fn_greater {
 struct fn_less_equal {
 	template<typename Lhs, typename Rhs>
 	bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
-		return !less(rhs,lhs);
+		return !tc::less(rhs,lhs);
 	}
 	using is_transparent = void;
 };

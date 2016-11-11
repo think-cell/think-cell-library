@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "range_defines.h"
 #include "result_of.h"
 #include "return_decltype.h"
 
@@ -37,4 +38,4 @@ template< typename Func >
 auto make_lazy(Func&& func) noexcept
 	return_ctor( lazy_impl<Func>, ( std::forward<Func>(func) ) )
 
-#define MAKE_LAZY( ... ) make_lazy( [&] { return (__VA_ARGS__); } )
+#define MAKE_LAZY( ... ) make_lazy( [&]() noexcept { return (__VA_ARGS__); } )

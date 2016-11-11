@@ -13,7 +13,9 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 
 #pragma once 
-#include <type_traits>
+
+#include "type_traits.h"
+#include "noncopyable.h"
 
 namespace tc {
 	template<typename T>
@@ -89,7 +91,7 @@ struct scoped_assigner
 #endif
 
 #define scope_exit_counter( unique, ... ) \
-auto BOOST_PP_CAT(scope_exit_lambda_, unique) = [&] { __VA_ARGS__ ; }; \
+auto BOOST_PP_CAT(scope_exit_lambda_, unique) = [&]() noexcept { __VA_ARGS__ ; }; \
 tc::scope_exit_impl< decltype( BOOST_PP_CAT(scope_exit_lambda_, unique) ) > \
 BOOST_PP_CAT(scope_exit_struct_, unique)( BOOST_PP_CAT(scope_exit_lambda_, unique) );
 

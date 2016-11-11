@@ -119,8 +119,8 @@ UNITTESTDEF( for_each ) {
 	g_mock.mock_reset(exp); for_each(gv, &foo);
 
 	// call with lambda
-	g_mock.mock_reset(exp); for_each(v, [](int i){ g_mock(i); });
-	g_mock.mock_reset(exp); for_each(gv, [](int i){ g_mock(i); });
+	g_mock.mock_reset(exp); for_each(v, [](int i) noexcept { g_mock(i); });
+	g_mock.mock_reset(exp); for_each(gv, [](int i) noexcept { g_mock(i); });
 
 	// Todo: call with mem func, std::function and bind
 }
@@ -203,7 +203,7 @@ UNITTESTDEF( break_behavior ) {
 
 UNITTESTDEF(for_each_adjacent_triple_initialization_order) {
 	int n=0;
-	auto f = [&] {return ++n;};
+	auto f = [&]() noexcept {return ++n;};
 	int a[2] = { f(), f() };
 	_ASSERT(1 == a[0] && 2 == a[1]);
 
@@ -235,7 +235,7 @@ UNITTESTDEF(for_each_adjacent_triple_deref) {
 	tc::vector<int> vecn{0,0,0,0,0};
 	tc::for_each_adjacent_tuple<3>(
 		vecn,
-		[](int& n0, int& n1, int& n2) {
+		[](int& n0, int& n1, int& n2) noexcept {
 			++n0;
 			++n1;
 			++n2;
@@ -251,9 +251,9 @@ UNITTESTDEF(for_each_adjacent_triple_deref) {
 	tc::for_each_adjacent_tuple<3>(
 		tc::transform(
 			vecn,
-			[&](int n) {++nTransforms; return n;}
+			[&](int n) noexcept {++nTransforms; return n;}
 		),
-		[](int n0, int n1, int n2) {
+		[](int n0, int n1, int n2) noexcept {
 			++n0;
 			++n1;
 			++n2;
@@ -274,7 +274,7 @@ UNITTESTDEF(for_each_adjacent_triple_deref) {
 	{
 		lr_overloads overloads;
 		tc::for_each_adjacent_tuple<3>(
-			tc::transform(vecn, [](int n) {return n;}),
+			tc::transform(vecn, [](int n) noexcept {return n;}),
 			std::ref(overloads)
 		);
 
@@ -300,12 +300,12 @@ UNITTESTDEF(for_each_ordered_pair) {
 
 	tc::for_each_ordered_pair(
 		make_initializer_list<int>({}),
-		[](int, int) { _ASSERTFALSE; }
+		[](int, int) noexcept { _ASSERTFALSE; }
 	);
 
 	tc::for_each_ordered_pair(
 		make_initializer_list<int>({1}),
-		[](int, int) { _ASSERTFALSE; }
+		[](int, int) noexcept { _ASSERTFALSE; }
 	);
 }
 

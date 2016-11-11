@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "range_defines.h"
 #include "functors.h"
 #include "tc_move.h"
 
@@ -21,11 +22,11 @@
 #include "type_traits.h"
 
 #include <boost/implicit_cast.hpp>
+#include <boost/mpl/identity.hpp>
+#include <boost/range/algorithm/copy.hpp>
 
 #include <type_traits>
 #include <cstring>
-#include <boost/mpl/identity.hpp>
-#include <boost/range/algorithm/copy.hpp>
 
 //-----------------------------------------------------------------------------------------------------------------------------
 
@@ -91,14 +92,6 @@ namespace tc {
 	BASE_CAST_IMPL(volatile const*)
 
 	#undef BASE_CAST_IMPL
-
-	template< typename Derived, typename Base, typename T >
-	std::conditional_t< is_base_of<Derived, std::remove_reference_t<T> >::value, same_cvref_t< Base, T&& >, T&& > ctor_base_cast(T&& t) noexcept {
-		static_assert( is_plain_type<Derived>::value, "" );
-		static_assert( is_plain_type<Base>::value, "" );
-		static_assert( std::is_base_of<Base, Derived>::value, "");
-		return std::forward<T>(t);
-	}
 
 	/////////////////////////////////////////////
 	// derived_cast

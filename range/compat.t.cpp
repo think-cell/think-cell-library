@@ -29,11 +29,11 @@ namespace lookup {
 	struct AdlBegin final {};
 
 	int begin(AdlBegin&) noexcept { return 0; }
-	int const begin(AdlBegin const&) noexcept { return 1; }
+	int begin(AdlBegin const&) noexcept { return 1; }
 }	
 
 long begin(lookup::GlobalBegin&) noexcept { return 2; }
-long const begin(lookup::GlobalBegin const&) noexcept {return 3; }
+long begin(lookup::GlobalBegin const&) noexcept {return 3; }
 
 namespace {
 	using namespace tc;
@@ -143,7 +143,7 @@ UNITTESTDEF( boost_range_traits_compat ) {
 	TEST_init_hack(tc::vector, unsigned long, original, {1,2,3,4,5,6,7,8});
 	TEST_init_hack(tc::vector, unsigned long, exp, {2,4,6,8});
 
-	auto fr = tc::filter(original, [](int i) { return i%2==0; });
+	auto fr = tc::filter(original, [](int i) noexcept { return i%2==0; });
 
 	STATIC_ASSERT(std::is_same<decltype(std::begin(fr)), decltype(boost::begin(fr))>::value);
 	//STATIC_ASSERT(std::is_same<typename tc::range_iterator<decltype(fr)>::type, typename boost::range_iterator<decltype(fr)>::type>::value);
@@ -198,7 +198,7 @@ UNITTESTDEF( deduce_traits ) {
 	TEST_RANGE_EQUAL( exp, trange );
 
 	tc::vector<int> res;
-	tc::for_each( o.trans_range(), [&](int const& id) { res.emplace_back(id); } );
+	tc::for_each( o.trans_range(), [&](int const& id) noexcept { res.emplace_back(id); } );
 	TEST_RANGE_EQUAL(exp, res);
 }
 

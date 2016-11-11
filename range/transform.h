@@ -19,6 +19,7 @@
 
 #include "range_adaptor.h"
 #include "meta.h"
+#include "minmax.h"
 
 #include "tc_move.h"
 
@@ -28,11 +29,11 @@ namespace tc {
 		return_ctor( transform_adaptor<tc::decay_t<Func> BOOST_PP_COMMA() view_by_value_t<Rng> >, (std::forward<Rng>(rng),std::forward<Func>(func)) )
 
 	template<typename Rng>
-	auto transform_asciiupper(Rng const& rng) noexcept
-		return_decltype( transform( rng, tc::fn_toasciiupper() ))
+	auto transform_asciiupper(Rng&& rng) noexcept
+		return_decltype( transform( std::forward<Rng>(rng), tc::fn_toasciiupper() ))
 
 	template<typename Rng>
-	auto transform_asciilower(Rng const& rng) noexcept
-		return_decltype( transform( rng, tc::fn_toasciilower() ))
+	auto transform_asciilower(Rng&& rng) noexcept
+		return_decltype( transform( std::forward<Rng>(rng), tc::fn_toasciilower() ))
 }
 

@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "algorithm.h"
 #include "as_lvalue.h"
 #include "zip_range.h"
 

@@ -28,7 +28,7 @@ UNITTESTDEF(merge_ranges_with_simple_usecase) {
 	int N=0;
 	tc::for_each(
 		tc::merge_many(vecvecn),
-		[&](int const& n) {
+		[&](int const& n) noexcept {
 			_ASSERTEQUAL(n, ++N);
 		}
 	);
@@ -51,7 +51,7 @@ UNITTESTDEF(zip_range_adaptor_test) {
 		tc::for_each(
 			rng,
 			boost::fusion::make_fused_function_object(
-				[&](int const& n, int const& n2) {
+				[&](int const& n, int const& n2) noexcept {
 					_ASSERTEQUAL(*it, n);
 					_ASSERTEQUAL(*it2, n2);
 					_ASSERTEQUAL(std::addressof(*it), std::addressof(n));
@@ -73,7 +73,7 @@ UNITTESTDEF(zip_range_adaptor_test) {
 	tc::for_each(
 		rng,
 		boost::fusion::make_fused_function_object(
-			[&](int const& n, int const& n2) {
+			[&](int const& n, int const& n2) noexcept {
 				VERIFYEQUAL(N, n) /= 2;
 				++VERIFYEQUAL(N2, n2);
 			}
@@ -99,7 +99,7 @@ UNITTESTDEF(merge_ranges_with_unique_range_2) {
 		tc::merge_many(
 			tc::transform(
 				tc::make_counting_range(0,2),
-				[&](int n) {
+				[&](int n) noexcept {
 					return tc::ordered_unique_range(
 						tc::zip(
 							tc::make_range(vecvecn[n]),
@@ -111,11 +111,11 @@ UNITTESTDEF(merge_ranges_with_unique_range_2) {
 			),
 			projected_front(lesspred)
 		),
-		[&](auto rng) {
+		[&](auto rng) noexcept {
 			tc::for_each(
 				rng,
 				boost::fusion::make_fused_function_object(
-					[&](int const& first, int& second) {
+					[&](int const& first, int& second) noexcept {
 						second = n;
 						_ASSERTEQUAL(first, n+1);
 						++nTotal;

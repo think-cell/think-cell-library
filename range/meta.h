@@ -51,6 +51,7 @@ namespace tc {
 	bool isasciicntrl( T ch ) noexcept {
 		return tc::char_cast<T>('\0')<=ch && ch<=tc::char_cast<T>('\x1f') || tc::char_cast<T>('\x7f')==ch;
 	}
+	DEFINE_FN(isasciicntrl)
 
 	template< typename T >
 	bool isasciiblank( T ch ) noexcept {
@@ -62,6 +63,7 @@ namespace tc {
 		return tc::isasciiblank(ch) || 
 			tc::char_cast<T>('\xa')<=ch && ch<=tc::char_cast<T>('\xd'); // \n, \v, \f, \r
 	}
+	DEFINE_FN(isasciispace)
 	
 	template< typename T >
 	T toasciiupper( T ch ) noexcept {
@@ -71,6 +73,8 @@ namespace tc {
 			return ch;
 		}
 	}
+	DEFINE_FN(toasciiupper)
+
 	template< typename T >
 	T toasciilower( T ch ) noexcept {
 		if( isasciiupper(ch) ) {
@@ -79,10 +83,7 @@ namespace tc {
 			return ch;
 		}
 	}
-
 	DEFINE_FN(toasciilower)
-	DEFINE_FN(toasciiupper)
-	DEFINE_FN(isasciispace)
 
 	template< typename T >
 	struct range_value : boost::range_value<T> {};

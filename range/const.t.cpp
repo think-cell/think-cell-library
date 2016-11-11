@@ -47,7 +47,7 @@ UNITTESTDEF( const_range ) {
 
 	TEST_RANGE_EQUAL(original, mutable_range);
 	TEST_RANGE_NOT_EQUAL(modified, mutable_range);
-	for_each(mutable_range, [](int& i) { i += 1; });
+	for_each(mutable_range, [](int& i) noexcept { i += 1; });
 	TEST_RANGE_EQUAL(modified, mutable_range);
 	TEST_RANGE_NOT_EQUAL(original, mutable_range);
 
@@ -57,9 +57,9 @@ UNITTESTDEF( const_range ) {
 
 	TEST_RANGE_EQUAL(original, const_range);
 	TEST_RANGE_NOT_EQUAL(modified, const_range);
-	//for_each(const_range, [](int& i) { i += 1; });        // breaks with a horrible error msg. Todo: see if we can make a better msg.
-	//for_each(const_range, [](int const& i) { i += 1; });  // breaks with clear msg as it should.
-	for_each(const_range, [](int const& i) { i; });
+	//for_each(const_range, [](int& i) noexcept { i += 1; });        // breaks with a horrible error msg. Todo: see if we can make a better msg.
+	//for_each(const_range, [](int const& i) noexcept { i += 1; });  // breaks with clear msg as it should.
+	for_each(const_range, [](int const& i) noexcept { i; });
 	TEST_RANGE_EQUAL(original, const_range);
 	TEST_RANGE_NOT_EQUAL(modified, const_range);
 }
@@ -80,7 +80,7 @@ UNITTESTDEF( const_filter_test ) {
 
 	TEST_init_hack(tc::vector, int, v, {1,2,3,4,5,6,7,8,9});
 
-	auto fr = tc::filter(v, [](int const& i) { return (i % 2 == 0); });
+	auto fr = tc::filter(v, [](int const& i) noexcept { return (i % 2 == 0); });
 
 	test_const_filter(fr);
 
@@ -91,21 +91,21 @@ UNITTESTDEF( filter_const_filter_test ) {
 
 	TEST_init_hack(tc::vector, int, v, {1,2,3,4,5,6,7,8,9});
 
-	auto fr = tc::filter(v, [](int const& i) { return (i % 2 == 0); });
+	auto fr = tc::filter(v, [](int const& i) noexcept { return (i % 2 == 0); });
 	
-	auto fcfr = tc::filter(tc::as_const(fr), [](int const& i) { return (i % 2 == 0); });
-	auto ffr = tc::filter(fr, [](int const& i) { return (i % 2 == 0); });
+	auto fcfr = tc::filter(tc::as_const(fr), [](int const& i) noexcept { return (i % 2 == 0); });
+	auto ffr = tc::filter(fr, [](int const& i) noexcept { return (i % 2 == 0); });
 }
 
 UNITTESTDEF( filter_filter_const_test ) {
 
 	TEST_init_hack(tc::vector, int, v, {1,2,3,4,5,6,7,8,9});
 
-	auto frc = tc::filter(tc::as_const(v), [](int const& i) { return (i % 2 == 0); });
+	auto frc = tc::filter(tc::as_const(v), [](int const& i) noexcept { return (i % 2 == 0); });
 	
-	auto ffrc = tc::filter(frc, [](int const& i) { return (i % 2 == 0); });
-	auto fcfrc = tc::filter(tc::as_const(frc), [](int const& i) { return (i % 2 == 0); });
-	auto ffrc2 = tc::filter(tc::filter(tc::as_const(v), [](int const& i) { return (i % 2 == 0); }), [](int const& i) { return (i % 2 == 0); });
+	auto ffrc = tc::filter(frc, [](int const& i) noexcept { return (i % 2 == 0); });
+	auto fcfrc = tc::filter(tc::as_const(frc), [](int const& i) noexcept { return (i % 2 == 0); });
+	auto ffrc2 = tc::filter(tc::filter(tc::as_const(v), [](int const& i) noexcept { return (i % 2 == 0); }), [](int const& i) noexcept { return (i % 2 == 0); });
 }
 
 UNITTESTDEF( filter_filter_const_move_test ) {
@@ -114,10 +114,10 @@ UNITTESTDEF( filter_filter_const_move_test ) {
 
 /*	auto ffcfr = tc::filter(
 					tc::filter(
-						tc::as_const( tc::filter(v, [](int const& i) { return (i % 2 == 0); }))
-						, [](int const& i) { return (i % 2 == 0); }
+						tc::as_const( tc::filter(v, [](int const& i) noexcept { return (i % 2 == 0); }))
+						, [](int const& i) noexcept { return (i % 2 == 0); }
 					)
-					, [](int const& i) { return (i % 2 == 0); }
+					, [](int const& i) noexcept { return (i % 2 == 0); }
 				);*/
 }
 
@@ -137,7 +137,7 @@ UNITTESTDEF( const_transform_test ) {
 
 	TEST_init_hack(tc::vector, int, v, {1,2,3,4,5,6,7,8,9});
 
-	auto tr = tc::transform(v, [](int const& i) { return (i * 2); });
+	auto tr = tc::transform(v, [](int const& i) noexcept { return (i * 2); });
 
 	test_const_transform(tr);
 
@@ -148,21 +148,21 @@ UNITTESTDEF( transform_const_transform_test ) {
 
 	TEST_init_hack(tc::vector, int, v, {1,2,3,4,5,6,7,8,9});
 
-	auto tr = tc::transform(v, [](int const& i) { return (i * 2); });
+	auto tr = tc::transform(v, [](int const& i) noexcept { return (i * 2); });
 	
-	auto tctr = tc::transform(tc::as_const(tr), [](int const& i) { return (i * 2); });
-	auto ttr = tc::transform(tr, [](int const& i) { return (i * 2); });
+	auto tctr = tc::transform(tc::as_const(tr), [](int const& i) noexcept { return (i * 2); });
+	auto ttr = tc::transform(tr, [](int const& i) noexcept { return (i * 2); });
 }
 
 UNITTESTDEF( transform_transform_const_test ) {
 
 	TEST_init_hack(tc::vector, int, v, {1,2,3,4,5,6,7,8,9});
 
-	auto trc = tc::transform(tc::as_const(v), [](int const& i) { return (i * 2); });
+	auto trc = tc::transform(tc::as_const(v), [](int const& i) noexcept { return (i * 2); });
 	
-	auto ttrc = tc::transform(trc, [](int const& i) { return (i * 2); });
+	auto ttrc = tc::transform(trc, [](int const& i) noexcept { return (i * 2); });
 
-	auto ttrc2 = tc::transform(tc::transform(tc::as_const(v), [](int const& i) { return (i * 2); }), [](int const& i) { return (i * 2); });
+	auto ttrc2 = tc::transform(tc::transform(tc::as_const(v), [](int const& i) noexcept { return (i * 2); }), [](int const& i) noexcept { return (i * 2); });
 
 }
 
@@ -172,10 +172,10 @@ UNITTESTDEF( transform_transform_const_move_test ) {
 
 /*	auto ttctr = tc::transform(
 					tc::transform(
-						tc::as_const( tc::transform(v, [](int const& i) { return (i * 2); }))
-						, [](int const& i) { return (i * 2); }
+						tc::as_const( tc::transform(v, [](int const& i) noexcept { return (i * 2); }))
+						, [](int const& i) noexcept { return (i * 2); }
 					)
-					, [](int const& i) { return (i * 2); }
+					, [](int const& i) noexcept { return (i * 2); }
 				);*/
 }
 
@@ -230,10 +230,10 @@ UNITTESTDEF( transform_const_filter_test ) {
 
 	TEST_init_hack(tc::vector, int, v, {1,2,3,4,5,6,7,8,9});
 
-	auto tr = tc::filter(v, [](int const& i) { return (i % 2 == 0); });
+	auto tr = tc::filter(v, [](int const& i) noexcept { return (i % 2 == 0); });
 	
-	auto tcfr = tc::transform(tc::as_const(tr), [](int const& i) { return (i * 2); });
-	auto tfr = tc::transform(tr, [](int const& i) { return (i * 2); });
+	auto tcfr = tc::transform(tc::as_const(tr), [](int const& i) noexcept { return (i * 2); });
+	auto tfr = tc::transform(tr, [](int const& i) noexcept { return (i * 2); });
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------

@@ -49,47 +49,62 @@
 	// MSVC does not support the use of typename outside of templates
 	// On the other hand, it accepts `friend simple-type-specifier` even if the type specifier is a dependent type name.
 	// Even so, it shows a warning mistakenly complaining about it being a deprecated access-declaration.
-	#define STATIC_VIRTUAL_ACCESS(Name) \
+	#define STATIC_VIRTUAL_ACCESS(Declaring, Name) \
 		__pragma(warning(push)); \
 		__pragma(warning(disable:4517)) \
-		friend this_type::Name ## _declaring_type; \
+		friend Declaring::Name ## _declaring_type; \
 		__pragma(warning(pop));
 #else
 	// This form should be ok in all circumstances on standard-compliant compilers
 	//  - The typename is needed, when this_type is a dependent type name
 	//  - Since C++11, typename is not restricted to templates anymore, meaning this form can also be used on non-dependent type names.
-	#define STATIC_VIRTUAL_ACCESS(Name) \
-		friend typename this_type::Name ## _declaring_type;
+	#define STATIC_VIRTUAL_ACCESS(Declaring, Name) \
+		friend typename Declaring::Name ## _declaring_type;
 #endif
 
-#define STATIC_FINAL_MOD(Mod, Name) \
-	STATIC_VIRTUAL_ACCESS(Name); \
+#define STATIC_FINAL_MOD_DECLARING(Mod, Declaring, Name) \
+	STATIC_VIRTUAL_ACCESS(STATIC_WRAP(Declaring), Name) \
 	static_assert( \
-		std::is_same< \
-			typename this_type::Name ## _derived_type, \
-			this_type \
-		>::value, \
-		"Static polymorphism error" \
+		std::is_same< typename Declaring::Name ## _derived_type, this_type >::value, \
+		"The class implementing the final static virtual method must be the Derived type of the class declaring the method." \
 	); \
 	Mod \
 	auto STATIC_VIRTUAL_METHOD_NAME( Name )
 
+#define STATIC_WRAP(...) \
+    __VA_ARGS__
+
+#define STATIC_FINAL_DECLARING(Declaring, Name) \
+	STATIC_FINAL_MOD_DECLARING(BOOST_PP_EMPTY(), STATIC_WRAP(Declaring), Name)
+
+#define STATIC_FINAL_MOD(Mod, Name) \
+	STATIC_FINAL_MOD_DECLARING(STATIC_WRAP(Mod), this_type::Name ## _declaring_type, Name)
+
 #define STATIC_FINAL(Name) \
 	STATIC_FINAL_MOD(BOOST_PP_EMPTY(), Name)
 
-#define STATIC_OVERRIDE_MOD_BASE(Name, ...) \
-	STATIC_VIRTUAL_ACCESS(Name); \
+#define STATIC_OVERRIDE_MOD_DECLARING_BASE(Declaring, Name, ...) \
+	STATIC_VIRTUAL_ACCESS(STATIC_WRAP(Declaring), Name) \
 	__VA_ARGS__ \
 	auto STATIC_VIRTUAL_METHOD_NAME( Name )
 
-#define STATIC_OVERRIDE_MOD(Mod, Name) \
-	STATIC_OVERRIDE_MOD_BASE(Name, \
+#define STATIC_OVERRIDE_MOD_BASE(Name, ...) \
+	STATIC_OVERRIDE_MOD_DECLARING_BASE(this_type::Name ## _declaring_type, Name, STATIC_WRAP(__VA_ARGS__))
+
+#define STATIC_OVERRIDE_MOD_DECLARING(Mod, Declaring, Name) \
+	STATIC_OVERRIDE_MOD_DECLARING_BASE(STATIC_WRAP(Declaring), Name, \
 		static_assert( \
-			std::is_same<typename this_type::Name ## _derived_type, Derived>::value, \
-			"Static polymorphism error" \
+			std::is_same<typename Declaring::Name ## _derived_type, Derived>::value, \
+			"The Derived type of the class implementing a non-final static virtual method must be the same as the one of the class declaring the method." \
 		); \
 		Mod \
 	)
+
+#define STATIC_OVERRIDE_DECLARING(Declaring, Name) \
+	STATIC_OVERRIDE_MOD_DECLARING(BOOST_PP_EMPTY(), STATIC_WRAP(Declaring), Name)
+
+#define STATIC_OVERRIDE_MOD(Mod, Name) \
+	STATIC_OVERRIDE_MOD_DECLARING(STATIC_WRAP(Mod), this_type::Name ## _declaring_type, Name)
 
 #define STATIC_OVERRIDE( Name ) \
 	STATIC_OVERRIDE_MOD( BOOST_PP_EMPTY(), Name )

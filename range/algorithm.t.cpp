@@ -36,7 +36,7 @@ UNITTESTDEF( quantifiers ) {
 	tc::vector<int> all_even{2,4,6,8};
 	tc::vector<int> all_odd{3,5,7,9};
 
-	auto even = [](int i){ return (i%2==0); };
+	auto even = [](int i) noexcept { return (i%2==0); };
 
 	int const existing_value = 5;
 	int const non_existing_value = 9;
@@ -72,8 +72,8 @@ UNITTESTDEF( sort_accumulate_each_unique_range_2 ) {
 		}
 		tc::sort_accumulate_each_unique_range(
 			vec,
-			[](SValAccu const& lhs, SValAccu const& rhs) { return lhs.m_val < rhs.m_val; },
-			[](SValAccu& lhs, SValAccu const& rhs) { lhs.m_accu+=rhs.m_accu; }
+			[](SValAccu const& lhs, SValAccu const& rhs) noexcept { return lhs.m_val < rhs.m_val; },
+			[](SValAccu& lhs, SValAccu const& rhs) noexcept { lhs.m_accu+=rhs.m_accu; }
 		);
 		TEST_EQUAL( 1, vec.size() );
 		TEST_EQUAL( 1, tc_front(vec).m_val );
@@ -96,10 +96,10 @@ UNITTESTDEF(filter_no_self_assignment_of_rvalues) {
 	tc::vector<S> vs{5,S{}};
 	tc::sort_accumulate_each_unique_range(
 		vs,
-		[&](auto const&, auto const&) {
+		[&](auto const&, auto const&) noexcept {
 			return false;
 		},
-		[&](auto&, auto const&) {
+		[&](auto&, auto const&) noexcept {
 		}
 	);
 }
@@ -107,10 +107,10 @@ UNITTESTDEF(filter_no_self_assignment_of_rvalues) {
 
 UNITTESTDEF( trim_leftright_if ) {
 	tc::vector<int> v{1,2,3,4,5,6,7,7,7};
-	auto rng = trim_left_if(v, [] (int n) {return n<4;});
+	auto rng = trim_left_if(v, [] (int n) noexcept {return n<4;});
 	_ASSERT(std::begin(rng) != std::end(rng));
 	_ASSERTEQUAL(tc::size(rng), 6);
-	_ASSERTEQUAL(tc::size(tc::trim_right_if(rng, [] (int n) {return n==7;})), 3);
+	_ASSERTEQUAL(tc::size(tc::trim_right_if(rng, [] (int n) noexcept {return n==7;})), 3);
 }
 
 UNITTESTDEF( is_sorted ) {
@@ -168,9 +168,9 @@ UNITTESTDEF(find_closest_if) {
 		bool mutable m_bCompared = false;
 	};
 
-	auto find=[](auto const& rngn, int iStart, int nTarget, int nComparisonsMax) {
+	auto find=[](auto const& rngn, int iStart, int nTarget, int nComparisonsMax) noexcept {
 		int nComparisons = 0;
-		return tc::find_closest_if<tc::return_element_index_or_npos>(rngn, tc::begin_next(rngn, iStart), /*bSkipSelf*/false, [&](IntCompareOnce const& n) {
+		return tc::find_closest_if<tc::return_element_index_or_npos>(rngn, tc::begin_next(rngn, iStart), /*bSkipSelf*/false, [&](IntCompareOnce const& n) noexcept {
 			_ASSERT(++nComparisons<=nComparisonsMax);
 			return n==nTarget;
 		});

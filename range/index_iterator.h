@@ -112,6 +112,15 @@ namespace tc {
 	template< typename It >
 	using element_t=typename element<It>::type;
 
+	template<typename T, typename Func>
+	auto not_singleton_or(T&& t, Func func) noexcept->decltype(func()) {
+		if(t) {
+			return std::forward<T>(t);
+		} else {
+			return func();
+		}
+	}
+
 	namespace index_iterator_impl {
 		template<typename IndexRange, typename Traversal, bool bConst>
 		struct index_iterator;

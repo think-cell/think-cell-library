@@ -311,69 +311,67 @@ namespace tc {
 		// does not rely on implementation-defined truncation of integers
 		return tc::numeric_cast<Lhs>( lhs-tc::numeric_cast< std::make_signed_t<decltype(lhs-rhs)>>(rhs) );
 	}
-}
 
-struct SRoundFloor final {
-	template< typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
-	T operator()( T t ) const& noexcept {
-		return t;
-	}
-	template< typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
-	T operator()( T t ) const& noexcept {
-		return std::floor(t);
-	}
-	template< typename T >
-	static T PositiveOffset( T t ) noexcept {
-		return 0;
-	}
-	template< typename T >
-	static T NegativeOffset( T t ) noexcept {
-		return t-1;
-	}
-} const roundFLOOR{};
+	struct SRoundFloor final {
+		template< typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
+		T operator()( T t ) const& noexcept {
+			return t;
+		}
+		template< typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
+		T operator()( T t ) const& noexcept {
+			return std::floor(t);
+		}
+		template< typename T >
+		static T PositiveOffset( T t ) noexcept {
+			return 0;
+		}
+		template< typename T >
+		static T NegativeOffset( T t ) noexcept {
+			return t-1;
+		}
+	} const roundFLOOR{};
 
-struct SRoundNearest final {
-	template< typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
-	T operator()( T t ) const& noexcept {
-		return t;
-	}
-	template< typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
-	T operator()( T t ) const& noexcept {
-		return tc::round(t);
-	}
-	template< typename T >
-	static T PositiveOffset( T t ) noexcept {
-		return t/2;
-	}
-	template< typename T >
-	static T NegativeOffset( T t ) noexcept {
-		return (t-1)/2;
-	}
-} const roundNEAREST{};
+	struct SRoundNearest final {
+		template< typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
+		T operator()( T t ) const& noexcept {
+			return t;
+		}
+		template< typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
+		T operator()( T t ) const& noexcept {
+			return tc::round(t);
+		}
+		template< typename T >
+		static T PositiveOffset( T t ) noexcept {
+			return t/2;
+		}
+		template< typename T >
+		static T NegativeOffset( T t ) noexcept {
+			return (t-1)/2;
+		}
+	} const roundNEAREST{};
 
-struct SRoundCeil final {
-	template< typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
-	T operator()( T t ) const& noexcept {
-		return t;
-	}
-	template< typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
-	T operator()( T t ) const& noexcept {
-		return std::ceil(t);
-	}
-	template< typename T >
-	static T PositiveOffset( T t ) noexcept {
-		return t-1;
-	}
-	template< typename T >
-	static T NegativeOffset( T t ) noexcept {
-		return 0;
-	}
-} const roundCEIL{};
+	struct SRoundCeil final {
+		template< typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
+		T operator()( T t ) const& noexcept {
+			return t;
+		}
+		template< typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
+		T operator()( T t ) const& noexcept {
+			return std::ceil(t);
+		}
+		template< typename T >
+		static T PositiveOffset( T t ) noexcept {
+			return t-1;
+		}
+		template< typename T >
+		static T NegativeOffset( T t ) noexcept {
+			return 0;
+		}
+	} const roundCEIL{};
 
-struct SRoundBanker final {
-} const roundBANKER{};
+	struct SRoundBanker final {
+	} const roundBANKER{};
 
-namespace tc {
 	namespace idiv_impl {
 		// The standard guarantees that integer division rounds to zero.
 		// [expr.mul]/4 (oder 5.6/4) 
@@ -469,12 +467,12 @@ namespace tc {
 
 	template< typename Num, typename Denom >
 	Num scale_div( Num num, Denom denom ) noexcept {
-		return scale_div(num,denom,roundNEAREST);
+		return scale_div(num,denom,tc::roundNEAREST);
 	}
 
 	template< bool bGeneralized, typename T, std::enable_if_t<tc::is_actual_integer< T >::value>* = nullptr >
 	T internal_lower_half(T t) noexcept {
-		return scale_div(t, 2, roundFLOOR);
+		return scale_div(t, 2, tc::roundFLOOR);
 	}
 
 	template< bool bGeneralized, typename T, std::enable_if_t<std::is_floating_point< T >::value>* = nullptr >
@@ -484,7 +482,7 @@ namespace tc {
 
 	template< bool bGeneralized, typename Rep, typename Period, std::enable_if_t<bGeneralized>* = nullptr >
 	std::chrono::duration<Rep, Period> internal_lower_half(std::chrono::duration<Rep, Period> const& dur) noexcept {
-		return idiv(dur, 2, roundFLOOR);
+		return idiv(dur, 2, tc::roundFLOOR);
 	}
 
 	template< typename T >
@@ -524,7 +522,7 @@ namespace tc {
 
 	template<typename T, typename Factor>
 	T scale_mul(T t, Factor factor) noexcept {
-		return scale_mul(t,factor,roundNEAREST);
+		return scale_mul(t,factor,tc::roundNEAREST);
 	}
 
 	/////////////////////////////////
@@ -560,7 +558,7 @@ namespace tc {
 
 	template<typename T, typename Num, typename Den>
 	T scale_muldiv(T const& x, Num const& num, Den const& den) noexcept {
-		return scale_muldiv(x, num, den, roundNEAREST);
+		return scale_muldiv(x, num, den, tc::roundNEAREST);
 	}
 }
 

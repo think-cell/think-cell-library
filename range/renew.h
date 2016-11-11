@@ -14,9 +14,7 @@
 
 #pragma once
 
-#ifndef RANGE_PROPOSAL_BUILD_STANDALONE
-	#include "Library/ErrorReporting/assert_fwd.h"
-#endif
+#include "range_defines.h"
 
 #pragma warning(push)
 #pragma warning( disable: 4267 )

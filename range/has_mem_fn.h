@@ -45,7 +45,7 @@ template< typename T, typename Signature = void > struct has_mem_fn3_ ## name : 
 \
 template< typename T > struct has_mem_fn3_ ## name< T, void > { \
 	struct has_mem_fn3_ ## name ## _derived_t : T, has_mem_fn3_ ## name ## _base_t {}; \
-	static bool const value = sizeof( has_mem_fn3_ ## name ## _test< has_mem_fn3_ ## name ## _derived_t >(0) ) \
+	static constexpr bool value = sizeof( has_mem_fn3_ ## name ## _test< has_mem_fn3_ ## name ## _derived_t >(0) ) \
 	                          == sizeof( boost::type_traits::yes_type ); \
 	using type = has_mem_fn3_ ## name; \
 }; \

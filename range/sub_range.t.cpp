@@ -229,7 +229,7 @@ namespace {
 			tc::union_range(
 				tc::make_initializer_list({4,2,0}),
 				tc::make_initializer_list({3,2,1}),
-				[](int lhs, int rhs) {return tc::compare(rhs,lhs);}
+				[](int lhs, int rhs) noexcept {return tc::compare(rhs,lhs);}
 			)
 		);
 
@@ -323,7 +323,7 @@ namespace {
 				rngMut,
 				vecf
 			),
-			[](double& d) {d += 0.1;}
+			[](double& d) noexcept {d += 0.1;}
 		);
 
 		TEST_RANGE_EQUAL(
@@ -338,7 +338,7 @@ namespace {
 	UNITTESTDEF(sub_range_with_tranform) {
 
 		tc::vector<int> vecn{1,2,3};
-		auto rgntrnsfn = tc::transform(vecn, [](int n) {return n*n;});
+		auto rgntrnsfn = tc::transform(vecn, [](int n) noexcept {return n*n;});
 
 		TEST_RANGE_EQUAL(
 			tc::slice(rgntrnsfn, boost::begin(rgntrnsfn), boost::end(rgntrnsfn)),
@@ -352,11 +352,11 @@ namespace {
 
 		TEST_RANGE_EQUAL(
 			tc::make_initializer_list({ 2 }),
-			tc::untransform(tc::equal_range(tc::transform(vecn, [](int n) {return n*n; }), 4))
+			tc::untransform(tc::equal_range(tc::transform(vecn, [](int n) noexcept {return n*n; }), 4))
 		);
 
 		{
-			auto rng = tc::transform(tc::filter(vecn, [](int n) {return n<3;}), [](int n) {return n*n; });
+			auto rng = tc::transform(tc::filter(vecn, [](int n) noexcept {return n<3;}), [](int n) noexcept {return n*n; });
 
 			TEST_RANGE_EQUAL(
 				tc::make_initializer_list({ 2 }),
@@ -366,7 +366,7 @@ namespace {
 
 		{
 			// r-value transform with l-value range
-			auto&& rng = tc::untransform(tc::transform(vecn, [](int n){return n*n;}));
+			auto&& rng = tc::untransform(tc::transform(vecn, [](int n) noexcept {return n*n;}));
 			_ASSERT(3 == tc::size(vecn));
 			_ASSERT(std::addressof(*boost::begin(rng)) == std::addressof(*boost::begin(vecn)));
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value, "");
@@ -379,7 +379,7 @@ namespace {
 
 		{
 			// r-value transform with l-value const range
-			auto&& rng = tc::untransform(tc::transform(tc::as_const(vecn), [](int n){return n*n;}));
+			auto&& rng = tc::untransform(tc::transform(tc::as_const(vecn), [](int n) noexcept {return n*n;}));
 			_ASSERT(3 == tc::size(vecn));
 			_ASSERT(std::addressof(*boost::begin(rng)) == std::addressof(*boost::begin(vecn)));
 			static_assert(std::is_lvalue_reference<decltype((rng))>::value, "");
@@ -392,7 +392,7 @@ namespace {
 
 		{
 			// r-value transform with r-value range
-			auto&& rng = tc::untransform(tc::transform(tc::vector<int>{1, 2, 3}, [](int n){return n*n;}));
+			auto&& rng = tc::untransform(tc::transform(tc::vector<int>{1, 2, 3}, [](int n) noexcept {return n*n;}));
 			_ASSERT(3 == tc::size(vecn));
 			static_assert(std::is_rvalue_reference<decltype(rng)>::value, "");
 			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
@@ -404,7 +404,7 @@ namespace {
 
 		{
 			// l-value transform of l-value-range
-			auto trnsfrng = tc::transform(vecn, [](int n){return n*n;});
+			auto trnsfrng = tc::transform(vecn, [](int n) noexcept {return n*n;});
 
 			auto&& rng = tc::untransform(trnsfrng);
 			_ASSERT(3 == tc::size(vecn));
@@ -419,7 +419,7 @@ namespace {
 
 		{
 			// l-value transform of const l-value-range
-			auto const trnsfrng = tc::transform(tc::as_const(vecn), [](int n){return n*n;});
+			auto const trnsfrng = tc::transform(tc::as_const(vecn), [](int n) noexcept {return n*n;});
 
 			auto&& rng = tc::untransform(trnsfrng);
 			_ASSERT(3 == tc::size(vecn));
@@ -434,7 +434,7 @@ namespace {
 
 		{
 			// l-value transform of const l-value-range
-			auto trnsfrng = tc::transform(tc::as_const(vecn), [](int n){return n*n;});
+			auto trnsfrng = tc::transform(tc::as_const(vecn), [](int n) noexcept {return n*n;});
 
 			auto&& rng = tc::untransform(trnsfrng);
 			_ASSERT(3 == tc::size(vecn));
@@ -449,7 +449,7 @@ namespace {
 
 		{
 			// l-value transform of r-value range
-			auto trnsfrng = tc::transform(tc::vector<int>{1, 2, 3}, [](int n){return n*n; });
+			auto trnsfrng = tc::transform(tc::vector<int>{1, 2, 3}, [](int n) noexcept {return n*n; });
 			auto&& rng = tc::untransform(trnsfrng);
 			_ASSERTEQUAL(
 				std::addressof(*boost::begin(trnsfrng).element_base()),
@@ -464,7 +464,7 @@ namespace {
 		}
 		{
 			// const l-value transform of r-value range
-			auto const trnsfrng = tc::transform(tc::vector<int>{1, 2, 3}, [](int n){return n*n; });
+			auto const trnsfrng = tc::transform(tc::vector<int>{1, 2, 3}, [](int n) noexcept {return n*n; });
 			auto&& rng = tc::untransform(trnsfrng);
 			_ASSERTEQUAL(
 				std::addressof(*boost::begin(trnsfrng).element_base()),
@@ -495,7 +495,7 @@ namespace {
 				auto it = boost::begin(rngExpected);
 				tc::for_each(
 					tc::adjacent_unique_range(vecn),
-					[&](tc::make_sub_range_result<tc::vector<int>&>::type subrng) {
+					[&](tc::make_sub_range_result<tc::vector<int>&>::type subrng) noexcept {
 						TEST_RANGE_EQUAL(subrng, *it);
 						++it;
 					}
@@ -507,7 +507,7 @@ namespace {
 				auto it = boost::begin(rngExpected);
 				tc::for_each(
 					tc::adjacent_unique_range(tc::as_const(vecn)),
-					[&](tc::make_sub_range_result<tc::vector<int> const&>::type subrng) {
+					[&](tc::make_sub_range_result<tc::vector<int> const&>::type subrng) noexcept {
 						TEST_RANGE_EQUAL(subrng, *it);
 						++it;
 					}
@@ -519,7 +519,7 @@ namespace {
 				auto it = boost::begin(rngExpected);
 				tc::for_each(
 				tc::adjacent_unique_range(vecn),
-					[&](tc::make_sub_range_result<tc::vector<int>&>::type subrng) {
+					[&](tc::make_sub_range_result<tc::vector<int>&>::type subrng) noexcept {
 						TEST_RANGE_EQUAL(subrng, *it);
 						++it;
 					}
@@ -529,7 +529,7 @@ namespace {
 
 		}
 
-		auto Pred = [](int lhs, int rhs) {
+		auto Pred = [](int lhs, int rhs) noexcept {
 			return std::abs(lhs-rhs) <=1;
 		};
 
@@ -543,7 +543,7 @@ namespace {
 			auto it = boost::begin(rngExpected);
 			tc::for_each(
 				tc::front_unique_range(vecn, Pred),
-				[&](tc::make_sub_range_result<tc::vector<int>&>::type subrng) {
+				[&](tc::make_sub_range_result<tc::vector<int>&>::type subrng) noexcept {
 					TEST_RANGE_EQUAL(subrng, *it);
 					++it;
 				}
@@ -560,7 +560,7 @@ namespace {
 			auto it = boost::begin(rngExpected);
 			tc::for_each(
 				tc::adjacent_unique_range(vecn, Pred),
-				[&](tc::make_sub_range_result<tc::vector<int>&>::type subrng) {
+				[&](tc::make_sub_range_result<tc::vector<int>&>::type subrng) noexcept {
 					TEST_RANGE_EQUAL(subrng, *it);
 					++it;
 				}

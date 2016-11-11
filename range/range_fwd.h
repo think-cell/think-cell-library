@@ -55,6 +55,6 @@ namespace tc {
 		{}
 		operator bool() const& noexcept { return m_b; }
 	private:
-		bool const m_b;
+		bool m_b;
 	};
 }

@@ -14,12 +14,10 @@
 
 #pragma once
 
+#include "range_adaptor.h"
 #include "functors.h"
 
 #include <boost/range/iterator_range.hpp>
-
-#include <boost/mpl/placeholders.hpp>
-#include <boost/tuple/tuple.hpp>
 #include <boost/fusion/adapted/std_tuple.hpp>
 #include <boost/iterator/iterator_categories.hpp>
 #include <boost/iterator/detail/minimum_category.hpp>

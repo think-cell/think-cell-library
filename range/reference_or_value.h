@@ -26,7 +26,7 @@ namespace tc {
 		template< typename T >
 		struct reference_or_value final {
 			static_assert( !std::is_reference<T>::value, "" );
-			static_assert( !std::is_const<T>::value, "T const seems to be strange. Are you serious?" );
+			static_assert( !std::is_const<T>::value, "T const seems to be strange. Are you sure?" );
 
 			using value_type = std::remove_cv_t<T>;
 			using reference = value_type&;

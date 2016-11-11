@@ -16,8 +16,6 @@
 // Include all header for tc ranges. See the individual headers for details.
 //-----------------------------------------------------------------------------------------------------------------------------
 // 
-// This also forms the basis for our iso c++ standard proposal. (current proposal N3752)
-//
 // Design choices:
 // - To avoid fat iterators when stacking range adaptors, in particular range filters, all per-range and not per-iterator data is stored in the range adaptor object.
 // - Thus, range adaptor iterator lifetime is limited to the lifetime of the range. All range adaptor iterators are slim, consisting of a pointer to their range and the "index",

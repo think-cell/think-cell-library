@@ -1,8 +1,20 @@
 #pragma once
 
+#include "range_fwd.h"
 #include "assign.h"
+#include "size.h"
 
 namespace tc {
+	template<typename Lhs, typename Rhs>
+	auto conditional(tc::bool_context b, Lhs&& lhs, Rhs&& rhs) noexcept->tc::common_reference_t<Lhs&&, Rhs&&> {
+		using result_type = tc::common_reference_t<Lhs&&, Rhs&&>;
+		if (b) {
+			return static_cast<result_type>(std::forward<Lhs>(lhs)); // static_cast needed for conversion from const& to const&&
+		} else {
+			return static_cast<result_type>(std::forward<Rhs>(rhs)); // static_cast needed for conversion from const& to const&&
+		}
+	}
+
 	namespace best_adl_barrier {
 		template<typename T, std::enable_if_t<tc::is_instance<tc::size_proxy,T>::value && std::is_signed<T>::value>* =nullptr>
 		void AssertSizeProxy(T const& t) {
@@ -78,12 +90,11 @@ namespace tc {
 				using result_type = common_min_type_t<T0,T1>;
 				AssertSizeProxy(t0);
 				AssertSizeProxy(t1);
-				//_ASSERT(tc::arithmetic_operation_preserves_sign<std::remove_reference_t<T0>, std::remove_reference_t<T1>>::value || 0<=t0 && 0<=t1 );
-				static_assert(
-					!std::is_rvalue_reference<result_type>::value,
-					"ternary operator does not work correctly with rval-refs."
-				);
-				return m_better(t1,t0) ? static_cast<result_type>(t1) : static_cast<result_type>(t0);
+				if( m_better(t1,t0) ) {
+					return static_cast<result_type>(t1);
+				} else {
+					return static_cast<result_type>(t0);
+				}
 			}
 
 			template<
@@ -96,37 +107,18 @@ namespace tc {
 					>::value)
 				>* = nullptr
 			>
-			auto /* constexpr (see comment below)*/ operator()(T0&& t0, T1&& t1) const& noexcept -> tc::common_reference_t<T0&&, T1&&> {
-				using result_type = tc::common_reference_t<T0&&, T1&&>;
-				if (m_better(t1,t0)) {
-					return static_cast<result_type>(std::forward<T1>(t1)); // static_cast needed for conversion from const& to const&&
-				} else {
-					return static_cast<result_type>(std::forward<T0>(t0));
-				}
-				/*
-					// Does not compile in Visual Studio 2015:
-					return m_better(t1,t0) ? static_cast<result_type>(std::forward<T1>(t1)) : static_cast<result_type>(std::forward<T0>(t0));
-
-					// The Following assert fails:
-					struct S{};
-					static_assert(
-						std::is_same<
-							decltype(true ? std::declval<S&&>() : std::declval<S&&>()),
-							S&&
-						>::value, ""
-					);
-
-					--> Thus, not constexpr at the moment (must be 1 return statement for constexpr)
-				*/
+			auto operator()(T0&& t0, T1&& t1) const& noexcept ->decltype(auto) {
+				return tc::conditional(m_better(t1,t0), std::forward<T1>(t1), std::forward<T0>(t0) );
 			}
 
 			template<
 				typename First,
 				typename Second,
+				typename Third,
 				typename... Args
 			>
-			constexpr auto operator()(First&& first, Second&& second, Args&&... args) const& noexcept return_decltype_rvalue_by_ref(
-				operator()(operator()(std::forward<First>(first), std::forward<Second>(second)), std::forward<Args>(args)...)
+			constexpr auto operator()(First&& first, Second&& second, Third&& third, Args&&... args) const& noexcept return_decltype_rvalue_by_ref(
+				operator()(operator()(std::forward<First>(first), std::forward<Second>(second)), std::forward<Third>(third), std::forward<Args>(args)...)
 			)
 		};
 	}

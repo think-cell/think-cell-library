@@ -14,41 +14,11 @@
 
 #pragma once
 
-#include "range_defines.h"
-#include "reference_or_value.h"
-#include "index_range.h"
-#include "for_each.h"
-
-#include <functional>
+#include <initializer_list>
 
 namespace tc {
-	namespace flatten_adaptor_adl_barrier {
-		template<
-			typename Rng
-		>
-		struct flatten_adaptor {
-		private:
-			reference_or_value<index_range_t<Rng>> m_baserng;
-
-		public:
-			template<typename Rhs>
-			explicit flatten_adaptor(aggregate_tag, Rhs&& rhs) noexcept
-				: m_baserng( aggregate_tag(), std::forward<Rhs>(rhs) )
-			{}
-
-			template< typename Func >
-			auto operator()(Func func) const& MAYTHROW {
-				return tc::for_each(*m_baserng, std::bind(tc::fn_for_each(), std::placeholders::_1, std::ref(func)));
-			}
-		};
+	template<typename T>
+	std::initializer_list<T> make_initializer_list(std::initializer_list<T> il) noexcept {
+		return il;
 	}
-
-	using flatten_adaptor_adl_barrier::flatten_adaptor;
-
-	template<typename Rng>
-	auto flatten(Rng&& rng) noexcept return_ctor(
-		flatten_adaptor< view_by_value_t<Rng> >,
-		(aggregate_tag(), std::forward<Rng>(rng))
-	)
-
 }

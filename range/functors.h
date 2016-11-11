@@ -182,5 +182,6 @@ INFIX_FN_( plus, + )
 INFIX_FN_( minus, - )
 INFIX_FN_( assign_plus, += )
 INFIX_FN_( assign_minus, -= )
+INFIX_FN_( assign, = )
 
 #undef INFIX_FN_

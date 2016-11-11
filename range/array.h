@@ -16,18 +16,17 @@
 #include "compare.h"
 #include "implements_compare.h"
 #include "storage_for.h"
-#ifndef RANGE_PROPOSAL_BUILD_STANDALONE
+#ifdef TC_PRIVATE
 #include "Library/Persistence/types.h"
 #endif
 #include "type_traits.h"
-#include "convert.h"
+#include "explicit_cast.h"
 #include <cstdint>
 #include <boost/iterator/indirect_iterator.hpp>
 
 namespace tc {
 	struct fill_tag final {};
 	struct func_tag final {};
-	struct transform_tag final {};
 
 	namespace array_adl_barrier {
 		template< typename T, std::size_t N >
@@ -73,38 +72,81 @@ namespace tc {
 			array(func_tag, Func func) MAYTHROW 
 				: array(func_tag{}, func, std::make_index_sequence<N>()) 
 			{}
-
 		private:
-			template<typename... Params, std::size_t ...IndexPack>
-			static constexpr auto make_element(std::tuple<Params...> const& rhs, std::index_sequence<IndexPack...>) MAYTHROW 
-				return_ctor(T, (std::get<IndexPack>(rhs)...))
+			template<typename T>
+			using const_forward_t = std::conditional_t<std::is_lvalue_reference<T>::value, T, T const&&>;
+
+			template <typename T, typename U>
+			static constexpr const_forward_t<T> const_forward(U&& u) {
+				return static_cast<const_forward_t<T>>(u);
+			}
+			template<
+				typename... Params,
+				std::size_t ...IndexPack,
+				typename T_ = T,
+				std::enable_if_t<
+					std::is_move_constructible<T_>::value
+				>* = nullptr
+			>
+			explicit constexpr array(fill_tag, std::index_sequence<IndexPack...>, Params&&... params) MAYTHROW
+				: m_a{
+					(IndexPack, T(const_forward<Params>(params)...))...,
+					T(std::forward<Params>(params)...)
+				}
+			{
+				static_assert(N == sizeof...(IndexPack)+1, "");
+			}
+
 		public:
-			// TODO: When VS supports proper constexpr, make delegating ctors constexpr and the following private:
-			template<typename... Params, std::size_t ...IndexPack>
-			constexpr array(fill_tag, std::tuple<Params...>&& rhs, std::index_sequence<IndexPack...>) MAYTHROW 
-				: m_a{(IndexPack, make_element(rhs, std::make_index_sequence<sizeof...(Params)>()))...} 
+			template<
+				typename... Rhs,
+				typename T_ = T,
+				std::enable_if_t<
+					std::is_move_constructible<T_>::value
+				>* = nullptr
+			>
+			explicit constexpr array(fill_tag, Rhs&&... rhs) MAYTHROW
+				: array(fill_tag{}, std::make_index_sequence<N-1>(), std::forward<Rhs>(rhs)...)
 			{}
 
-			template<typename... Rhs>
-			array(fill_tag, Rhs&&... rhs) MAYTHROW 
-				: array(fill_tag{}, std::forward_as_tuple(std::forward<Rhs>(rhs)...), std::make_index_sequence<N>()) 
-			{}
+			template<
+				typename Arg0,
+				typename... Params,
+				std::size_t ...IndexPack,
+				typename T_ = T,
+				std::enable_if_t<
+					!std::is_move_constructible<T_>::value
+				>* = nullptr
+			>
+			constexpr array(fill_tag, std::index_sequence<IndexPack...>, Arg0&& arg0, Params&&... params) MAYTHROW
+				: m_a{
+					{(IndexPack, const_forward<Arg0>(arg0)), const_forward<Params>(params)...}...,
+					{std::forward<Arg0>(arg0), std::forward<Params>(params)...}
+				}
+			{
+				static_assert(N == sizeof...(IndexPack)+1, "");
+			}
 
-			template<typename Func,typename T2>
-			array(transform_tag, array<T2, N> const& arrOther, Func func) noexcept
-				: array(func_tag{}, [&](std::size_t i)->T { // force return of T
-					return func(VERIFYINITIALIZED(arrOther[i]));
-				})
-			{}
-
-			template<typename Func,typename T2>
-			array(transform_tag, array<T2, N>&& arrOther, Func func) noexcept
-				: array(func_tag{}, [&](std::size_t i)->T { // force return of T
-					// Use tc_move(arrOther)[i] instead of tc_move(arrOther[i]) here so we do not
-					// need to specialize for the case that arrOther is an array of reference.
-					// Note that it is safe to call arrOther::operator[]()&& on different indices.
-					return func(VERIFYINITIALIZED(tc_move_always(arrOther)[i]));
-				})
+			/*
+				TODO C++17:
+				- The condition !std::is_move_constructible is a workaround for a trait
+				  such as "is_implicit_constructible".
+				- Initialization of m_a needs explicit T if T is only explict constructible, and must not have T() if
+				  a move-ctor is not available.
+				C++17 will solve this by:
+				- guaranteed copy elision -> T(...) can be used for non-movable types
+				Then todo: Unify code paths.
+			*/
+			template<
+				typename Arg0,
+				typename... Rhs,
+				typename T_ = T,
+				std::enable_if_t<
+					!std::is_move_constructible<T_>::value
+				>* = nullptr
+			>
+			constexpr array(fill_tag, Arg0&& arg0, Rhs&&... rhs) MAYTHROW
+				: array(fill_tag{}, std::make_index_sequence<N-1>(), std::forward<Arg0>(arg0), std::forward<Rhs>(rhs)...)
 			{}
 
 			// TODO: We inlined elementwise_construction_restrictiveness to fold_expression_bitwise_and<construction_restrictiveness...>,
@@ -141,33 +183,35 @@ namespace tc {
 			{
 				static_assert(sizeof...(Args)==N-2, "array initializer list does not match number of elements");
 			}
-			
-			template <typename T2,
-				std::enable_if_t<construction_restrictiveness<T, T2 const&>::value == implicit_construction>* =nullptr
+
+		private:
+			struct range_tag final {};
+
+			template<typename Iterator, std::size_t ...IndexPack>
+			array(range_tag, Iterator it, Iterator itEnd, std::index_sequence<IndexPack...>) MAYTHROW
+				: m_a{*it, (IndexPack, *++it)...}
+			{
+				_ASSERT(itEnd==++it);
+			}
+		public:
+			template< typename Rng,
+				std::enable_if_t< 0!=N 
+					&& is_range_with_iterators<std::remove_reference_t<Rng>>::value 
+					&& construction_restrictiveness<T, decltype(tc_front(std::declval<Rng&>()))>::value == implicit_construction
+				>* = nullptr 
 			>
-			array(array<T2, N> const& arrOther) MAYTHROW
-				: array(transform_tag{}, arrOther, tc::identity())
+			array(Rng&& rng) MAYTHROW
+				: array(range_tag(), boost::begin(rng), boost::end(rng), std::make_index_sequence<N-1>())
 			{}
 
-			template <typename T2,
-				std::enable_if_t<construction_restrictiveness<T, T2 const&>::value == explicit_construction>* =nullptr
+			template< typename Rng,
+				std::enable_if_t< 0!=N 
+					&& is_range_with_iterators<std::remove_reference_t<Rng>>::value 
+					&& construction_restrictiveness<T, decltype(tc_front(std::declval<Rng&>()))>::value == explicit_construction
+				>* = nullptr 
 			>
-			explicit array(array<T2, N> const& arrOther) MAYTHROW
-				: array(transform_tag{}, arrOther, fn_Convert<T>())
-			{}
-
-			template <typename T2,
-				std::enable_if_t<construction_restrictiveness<T, T2&&>::value == implicit_construction>* =nullptr
-			>
-			array(array<T2, N>&& arrOther) MAYTHROW
-				: array(transform_tag{}, tc_move(arrOther), tc::identity())
-			{}
-
-			template <typename T2,
-				std::enable_if_t<construction_restrictiveness<T, T2&&>::value == explicit_construction>* =nullptr
-			>
-			explicit array(array<T2, N>&& arrOther) MAYTHROW
-				: array(transform_tag{}, tc_move(arrOther), fn_Convert<T>())
+			explicit array(Rng&& rng) MAYTHROW
+				: array(tc::transform( std::forward<Rng>(rng), tc::fn_explicit_cast<T>()))
 			{}
 			
 			template <typename T2,
@@ -191,11 +235,6 @@ namespace tc {
 					*(data() + i)=VERIFYINITIALIZED(tc_move(rhs)[i]);
 				}
 				return *this;
-			}
-
-			template<typename Func>
-			array< tc::decayed_result_of_t< Func(T) >, N > transform(Func&& func) const& MAYTHROW {
-				return array< tc::decayed_result_of_t< Func(T) >, N >(transform_tag{}, *this, std::forward<Func>(func));
 			}
 
 			// iterators
@@ -247,7 +286,7 @@ namespace tc {
 				return tc::equal(lhs, rhs);
 			}
 
-#ifndef RANGE_PROPOSAL_BUILD_STANDALONE
+#ifdef TC_PRIVATE
 			// persistence
 			friend void LoadType(array& at, CXmlReader& loadhandler) noexcept {
 				LoadRange(at, loadhandler);
@@ -306,17 +345,6 @@ namespace tc {
 			array(func_tag, Func func) MAYTHROW 
 				: array(func_tag{}, func, std::make_index_sequence<N>()) {}
 
-			template<typename Func,typename T2>
-			array(transform_tag, array<T2, N> const& arrOther, Func func) noexcept
-				: array(func_tag{}, [&](std::size_t i)->T& { // force return of T&
-					static_assert(tc::creates_no_reference_to_temporary<decltype(func(arrOther[i])), T&>::value, "func must return a reference to T or derived type");
-					return func(arrOther[i]);
-				})
-			{}
-
-			template<typename Func,typename T2>
-			array(transform_tag, array<T2, N> const&& arrOther, Func func) noexcept = delete; // would be ok if func maps to object which does not depend on arrOther lifetime, but there is no way to static_assert this
-
 			// make sure forwarding ctor has at least two parameters, so no ambiguity with copy/move ctors
 			template< typename First, typename Second, typename... Args,
 				std::enable_if_t<
@@ -329,25 +357,26 @@ namespace tc {
 				static_assert(sizeof...(Args)==N-2, "array initializer list does not match number of elements");
 			}
 
-			template <typename T2,
-				std::enable_if_t<construction_restrictiveness<T&, T2 const&>::value == implicit_construction>* =nullptr
-			>
-			array(array<T2, N> const& arrOther) noexcept
-				: array(transform_tag{}, arrOther, tc::identity()) 
-			{}
+		private:
+			struct range_tag final {};
 
-			// allow construction from expiring array of (compatible) references, prevent construction from expiring array of values
-			template <typename T2,
-				std::enable_if_t<construction_restrictiveness<T&, T2&&>::value == implicit_construction>* =nullptr
+			template<typename Iterator, std::size_t ...IndexPack>
+			array(range_tag, Iterator it, Iterator itEnd, std::index_sequence<IndexPack...>) MAYTHROW
+				: m_a{std::addressof(*it), (IndexPack, std::addressof(*++it))...}
+			{
+				static_assert(tc::creates_no_reference_to_temporary<decltype(*it), T&>::value, "*it must return a reference to T or derived type");
+				_ASSERT(itEnd==++it);
+			}
+		public:
+			template< typename Rng,
+				std::enable_if_t< 0!=N 
+					&& is_range_with_iterators<std::remove_reference_t<Rng>>::value 
+					&& construction_restrictiveness<T&, decltype(tc_front(std::declval<Rng&>()))>::value == implicit_construction
+				>* = nullptr 
 			>
-			array(array<T2, N> const&& arrOther) noexcept
-				: array(transform_tag{}, arrOther, tc::identity()) 
+			array(Rng&& rng) MAYTHROW
+				: array(range_tag(), boost::begin(rng), boost::end(rng), std::make_index_sequence<N-1>())
 			{}
-
-			template <typename T2,
-				std::enable_if_t<construction_restrictiveness<T&, T2&&>::value == forbidden_construction>* =nullptr
-			>
-			array(array<T2, N> const&& arrOther) noexcept = delete; // explicitly delete this constructor, otherwise array(array<T2, N> const& arrOther) above may be chosen.
 			
 			array const& operator=(array const& rhs) const& noexcept(std::is_nothrow_copy_assignable<T>::value) {
 				boost::copy(rhs, begin());
@@ -373,11 +402,6 @@ namespace tc {
 					m_a[i]=tc_move_always(rhs)[i];
 				}
 				return *this;
-			}
-
-			template<typename Func>
-			array< tc::decayed_result_of_t< Func(T) >, N > transform(Func&& func) const& MAYTHROW {
-				return array< tc::decayed_result_of_t< Func(T) >, N >(transform_tag{}, *this, std::forward<Func>(func));
 			}
 
 			// iterators
@@ -408,7 +432,7 @@ namespace tc {
 				return tc::equal(lhs, rhs);
 			}
 
-#ifndef RANGE_PROPOSAL_BUILD_STANDALONE
+#ifdef TC_PRIVATE
 
 			// error reporting
 			friend SReportStream& operator<<(SReportStream& rs, array const& at) noexcept {
@@ -433,6 +457,14 @@ namespace tc {
 		static_assert(has_mem_fn_size<array<int&, 10>>::value, "");
 	}
 	using array_adl_barrier::array;
+
+	template<typename T, std::size_t N>
+	auto constexpr_size(tc::array<T, N> const&) -> std::integral_constant<std::size_t, N>;
+
+	template< typename Rng >
+	auto make_array(Rng&& rng) noexcept {
+		return array<decltype(tc_front(rng)), decltype(constexpr_size(rng))::value>(std::forward<Rng>(rng));
+	}
 
 	template <typename T, std::size_t N>
 	struct decay<tc::array<T, N>> {

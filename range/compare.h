@@ -16,7 +16,7 @@
 
 #include "assign.h"
 #include "return_decltype.h"
-#ifndef RANGE_PROPOSAL_BUILD_STANDALONE
+#ifdef TC_PRIVATE
 #include "Library/HeaderOnly/enum.h"
 #endif
 #include "quantifier.h"
@@ -28,12 +28,12 @@ namespace tc {
 		enum class order {
 			less, equal, greater, end__
 		};
-#ifndef RANGE_PROPOSAL_BUILD_STANDALONE
+#ifdef TC_PRIVATE
 		DEFINE_CONTIGUOUS_ENUM(order,order::less,order::end__)
 #endif
 
 		inline order operator-(order ord) noexcept {
-#ifndef RANGE_PROPOSAL_BUILD_STANDALONE
+#ifdef TC_PRIVATE
 			return order::less+(order::greater-ord);
 #else
 			using TUnderlying = std::underlying_type_t<order>;
@@ -266,7 +266,7 @@ namespace tc {
 	// Provide adapter from 3-way compare to 2-way compare
 
 	template<typename FCompare, typename Base>
-	struct F2wayFrom3way final : private Base {
+	struct F2wayFrom3way /* final */ : private Base {
 	private:
 		FCompare m_fnCompare;
 	public:
@@ -275,6 +275,7 @@ namespace tc {
 		template< typename Lhs, typename Rhs > bool operator()( Lhs&& lhs, Rhs&& rhs ) const& noexcept {
 			return tc::base_cast<Base>(*this)(m_fnCompare(std::forward<Lhs>(lhs), std::forward<Rhs>(rhs)), tc::order::equal);
 		}
+		using is_transparent = void;
 	};
 
 	template< typename FCompare> F2wayFrom3way<FCompare, tc::fn_less> lessfrom3way( FCompare fnCompare ) noexcept {

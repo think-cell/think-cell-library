@@ -279,10 +279,10 @@ namespace tc {
 				std::get<N>(m_baserng)->dereference_index(idx.template get<N>())
 			)
 
-			STATIC_FINAL(dereference_index)(index const& idx) const& noexcept ->
+			STATIC_FINAL_MOD(template<typename R0=Rng0 BOOST_PP_COMMA() typename R1=Rng1>, dereference_index)(index const& idx) const& noexcept ->
 			tc::lvalue_or_decay_t<common_reference_t<
-				typename range_traits<Rng0>::reference,
-				typename range_traits<Rng1>::reference
+				typename range_traits<R0>::reference,
+				typename range_traits<R1>::reference
 			>> {
 				switch_no_default(idx.which()) {
 					case 0: return dereference_index_fwd<0>(idx);
@@ -295,10 +295,10 @@ namespace tc {
 				std::get<N>(m_baserng)->dereference_index(idx.template get<N>())
 			)
 
-			STATIC_FINAL(dereference_index)(index const& idx) & noexcept ->
+			STATIC_FINAL_MOD(template<typename R0=Rng0 BOOST_PP_COMMA() typename R1=Rng1>, dereference_index)(index const& idx) & noexcept ->
 			tc::lvalue_or_decay_t<common_reference_t<
-				typename range_traits<Rng0>::reference,
-				typename range_traits<Rng1>::reference
+				typename range_traits<R0>::reference,
+				typename range_traits<R1>::reference
 			>> {
 				switch_no_default(idx.which()) {
 					case 0: return dereference_index_fwd<0>(idx);
@@ -393,7 +393,7 @@ namespace tc {
 						case 1: return std::get<1>(m_baserng)->distance_to_index(idxLhs.template get<1>(), idxRhs.template get<1>());
 					}
 				} else {
-					auto positive_distance = [&](index const& lhs, index const& rhs) {
+					auto positive_distance = [&](index const& lhs, index const& rhs) noexcept {
 						return
 							std::get<0>(m_baserng)->distance_to_index(
 								lhs.template get<0>(),

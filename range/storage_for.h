@@ -14,9 +14,9 @@
 
 #pragma once
 
-#ifndef RANGE_PROPOSAL_BUILD_STANDALONE
-	#include "Library/ErrorReporting/assert_fwd.h"
-#endif
+#include "range_defines.h"
+#include "noncopyable.h"
+#include "type_traits.h"
 
 #include <boost/implicit_cast.hpp>
 
@@ -80,7 +80,7 @@ namespace tc {
 
 	template< typename T >
 	struct storage_for : storage_for_without_dtor <T> {
-#if defined(_DEBUG) && !defined(RANGE_PROPOSAL_BUILD_STANDALONE)
+#if defined(_DEBUG) && defined(TC_PRIVATE)
 		storage_for() noexcept {
 			tc::fill_with_dead_pattern(this->m_buffer);
 		}
@@ -133,7 +133,7 @@ namespace tc {
 	private:
 		void check_pattern() const& noexcept {
 			// RT#12004: g_mtxSharedHeap's destructor fails this check in the Excel insider build 16.0.6568.2036
-			// because this version does not realease all its locks on CTCAddInModule so that CSharedHeap::ShutDown()
+			// because this version does not realease all its locks on CTCAddInModule so that tc::shared_heap::shutdown()
 			// and thus g_mtxSharedHeap.dtor() are never called. This build appears to be broken. It throws and does
 			// not handle 0xC0000008 (An invalid handle was specified) while closing even without think-cell installed.
 			// I could not reproduce the error in the next Excel insider build 16.0.6701.1008. -Edgar 2016-03-14
@@ -165,7 +165,7 @@ namespace tc {
 
 	template< typename T >
 	struct storage_for<T&> : storage_for_without_dtor <T&> {
-#if defined(_DEBUG) && !defined(RANGE_PROPOSAL_BUILD_STANDALONE)
+#if defined(_DEBUG) && defined(TC_PRIVATE)
 		storage_for() noexcept {
 			this->m_pt=nullptr;
 		}

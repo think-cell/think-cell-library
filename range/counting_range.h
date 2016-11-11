@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "sub_range.h"
 #include "return_decltype.h"
 
 #ifdef __clang__
@@ -30,7 +31,7 @@
 #pragma warning( pop )
 #endif
 
-// By default, boost uses __int64 as counting_iterator<int>::difference_type,
+// By default, boost uses long long as counting_iterator<int>::difference_type,
 // which generates C4244 level 1 compiler warnings when cast back to int.
 // Most pragmatically, difference_type should reflect the type of a-b, thus counting_iterator<int>::difference_type is int,
 // and counting_iterator<unsigned short (or anything else shorter than int)>::difference_type is int.

@@ -14,13 +14,9 @@
 
 #pragma once
 
-#ifndef RANGE_PROPOSAL_BUILD_STANDALONE
-	// prevent wrong include order
-	#include "Library/ErrorReporting/assert_fwd.h"
-	#include "assign.h"
-	#include "functors.h"
-#endif
-
+#include "range_defines.h"
+#include "assign.h"
+#include "functors.h"
 #include "inherit_ctors.h"
 #include "return_decltype.h"
 #include "casts.h"
