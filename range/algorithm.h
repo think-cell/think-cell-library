@@ -255,33 +255,33 @@ namespace tc {
 	}
 
 	template< typename Rng, typename Pred >
-	typename tc::return_drop_before_element_or_empty<Rng>::type trim_left_if(Rng&& rng, Pred&& pred) noexcept {
-		return tc::find_first_if<tc::return_drop_before_element_or_empty>( std::forward<Rng>(rng), tc::not_fn(std::forward<Pred>(pred)) );
+	typename tc::return_drop_before_or_empty<Rng>::type trim_left_if(Rng&& rng, Pred&& pred) noexcept {
+		return tc::find_first_if<tc::return_drop_before_or_empty>( std::forward<Rng>(rng), tc::not_fn(std::forward<Pred>(pred)) );
 	}
 
 	template< typename Rng, typename Pred >
-	typename tc::return_take_after_element_or_empty<Rng>::type trim_right_if(Rng&& rng, Pred&& pred) noexcept {
-		return tc::find_last_if<tc::return_take_after_element_or_empty>( std::forward<Rng>(rng), tc::not_fn(std::forward<Pred>(pred)) );
+	typename tc::return_take_after_or_empty<Rng>::type trim_right_if(Rng&& rng, Pred&& pred) noexcept {
+		return tc::find_last_if<tc::return_take_after_or_empty>( std::forward<Rng>(rng), tc::not_fn(std::forward<Pred>(pred)) );
 	}
 
 	template< typename Rng, typename Pred >
-	typename tc::return_drop_before_element_or_empty<typename tc::return_take_after_element_or_empty<Rng>::type>::type trim_if(Rng&& rng, Pred&& pred) noexcept {
+	typename tc::return_drop_before_or_empty<typename tc::return_take_after_or_empty<Rng>::type>::type trim_if(Rng&& rng, Pred&& pred) noexcept {
 		auto rngTrimmed = tc::trim_right_if( std::forward<Rng>(rng), pred );
 		return tc::trim_left_if( tc_move(rngTrimmed), std::forward<Pred>(pred) );
 	}
 
 	template< typename Rng, typename RngTrim >
-	typename tc::return_drop_before_element_or_empty<Rng>::type trim_left(Rng&& rng, RngTrim const& rngTrim) noexcept {
+	typename tc::return_drop_before_or_empty<Rng>::type trim_left(Rng&& rng, RngTrim const& rngTrim) noexcept {
 		return tc::trim_left_if( std::forward<Rng>(rng), std::bind( tc::fn_find_first<tc::return_bool>(), std::cref(rngTrim), std::placeholders::_1 ) );
 	}
 
 	template< typename Rng, typename RngTrim >
-	typename tc::return_take_after_element_or_empty<Rng>::type trim_right(Rng&& rng, RngTrim const& rngTrim) noexcept {
+	typename tc::return_take_after_or_empty<Rng>::type trim_right(Rng&& rng, RngTrim const& rngTrim) noexcept {
 		return tc::trim_right_if( std::forward<Rng>(rng), std::bind( tc::fn_find_first<tc::return_bool>(), std::cref(rngTrim), std::placeholders::_1 ) );
 	}
 
 	template< typename Rng, typename RngTrim >
-	typename tc::return_drop_before_element_or_empty<typename tc::return_take_after_element_or_empty<Rng>::type>::type trim(Rng&& rng, RngTrim const& rngTrim) noexcept {
+	typename tc::return_drop_before_or_empty<typename tc::return_take_after_or_empty<Rng>::type>::type trim(Rng&& rng, RngTrim const& rngTrim) noexcept {
 		return tc::trim_if( std::forward<Rng>(rng), std::bind( tc::fn_find_first<tc::return_bool>(), std::cref(rngTrim), std::placeholders::_1 ) );
 	}
 
@@ -1526,7 +1526,7 @@ namespace tc {
 		// ordered. In some cases, it is convenient to allow multiple occurrences of the same item in
 		// rng, which is not a problem as long as these items are not searched for.
 		_ASSERTDEBUG( tc::is_sorted( rng, pred ) );
-		auto it=tc::lower_bound<tc::return_bound>( rng, t, pred );
+		auto it=tc::lower_bound<tc::return_border>( rng, t, pred );
 		if( it==boost::end( rng ) ) {
 			return RangeReturn<Rng>::pack_no_element(std::forward<Rng>(rng));
 		} else {
@@ -1551,7 +1551,7 @@ namespace tc {
 	template< template<typename> class RangeReturn, typename Rng, typename T, typename Pred >
 	typename RangeReturn<Rng>::type binary_find_first(Rng&& rng, T const& t, Pred pred) noexcept {
 		_ASSERTDEBUG( tc::is_sorted( rng, pred ) );
-		auto it=tc::lower_bound<tc::return_bound>( rng, t, pred );
+		auto it=tc::lower_bound<tc::return_border>( rng, t, pred );
 		if (it == boost::end(rng)) {
 			return RangeReturn<Rng>::pack_no_element(std::forward<Rng>(rng));
 		} else {
@@ -1573,7 +1573,7 @@ namespace tc {
 	// but subtraction may cause unnecessary overflows
 	template< typename Rng, typename T >
 	typename boost::range_iterator< std::remove_reference_t<Rng> >::type binary_closest(Rng&& rng, T const& t) noexcept {
-		auto it = tc::lower_bound<tc::return_bound>(rng, t);
+		auto it = tc::lower_bound<tc::return_border>(rng, t);
 		if( boost::begin(rng)==it ) {
 			return it;
 		} else if( boost::end(rng)==it ) {

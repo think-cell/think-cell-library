@@ -24,16 +24,16 @@ namespace {
 		auto rngNoSize = tc::transform(tc::filter(tc::vector<int>(), [](int) noexcept { return false; }), [](int) noexcept { return 0; });
 		static_assert(!tc::size_impl::has_size<decltype(rngNoSize)>::value, "");
 
-		/*int anNative[] = {1,2,3,4,5};
+		int anNative[] = {1,2,3,4,5};
 		auto anTc = tc::make_array(anNative);
 		auto anTc2 = tc::make_array(anTc);
 		auto anNativeTrans = tc::make_array(tc::transform(anNative, tc::identity()));
 		auto anTcTrans = tc::make_array(tc::transform(anTc, tc::identity()));
 
-		static_assert(std::is_same<decltype(tc::constexpr_size(anTc)), decltype(tc::constexpr_size(anNative))>::value, "");
-		static_assert(std::is_same<decltype(tc::constexpr_size(anTc2)), decltype(tc::constexpr_size(anNative))>::value, "");
-		static_assert(std::is_same<decltype(tc::constexpr_size(anNativeTrans)), decltype(tc::constexpr_size(anNative))>::value, "");
-		static_assert(std::is_same<decltype(tc::constexpr_size(anTcTrans)), decltype(tc::constexpr_size(anNative))>::value, "");*/
+		static_assert(std::is_same<decltype(constexpr_size(anTc)), decltype(tc::constexpr_size(anNative))>::value, "");
+		static_assert(std::is_same<decltype(constexpr_size(anTc2)), decltype(tc::constexpr_size(anNative))>::value, "");
+		static_assert(std::is_same<decltype(constexpr_size(anNativeTrans)), decltype(tc::constexpr_size(anNative))>::value, "");
+		static_assert(std::is_same<decltype(constexpr_size(anTcTrans)), decltype(tc::constexpr_size(anNative))>::value, "");
 	}
 }
 

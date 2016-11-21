@@ -235,7 +235,7 @@ namespace {
 
 		_ASSERTEQUAL(
 			3,
-			*tc::upper_bound<tc::return_bound>(
+			*tc::upper_bound<tc::return_border>(
 				tc::union_range(
 					tc::make_initializer_list({1,2,4}),
 					tc::make_initializer_list({2,3})
@@ -256,13 +256,13 @@ namespace {
 			);
 
 			{
-				auto it = tc::lower_bound<tc::return_bound>(rng,3);
+				auto it = tc::lower_bound<tc::return_border>(rng,3);
 				_ASSERTEQUAL(*it,3);
 				_ASSERTEQUAL(*boost::prior(it), 2);
 				_ASSERTEQUAL(*boost::next(it), 3);
 	}
 			{
-				auto it = tc::upper_bound<tc::return_bound>(rng,1);
+				auto it = tc::upper_bound<tc::return_border>(rng,1);
 				_ASSERTEQUAL(*it,2);
 				_ASSERTEQUAL(*--it, 1);
 				_ASSERTEQUAL(*--it, 1);
@@ -274,7 +274,7 @@ namespace {
 				tc::make_initializer_list({1,1,1,1,1,1,1,1,1}),
 				tc::make_initializer_list({1,1})
 			);
-			auto it = tc::lower_bound<tc::return_bound>(rng,1);
+			auto it = tc::lower_bound<tc::return_border>(rng,1);
 			_ASSERTEQUAL(*it,1);
 		}
 	}

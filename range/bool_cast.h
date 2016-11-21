@@ -21,12 +21,5 @@ namespace tc {
 		return static_cast<bool>( VERIFYINITIALIZED(t) );
 	}
 
-	template<typename T>
-	struct has_bool_cast {
-	private:
-		template<typename U> static auto test(int) -> decltype(tc::bool_cast(std::declval<U>()), std::true_type());
-		template<typename> static std::false_type test(...);
-	public:
-		static constexpr bool value = std::is_same<decltype(test<T>(0)), std::true_type>::value;
-	};
+	TC_HAS_EXPR(bool_cast, tc::bool_cast(std::declval<T>()))
 }

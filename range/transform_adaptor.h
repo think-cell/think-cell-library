@@ -99,7 +99,7 @@ namespace tc {
 				, typename boost::range_iterator< transform_adaptor< FuncOther, RngOther, true > >::type itBegin
 				, typename boost::range_iterator< transform_adaptor< FuncOther, RngOther, true > >::type itEnd
 			) noexcept
-				: base_(tc::slice(tc_move(rng).base_range_move(),itBegin.bound_base(),itEnd.bound_base()), transform_adaptor_access::get_func(tc_move(rng)))
+				: base_(tc::slice(tc_move(rng).base_range_move(),itBegin.border_base(),itEnd.border_base()), transform_adaptor_access::get_func(tc_move(rng)))
 			{}
 
 			template<typename Func=Func/*enable SFINAE*/>
@@ -122,7 +122,7 @@ namespace tc {
 				return tc::as_const(this->m_func)(base_::STATIC_VIRTUAL_METHOD_NAME(dereference_index)(idx));
 			}
 
-			auto bound_base_index(index const& idx) const& noexcept {
+			auto separator_base_index(index const& idx) const& noexcept {
 				return idx;
 			}
 

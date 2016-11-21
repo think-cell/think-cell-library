@@ -88,7 +88,7 @@ UNITTESTDEF(tc_reverse_base_bound) {
 	auto it = boost::next(boost::next(boost::begin(rngreverse)));
 	TEST_RANGE_EQUAL(
 		tc::reverse(tc::take(rngreverse,it)),
-		tc::drop(rng, it.bound_base())
+		tc::drop(rng, it.border_base())
 	);
 
 	_ASSERTEQUAL(*it,*it.element_base());

@@ -219,8 +219,8 @@ namespace tc {
 			}
 
 			template<typename IndexRange_ = IndexRange>
-			auto bound_base() const& noexcept {
-				return tc::as_const(VERIFY(m_pidxrng))->base_range().make_iterator(m_pidxrng->bound_base_index(m_idx));
+			auto border_base() const& noexcept {
+				return tc::as_const(VERIFY(m_pidxrng))->base_range().make_iterator(m_pidxrng->separator_base_index(m_idx));
 			}
 
 			template<typename IndexRange_ = IndexRange>

@@ -70,7 +70,7 @@ namespace tc {
 				);
 
 				for (;;) {
-					auto it = tc::best_element<tc::return_element_or_singleton>(
+					auto it = tc::best_element<tc::return_element_or_null>(
 						tc::as_lvalue(tc::filter( // as_lvalue -> yield non-const iterator
 							vecrngrng,
 							tc::not_fn(tc::fn_empty())

@@ -17,6 +17,7 @@
 #include "range_defines.h"
 #include "break_or_continue.h"
 #include "meta.h"
+#include "size.h"
 
 #include "reference_or_value.h"
 #include "static_polymorphism.h"

@@ -27,6 +27,17 @@
 
 #include <type_traits>
 
+// Use if you have to check if an expression compiles, e.g., to check if an operator is defined, a cast is valid etc
+#define TC_HAS_EXPR(name, expr) \
+	template<typename U> \
+	struct BOOST_PP_CAT(has_,name) { \
+	private: \
+		template<typename T> static auto test(int) -> decltype((expr), std::true_type()); \
+		template<typename> static std::false_type test(...); \
+	public: \
+		static constexpr bool value = std::is_same<decltype(test<U>(0)), std::true_type>::value; \
+	};
+
 // Use as type of constructor arguments that are required for enabling / disabling constructor through SFINAE.
 // To be replaced by template parameter default when Visual C++ supports template parameter defaults for functions.
 struct unused_arg final {};

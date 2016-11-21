@@ -238,15 +238,7 @@ namespace tc {
 			N
 		)
 
-		template <typename T, typename = decltype(tc::size_impl::size(std::declval<T>()))>
-		static std::true_type test_has_size(int) noexcept;
-
-		template <typename T>
-		static std::false_type test_has_size(...) noexcept;
-
-		template <typename T>
-		struct has_size final : decltype(test_has_size<T>(0)) {
-		};
+		TC_HAS_EXPR(size, tc::size_impl::size(std::declval<T>()))
 
 		template<typename Rng, std::enable_if_t<!tc::size_impl::has_size< Rng const >::value>* =nullptr>
 		auto size_linear(Rng const& rng) noexcept return_decltype(

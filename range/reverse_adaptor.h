@@ -132,7 +132,7 @@ namespace tc {
 				}
 			}
 
-			auto bound_base_index(index const& idx) const& noexcept {
+			auto separator_base_index(index const& idx) const& noexcept {
 				return idx ? modified(*idx, m_baserng->increment_index(_)) : m_baserng->begin_index();
 			}
 
@@ -150,19 +150,19 @@ namespace tc {
 			}
 
 			STATIC_FINAL(middle_point)(index & idx, index const& idxEnd ) const& noexcept -> void {
-				auto idxBeginBase = bound_base_index(idxEnd);
-				m_baserng->middle_point(idxBeginBase, bound_base_index(idx));
+				auto idxBeginBase = separator_base_index(idxEnd);
+				m_baserng->middle_point(idxBeginBase, separator_base_index(idx));
 				idx = idxBeginBase;
 			}
 
 			template <typename It>
 			friend void take_inplace_impl(reverse_adaptor& rng, It&& it) noexcept {
-				drop_inplace(*rng.m_baserng, it.bound_base());
+				drop_inplace(*rng.m_baserng, it.border_base());
 			}
 
 			template <typename It>
 			friend void drop_inplace_impl(reverse_adaptor& rng, It&& it) noexcept {
-				take_inplace(*rng.m_baserng, it.bound_base());
+				take_inplace(*rng.m_baserng, it.border_base());
 			}
 		};
 	}

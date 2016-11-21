@@ -455,12 +455,12 @@ namespace tc {
 
 		static_assert(has_mem_fn_size<array<int, 10>>::value, "");
 		static_assert(has_mem_fn_size<array<int&, 10>>::value, "");
+
+		template<typename T, std::size_t N>
+		auto constexpr_size(array<T, N> const&) -> std::integral_constant<std::size_t, N>;
 	}
 	using array_adl_barrier::array;
-
-	template<typename T, std::size_t N>
-	auto constexpr_size(tc::array<T, N> const&) -> std::integral_constant<std::size_t, N>;
-
+	
 	template< typename Rng >
 	auto make_array(Rng&& rng) noexcept {
 		return array<decltype(tc_front(rng)), decltype(constexpr_size(rng))::value>(std::forward<Rng>(rng));

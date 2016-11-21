@@ -887,7 +887,7 @@ namespace tc {
 	// returning bound
 
 	template< typename Rng >
-	struct return_bound final {
+	struct return_border final {
 		using type = typename boost::range_iterator< std::remove_reference_t<Rng> >::type;
 
 		static type pack_bound(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng) noexcept {
@@ -896,7 +896,7 @@ namespace tc {
 	};
 
 	template< typename Rng >
-	struct return_bound_index final {
+	struct return_border_index final {
 		using type = tc::size_proxy< typename boost::range_size< std::remove_reference_t<Rng> >::type >;
 
 		static type pack_bound(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng) noexcept {
@@ -957,20 +957,7 @@ namespace tc {
 	};
 
 	template< typename Rng >
-	struct return_element_or_end final {
-		using type = typename boost::range_iterator< std::remove_reference_t<Rng> >::type;
-
-		template<typename Ref>
-		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&&, Ref&&) noexcept {
-			return it;
-		}
-		static type pack_no_element(Rng&& rng) noexcept {
-			return boost::end(rng);
-		}
-	};
-
-	template< typename Rng >
-	struct return_element_or_singleton final {
+	struct return_element_or_null final {
 		using type = element_t< typename boost::range_iterator< std::remove_reference_t<Rng> >::type >;
 
 		template<typename Ref>
@@ -1080,7 +1067,7 @@ namespace tc {
 	// returning bound
 
 	template< typename Rng >
-	struct return_bound_after final {
+	struct return_border_after final {
 		using type = typename boost::range_iterator< std::remove_reference_t<Rng> >::type;
 
 		template<typename Ref>
@@ -1094,7 +1081,7 @@ namespace tc {
 	};
 
 	template< typename Rng >
-	struct return_bound_after_or_begin final {
+	struct return_border_after_or_begin final {
 		using type = typename boost::range_iterator< std::remove_reference_t<Rng> >::type;
 
 		template<typename Ref>
@@ -1107,7 +1094,7 @@ namespace tc {
 	};
 
 	template< typename Rng >
-	struct return_bound_before_or_end final {
+	struct return_border_before_or_end final {
 		using type = typename boost::range_iterator< std::remove_reference_t<Rng> >::type;
 
 		template<typename Ref>
@@ -1122,7 +1109,7 @@ namespace tc {
 	// returning range
 
 	template< typename Rng >
-	struct return_take_before_element final {
+	struct return_take_before final {
 		using type = typename make_sub_range_result<Rng>::type;
 
 		template<typename Ref>
@@ -1137,7 +1124,7 @@ namespace tc {
 	};
 
 	template< typename Rng >
-	struct return_take_before_element_or_empty final {
+	struct return_take_before_or_empty final {
 		using type = typename make_sub_range_result<Rng>::type;
 
 		template<typename Ref>
@@ -1150,7 +1137,7 @@ namespace tc {
 	};
 
 	template< typename Rng >
-	struct return_take_before_element_or_all final {
+	struct return_take_before_or_all final {
 		using type = typename make_sub_range_result<Rng>::type;
 
 		template<typename Ref>
@@ -1163,7 +1150,7 @@ namespace tc {
 	};
 
 	template< typename Rng >
-	struct return_take_after_element final {
+	struct return_take_after final {
 		using type = typename make_sub_range_result<Rng>::type;
 
 		template<typename Ref>
@@ -1178,7 +1165,7 @@ namespace tc {
 	};
 
 	template< typename Rng >
-	struct return_take_after_element_or_empty final {
+	struct return_take_after_or_empty final {
 		using type = typename make_sub_range_result<Rng>::type;
 
 		template<typename Ref>
@@ -1191,7 +1178,7 @@ namespace tc {
 	};
 
 	template< typename Rng >
-	struct return_take_after_element_or_all final {
+	struct return_take_after_or_all final {
 		using type = typename make_sub_range_result<Rng>::type;
 
 		template<typename Ref>
@@ -1204,7 +1191,7 @@ namespace tc {
 	};
 
 	template< typename Rng >
-	struct return_drop_before_element final {
+	struct return_drop_before final {
 		using type = decltype(tc::drop(std::declval<Rng>(), boost::begin(std::declval<Rng&>())));
 
 		template<typename Ref>
@@ -1219,7 +1206,7 @@ namespace tc {
 	};
 
 	template< typename Rng >
-	struct return_drop_before_element_or_empty final {
+	struct return_drop_before_or_empty final {
 		using type = decltype(tc::drop( std::declval<Rng>(), boost::begin(std::declval<Rng&>()) ));
 
 		template<typename Ref>
@@ -1232,7 +1219,7 @@ namespace tc {
 	};
 
 	template< typename Rng >
-	struct return_drop_before_element_or_all final {
+	struct return_drop_before_or_all final {
 		using type = decltype(tc::drop(std::declval<Rng>(), boost::begin(std::declval<Rng&>())));
 
 		template<typename Ref>
@@ -1245,7 +1232,7 @@ namespace tc {
 	};
 
 	template< typename Rng >
-	struct return_drop_after_element final {
+	struct return_drop_after final {
 		using type = decltype(tc::drop(std::declval<Rng>(), boost::begin(std::declval<Rng&>())));
 
 		template<typename Ref>
@@ -1260,7 +1247,7 @@ namespace tc {
 	};
 
 	template< typename Rng >
-	struct return_drop_after_element_or_empty final {
+	struct return_drop_after_or_empty final {
 		using type = decltype(tc::drop( std::declval<Rng>(), boost::begin(std::declval<Rng&>()) ));
 
 		template<typename Ref>
@@ -1273,7 +1260,7 @@ namespace tc {
 	};
 
 	template< typename Rng >
-	struct return_drop_after_element_or_all final {
+	struct return_drop_after_or_all final {
 		using type = decltype(tc::drop( std::declval<Rng>(), boost::begin(std::declval<Rng&>()) ));
 
 		template<typename Ref>

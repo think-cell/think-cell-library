@@ -84,12 +84,12 @@ namespace tc {
 
 	namespace range_of_iterators_adl_barrier {
 		template<typename Rng>
-		struct range_of_iterators {
+		struct range_of_elements {
 			using const_iterator=counting_iterator< decltype(boost::begin(*std::declval<tc::reference_or_value<Rng> const&>())) >;
 			using iterator=counting_iterator< decltype(boost::begin(*std::declval<tc::reference_or_value<Rng>&>())) >;
 
 			template<typename Rhs>
-			range_of_iterators(aggregate_tag, Rhs&& rhs) noexcept
+			range_of_elements(aggregate_tag, Rhs&& rhs) noexcept
 				: m_rng(aggregate_tag(), std::forward<Rhs>(rhs))
 			{}
 			
@@ -111,5 +111,5 @@ namespace tc {
 	}
 	template<typename Rng>
 	auto make_range_of_iterators(Rng&& rng) noexcept
-		return_ctor( range_of_iterators_adl_barrier::range_of_iterators< view_by_value_t<Rng> >, (aggregate_tag(), std::forward<Rng>(rng)) )
+		return_ctor( range_of_iterators_adl_barrier::range_of_elements< view_by_value_t<Rng> >, (aggregate_tag(), std::forward<Rng>(rng)) )
 }
