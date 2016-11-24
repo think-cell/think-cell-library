@@ -25,7 +25,6 @@ Usage on Windows:
 
 	#define NOMINMAX
 	#include <windows.h>
-	#define RANGE_PROPOSAL_BUILD_STANDALONE
 	#include "range/range.h"
 
 

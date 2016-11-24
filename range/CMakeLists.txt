@@ -141,7 +141,7 @@ source_group(Build FILES ${Build})
 
 
 # create a test runner
-add_definitions(-DRANGE_PROPOSAL_BUILD_STANDALONE -DPERFORMUNITTESTS -DBOOST_RANGE_ENABLE_CONCEPT_ASSERT=0)
+add_definitions(-DPERFORMUNITTESTS -DBOOST_RANGE_ENABLE_CONCEPT_ASSERT=0)
 
 foreach(Example ${Examples})
 	add_executable(example_${Example} ${Build} ${Header} ${Tests} ${Example})
