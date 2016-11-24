@@ -17,9 +17,8 @@
 #ifdef TC_PRIVATE
 	#include "Library/ErrorReporting/assert_fwd.h"
 #else
-
-    #define _CHECKS
-    #ifndef _ASSERT
+	#define _CHECKS
+	#ifndef _ASSERT
 		#include <cassert>
 		#define _ASSERT(...) assert((__VA_ARGS__))
 	#endif
