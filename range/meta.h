@@ -197,7 +197,7 @@ CHAR_RANGE(wchar_t)
 
 #include <boost/range/has_range_iterator.hpp>
 
-static_assert(boost::has_range_iterator<char*>::value, "");
+static_assert(boost::has_range_iterator<char*>::value, "Please apply think-cell boost patches, look at README.md for further information.");
 
 namespace tc{
 	namespace is_range_of_adl_barrier {
