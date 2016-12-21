@@ -25,6 +25,8 @@
 #include "noncopyable.h"
 
 #include <functional>
+#include <unordered_set>
+#include <unordered_map>
 
 namespace tc{
 
@@ -58,6 +60,11 @@ namespace tc{
 
 	template<typename LRng, typename RRng, typename Pred, std::enable_if_t<is_range_with_iterators< RRng >::value>* = nullptr>
 		bool equal(LRng const& lrng, RRng const& rrng, Pred&& pred) noexcept {
+		// TODO: this does not protect us against inputs such as transform(unordered_set)
+		static_assert(!tc::is_instance<std::unordered_set, LRng>::value, "");
+		static_assert(!tc::is_instance<std::unordered_map, LRng>::value, "");
+		static_assert(!tc::is_instance<std::unordered_set, RRng>::value, "");
+		static_assert(!tc::is_instance<std::unordered_map, RRng>::value, "");
 
 		equal_impl::is_equal_elem<RRng, Pred> equalpred(rrng, std::forward<Pred>(pred));
 		tc::for_each(lrng, std::ref(equalpred));

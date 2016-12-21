@@ -13,6 +13,7 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 
 #pragma once
+#include "const_forward.h"
 #include "compare.h"
 #include "implements_compare.h"
 #include "storage_for.h"
@@ -73,13 +74,6 @@ namespace tc {
 				: array(func_tag{}, func, std::make_index_sequence<N>()) 
 			{}
 		private:
-			template<typename T>
-			using const_forward_t = std::conditional_t<std::is_lvalue_reference<T>::value, T, T const&&>;
-
-			template <typename T, typename U>
-			static constexpr const_forward_t<T> const_forward(U&& u) {
-				return static_cast<const_forward_t<T>>(u);
-			}
 			template<
 				typename... Params,
 				std::size_t ...IndexPack,

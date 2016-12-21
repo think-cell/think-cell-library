@@ -110,6 +110,8 @@ namespace tc {
 	auto ptr_end(Rng&& rng) noexcept return_decltype(
 		tc::make_mutable_ptr(raw_ptr( rng.data() )) + rng.size()
 	)
+
+	TC_HAS_EXPR(ptr_begin, tc::ptr_begin(std::declval<T>()))
 	
 	//-------------------------------------------------------------------------------------------------------------------------
 	// fwd decls 
@@ -204,7 +206,7 @@ namespace tc {
 			static auto end_index(sub_range<Rng>&, sub_range<Rhs>& rhs) noexcept
 				return_decltype( rhs.end_index() )
 
-			// Fallback for is_compatible_range below
+			// Fallback for delayed_test_conversion_to_index below
 			struct incompatible_index final {};
 			static incompatible_index begin_index(sub_range<Rng>&, ...) noexcept;
 		};
@@ -242,27 +244,16 @@ namespace tc {
 					) )>;
 			};
 
-#ifdef _MSC_VER // compiler bug ?
-			template<std::size_t N>
-			struct delayed_test_conversion_to_index<sub_range(&)[N]> : std::false_type {};
-
-			template<std::size_t N>
-			struct delayed_test_conversion_to_index<sub_range const(&)[N]> : std::false_type {};
-#endif
-			
-			template<typename RngOther>
-			using is_compatible_range =
-				typename boost::mpl::eval_if_c<
-					is_range_with_iterators<RngOther>::value,
-					delayed_test_conversion_to_index<RngOther>,
-					std::false_type
-				>::type;
 		public:
 			// default ctor (for deferred initialization)
 			sub_range() noexcept
 			{}
 
-			template<typename RngOther, std::enable_if_t< is_compatible_range<RngOther>::value >* =nullptr> 
+			template<typename RngOther, std::enable_if_t< std::conditional_t<
+					is_range_with_iterators<RngOther>::value,
+					delayed_test_conversion_to_index<RngOther>,
+					std::false_type
+			>::type::value >* =nullptr> 
 			sub_range( RngOther&& rng ) noexcept
 				: base_( aggregate_tag(), whole_range_sub_range_helper<Rng>::base_range(
 					std::forward<RngOther>(rng) 
@@ -349,7 +340,7 @@ namespace tc {
 			using iterator = typename boost::range_iterator< std::remove_reference_t< typename reference_or_value< Rng >::reference > >::type;
 			using const_iterator = typename boost::range_iterator< std::remove_reference_t< typename reference_or_value< Rng >::const_reference > >::type;
 
-			const_iterator make_iterator( index idx ) const &  noexcept {
+			const_iterator make_iterator( index idx ) const & noexcept {
 				return base_::base_range().make_iterator(tc_move(idx));
 			}
 
@@ -863,7 +854,7 @@ namespace tc {
 	struct return_void final {
 		using type = void;
 
-		static type pack_bound(typename boost::range_iterator< std::remove_reference_t<Rng> >::type, Rng&&) noexcept {}
+		static type pack_border(typename boost::range_iterator< std::remove_reference_t<Rng> >::type, Rng&&) noexcept {}
 		template<typename Ref>
 		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type, Rng&&, Ref&&) noexcept {}
 		static type pack_no_element(Rng&& rng) noexcept {}
@@ -878,7 +869,7 @@ namespace tc {
 	struct return_element_before final {
 		using type = typename boost::range_iterator< std::remove_reference_t<Rng> >::type;
 
-		static type pack_bound(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng) noexcept {
+		static type pack_border(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng) noexcept {
 			_ASSERT(it != boost::begin(rng));
 			return boost::prior(it);
 		}
@@ -890,7 +881,7 @@ namespace tc {
 	struct return_border final {
 		using type = typename boost::range_iterator< std::remove_reference_t<Rng> >::type;
 
-		static type pack_bound(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng) noexcept {
+		static type pack_border(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng) noexcept {
 			return it;
 		}
 	};
@@ -899,7 +890,7 @@ namespace tc {
 	struct return_border_index final {
 		using type = tc::size_proxy< typename boost::range_size< std::remove_reference_t<Rng> >::type >;
 
-		static type pack_bound(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng) noexcept {
+		static type pack_border(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng) noexcept {
 			return tc::verify_class<type>(it - boost::begin(rng));
 		}
 	};
@@ -910,7 +901,7 @@ namespace tc {
 	struct return_take final {
 		using type = typename make_sub_range_result<Rng>::type;
 
-		static type pack_bound(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng) noexcept {
+		static type pack_border(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng) noexcept {
 			return tc::take(std::forward<Rng>(rng), it);
 		}
 	};
@@ -919,7 +910,7 @@ namespace tc {
 	struct return_drop final {
 		using type = decltype(tc::drop(std::declval<Rng>(), boost::begin(std::declval<Rng&>())));
 
-		static type pack_bound(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng) noexcept {
+		static type pack_border(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng) noexcept {
 			return tc::drop(std::forward<Rng>(rng), it);
 		}
 	};
@@ -933,6 +924,10 @@ namespace tc {
 
 		template<typename Anything, typename Ref>
 		static type pack_element(Anything&&, Rng&&, Ref&&) noexcept {
+			return true;
+		}
+		template<typename Anything, typename It>
+		static type pack_view(Anything&&, It&&, It&&) noexcept {
 			return true;
 		}
 		static type pack_no_element(Rng&& rng) noexcept {
@@ -1071,8 +1066,11 @@ namespace tc {
 		using type = typename boost::range_iterator< std::remove_reference_t<Rng> >::type;
 
 		template<typename Ref>
-		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng, Ref&&) noexcept {
+		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&&, Ref&&) noexcept {
 			return boost::next(it);
+		}
+		static type pack_view(Rng&&, typename boost::range_iterator< std::remove_reference_t<Rng> >::type, typename boost::range_iterator< std::remove_reference_t<Rng> >::type itEnd) noexcept {
+			return itEnd;
 		}
 		static type pack_no_element(Rng&& rng) noexcept {
 			_ASSERTFALSE;
@@ -1088,6 +1086,9 @@ namespace tc {
 		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng, Ref&&) noexcept {
 			return boost::next(it);
 		}
+		static type pack_view(Rng&&, typename boost::range_iterator< std::remove_reference_t<Rng> >::type, typename boost::range_iterator< std::remove_reference_t<Rng> >::type itEnd) noexcept {
+			return itEnd;
+		}
 		static type pack_no_element(Rng&& rng) noexcept {
 			return boost::begin(rng);
 		}
@@ -1100,6 +1101,9 @@ namespace tc {
 		template<typename Ref>
 		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&&, Ref&&) noexcept {
 			return it;
+		}
+		static type pack_view(Rng&&, typename boost::range_iterator< std::remove_reference_t<Rng> >::type itBegin, typename boost::range_iterator< std::remove_reference_t<Rng> >::type) noexcept {
+			return itBegin;
 		}
 		static type pack_no_element(Rng&& rng) noexcept {
 			return boost::end(rng);
@@ -1116,6 +1120,9 @@ namespace tc {
 		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng, Ref&&) noexcept {
 			return tc::take(std::forward<Rng>(rng), it);
 		}
+		static type pack_view(Rng&& rng, typename boost::range_iterator< std::remove_reference_t<Rng> >::type itBegin, typename boost::range_iterator< std::remove_reference_t<Rng> >::type) noexcept {
+			return tc::take(std::forward<Rng>(rng), itBegin);
+		}
 		static type pack_no_element(Rng&& rng) noexcept {
 			_ASSERTFALSE;
 			// safe choice is empty because result may be empty
@@ -1131,6 +1138,9 @@ namespace tc {
 		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng, Ref&&) noexcept {
 			return tc::take(std::forward<Rng>(rng), it);
 		}
+		static type pack_view(Rng&& rng, typename boost::range_iterator< std::remove_reference_t<Rng> >::type itBegin, typename boost::range_iterator< std::remove_reference_t<Rng> >::type) noexcept {
+			return tc::take(std::forward<Rng>(rng), itBegin);
+		}
 		static type pack_no_element(Rng&& rng) noexcept {
 			return tc::take(std::forward<Rng>(rng), boost::begin(rng));
 		}
@@ -1144,6 +1154,9 @@ namespace tc {
 		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng, Ref&&) noexcept {
 			return tc::take(std::forward<Rng>(rng), it);
 		}
+		static type pack_view(Rng&& rng, typename boost::range_iterator< std::remove_reference_t<Rng> >::type itBegin, typename boost::range_iterator< std::remove_reference_t<Rng> >::type) noexcept {
+			return tc::take(std::forward<Rng>(rng), itBegin);
+		}
 		static type pack_no_element(Rng&& rng) noexcept {
 			return tc::take(std::forward<Rng>(rng), boost::end(rng));
 		}
@@ -1156,6 +1169,9 @@ namespace tc {
 		template<typename Ref>
 		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng, Ref&&) noexcept {
 			return tc::take(std::forward<Rng>(rng), boost::next(it));
+		}
+		static type pack_view(Rng&& rng, typename boost::range_iterator< std::remove_reference_t<Rng> >::type, typename boost::range_iterator< std::remove_reference_t<Rng> >::type itEnd) noexcept {
+			return tc::take(std::forward<Rng>(rng), itEnd);
 		}
 		static type pack_no_element(Rng&& rng) noexcept {
 			_ASSERTFALSE;
@@ -1172,6 +1188,9 @@ namespace tc {
 		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng, Ref&&) noexcept {
 			return tc::take(std::forward<Rng>(rng), boost::next(it));
 		}
+		static type pack_view(Rng&& rng, typename boost::range_iterator< std::remove_reference_t<Rng> >::type, typename boost::range_iterator< std::remove_reference_t<Rng> >::type itEnd) noexcept {
+			return tc::take(std::forward<Rng>(rng), itEnd);
+		}
 		static type pack_no_element(Rng&& rng) noexcept {
 			return tc::take(std::forward<Rng>(rng), boost::begin(rng));
 		}
@@ -1185,6 +1204,9 @@ namespace tc {
 		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng, Ref&&) noexcept {
 			return tc::take(std::forward<Rng>(rng), boost::next(it));
 		}
+		static type pack_view(Rng&& rng, typename boost::range_iterator< std::remove_reference_t<Rng> >::type, typename boost::range_iterator< std::remove_reference_t<Rng> >::type itEnd) noexcept {
+			return tc::take(std::forward<Rng>(rng), itEnd);
+		}
 		static type pack_no_element(Rng&& rng) noexcept {
 			return tc::take(std::forward<Rng>(rng), boost::end(rng));
 		}
@@ -1197,6 +1219,9 @@ namespace tc {
 		template<typename Ref>
 		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng, Ref&&) noexcept {
 			return tc::drop(std::forward<Rng>(rng), it);
+		}
+		static type pack_view(Rng&& rng, typename boost::range_iterator< std::remove_reference_t<Rng> >::type itBegin, typename boost::range_iterator< std::remove_reference_t<Rng> >::type) noexcept {
+			return tc::drop(std::forward<Rng>(rng), itBegin);
 		}
 		static type pack_no_element(Rng&& rng) noexcept {
 			_ASSERTFALSE;
@@ -1213,6 +1238,9 @@ namespace tc {
 		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng, Ref&&) noexcept {
 			return tc::drop( std::forward<Rng>(rng), it );
 		}
+		static type pack_view(Rng&& rng, typename boost::range_iterator< std::remove_reference_t<Rng> >::type itBegin, typename boost::range_iterator< std::remove_reference_t<Rng> >::type) noexcept {
+			return tc::drop(std::forward<Rng>(rng), itBegin);
+		}
 		static type pack_no_element(Rng&& rng) noexcept {
 			return tc::drop( std::forward<Rng>(rng), boost::end(rng));
 		}
@@ -1225,6 +1253,9 @@ namespace tc {
 		template<typename Ref>
 		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng, Ref&&) noexcept {
 			return tc::drop(std::forward<Rng>(rng), it);
+		}
+		static type pack_view(Rng&& rng, typename boost::range_iterator< std::remove_reference_t<Rng> >::type itBegin, typename boost::range_iterator< std::remove_reference_t<Rng> >::type) noexcept {
+			return tc::drop(std::forward<Rng>(rng), itBegin);
 		}
 		static type pack_no_element(Rng&& rng) noexcept {
 			return tc::drop(std::forward<Rng>(rng), boost::begin(rng));
@@ -1239,7 +1270,10 @@ namespace tc {
 		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng, Ref&&) {
 			return tc::drop(std::forward<Rng>(rng), boost::next(it));
 		}
-		static type pack_no_element(Rng&& rng) {
+		static type pack_view(Rng&& rng, typename boost::range_iterator< std::remove_reference_t<Rng> >::type, typename boost::range_iterator< std::remove_reference_t<Rng> >::type itEnd) noexcept {
+			return tc::drop(std::forward<Rng>(rng), itEnd);
+		}
+		static type pack_no_element(Rng&& rng) noexcept {
 			_ASSERTFALSE;
 			// safe choice is empty because result may be empty
 			return tc::drop(std::forward<Rng>(rng), boost::begin(rng));
@@ -1251,10 +1285,13 @@ namespace tc {
 		using type = decltype(tc::drop( std::declval<Rng>(), boost::begin(std::declval<Rng&>()) ));
 
 		template<typename Ref>
-		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng, Ref&&) {
+		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng, Ref&&) noexcept {
 			return tc::drop( std::forward<Rng>(rng), boost::next(it) );
 		}
-		static type pack_no_element(Rng&& rng) {
+		static type pack_view(Rng&& rng, typename boost::range_iterator< std::remove_reference_t<Rng> >::type, typename boost::range_iterator< std::remove_reference_t<Rng> >::type itEnd) noexcept {
+			return tc::drop(std::forward<Rng>(rng), itEnd);
+		}
+		static type pack_no_element(Rng&& rng) noexcept {
 			return tc::drop(std::forward<Rng>(rng), boost::end(rng));
 		}
 	};
@@ -1266,6 +1303,9 @@ namespace tc {
 		template<typename Ref>
 		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng, Ref&&) noexcept {
 			return tc::drop( std::forward<Rng>(rng), boost::next(it) );
+		}
+		static type pack_view(Rng&& rng, typename boost::range_iterator< std::remove_reference_t<Rng> >::type, typename boost::range_iterator< std::remove_reference_t<Rng> >::type itEnd) noexcept {
+			return tc::drop(std::forward<Rng>(rng), itEnd);
 		}
 		static type pack_no_element(Rng&& rng) noexcept {
 			return tc::drop(std::forward<Rng>(rng), boost::begin(rng));
@@ -1338,6 +1378,27 @@ namespace tc {
 	template<typename T, std::enable_if_t<!tc::is_range_with_iterators< T >::value>* = nullptr>
 	tc::ptr_range<unsigned char const> as_blob(T const& t) noexcept {
 		return as_blob( tc::make_singleton_range(t) );
+	}
+
+	namespace assert_no_overlap_impl {
+		template< typename Lhs, typename Rhs>
+		void assert_no_overlap(Lhs const& lhs, Rhs const& rhs) noexcept {
+			_ASSERT(
+				reinterpret_cast<std::size_t>(tc::ptr_end(lhs)) <= reinterpret_cast<std::size_t>(tc::ptr_begin(rhs)) ||
+				reinterpret_cast<std::size_t>(tc::ptr_end(rhs)) <= reinterpret_cast<std::size_t>(tc::ptr_begin(lhs))
+			);
+		}
+	}
+
+	template< typename Lhs, typename Rhs, std::enable_if_t<!has_ptr_begin<Lhs>::value || !has_ptr_begin<Rhs>::value>* = nullptr >
+	void assert_no_overlap(Lhs const& lhs, Rhs const& rhs) noexcept {
+		assert_no_overlap_impl::assert_no_overlap(tc::as_pointers(tc::make_singleton_range(lhs)), tc::as_pointers(tc::make_singleton_range(rhs)));
+	}
+
+	template< typename Lhs, typename Rhs, std::enable_if_t<has_ptr_begin<Lhs>::value && has_ptr_begin<Rhs>::value>* = nullptr >
+	void assert_no_overlap(Lhs const& lhs, Rhs const& rhs) noexcept {
+		assert_no_overlap_impl::assert_no_overlap(tc::as_pointers(tc::make_singleton_range(lhs)), tc::as_pointers(tc::make_singleton_range(rhs)));
+		assert_no_overlap_impl::assert_no_overlap(lhs, rhs);
 	}
 
 	template<typename Func, typename Rng>

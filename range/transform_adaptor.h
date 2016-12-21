@@ -24,9 +24,6 @@
 #include "tc_move.h"
 #include "transform.h"
 
-#include <boost/mpl/eval_if.hpp>
-#include <boost/mpl/identity.hpp>
-
 namespace tc {
 	namespace transform_adaptor_impl {
 		struct transform_adaptor_access final {

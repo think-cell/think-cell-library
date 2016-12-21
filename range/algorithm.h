@@ -239,6 +239,33 @@ namespace tc {
 		return tc::find_last_if<RangeReturn>( std::forward<Rng>(rng), std::bind( tc::fn_equal_to(), std::placeholders::_1, std::cref(t) ) );
 	}
 
+
+	template<template<typename> class RangeReturn, typename RngWhere, typename RngWhat, typename Pred>
+	auto search(RngWhere&& rngWhere, RngWhat const& rngWhat, Pred pred) noexcept {
+		auto const itWhereEnd = boost::end(rngWhere);
+		auto const itWhatBegin = boost::begin(rngWhat);
+		auto const itWhatEnd = boost::end(rngWhat);
+		for (auto itWhere = boost::begin(rngWhere);; ++itWhere) {
+			auto itWhere2 = itWhere;
+			auto itWhat = itWhatBegin;
+			for (;;) {
+				if (itWhat == itWhatEnd) {
+					return RangeReturn<RngWhere>::pack_view(std::forward<RngWhere>(rngWhere), tc_move(itWhere), tc_move(itWhere2));
+				}
+				if (itWhere2 == itWhereEnd) {
+					return RangeReturn<RngWhere>::pack_no_element(std::forward<RngWhere>(rngWhere));
+				}
+				if (!pred(*itWhere2, *itWhat)) break;
+				++itWhere2;
+				++itWhat;
+			}
+		}
+	}
+	template<template<typename> class RangeReturn, typename RngWhere, typename RngWhat>
+	auto search(RngWhere&& rngWhere, RngWhat const& rngWhat) noexcept {
+		return tc::search<RangeReturn>(rngWhere, rngWhat, tc::fn_equal_to());
+	}
+
 	template<typename Rng>
 	typename boost::range_iterator< std::remove_reference_t<Rng> >::type plurality_element(Rng&& rng) noexcept {
 		_ASSERT( !tc::empty(rng) );
@@ -254,34 +281,34 @@ namespace tc {
 		).first );
 	}
 
-	template< typename Rng, typename Pred >
-	typename tc::return_drop_before_or_empty<Rng>::type trim_left_if(Rng&& rng, Pred&& pred) noexcept {
-		return tc::find_first_if<tc::return_drop_before_or_empty>( std::forward<Rng>(rng), tc::not_fn(std::forward<Pred>(pred)) );
+	template< template<typename> class RangeReturn, typename Rng, typename Pred >
+	typename RangeReturn<Rng>::type trim_left_if(Rng&& rng, Pred&& pred) MAYTHROW {
+		return RangeReturn<Rng>::pack_border( tc::find_first_if<tc::return_border_before_or_end>( rng, tc::not_fn(std::forward<Pred>(pred)) ), std::forward<Rng>(rng));
+	}
+
+	template< template<typename> class RangeReturn, typename Rng, typename Pred >
+	typename RangeReturn<Rng>::type trim_right_if(Rng&& rng, Pred&& pred) MAYTHROW {
+		return RangeReturn<Rng>::pack_border( tc::find_last_if<tc::return_border_after_or_begin>( rng, tc::not_fn(std::forward<Pred>(pred)) ), std::forward<Rng>(rng));
 	}
 
 	template< typename Rng, typename Pred >
-	typename tc::return_take_after_or_empty<Rng>::type trim_right_if(Rng&& rng, Pred&& pred) noexcept {
-		return tc::find_last_if<tc::return_take_after_or_empty>( std::forward<Rng>(rng), tc::not_fn(std::forward<Pred>(pred)) );
+	typename tc::return_drop_before_or_empty<typename tc::return_take_after_or_empty<Rng>::type>::type trim_if(Rng&& rng, Pred&& pred) MAYTHROW {
+		auto rngTrimmed = tc::trim_right_if<tc::return_take>( std::forward<Rng>(rng), pred );
+		return tc::trim_left_if<tc::return_drop>( tc_move(rngTrimmed), std::forward<Pred>(pred) );
 	}
 
-	template< typename Rng, typename Pred >
-	typename tc::return_drop_before_or_empty<typename tc::return_take_after_or_empty<Rng>::type>::type trim_if(Rng&& rng, Pred&& pred) noexcept {
-		auto rngTrimmed = tc::trim_right_if( std::forward<Rng>(rng), pred );
-		return tc::trim_left_if( tc_move(rngTrimmed), std::forward<Pred>(pred) );
+	template< template<typename> class RangeReturn, typename Rng, typename RngTrim >
+	typename RangeReturn<Rng>::type trim_left(Rng&& rng, RngTrim const& rngTrim) MAYTHROW {
+		return tc::trim_left_if<RangeReturn>( std::forward<Rng>(rng), std::bind( tc::fn_find_first<tc::return_bool>(), std::cref(rngTrim), std::placeholders::_1 ) );
 	}
 
-	template< typename Rng, typename RngTrim >
-	typename tc::return_drop_before_or_empty<Rng>::type trim_left(Rng&& rng, RngTrim const& rngTrim) noexcept {
-		return tc::trim_left_if( std::forward<Rng>(rng), std::bind( tc::fn_find_first<tc::return_bool>(), std::cref(rngTrim), std::placeholders::_1 ) );
-	}
-
-	template< typename Rng, typename RngTrim >
-	typename tc::return_take_after_or_empty<Rng>::type trim_right(Rng&& rng, RngTrim const& rngTrim) noexcept {
-		return tc::trim_right_if( std::forward<Rng>(rng), std::bind( tc::fn_find_first<tc::return_bool>(), std::cref(rngTrim), std::placeholders::_1 ) );
+	template< template<typename> class RangeReturn, typename Rng, typename RngTrim >
+	typename RangeReturn<Rng>::type trim_right(Rng&& rng, RngTrim const& rngTrim) MAYTHROW {
+		return tc::trim_right_if<RangeReturn>( std::forward<Rng>(rng), std::bind( tc::fn_find_first<tc::return_bool>(), std::cref(rngTrim), std::placeholders::_1 ) );
 	}
 
 	template< typename Rng, typename RngTrim >
-	typename tc::return_drop_before_or_empty<typename tc::return_take_after_or_empty<Rng>::type>::type trim(Rng&& rng, RngTrim const& rngTrim) noexcept {
+	typename tc::return_drop_before_or_empty<typename tc::return_take_after_or_empty<Rng>::type>::type trim(Rng&& rng, RngTrim const& rngTrim) MAYTHROW {
 		return tc::trim_if( std::forward<Rng>(rng), std::bind( tc::fn_find_first<tc::return_bool>(), std::cref(rngTrim), std::placeholders::_1 ) );
 	}
 
@@ -318,6 +345,7 @@ namespace tc {
 
 	template< typename Cont, typename Rng, std::enable_if_t<!has_mem_fn_lower_bound<Cont>::value && !has_mem_fn_hash_function<Cont>::value>* = nullptr>
 	Cont& cont_assign(Cont& cont, Rng&& rng) MAYTHROW {
+		tc::assert_no_overlap(cont, std::forward<Rng>(rng));
 		tc::cont_clear(cont);
 		tc::cont_append<tc::return_void>(cont, std::forward<Rng>(rng)); // MAYTHROW
 		return cont;
@@ -325,6 +353,7 @@ namespace tc {
 
 	template< typename Cont, typename Rng, std::enable_if_t<has_mem_fn_lower_bound<Cont>::value || has_mem_fn_hash_function<Cont>::value>* = nullptr>
 	Cont& cont_assign(Cont& cont, Rng&& rng) noexcept {
+		tc::assert_no_overlap(cont, std::forward<Rng>(rng));
 		tc::cont_clear(cont);
 		tc::cont_must_insert_range(cont, std::forward<Rng>(rng));
 		return cont;
@@ -419,12 +448,10 @@ namespace tc {
 	//	- no more than O(log N) memory operations
 
 	template< typename Cont >
-	typename boost::range_size< Cont >::type cont_extended_memory(Cont const& cont) noexcept {
+	typename boost::range_size< Cont >::type cont_extended_memory(Cont const& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type n=2) noexcept {
 		// factor*cont.size() does not suffice for memory operation guarantee
 		// 64 bit is enough to hold any memory money can buy
-		return static_cast< typename Cont::size_type >(
-			static_cast<std::uint64_t>(cont.capacity())*8/5
-		);
+		return tc::max(n,static_cast< typename Cont::size_type >(static_cast<std::uint64_t>(cont.capacity())*8/5));
 	}
 
 	template< typename Cont, std::enable_if_t<!has_mem_fn_reserve<Cont>::value>* = nullptr >
@@ -434,7 +461,7 @@ namespace tc {
 	template< typename Cont, std::enable_if_t<has_mem_fn_reserve<Cont>::value>* = nullptr >
 	void cont_reserve( Cont& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type n ) noexcept {
 		if( cont.capacity()<n ) {
-			NOEXCEPT( cont.reserve(tc::max(cont_extended_memory(cont),n)) );
+			NOEXCEPT( cont.reserve(cont_extended_memory(cont,n) ));
 		}
 	}
 
@@ -582,7 +609,7 @@ namespace tc {
 		}
 		try {
 			tc::for_each(std::forward<Rng>(rng), tc::cont_append_adl_barrier::mem_fn_emplace_back<Cont>(cont)); // MAYTHROW
-			return RangeReturn<Cont&>::pack_bound(
+			return RangeReturn<Cont&>::pack_border(
 				oit ? boost::next(*oit) : boost::begin(cont),
 				cont
 			);
@@ -598,7 +625,7 @@ namespace tc {
 	typename RangeReturn<Cont&>::type cont_append(Cont& cont, Rng&& rng) MAYTHROW {
 		typename Cont::size_type const nOffset = cont.size();
 		try {
-			return RangeReturn<Cont&>::pack_bound(
+			return RangeReturn<Cont&>::pack_border(
 				cont.insert(boost::end(cont), boost::begin(rng), boost::end(rng)),
 				cont
 			);
@@ -616,7 +643,7 @@ namespace tc {
 		typename Cont::size_type const nOffset = cont.size();
 		try {
 			tc::for_each(std::forward<Rng>(rng), tc::cont_append_adl_barrier::mem_fn_emplace_back<Cont>(cont)); // MAYTHROW
-			return RangeReturn<Cont&>::pack_bound(
+			return RangeReturn<Cont&>::pack_border(
 				tc::begin_next(cont,nOffset),
 				cont
 			);
@@ -634,7 +661,7 @@ namespace tc {
 		tc::cont_reserve(cont, nOffset + tc::size(rng));
 		try {
 			tc::for_each(std::forward<Rng>(rng), tc::cont_append_adl_barrier::mem_fn_emplace_back<Cont>(cont)); // MAYTHROW
-			return RangeReturn<Cont&>::pack_bound(
+			return RangeReturn<Cont&>::pack_border(
 				tc::begin_next(cont,nOffset),
 				cont
 			);
@@ -693,7 +720,7 @@ namespace tc {
 		}
 
 
-#ifdef _DEBUG
+#if defined _DEBUG && !defined __clang__
 		template<typename Cont>
 		struct container_with_sentinel final {
 			using type = Cont;
@@ -711,7 +738,7 @@ namespace tc {
 
 			// sentinel to detect buffer overrun
 			constexpr typename boost::range_size<Cont>::type nSentinel=
-#ifdef _DEBUG
+#if defined _DEBUG && !defined __clang__
 				1;
 			typename container_with_sentinel<Cont>::type
 #else
@@ -723,14 +750,14 @@ namespace tc {
 
 			for (;;) {
 				auto const nSize =
-#ifdef _DEBUG
+#if defined _DEBUG && !defined __clang__
 				 [&]() noexcept {
 					tc::uninitialize(tc_back(cont));
 					scope_exit( _ASSERTDEBUG( !tc::check_initialized(tc_back(cont))) );
 					return 
 #endif
 						func(tc::ptr_begin(cont), tc::size(cont)-nSentinel);
-#ifdef _DEBUG
+#if defined _DEBUG && !defined __clang__
 				}();
 #endif
 				if (nSize < tc::size(cont)-nSentinel) {
@@ -738,7 +765,7 @@ namespace tc {
 					tc::take_first_inplace(cont, nSize);
 					tc::assert_no_null_terminator(cont);
 					return
-#ifdef _DEBUG
+#if defined _DEBUG && !defined __clang__
 						tc::make_container<Cont>(cont)
 #else
 						cont
@@ -756,7 +783,7 @@ namespace tc {
 
 			// sentinel to detect buffer overrun
 			constexpr typename boost::range_size<Cont>::type nSentinel=
-#ifdef _DEBUG
+#if defined _DEBUG && !defined __clang__
 				1;
 			typename container_with_sentinel<Cont>::type
 #else
@@ -769,21 +796,21 @@ namespace tc {
 
 			for (;;) {
 				auto const nSize = 
-#ifdef _DEBUG
+#if defined _DEBUG && !defined __clang__
 				 [&]() MAYTHROW {
 					tc::fill_with_dead_pattern(tc_back(cont));
 					scope_exit( tc::assert_dead_pattern(tc_back(cont)) );
 					return 
 #endif
 					func(tc::ptr_begin(cont), tc::size(cont)-nSentinel); // MAYTHROW
-#ifdef _DEBUG
+#if defined _DEBUG && !defined __clang__
 				}();
 #endif
 				if (nSize <= tc::size(cont)-nSentinel) {
 					_ASSERT(0 <= nSize);
 					tc::take_first_inplace(cont, nSize);
 					return
-#ifdef _DEBUG
+#if defined _DEBUG && !defined __clang__
 						tc::make_container<Cont>(cont)
 #else
 						cont
@@ -1184,11 +1211,11 @@ namespace tc {
 
 		range_filter(tc::sub_range< Cont& >& rng) noexcept : m_rng(rng)	{
 			_ASSERT(boost::end(m_rng)==boost::end(Container())); // otherwise, we would need to keep [ end(m_rng), end(Container()) ) inside dtor
-			m_rngfilter.ctor(Container(), boost::begin(rng));
+			m_orngfilter.ctor(Container(), boost::begin(rng));
 		}
 
 		void keep(iterator it) & noexcept {
-			m_rngfilter->keep(it);
+			m_orngfilter->keep(it);
 		}
 
 		iterator begin() const& noexcept {
@@ -1196,18 +1223,18 @@ namespace tc {
 		}
 
 		iterator end() const& noexcept {
-			return boost::end(*m_rngfilter);
+			return boost::end(*m_orngfilter);
 		}
 
 		void pop_back() & noexcept {
 			_ASSERT(boost::end(*this)!=boost::begin(*this));
-			m_rngfilter->pop_back();
+			m_orngfilter->pop_back();
 		}
 
 		~range_filter() {
 			auto& cont=Container();
 			auto const nIndexBegin=boost::begin(m_rng)-boost::begin(cont);
-			m_rngfilter.dtor(); // erases cont tail and invalidates iterators in m_rng
+			m_orngfilter.dtor(); // erases cont tail and invalidates iterators in m_rng
 			m_rng=tc::drop_first(cont, nIndexBegin);
 		}
 	private:
@@ -1216,7 +1243,7 @@ namespace tc {
 		}
 
 		tc::sub_range< Cont& >& m_rng;
-		tc::storage_for< tc::range_filter<Cont> > m_rngfilter;
+		tc::storage_for< tc::range_filter<Cont> > m_orngfilter;
 	};
 
 	/////////////////////////////////////////////////////
@@ -1669,29 +1696,29 @@ namespace tc {
 		if(ait[0]==itEnd) {
 			return RangeReturn<Rng>::pack_no_element(std::forward<Rng>(rng));
 		} else {
-			tc::storage_for< tc::reference_or_value<typename boost::range_reference< std::remove_reference_t<Rng> >::type> > aref[2];
-			aref[0].ctor( aggregate_tag(), *ait[0] ); // MAYTHROW
+			tc::storage_for< tc::reference_or_value<typename boost::range_reference< std::remove_reference_t<Rng> >::type> > aoref[2];
+			aoref[0].ctor( aggregate_tag(), *ait[0] ); // MAYTHROW
 			for(;;){
 				for( int i=0; i!=2; ++i ) { // we expect the compiler to unroll this loop
-					// aref[i] is constructed, aref[1-i] is not constructed
-					scope_exit( aref[i].dtor() ); // also required in case of exception
+					// aoref[i] is constructed, aoref[1-i] is not constructed
+					scope_exit( aoref[i].dtor() ); // also required in case of exception
 					ait[1-i]=ait[i];
 					for(;;) {
-						// aref[i] is constructed, aref[1-i] is not constructed
+						// aoref[i] is constructed, aoref[1-i] is not constructed
 						++ait[1-i];
 						if(ait[1-i]==itEnd) {
-							return RangeReturn<Rng>::pack_element(tc_move_always(ait[i]),std::forward<Rng>(rng),**tc_move_always(aref[i]));
+							return RangeReturn<Rng>::pack_element(tc_move_always(ait[i]),std::forward<Rng>(rng),**tc_move_always(aoref[i]));
 						}
-						aref[1-i].ctor( aggregate_tag(), *ait[1-i] ); // MAYTHROW
+						aoref[1-i].ctor( aggregate_tag(), *ait[1-i] ); // MAYTHROW
 						try {
-							if( pred(**aref[1-i],**aref[i]) ) { // MAYTHROW
-								break; // only path where aref[1-i] is not destroyed
+							if( pred(**aoref[1-i],**aoref[i]) ) { // MAYTHROW
+								break; // only path where aoref[1-i] is not destroyed
 							}
 						} catch(...) {
-							aref[1-i].dtor();
+							aoref[1-i].dtor();
 							throw;
 						}
-						aref[1-i].dtor();
+						aoref[1-i].dtor();
 					}
 				}
 			}

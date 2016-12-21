@@ -32,14 +32,14 @@ namespace tc {
 		typename RangeReturn<Rng>::type
 		partition_point(Rng&& rng, UnaryPredicate&& pred) noexcept {
 			return RangeReturn<Rng>::
-				pack_bound(iterator::partition_point(boost::begin(rng), boost::end(rng), std::forward<UnaryPredicate>(pred)), std::forward<Rng>(rng));
+				pack_border(iterator::partition_point(boost::begin(rng), boost::end(rng), std::forward<UnaryPredicate>(pred)), std::forward<Rng>(rng));
 		}
 
 		template< template<typename> class RangeReturn, typename Rng, typename Value >
 		typename RangeReturn<Rng>::type
 		lower_bound(Rng&& rng, Value const& val) noexcept {
 			return RangeReturn<Rng>::
-				pack_bound(iterator::lower_bound(boost::begin(rng), boost::end(rng), val),
+				pack_border(iterator::lower_bound(boost::begin(rng), boost::end(rng), val),
 					 std::forward<Rng>(rng));
 		}
 
@@ -47,7 +47,7 @@ namespace tc {
 		typename RangeReturn<Rng>::type
 		lower_bound(Rng&& rng, Value const& val, SortPredicate&& pred) noexcept {
 			return RangeReturn<Rng>::
-				pack_bound(iterator::lower_bound(boost::begin(rng), boost::end(rng), val, std::forward<SortPredicate>(pred)),
+				pack_border(iterator::lower_bound(boost::begin(rng), boost::end(rng), val, std::forward<SortPredicate>(pred)),
 					 std::forward<Rng>(rng));
 		}
 
@@ -55,7 +55,7 @@ namespace tc {
 		typename RangeReturn<Rng>::type
 		upper_bound(Rng&& rng, Value const& val) noexcept {
 			return RangeReturn<Rng>::
-				pack_bound(iterator::upper_bound(boost::begin(rng), boost::end(rng), val),
+				pack_border(iterator::upper_bound(boost::begin(rng), boost::end(rng), val),
 					 std::forward<Rng>(rng));
 		}
 
@@ -63,7 +63,7 @@ namespace tc {
 		typename RangeReturn<Rng>::type
 		upper_bound(Rng&& rng, Value const& val, SortPredicate&& pred) noexcept {
 			return RangeReturn<Rng>::
-				pack_bound(iterator::upper_bound(boost::begin(rng), boost::end(rng), val, std::forward<SortPredicate>(pred)),
+				pack_border(iterator::upper_bound(boost::begin(rng), boost::end(rng), val, std::forward<SortPredicate>(pred)),
 					 std::forward<Rng>(rng));
 		}
 

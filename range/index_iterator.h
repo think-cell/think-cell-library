@@ -23,6 +23,8 @@
 #include <boost/iterator/iterator_facade.hpp> 
 #pragma warning( pop )
 
+#include <boost/mpl/identity.hpp>
+
 namespace tc {
 
 	template< typename DerivedConst >
@@ -40,17 +42,14 @@ namespace tc {
 		using value_type = tc::decay_t<reference>;
 
 		template<typename Traversal>
-		struct difference_type final {
-			using type =
-				typename boost::mpl::eval_if_c<
-					std::is_convertible< Traversal, boost::iterators::random_access_traversal_tag >::value,
-					delayed_difference_type<IndexRange>,
-					boost::mpl::identity<
-						/*default of iterator_facade, needed to compile interfaces relying on difference_tye:*/
-						std::ptrdiff_t
-					>
-				>::type;
-		};
+		struct difference_type final : std::conditional_t<
+			std::is_convertible< Traversal, boost::iterators::random_access_traversal_tag >::value,
+			delayed_difference_type<IndexRange>,
+			boost::mpl::identity<
+				/*default of iterator_facade, needed to compile interfaces relying on difference_tye:*/
+				std::ptrdiff_t
+			>
+		> {};
 	};
 
 	template<typename Rng, typename Traversal>

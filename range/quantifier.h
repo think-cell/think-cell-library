@@ -49,16 +49,6 @@ bool all_of(Rng&& rng, Pred&& pred) MAYTHROW {
 	return all_of( tc::transform( std::forward<Rng>(rng), std::forward<Pred>(pred) ) );
 }
 
-template< typename Rng >
-bool none_of(Rng&& rng) MAYTHROW {
-	return !any_of( std::forward<Rng>(rng) );
-}
-
-template< typename Rng, typename Pred >
-bool none_of(Rng&& rng, Pred&& pred) MAYTHROW {
-	return !any_of( std::forward<Rng>(rng), std::forward<Pred>(pred) );
-}
-
 // pair is in same order as if minmax_element( ..., operator<( bool, bool ) ) would have been used.
 template< typename Rng >
 std::pair<bool,bool> all_any_of( Rng const& rng ) MAYTHROW {

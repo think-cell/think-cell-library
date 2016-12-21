@@ -52,7 +52,7 @@ namespace tc {
 		} else {
 			auto const itEnd = boost::end(rng);
 			auto it = boost::begin(rng);
-			// TODO C++17: remove storage_for and use aggregate initialization: ait(tc::func_tag(), [&](std::size_t) noexcept { return it++; })
+			// TODO C++17: remove storage_for and use aggregate initialization: aoit(tc::func_tag(), [&](std::size_t) noexcept { return it++; })
 			// This workaround is only needed because GCC and Clang require a copy ctor for aggregate initialization, which we cannot provide for iterator_cache.
 			// C++17 should solve this, because copy elision is mandatory then.
 			tc::array<
@@ -62,19 +62,19 @@ namespace tc {
 					>
 				>,
 				N
-			> ait;
+			> aoit;
 			for(std::size_t n=0; n<N; n++) {
-				ait[n].ctor(it++);
+				aoit[n].ctor(it++);
 			}
-			scope_exit(	tc::for_each(ait, [](auto const& it) noexcept { it.dtor(); }) )
+			scope_exit(	tc::for_each(aoit, [](auto const& it) noexcept { it.dtor(); }) )
 
 			for (;;) {
 				for (int n = 0; n<N; ++n) {
 					if (it == itEnd) {
-						return continue_if_not_break(func, *tc_move_always(*ait[n]), *tc_move_always(*ait[(n + i + 1) % N])...);
+						return continue_if_not_break(func, *tc_move_always(*aoit[n]), *tc_move_always(*aoit[(n + i + 1) % N])...);
 					}
-					RETURN_IF_BREAK(continue_if_not_break(func, *tc_move_always(*ait[n]), **ait[(n + i + 1) % N]...));
-					*ait[n] = it;
+					RETURN_IF_BREAK(continue_if_not_break(func, *tc_move_always(*aoit[n]), **aoit[(n + i + 1) % N]...));
+					*aoit[n] = it;
 					++it;
 				}
 			}

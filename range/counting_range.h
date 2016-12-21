@@ -31,6 +31,8 @@
 #pragma warning( pop )
 #endif
 
+#include <boost/mpl/identity.hpp>
+
 // By default, boost uses long long as counting_iterator<int>::difference_type,
 // which generates C4244 level 1 compiler warnings when cast back to int.
 // Most pragmatically, difference_type should reflect the type of a-b, thus counting_iterator<int>::difference_type is int,
@@ -53,8 +55,8 @@ namespace tc {
 	>;
 
 	// For random_access_iterator, use delayed_iterator_difference
-	template<typename Traversal>
-	using difference_type = typename boost::mpl::eval_if_c<
+	template <typename Traversal>
+	using difference_type = typename std::conditional_t<
 		std::is_same<Traversal, boost::iterators::random_access_traversal_tag>::value,
 		delayed_iterator_difference_type<T>,
 		boost::mpl::identity< boost::iterators::use_default >

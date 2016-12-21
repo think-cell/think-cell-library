@@ -16,15 +16,6 @@
 
 #include <boost/numeric/conversion/conversion_traits.hpp>
 
-#include <boost/mpl/if.hpp>
-#include <boost/mpl/vector.hpp>
-#include <boost/mpl/transform_view.hpp>
-#include <boost/mpl/zip_view.hpp>
-#include <boost/mpl/unpack_args.hpp>
-#include <boost/mpl/equal.hpp>
-#include <boost/mpl/min_element.hpp>
-#include <boost/mpl/identity.hpp>
-
 #include <type_traits>
 
 // Use if you have to check if an expression compiles, e.g., to check if an operator is defined, a cast is valid etc
@@ -638,10 +629,10 @@ namespace tc {
 	namespace transform_return_adl_barrier {
 		template<typename Func, typename TargetExpr, typename... SourceExpr>
 		struct transform_return final {
-			static constexpr bool bDecay=boost::mpl::eval_if_c<
+			static constexpr bool bDecay=std::conditional_t<
 				!tc::conjunction<std::is_reference<SourceExpr>...>::value && std::is_rvalue_reference<TargetExpr>::value
 				, delayed_returns_reference_to_argument<Func>
-				, boost::mpl::identity<std::false_type>
+				, std::false_type
 			>::type::value;
 			using type=std::conditional_t<
 				bDecay

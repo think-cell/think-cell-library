@@ -91,13 +91,7 @@ namespace tc {
 		  We adopt the same policy. \
 		- Values cannot alias. */ \
 		/* check for overlap of memory ranges, most general check for self-assignment I could come up with, even if it does not catch all cases, e.g., heap-allocated memory */ \
-		_ASSERT( tc::min( \
-			reinterpret_cast<std::size_t>(this)+sizeof(*this), \
-			reinterpret_cast<std::size_t>(std::addressof(s))+sizeof(s) \
-		)<=tc::max( \
-			reinterpret_cast<std::size_t>(this), \
-			reinterpret_cast<std::size_t>(std::addressof(s)) \
-		) ); \
+		tc::assert_no_overlap(*this, std::forward<S>(s)); \
 		tc::renew( *this, std::forward<S>(s) ); \
 		return *this; \
 	}

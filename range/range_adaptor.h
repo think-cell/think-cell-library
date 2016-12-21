@@ -72,7 +72,7 @@ namespace tc {
 			STATIC_VIRTUAL(distance_to_index)
 			STATIC_VIRTUAL(middle_point)
 
-			const_iterator make_iterator( index idx ) const &  noexcept {
+			const_iterator make_iterator( index idx ) const & noexcept {
 				return const_iterator(tc::derived_cast<Derived>(this),tc_move(idx));
 			}
 

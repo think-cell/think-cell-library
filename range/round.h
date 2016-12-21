@@ -386,43 +386,41 @@ namespace tc {
 
 		template< typename Num, typename Denom >
 		Num idiv( Num num, Denom denom, SRoundBanker ) noexcept {
-			static_assert( tc::is_actual_integer<Num>::value, "" );
-			static_assert( tc::is_actual_integer< Denom >::value, "" );
+			static_assert( tc::is_actual_integer_like<Num>::value, "" );
+			static_assert( tc::is_actual_integer_like< Denom >::value, "" );
 			static_assert( std::numeric_limits<Num>::is_signed==std::numeric_limits<Denom>::is_signed, "" );
 			_ASSERT( 0<denom );
-			auto halfdenom=std::div(denom,2);
-			if( 0==halfdenom.rem ) {
-				auto result2=std::div(num,halfdenom.quot);
-				if( 0==result2.rem ) {
-					switch_no_default( result2.quot%4 ) {
-					case -2:
-					case 0:
-					case 2:
-						break;
-					case 1:
-					case -3:
-						--num;
-						break;
-					case 3:
-					case -1:
-						++num;
-						break;
-					}
-				}
+			auto result = num / denom;
+			auto remainder = num - result * denom;
+			if(remainder<0) -tc::inplace(remainder);
+			switch_no_default(tc::compare(denom,remainder * 2)) {
+				case tc::order::equal:
+					if(result % 2 == 0) break;
+				case tc::order::less:
+					result += num < 0 ? -1 : 1;
+					break;
+				case tc::order::greater:
+					break;
 			}
-			return tc::numeric_cast<Num>( ( num<0 ? num-(denom-1)/2 : num+halfdenom.quot )/denom );
+			return tc::numeric_cast<Num>(result);
 		}
 	}
 
 	template< typename Num, typename Denom, typename Round, std::enable_if_t<
-		tc::is_actual_integer_like<Num>::value && tc::is_actual_integer_like< Denom >::value && std::numeric_limits<Num>::is_signed==std::numeric_limits<Denom>::is_signed
+		tc::is_actual_integer_like<Num>::value && tc::is_actual_integer_like< Denom >::value && std::numeric_limits<Num>::is_signed && std::numeric_limits<Denom>::is_signed
 	>* = nullptr>
-	Num idiv( Num num, Denom denom, Round round ) noexcept {
-		_ASSERT( 0!=denom );
-		if( denom<0 ) { // optimized away for unsigned denom
+		Num idiv(Num num, Denom denom, Round round) noexcept {
+		if (denom < 0) {
 			-tc::inplace(num);
 			-tc::inplace(denom);
 		}
+		return idiv_impl::idiv(num, denom, round);
+	}
+
+	template< typename Num, typename Denom, typename Round, std::enable_if_t<
+		tc::is_actual_integer_like<Num>::value && tc::is_actual_integer_like< Denom >::value && !std::numeric_limits<Num>::is_signed && !std::numeric_limits<Denom>::is_signed
+	>* = nullptr>
+	Num idiv( Num num, Denom denom, Round round ) noexcept {
 		return idiv_impl::idiv( num, denom, round );
 	}
 
@@ -430,7 +428,7 @@ namespace tc {
 		tc::is_actual_integer_like<Num>::value && tc::is_actual_integer_like< Denom >::value && std::numeric_limits<Num>::is_signed && !std::numeric_limits<Denom>::is_signed
 	>* = nullptr>
 	Num idiv( Num num, Denom denom, Round round ) noexcept {
-		return idiv_impl::idiv( num, tc::signed_cast(denom), round );
+		return idiv/*not idiv_impl::idiv*/( num, tc::signed_cast(denom), round );
 	}
 
 	template< typename Num, typename Denom, typename Round, std::enable_if_t<
@@ -559,6 +557,16 @@ namespace tc {
 	template<typename T, typename Num, typename Den>
 	T scale_muldiv(T const& x, Num const& num, Den const& den) noexcept {
 		return scale_muldiv(x, num, den, tc::roundNEAREST);
+	}
+
+	struct fraction {
+		int m_nNum;
+		int m_nDen;
+	};
+
+	template<typename T>
+	T scale_muldiv(T const& x, tc::fraction const& fracn) noexcept {
+		return scale_muldiv(x, fracn.m_nNum, fracn.m_nDen);
 	}
 }
 

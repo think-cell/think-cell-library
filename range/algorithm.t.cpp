@@ -48,15 +48,12 @@ UNITTESTDEF( quantifiers ) {
 
 	_ASSERT(! all_of(const_range, even));
 	_ASSERT(  any_of(const_range, even));
-	_ASSERT(!none_of(const_range, even));
 
 	_ASSERT(  all_of(all_even, even));
 	_ASSERT(  any_of(all_even, even));
-	_ASSERT(!none_of(all_even, even));
 
 	_ASSERT(! all_of(all_odd, even));
 	_ASSERT(! any_of(all_odd, even));
-	_ASSERT( none_of(all_odd, even));
 }
 
 UNITTESTDEF( sort_accumulate_each_unique_range_2 ) {
@@ -107,10 +104,10 @@ UNITTESTDEF(filter_no_self_assignment_of_rvalues) {
 
 UNITTESTDEF( trim_leftright_if ) {
 	tc::vector<int> v{1,2,3,4,5,6,7,7,7};
-	auto rng = trim_left_if(v, [] (int n) noexcept {return n<4;});
+	auto rng = trim_left_if<tc::return_drop>(v, [] (int n) noexcept {return n<4;});
 	_ASSERT(std::begin(rng) != std::end(rng));
 	_ASSERTEQUAL(tc::size(rng), 6);
-	_ASSERTEQUAL(tc::size(tc::trim_right_if(rng, [] (int n) noexcept {return n==7;})), 3);
+	_ASSERTEQUAL(tc::size(tc::trim_right_if<tc::return_take>(rng, [] (int n) noexcept {return n==7;})), 3);
 }
 
 UNITTESTDEF( is_sorted ) {
