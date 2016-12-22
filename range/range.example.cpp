@@ -16,8 +16,8 @@ void basic () {
 
    auto evenvr = tc::filter(v, [](const int& v){ return (v%2==0);});
 
-   for (auto& v: evenvr) {
-      std::cout << v << ", ";
+   for (auto& var: evenvr) {
+      std::cout << var << ", ";
    }
    std::cout << std::endl;
 }

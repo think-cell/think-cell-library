@@ -16,6 +16,8 @@
 #include "container.h" // tc::vector
 #include "range.t.h"
 
+#include <boost/core/ignore_unused.hpp>
+
 namespace {
 	using namespace tc;
 
@@ -86,6 +88,7 @@ UNITTESTDEF(filter_no_self_assignment_of_rvalues) {
 
 		S& operator=(S&& other) {
 			_ASSERT(&other != this);
+			boost::ignore_unused(other);
 			return *this;
 		}
 	};
@@ -114,40 +117,49 @@ UNITTESTDEF( is_sorted ) {
 	{
 		int a[]={0};
 		_ASSERT( tc::is_sorted(a) );
+		boost::ignore_unused(a);
 	}
 	{
 		int a[]={0,0};
 		_ASSERT( tc::is_sorted(a) );
+		boost::ignore_unused(a);
 	}
 	{
 		int a[]={0,1};
 		_ASSERT( tc::is_sorted(a) );
+		boost::ignore_unused(a);
 	}
 	{
 		int a[]={1,0};
 		_ASSERT( !tc::is_sorted(a) );
+		boost::ignore_unused(a);
 	}
 	{
 		int a[]={0};
 		_ASSERT( tc::is_strictly_sorted(a) );
+		boost::ignore_unused(a);
 	}
 	{
 		int a[]={0,0};
 		_ASSERT( !tc::is_strictly_sorted(a) );
+		boost::ignore_unused(a);
 	}
 	{
 		int a[]={0,1};
 		_ASSERT( tc::is_strictly_sorted(a) );
+		boost::ignore_unused(a);
 	}
 	{
 		int a[]={1,0};
 		_ASSERT( !tc::is_strictly_sorted(a) );
+		boost::ignore_unused(a);
 	}
 }
 
 UNITTESTDEF( make_vector_on_r_vector_is_identity ) {
 	tc::vector<int> v{1,2,3};
 	auto pvecdata = v.data();
+	boost::ignore_unused(pvecdata);
 
 	auto vNew = tc::make_vector(tc_move(v));
 	_ASSERT( vNew.data() == pvecdata );
@@ -177,6 +189,7 @@ UNITTESTDEF(find_closest_if) {
 		for (int nTarget = -1; nTarget < 4; ++nTarget) {
 			int nComparisonsMax = -1==nTarget ? 5 : nTarget<iStart ? 2*(iStart-nTarget) : 1+2*(nTarget-iStart);
 			_ASSERTEQUAL(find(std::initializer_list<IntCompareOnce>{{0},{1},{2},{3},{4}}, iStart, nTarget, nComparisonsMax), nTarget);
+			boost::ignore_unused(nComparisonsMax);
 		}
 	}
 }

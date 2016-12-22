@@ -142,7 +142,7 @@ namespace tc {
 			}
 
 #ifdef _CHECKS
-			bool all_at_end_index(index const& idx, std::index_sequence<>) const& noexcept {
+			bool all_at_end_index(index const&, std::index_sequence<>) const& noexcept {
 				return true;
 			}
 
