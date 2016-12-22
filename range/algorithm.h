@@ -861,7 +861,7 @@ namespace tc {
 	}
 
 	template< typename Cont, typename It, std::enable_if_t<!is_instance<std::multiset,Cont>::value && !is_instance<std::multimap,Cont>::value>* = nullptr >
-	It && verify_at_upper_bound(Cont const& cont, It&& it) noexcept {
+	It && verify_at_upper_bound(Cont const&, It&& it) noexcept {
 		return std::forward<It>(it);
 	}
 

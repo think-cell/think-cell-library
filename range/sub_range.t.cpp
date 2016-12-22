@@ -50,11 +50,14 @@ namespace {
 			}
 		};
 
+#pragma warning (push)
+#pragma warning (disable: 4505) //  unreferenced local function has been removed
 		static void test_make_sub_range_result() noexcept {
 			make_sub_range_result_tests<tc::vector<int>>::test();
 			make_sub_range_result_tests<std::string>::test();
 			//make_sub_range_result_tests<tc::bstr>::test();
 		}
+#pragma warning (pop)
 	}
 
 	//-------------------------------------------------------------------------------------------------------------------------

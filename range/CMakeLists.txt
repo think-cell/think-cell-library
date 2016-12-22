@@ -20,7 +20,6 @@ function(CreateStandalone CS_Dest)
 	endforeach()
 endfunction()
 
-
 # Require boost system library
 find_package(Boost 1.59 COMPONENTS system REQUIRED)
 include_directories(${Boost_INCLUDE_DIR})
@@ -29,10 +28,10 @@ set(LIBRARIES ${LIBRARIES} ${Boost_LIBRARIES})
 if (MSVC)
 	add_definitions(-DBOOST_ALL_NO_LIB -D_SCL_SECURE_NO_WARNINGS)
 
-	set(CMAKE_CXX_FLAGS_DEBUG "/D_DEBUG /MTd /Zi /Ob0 /Od /RTC1")
-    set(CMAKE_CXX_FLAGS_MINSIZEREL     "/MT /O1 /Ob1 /D NDEBUG")
-    set(CMAKE_CXX_FLAGS_RELEASE        "/MT /O2 /Ob2 /D NDEBUG")
-    set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/MT /Zi /O2 /Ob1 /D NDEBUG")
+	set(CMAKE_CXX_FLAGS_DEBUG          "/W4 /WX /MTd /Od /Ob0 /D_DEBUG /Zi /RTC1")
+	set(CMAKE_CXX_FLAGS_MINSIZEREL     "/W4 /WX /MT  /O1 /Ob1 /DNDEBUG")
+	set(CMAKE_CXX_FLAGS_RELEASE        "/W4 /WX /MT  /O2 /Ob2 /DNDEBUG")
+	set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/W4 /WX /MT  /O2 /Ob1 /DNDEBUG /Zi")
 else ()
 	add_definitions(-DCLANG)
 
@@ -108,7 +107,7 @@ set(Header
 	union_adaptor.h
 	unique_range_adaptor.h
 	zip_range.h
-   )
+)
 source_group(Header FILES ${Header})
 
 set(Tests
@@ -139,15 +138,12 @@ set(Build
 )
 source_group(Build FILES ${Build})
 
-
 # create a test runner
 add_definitions(-DPERFORMUNITTESTS -DBOOST_RANGE_ENABLE_CONCEPT_ASSERT=0)
 
 foreach(Example ${Examples})
 	add_executable(example_${Example} ${Build} ${Header} ${Tests} ${Example})
-    target_link_libraries(example_${Example} ${LIBRARIES})
+	target_link_libraries(example_${Example} ${LIBRARIES})
 endforeach()
 
 CreateStandalone("StandaloneRanges/Library/Utilities/Range" FILES ${Build} ${Header} ${Tests} ${Examples})
-
-

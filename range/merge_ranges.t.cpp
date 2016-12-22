@@ -76,6 +76,8 @@ UNITTESTDEF(zip_range_adaptor_test) {
 			[&](int const& n, int const& n2) noexcept {
 				VERIFYEQUAL(N, n) /= 2;
 				++VERIFYEQUAL(N2, n2);
+				boost::ignore_unused(n);
+				boost::ignore_unused(n2);
 			}
 		)
 	);

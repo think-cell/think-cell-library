@@ -881,7 +881,7 @@ namespace tc {
 	struct return_border final {
 		using type = typename boost::range_iterator< std::remove_reference_t<Rng> >::type;
 
-		static type pack_border(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng) noexcept {
+		static type pack_border(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&&) noexcept {
 			return it;
 		}
 	};
@@ -930,7 +930,7 @@ namespace tc {
 		static type pack_view(Anything&&, It&&, It&&) noexcept {
 			return true;
 		}
-		static type pack_no_element(Rng&& rng) noexcept {
+		static type pack_no_element(Rng&&) noexcept {
 			return false;
 		}
 	};
@@ -959,7 +959,7 @@ namespace tc {
 		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&&, Ref&&) noexcept {
 			return static_cast<type>(it);
 		}
-		static type pack_no_element(Rng&& rng) noexcept {
+		static type pack_no_element(Rng&&) noexcept {
 			return type{}; // value initialization to initialize pointers to nullptr
 		}
 	};
@@ -1083,7 +1083,7 @@ namespace tc {
 		using type = typename boost::range_iterator< std::remove_reference_t<Rng> >::type;
 
 		template<typename Ref>
-		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng, Ref&&) noexcept {
+		static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&&, Ref&&) noexcept {
 			return boost::next(it);
 		}
 		static type pack_view(Rng&&, typename boost::range_iterator< std::remove_reference_t<Rng> >::type, typename boost::range_iterator< std::remove_reference_t<Rng> >::type itEnd) noexcept {
