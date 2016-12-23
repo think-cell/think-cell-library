@@ -38,13 +38,13 @@
 		#define _ASSERTNOTIFYFALSE _ASSERTFALSE
 	#endif
 	#ifndef _ASSERTEQUAL
-			#define _ASSERTEQUAL(a, b) assert((a)==(b))
+			#define _ASSERTEQUAL(a, b) _ASSERT((a)==(b))
 	#endif
 	#ifndef _ASSERTINITIALIZED
 		#define _ASSERTINITIALIZED( expr ) (expr)
 	#endif
 	#ifndef _ASSERTPRINT
-		#define _ASSERTPRINT( cond, ... ) assert( cond )
+		#define _ASSERTPRINT( cond, ... ) _ASSERT( cond )
 	#endif
 	#ifndef VERIFYEQUAL
 		#define VERIFYEQUAL( expr, constant ) (expr)

@@ -21,7 +21,7 @@ namespace tc {
 			_ASSERT(-1!=t);
 		}
 		template<typename T, std::enable_if_t<!(tc::is_instance<tc::size_proxy,T>::value && std::is_signed<T>::value)>* =nullptr>
-		void AssertSizeProxy(T const& t) {}
+		void AssertSizeProxy(T const&) {}
 		
 		template<typename Better>
 		struct best_impl final {

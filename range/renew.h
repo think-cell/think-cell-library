@@ -29,6 +29,7 @@ namespace tc {
 	template< typename T >
 	void dtor( T & t ) noexcept { // can call dtor on const&, but does not seem sensible
 		t.~T();
+		boost::ignore_unused(t);
 #ifdef _DEBUG
 		// static_cast<void*> to silence warning: destination for this 'memset' call is a pointer to dynamic class; vtable pointer will be overwritten [-Wdynamic-class-memaccess]
 		std::memset( static_cast<void*>(std::addressof(t)), 0xcc, sizeof( t ) );
