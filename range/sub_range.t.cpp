@@ -28,39 +28,6 @@ namespace {
 	using namespace tc;
 
 	//-------------------------------------------------------------------------------------------------------------------------
-	// make_sub_range_result stanity checks
-	namespace sub_range_detail{
-		template< typename Rng > struct make_sub_range_result_tests final {
-			template <typename Lhs, typename Rhs> static void test_const_ref_variants() noexcept {
-				//static_assert(std::is_same< typename make_sub_range_result<Lhs>::type, sub_range<Rhs> >::value, "make_sub_range_result(Rng) gives wrong result");
-				//static_assert(std::is_same< typename make_sub_range_result<Lhs&>::type, sub_range<Rhs&> >::value, "make_sub_range_result(Rng&) gives wrong result");
-				//static_assert(std::is_same< typename make_sub_range_result<Lhs const>::type, sub_range<Rhs const> >::value, "make_sub_range_result(Rng const) gives wrong result");
-				//static_assert(std::is_same< typename make_sub_range_result<Lhs const&>::type, sub_range<Rhs const&> >::value, "make_sub_range_result(Rng const&) gives wrong result");
-			}
-
-			static void test_sub_range_unrolling() noexcept {
-				test_const_ref_variants<Rng, Rng>();
-				test_const_ref_variants<sub_range<Rng>, Rng>();
-				test_const_ref_variants<sub_range<sub_range<Rng>>, Rng>();
-				test_const_ref_variants<sub_range<sub_range<sub_range<sub_range<sub_range<Rng>>>>>, Rng>(); // "proof" of induction
-			}
-
-			static void test() noexcept {
-				test_sub_range_unrolling();
-			}
-		};
-
-#pragma warning (push)
-#pragma warning (disable: 4505) //  unreferenced local function has been removed
-		static void test_make_sub_range_result() noexcept {
-			make_sub_range_result_tests<tc::vector<int>>::test();
-			make_sub_range_result_tests<std::string>::test();
-			//make_sub_range_result_tests<tc::bstr>::test();
-		}
-#pragma warning (pop)
-	}
-
-	//-------------------------------------------------------------------------------------------------------------------------
 
 	using SRVI = make_sub_range_result<tc::vector<int>&>::type;
 	using CSRVI = make_sub_range_result<tc::vector<int> const&>::type;
