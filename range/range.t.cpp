@@ -232,6 +232,7 @@ UNITTESTDEF( zero_termination ) {
 		// _ASSERTEQUAL( tc::size(ach), 1 ); // does not compile
 		char const* pch=ach;
 		_ASSERTEQUAL( tc::size(pch), 1 );
+		boost::ignore_unused(pch);
 	}
 	{
 		signed char const ach[]={ 0x20, 0 };
@@ -332,6 +333,7 @@ UNITTESTDEF( construct_array_from_range ) {
 		_ASSERTEQUAL(tc::size(avecn[n]), 0);
 		_ASSERTEQUAL(tc::size(avecnRef[n]), 0);
 		_ASSERTEQUAL(tc::size(avecnMoved[n]), n);
+		boost::ignore_unused(n);
 	});
 }
 

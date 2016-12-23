@@ -24,6 +24,7 @@
 #include "explicit_cast.h"
 #include <cstdint>
 #include <boost/iterator/indirect_iterator.hpp>
+#include <boost/core/ignore_unused.hpp>
 
 namespace tc {
 	struct fill_tag final {};
@@ -186,6 +187,7 @@ namespace tc {
 				: m_a{*it, (IndexPack, *++it)...}
 			{
 				_ASSERT(itEnd==++it);
+				boost::ignore_unused(itEnd);
 			}
 		public:
 			template< typename Rng,
@@ -360,6 +362,7 @@ namespace tc {
 			{
 				static_assert(tc::creates_no_reference_to_temporary<decltype(*it), T&>::value, "*it must return a reference to T or derived type");
 				_ASSERT(itEnd==++it);
+				boost::ignore_unused(itEnd);
 			}
 		public:
 			template< typename Rng,

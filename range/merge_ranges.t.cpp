@@ -17,6 +17,7 @@
 #include "compare.h"
 
 #include <boost/fusion/include/make_fused_function_object.hpp>
+#include <boost/core/ignore_unused.hpp>
 #include "merge_ranges.h"
 
 UNITTESTDEF(merge_ranges_with_simple_usecase) {
@@ -30,9 +31,11 @@ UNITTESTDEF(merge_ranges_with_simple_usecase) {
 		tc::merge_many(vecvecn),
 		[&](int const& n) noexcept {
 			_ASSERTEQUAL(n, ++N);
+			boost::ignore_unused(n);
 		}
 	);
 	_ASSERT(N==5);
+	boost::ignore_unused(N);
 }
 
 
@@ -57,6 +60,8 @@ UNITTESTDEF(zip_range_adaptor_test) {
 					_ASSERTEQUAL(std::addressof(*it), std::addressof(n));
 					_ASSERTEQUAL(std::addressof(*it2), std::addressof(n2));
 					++it; ++it2;
+					boost::ignore_unused(n);
+					boost::ignore_unused(n2);
 				}
 			)
 		);
@@ -76,6 +81,8 @@ UNITTESTDEF(zip_range_adaptor_test) {
 			[&](int const& n, int const& n2) noexcept {
 				VERIFYEQUAL(N, n) /= 2;
 				++VERIFYEQUAL(N2, n2);
+				boost::ignore_unused(n);
+				boost::ignore_unused(n2);
 			}
 		)
 	);
@@ -119,6 +126,7 @@ UNITTESTDEF(merge_ranges_with_unique_range_2) {
 						second = n;
 						_ASSERTEQUAL(first, n+1);
 						++nTotal;
+						boost::ignore_unused(first);
 					}
 				)
 			);

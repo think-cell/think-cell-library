@@ -2,14 +2,14 @@
 // think-cell public library
 // Copyright (C) 2016 think-cell Software GmbH
 //
-// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
-// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
+// This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as
+// published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
 //
-// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty 
-// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+// This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty
+// of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 //
-// You should have received a copy of the GNU General Public License along with this program. 
-// If not, see <http://www.gnu.org/licenses/>. 
+// You should have received a copy of the GNU General Public License along with this program.
+// If not, see <http://www.gnu.org/licenses/>.
 //-----------------------------------------------------------------------------------------------------------------------------
 
 #pragma once
@@ -58,8 +58,8 @@
 #pragma warning(push)
 #pragma warning( disable: 4267 )
 // warning C4267 : 'argument' : conversion from 'size_t' to 'int', possible loss of data
-// _Median(...) causes warning C4267 when difference_type is int and size_t is 64 bit. 
-// Stephan T. Lavavej [stl@exchange.microsoft.com] agrees this is a bug and filed DevDiv#1213041 
+// _Median(...) causes warning C4267 when difference_type is int and size_t is 64 bit.
+// Stephan T. Lavavej [stl@exchange.microsoft.com] agrees this is a bug and filed DevDiv#1213041
 // "<algorithm>: _Median() doesn't handle fancy difference types" to track the problem.
 #include <algorithm>
 #pragma warning(pop)
@@ -365,7 +365,7 @@ namespace tc {
 		struct assign final {
 			assign(T (&at)[N]) noexcept
 			: m_at(at) {}
-			
+
 			template< typename Rhs >
 			void operator()( Rhs&& rhs ) & noexcept {
 				m_at[m_i]=std::forward<Rhs>(rhs);
@@ -745,7 +745,7 @@ namespace tc {
 #else
 				0;
 			Cont
-#endif				
+#endif
 				cont;
 			tc::cont_clear(cont, 0<cont.capacity() ? cont.capacity() : tc::numeric_cast<typename Cont::size_type>(8)/*, boost::container::default_init*/);
 
@@ -755,7 +755,7 @@ namespace tc {
 				 [&]() noexcept {
 					tc::uninitialize(tc_back(cont));
 					scope_exit( _ASSERTDEBUG( !tc::check_initialized(tc_back(cont))) );
-					return 
+					return
 #endif
 						func(tc::ptr_begin(cont), tc::size(cont)-nSentinel);
 #if defined _DEBUG && !defined __clang__
@@ -796,12 +796,12 @@ namespace tc {
 			tc::cont_clear(cont,tc::max(cont.capacity(),nSentinel)/*, boost::container::default_init*/);
 
 			for (;;) {
-				auto const nSize = 
+				auto const nSize =
 #if defined _DEBUG && !defined __clang__
 				 [&]() MAYTHROW {
 					tc::fill_with_dead_pattern(tc_back(cont));
 					scope_exit( tc::assert_dead_pattern(tc_back(cont)) );
-					return 
+					return
 #endif
 					func(tc::ptr_begin(cont), tc::size(cont)-nSentinel); // MAYTHROW
 #if defined _DEBUG && !defined __clang__
@@ -862,7 +862,7 @@ namespace tc {
 	}
 
 	template< typename Cont, typename It, std::enable_if_t<!is_instance<std::multiset,Cont>::value && !is_instance<std::multimap,Cont>::value && !is_instance<boost::intrusive::multiset,Cont>::value>* = nullptr >
-	It && verify_at_upper_bound(Cont const& cont, It&& it) noexcept {
+	It && verify_at_upper_bound(Cont const&, It&& it) noexcept {
 		return std::forward<It>(it);
 	}
 
@@ -938,7 +938,7 @@ namespace tc {
 			tc::assign_better(it->second, std::forward<V>(val), std::forward<Better>(better));
 		}
 	}
-	
+
 	template< typename... MapArgs, typename K, typename... MappedTypeCtorArgs >
 	std::pair< typename std::map<MapArgs...>::iterator, bool > map_try_emplace_with_key(std::map<MapArgs...>& map, K&& key, MappedTypeCtorArgs&& ... mappedtypectorargs) noexcept {
 		// TODO C++17: Use std::map::try_emplace
@@ -1005,7 +1005,7 @@ namespace tc {
 	struct range_filter;
 
 	template<typename Cont>
-	struct range_filter<Cont, std::enable_if_t< 
+	struct range_filter<Cont, std::enable_if_t<
 		has_efficient_erase<Cont>::value
 		|| has_mem_fn_lower_bound<Cont>::value
 		|| has_mem_fn_hash_function<Cont>::value
@@ -1060,7 +1060,7 @@ namespace tc {
 	};
 
 	template<typename Cont>
-	struct range_filter< Cont, std::enable_if_t< 
+	struct range_filter< Cont, std::enable_if_t<
 		has_mem_fn_splice_after< Cont >::value
 	> >: Cont, private tc::noncopyable {
 		static_assert( tc::is_decayed< Cont >::value, "" );
@@ -1100,14 +1100,14 @@ namespace tc {
 	};
 
 	template<typename Cont>
-	struct range_filter< Cont, std::enable_if_t< 
+	struct range_filter< Cont, std::enable_if_t<
 		has_mem_fn_splice<Cont >::value
 	> >: Cont, private tc::noncopyable {
 		static_assert( tc::is_decayed< Cont >::value, "" );
 		Cont& m_contInput;
 		using typename Cont::iterator;
 		using const_iterator = iterator; // no deep constness (analog to sub_range)
-	
+
 		explicit range_filter(Cont& cont) noexcept
 			: m_contInput(cont)
 		{}
@@ -1124,7 +1124,7 @@ namespace tc {
 
 		void keep(iterator it) & noexcept {
 			_ASSERT( it!=boost::end(m_contInput) );
-			this->splice( 
+			this->splice(
 				boost::end(*this),
 				m_contInput,
 				m_contInput.erase( boost::begin(m_contInput), it )
@@ -1173,7 +1173,7 @@ namespace tc {
 
 		void keep(iterator it) & noexcept {
 #ifdef _CHECKS
-			// Filter without reordering 
+			// Filter without reordering
 			_ASSERT( 0<=std::distance(m_itFirstValid,it) );
 			m_itFirstValid=it;
 			++m_itFirstValid;
@@ -1612,7 +1612,7 @@ namespace tc {
 		}
 	}
 
-	template< typename RngA, typename RngB, typename Comp, typename FuncElementA, typename FuncElementB, typename FuncElementBoth > 
+	template< typename RngA, typename RngB, typename Comp, typename FuncElementA, typename FuncElementB, typename FuncElementBoth >
 	break_or_continue interleave_may_remove_current(RngA&& rngA, RngB&& rngB, Comp comp, FuncElementA fnElementA, FuncElementB fnElementB,  FuncElementBoth fnElementBoth) noexcept {
 		auto itA=boost::begin(rngA);
 		auto itEndA=boost::end(rngA);

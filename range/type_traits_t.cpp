@@ -16,6 +16,7 @@
 #include "type_traits.h"
 #include "range.t.h"
 
+#include <boost/core/ignore_unused.hpp>
 
 static_assert(std::is_same< tc::remove_rvalue_reference_t<int>, int >::value, "");
 static_assert(std::is_same< tc::remove_rvalue_reference_t<int const>, int const >::value, "");
@@ -194,11 +195,11 @@ struct S{
 		tc::cont_must_emplace(g_sets, this);
 	}
 
-	S(S const& other) {
+	S(S const&) {
 		tc::cont_must_emplace(g_sets, this);
 	}
 
-	S(S&& other) {
+	S(S&&) {
 		tc::cont_must_emplace(g_sets, this);
 	}
 
@@ -225,6 +226,8 @@ struct S{
 	friend bool operator<(S const& lhs, S const& rhs) {
 		_ASSERT(boost::end(g_sets) != g_sets.find(std::addressof(lhs)));
 		_ASSERT(boost::end(g_sets) != g_sets.find(std::addressof(rhs)));
+		boost::ignore_unused(lhs);
+		boost::ignore_unused(rhs);
 		return true;
 	}
 };

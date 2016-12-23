@@ -68,7 +68,7 @@ UNITTESTDEF( const_range ) {
 // filter constness tests
 
 template <typename Rng, typename Func>
-void test_const_filter(filter_adaptor<Func, Rng> const& f) noexcept {
+void test_const_filter(filter_adaptor<Func, Rng> const& /*f*/) noexcept {
 
 	//filter_adaptor<Func, Rng> non_const_should_fail(f); // do not add ctor_const_overload() here, you would be lying
 //	filter_adaptor<Func, Rng> const const_filter(f, ctor_const_overload());
@@ -125,7 +125,7 @@ UNITTESTDEF( filter_filter_const_move_test ) {
 // transform constness tests
 
 template <typename Rng, typename Func>
-void test_const_transform(transform_adaptor<Func, Rng> const& t) noexcept {
+void test_const_transform(transform_adaptor<Func, Rng> const& /*t*/) noexcept {
 
 	//transform_adaptor<Func, Rng> non_const_should_fail(t); // do not add ctor_const_overload() here, you would be lying
 //	transform_adaptor<Func, Rng> const const_transform(t, ctor_const_overload());
