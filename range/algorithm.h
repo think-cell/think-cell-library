@@ -47,6 +47,7 @@
 #include <boost/range/algorithm/stable_sort.hpp>
 
 #include <boost/multi_index_container_fwd.hpp>
+#include <boost/intrusive/set.hpp>
 
 #include <type_traits>
 #include <set>
@@ -860,12 +861,12 @@ namespace tc {
 		return std::forward<It>(it);
 	}
 
-	template< typename Cont, typename It, std::enable_if_t<!is_instance<std::multiset,Cont>::value && !is_instance<std::multimap,Cont>::value>* = nullptr >
+	template< typename Cont, typename It, std::enable_if_t<!is_instance<std::multiset,Cont>::value && !is_instance<std::multimap,Cont>::value && !is_instance<boost::intrusive::multiset,Cont>::value>* = nullptr >
 	It && verify_at_upper_bound(Cont const& cont, It&& it) noexcept {
 		return std::forward<It>(it);
 	}
 
-	template< typename Cont, typename It, std::enable_if_t<is_instance<std::multiset,Cont>::value || is_instance<std::multimap,Cont>::value>* = nullptr >
+	template< typename Cont, typename It, std::enable_if_t<is_instance<std::multiset,Cont>::value || is_instance<std::multimap,Cont>::value || is_instance<boost::intrusive::multiset,Cont>::value>* = nullptr >
 	It && verify_at_upper_bound(Cont const& cont, It&& it) noexcept {
 #ifdef _DEBUG
 		/* standard says: the inserted element has to be placed at upper bound */
