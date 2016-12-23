@@ -56,7 +56,7 @@ namespace tc {
 	// specialization for wchar_t in MSVC does not have has_quiet_NAN:
 	// std::enable_if_t<!(std::numeric_limits<T>::has_quiet_NAN || std::numeric_limits<T>::has_signaling_NAN) >
 	template<typename T, std::enable_if_t<!std::is_floating_point<T>::value>* = nullptr>
-	void assert_not_isnan(T const& t) noexcept {}
+	void assert_not_isnan(T const&) noexcept {}
 }
 
 // not inside tc namespace, so that compare below has no chance seeing tc::compare

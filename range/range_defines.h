@@ -19,8 +19,12 @@
 #else
 	#define _CHECKS
 	#ifndef _ASSERT
-		#include <cassert>
-		#define _ASSERT(...) assert((__VA_ARGS__))
+		#ifdef NDEBUG
+			#define _ASSERT(...) (static_cast<void>(__VA_ARGS__))
+		#else
+			#include <cassert>
+			#define _ASSERT(...) assert((__VA_ARGS__))
+		#endif
 	#endif
 	#ifndef _ASSERTE
 		#define _ASSERTE(...) (static_cast<void>(0))
@@ -38,13 +42,13 @@
 		#define _ASSERTNOTIFYFALSE _ASSERTFALSE
 	#endif
 	#ifndef _ASSERTEQUAL
-			#define _ASSERTEQUAL(a, b) assert((a)==(b))
+			#define _ASSERTEQUAL(a, b) _ASSERT((a)==(b))
 	#endif
 	#ifndef _ASSERTINITIALIZED
 		#define _ASSERTINITIALIZED( expr ) (expr)
 	#endif
 	#ifndef _ASSERTPRINT
-		#define _ASSERTPRINT( cond, ... ) assert( cond )
+		#define _ASSERTPRINT( cond, ... ) _ASSERT( cond )
 	#endif
 	#ifndef VERIFYEQUAL
 		#define VERIFYEQUAL( expr, constant ) (expr)

@@ -30,6 +30,7 @@ namespace tc {
 
 #pragma warning (push)
 #pragma warning (disable: 4822) //  local class member function does not have a body
+#pragma warning (disable: 4505) //  unreferenced local function has been removed
 	static void Test() noexcept {
 		struct S {};
 		struct T : S {};

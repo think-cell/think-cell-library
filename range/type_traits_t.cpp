@@ -16,7 +16,6 @@
 #include "type_traits.h"
 #include "range.t.h"
 
-
 static_assert(std::is_same< tc::remove_rvalue_reference_t<int>, int >::value, "");
 static_assert(std::is_same< tc::remove_rvalue_reference_t<int const>, int const >::value, "");
 static_assert(std::is_same< tc::remove_rvalue_reference_t<int&>, int& >::value, "");
@@ -194,11 +193,11 @@ struct S{
 		tc::cont_must_emplace(g_sets, this);
 	}
 
-	S(S const& other) {
+	S(S const&) {
 		tc::cont_must_emplace(g_sets, this);
 	}
 
-	S(S&& other) {
+	S(S&&) {
 		tc::cont_must_emplace(g_sets, this);
 	}
 
