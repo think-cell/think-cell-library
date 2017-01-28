@@ -30,6 +30,38 @@
 
 //-----------------------------------------------------------------------------------------------------------------------------
 
+// This macro should only be defined when the implementation of
+// the C++ standard library from GCC is being used.
+#ifdef __GLIBCXX__
+
+// Only versions < 5.0 of GCC don't know anything about std::is_trivially_copyable.
+#if __GLIBCXX__ <= 20150626
+
+namespace std {
+	template< typename T >
+	struct is_trivially_copyable {
+	private:
+		// We use GCC's internal __has_trivial_copy(T) to implement this
+		// type trait. Note that __has_trivial_copy behaves slightly 
+		// differently than std::is-is_trivially_copyable, see e.g.
+		// http://stackoverflow.com/questions/12754886/has-trivial-copy-behaves-differently-in-clang-and-gcc-whos-right
+
+		// However, this is the best way to allow this library to compile on
+		// recent versions of e.g. Ubuntu or CentOS (as of July 2016), since
+		// neither of them ships with GCC 5.
+		using type = typename std::conditional<__has_trivial_copy(T),
+			std::integral_constant<bool,true>,
+			std::integral_constant<bool,false>>::type;
+
+	public:
+		static constexpr bool value = type::value;
+	};
+
+}
+
+#endif
+#endif
+
 namespace tc {
 	template< typename T >
 	struct is_plain_type final
