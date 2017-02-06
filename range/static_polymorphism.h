@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include "range_defines.h"
+#include <type_traits>
+
 #define STATIC_VIRTUAL_METHOD_NAME( Name ) \
 	Name ## _ImplDoNotCallDirectly
 
@@ -45,7 +48,7 @@
 #define STATIC_VIRTUAL_WITH_DEFAULT_IMPL( Name ) \
 	STATIC_VIRTUAL_WITH_DEFAULT_IMPL_MOD( BOOST_PP_EMPTY(), Name )
 
-#ifdef _MSC_VER
+#if defined(_MSC_VER) && _MSC_FULL_VER < 191024910
 	// MSVC does not support the use of typename outside of templates
 	// On the other hand, it accepts `friend simple-type-specifier` even if the type specifier is a dependent type name.
 	// Even so, it shows a warning mistakenly complaining about it being a deprecated access-declaration.

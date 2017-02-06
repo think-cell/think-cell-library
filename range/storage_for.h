@@ -33,7 +33,7 @@ namespace tc {
 		std::remove_const_t<T>* uninitialized_addressof() noexcept {
 			return reinterpret_cast< std::remove_const_t<T>*>(&m_buffer);
 		}
-		void ctor() & noexcept {
+		void ctor() & noexcept(std::is_nothrow_default_constructible<T>::value) {
 			// This check is not strict enough. The following struct is !std::is_trivially_default_constructible,
 			// but ctor_default does not initialize n to 0, while ctor_value does:
 			//	struct Foo {
@@ -43,15 +43,15 @@ namespace tc {
 			static_assert(!std::is_trivially_default_constructible<T>::value, "You must decide between ctor_default and ctor_value!");
 			::new (static_cast<void*>(&m_buffer)) T; // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
 		}
-		void ctor_default() & noexcept {
+		void ctor_default() & noexcept(std::is_nothrow_default_constructible<T>::value) {
 			::new (static_cast<void*>(&m_buffer)) T; // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
 		}
 		template<typename... Args> // ctor_value with non-empty argument list is useful in generic code
-		void ctor_value(Args&& ... args) & noexcept {
+		void ctor_value(Args&& ... args) & noexcept(std::is_nothrow_constructible<T, Args&&...>::value) {
 			::new (static_cast<void*>(&m_buffer)) T(std::forward<Args>(args)...); // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
 		}
 		template<typename First, typename... Args>
-		void ctor(First&& first, Args&& ... args) & noexcept {
+		void ctor(First&& first, Args&& ... args) & noexcept(std::is_nothrow_constructible<T, First&&, Args&&...>::value) {
 			// In C++, new T(...) is direct initialization just like T t(...).
 			// For non-class types, only implicit conversions are considered, so it is equivalent to T t=...
 			// For class types, explicit conversions are considered, unlike for T t=...

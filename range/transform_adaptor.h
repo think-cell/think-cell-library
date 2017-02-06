@@ -33,7 +33,7 @@ namespace tc {
 				// workaround for compiler bug https://connect.microsoft.com/VisualStudio/feedback/details/1706489
 				return tc_move(rng.m_func);
 #else
-				return tc_move(tc_move(rng).m_func);
+				return tc_move(rng).m_func;
 #endif
 			}
 		};
@@ -66,8 +66,10 @@ namespace tc {
 				, m_func(std::forward<FuncOther>(func))
 			{}
 
-			template< typename Rng2 = Rng >
-			auto size() const& noexcept return_decltype(tc::size_impl::size(boost::implicit_cast<std::remove_reference_t<Rng2> const&>(this->base_range())))
+			template< typename Rng2 = tc::index_range_t<Rng>, std::enable_if_t<tc::size_impl::has_size<Rng2>::value>* = nullptr >
+			auto size() const& noexcept {
+				return tc::size_impl::size(this->base_range());
+			}
 		};
 
 		template< typename Func, typename Rng >
@@ -99,20 +101,20 @@ namespace tc {
 				: base_(tc::slice(tc_move(rng).base_range_move(),itBegin.border_base(),itEnd.border_base()), transform_adaptor_access::get_func(tc_move(rng)))
 			{}
 
-			template<typename Func=Func/*enable SFINAE*/>
+			template<typename Func2=Func/*enable SFINAE*/>
 			auto STATIC_VIRTUAL_METHOD_NAME(dereference_index)(index const& idx) & MAYTHROW -> tc::transform_return_t<
-				Func,
-				decltype(std::declval<Func const&>()(std::declval<range_adaptor &>().STATIC_VIRTUAL_METHOD_NAME(dereference_index)(std::declval<index const&>()))),
+				Func2,
+				decltype(std::declval<Func2 const&>()(std::declval<range_adaptor &>().STATIC_VIRTUAL_METHOD_NAME(dereference_index)(std::declval<index const&>()))),
 				decltype(std::declval<range_adaptor &>().STATIC_VIRTUAL_METHOD_NAME(dereference_index)(std::declval<index const&>()))
 			> {
 				// always call operator() const, which is assumed to be thread-safe
 				return tc::as_const(this->m_func)(base_::STATIC_VIRTUAL_METHOD_NAME(dereference_index)(idx));
 			}
 
-			template<typename Func=Func/*enable SFINAE*/>
+			template<typename Func2=Func/*enable SFINAE*/>
 			auto STATIC_VIRTUAL_METHOD_NAME(dereference_index)(index const& idx) const& MAYTHROW -> tc::transform_return_t<
-				Func,
-				decltype(std::declval<Func const&>()(std::declval<range_adaptor const&>().STATIC_VIRTUAL_METHOD_NAME(dereference_index)(std::declval<index const&>()))),
+				Func2,
+				decltype(std::declval<Func2 const&>()(std::declval<range_adaptor const&>().STATIC_VIRTUAL_METHOD_NAME(dereference_index)(std::declval<index const&>()))),
 				decltype(std::declval<range_adaptor const&>().STATIC_VIRTUAL_METHOD_NAME(dereference_index)(std::declval<index const&>()))
 			> {
 				// always call operator() const, which is assumed to be thread-safe

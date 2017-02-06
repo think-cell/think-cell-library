@@ -22,8 +22,8 @@
 UNITTESTDEF(merge_ranges_with_simple_usecase) {
 
 	tc::vector<tc::vector<int>> vecvecn;
-	vecvecn.emplace_back(tc::make_initializer_list({1,3,5}));
-	vecvecn.emplace_back(tc::make_initializer_list({2,4}));
+	vecvecn.emplace_back(std::initializer_list<int>{1,3,5});
+	vecvecn.emplace_back(std::initializer_list<int>{2,4});
 
 	int N=0;
 	tc::for_each(
@@ -84,12 +84,12 @@ UNITTESTDEF(zip_range_adaptor_test) {
 
 UNITTESTDEF(merge_ranges_with_unique_range_2) {
 	tc::vector<tc::vector<int>> vecvecn;
-	vecvecn.emplace_back(tc::make_initializer_list({1,1,3,3,3,5,5,5,5}));
-	vecvecn.emplace_back(tc::make_initializer_list({2,2,4}));
+	vecvecn.emplace_back(std::initializer_list<int>{1,1,3,3,3,5,5,5,5});
+	vecvecn.emplace_back(std::initializer_list<int>{2,2,4});
 
 	tc::vector<tc::vector<int>> vecvecn2;
-	vecvecn2.emplace_back(tc::make_initializer_list({101,102,103,104,105,106,107,108,109}));
-	vecvecn2.emplace_back(tc::make_initializer_list({110,111,112}));
+	vecvecn2.emplace_back(std::initializer_list<int>{101,102,103,104,105,106,107,108,109});
+	vecvecn2.emplace_back(std::initializer_list<int>{110,111,112});
 
 	auto lesspred = tc::projected(tc::fn_less(), fn_std_get<0>());
 

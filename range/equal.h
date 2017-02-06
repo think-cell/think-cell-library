@@ -91,7 +91,7 @@ namespace tc{
 		return tc::equal(lrng, rrng, tc::fn_equal_to());
 	}
 
-	// boost::ends_with does not work with transform_range::iterator returning by value because it has input_iterator category
+	// boost::ends_with does not work with boost::range_iterator<transform_range>::type returning by value because it has input_iterator category
 	template<typename LRng, typename RRng, typename Pred=tc::fn_equal_to>
 	bool ends_with(LRng const& lrng, RRng const& rrng, Pred pred=Pred()) noexcept {
 		auto itL=boost::end(lrng);

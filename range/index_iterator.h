@@ -128,6 +128,8 @@ namespace tc {
 	template<typename IndexRange, typename Traversal, bool bConst>
 	typename index_iterator_impl::index_iterator<IndexRange,Traversal,bConst>::index const& iterator2index(index_iterator_impl::index_iterator<IndexRange,Traversal,bConst> const& it) noexcept;
 
+	struct end_sentinel final {};
+
 	namespace index_iterator_impl {
 
 		template< typename T, bool bConst >
@@ -153,8 +155,8 @@ namespace tc {
 			using index = typename range_traits<IndexRange>::index;
 			index m_idx;
 
-			template<typename IndexRange, typename Traversal, bool bConst>
-			friend typename index_iterator<IndexRange,Traversal,bConst>::index const& tc::iterator2index(index_iterator<IndexRange,Traversal,bConst> const& it) noexcept;
+			template<typename IndexRange2, typename Traversal2, bool bConst2>
+			friend typename index_iterator<IndexRange2,Traversal2,bConst2>::index const& tc::iterator2index(index_iterator<IndexRange2,Traversal2,bConst2> const& it) noexcept;
 
 			struct enabler final {};
 
@@ -233,14 +235,31 @@ namespace tc {
 			}
 
 			// sub_range from iterator pair
-			friend typename tc::make_sub_range_result< conditional_const_t<IndexRange,bConst> & >::type make_iterator_range_impl( index_iterator itBegin, index_iterator itEnd ) noexcept {
-				return typename tc::make_sub_range_result< conditional_const_t<IndexRange,bConst> & >::type( *VERIFYEQUAL(VERIFY(itBegin.m_pidxrng),itEnd.m_pidxrng), tc_move(itBegin).m_idx, tc_move(itEnd).m_idx );
-			}
+			template<typename IndexRange_, typename Traversal_, bool bConst_>
+			friend typename tc::make_sub_range_result< conditional_const_t<IndexRange_,bConst_> & >::type make_iterator_range_impl( index_iterator<IndexRange_, Traversal_, bConst_> itBegin, index_iterator<IndexRange_, Traversal_, bConst_> itEnd ) noexcept;
 
 			explicit operator bool() const& noexcept {
 				return tc::bool_cast(m_pidxrng);
 			}
+
+			friend bool operator==(index_iterator const& it, end_sentinel) noexcept {
+				return it.m_pidxrng->at_end_index(it.m_idx);
+			}
+			friend bool operator==(end_sentinel, index_iterator const& it) noexcept {
+				return it.m_pidxrng->at_end_index(it.m_idx);
+			}
+			friend bool operator!=(index_iterator const& it, end_sentinel) noexcept {
+				return !it.m_pidxrng->at_end_index(it.m_idx);
+			}
+			friend bool operator!=(end_sentinel, index_iterator const& it) noexcept {
+				return !it.m_pidxrng->at_end_index(it.m_idx);
+			}
 		};
+
+		template<typename IndexRange, typename Traversal, bool bConst>
+		typename tc::make_sub_range_result< conditional_const_t<IndexRange,bConst> & >::type make_iterator_range_impl( index_iterator<IndexRange, Traversal, bConst> itBegin, index_iterator<IndexRange, Traversal, bConst> itEnd ) noexcept {
+			return typename tc::make_sub_range_result< conditional_const_t<IndexRange,bConst> & >::type( *VERIFYEQUAL(VERIFY(itBegin.m_pidxrng),itEnd.m_pidxrng), tc_move(itBegin).m_idx, tc_move(itEnd).m_idx );
+		}
 	}
 	using index_iterator_impl::index_iterator;
 

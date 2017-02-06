@@ -48,8 +48,8 @@ namespace tc {
 
 			template< typename Func >
 			tc::break_or_continue operator()(Func func) /* no & */ MAYTHROW {
-				auto const itBegin=boost::begin(boost::implicit_cast<std::remove_reference_t<Rng>&>(*m_baserng));
-				auto itEnd=boost::end(boost::implicit_cast<std::remove_reference_t<Rng>&>(*m_baserng));
+				auto const itBegin=boost::begin(*m_baserng);
+				auto itEnd=boost::end(*m_baserng);
 				while( itEnd!=itBegin ) {
 					--itEnd;
 					if( break_==continue_if_not_break(func, *itEnd) ) return break_;
@@ -59,8 +59,8 @@ namespace tc {
 
 			template< typename Func >
 			tc::break_or_continue operator()(Func func) const/* no & */ MAYTHROW {
-				auto const itBegin=boost::begin(boost::implicit_cast<std::remove_reference_t<Rng> const&>((*m_baserng)));
-				auto itEnd=boost::end(boost::implicit_cast<std::remove_reference_t<Rng> const&>(*m_baserng));
+				auto const itBegin=boost::begin(*m_baserng);
+				auto itEnd=boost::end(*m_baserng);
 				while( itEnd!=itBegin ) {
 					--itEnd;
 					if( break_==continue_if_not_break(func, *itEnd) ) return break_;

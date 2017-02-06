@@ -197,7 +197,6 @@ namespace tc {
 			using this_type = range_generator_from_index;
 		public:
 			STATIC_VIRTUAL(begin_index)
-			STATIC_VIRTUAL(end_index)
 			STATIC_VIRTUAL(at_end_index)
 
 			template< typename Func >
@@ -232,16 +231,16 @@ namespace tc {
 				: m_func(f)
 			{}
 
-			template<typename Arg>
-			void operator()(Arg&& arg) & noexcept {
+			template<typename... Args>
+			void operator()(Args&&... args) & noexcept {
 				static_assert(
 					!std::is_same<
-						decltype(m_func(std::forward<Arg>(arg))),
+						decltype(m_func(std::forward<Args>(args)...)),
 						break_or_continue
 					>::value,
 					"Functor to void range must not return break_or_continue"
 					);
-				m_func(std::forward<Arg>(arg));
+				m_func(std::forward<Args>(args)...);
 			}
 
 		private:
@@ -255,16 +254,15 @@ namespace tc {
 	template< typename Rng >
 	struct index_range final {
 	private:
-		struct add_index_interface final : range_generator_from_index< add_index_interface, iterator_base<
+		struct add_index_interface : range_generator_from_index< add_index_interface, iterator_base<
 			typename boost::range_iterator< std::remove_reference_t< typename reference_or_value< Rng >::reference > >::type,
 			typename boost::range_iterator< std::remove_reference_t< typename reference_or_value< Rng >::const_reference > >::type
 		> > {
 		private:
 			using this_type = add_index_interface;
-			// add_index_interface is deliberately not a range itself, e.g., it is missing begin() and end().
-			// Users should use Rng directly instead, and use add_index_interface only to add the index interface.
 			
 		public:
+			// Index interface
 			using index = typename this_type::index;
 
 			add_index_interface() noexcept {}
@@ -278,7 +276,7 @@ namespace tc {
 				return index( aggregate_tag(), boost::begin(m_rng.best_access()) );
 			}
 	
-			STATIC_FINAL(end_index)() const& noexcept -> index {
+			auto end_index() const& noexcept -> index {
 				return index( aggregate_tag(), boost::end(m_rng.best_access()) );
 			}
 
@@ -293,6 +291,21 @@ namespace tc {
 			operator typename reference_or_value< Rng >::const_reference () const& noexcept {
 				return *m_rng;
 			}
+
+			template< typename Rng2 = Rng, std::enable_if_t<tc::size_impl::has_size<Rng2>::value>* = nullptr >
+			auto size() const& noexcept {
+				return tc::size_impl::size(*m_rng);
+			}
+
+			// Range interface
+			using iterator = decltype(boost::begin(*std::declval<reference_or_value< Rng >&>()));
+			using const_iterator = decltype(boost::begin(*std::declval<reference_or_value< Rng > const&>()));
+
+			auto begin() const& noexcept { return boost::begin(*m_rng); }
+			auto end() const& noexcept { return boost::end(*m_rng); }
+			auto begin() & noexcept { return boost::begin(*m_rng); }
+			auto end() & noexcept { return boost::end(*m_rng); }
+
 		private:
 			static_assert(
 				!std::is_rvalue_reference<Rng>::value

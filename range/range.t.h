@@ -15,7 +15,6 @@
 #pragma once
 #include "range.h"
 #include "container.h" // tc::vector
-#include "initializer_list.h"
 
 namespace tc {
 
@@ -126,27 +125,27 @@ namespace tc {
 	}
 }
 
-#	define TEST_RANGE_EQUAL(EXPECT, IS) {   bool e = tc::equal(EXPECT, IS);													  \
-											if (!e) {																		  \
-												std::cerr << "Fail: Ranges differ:\n"										  \
-															 "Expected: " << dbg_print_rng(EXPECT) << "\n"					  \
-															 "Is      : " << dbg_print_rng(IS) << std::endl;				  \
-												_ASSERT(tc::equal(EXPECT, IS));												  \
+#	define TEST_RANGE_EQUAL(EXPECT, IS) {   bool e = tc::equal(EXPECT, IS);													\
+											if (!e) {																		\
+												std::cerr << "Fail: Ranges differ:\n"										\
+															 "Expected: " << tc::dbg_print_rng(EXPECT) << "\n"				\
+															 "Is      : " << tc::dbg_print_rng(IS) << std::endl;			\
+												_ASSERT(tc::equal(EXPECT, IS));												\
 											}}
-#	define TEST_EQUAL(EXPECT, IS)       {   bool e = EXPECT == IS;															  \
-											if (!e) {																		  \
-												std::cerr << "Fail: Values differ:\n"										  \
-															 "Expected: " << EXPECT << "\n"									  \
-															 "Is      : " << IS << std::endl;								  \
-												_ASSERT(EXPECT == IS);														  \
+#	define TEST_EQUAL(EXPECT, IS)       {   bool e = EXPECT == IS;															\
+											if (!e) {																		\
+												std::cerr << "Fail: Values differ:\n"										\
+															 "Expected: " << EXPECT << "\n"									\
+															 "Is      : " << IS << std::endl;								\
+												_ASSERT(EXPECT == IS);														\
 											}}
 #	define TEST_OUTPUT(...) std::cerr __VA_ARGS__
 
 #endif
 
-#define TEST_init_hack(CTYPE, ETYPE, NAME, ...)                                                                               \
-	ETYPE internal_array_##NAME[] = __VA_ARGS__;                                                                              \
-	auto NAME = CTYPE<ETYPE>(internal_array_##NAME,                                                                           \
+#define TEST_init_hack(CTYPE, ETYPE, NAME, ...) \
+	ETYPE internal_array_##NAME[] = __VA_ARGS__; \
+	auto NAME = CTYPE<ETYPE>(internal_array_##NAME, \
 									internal_array_##NAME + sizeof(internal_array_##NAME)/sizeof(ETYPE));
 
 #define UNUSED_TEST_VARIABLE(v) (v)
@@ -155,5 +154,4 @@ namespace tc {
 #define TEST_RANGE_NOT_EQUAL(EXPECT, IS) _ASSERT(!tc::equal(EXPECT, IS))
 #define TEST_NOT_EQUAL(EXPECT, IS) _ASSERT(!(EXPECT == IS));
 
-#define TEST_OUTPUT_RANGE(Rng) TEST_OUTPUT( << #Rng << " = " << dbg_print_rng(Rng) << std::endl)
 #define STATIC_ASSERT(...) static_assert((__VA_ARGS__), #__VA_ARGS__ " is not true.")

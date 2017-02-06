@@ -76,16 +76,16 @@ namespace tc {
 			tc::decay_t<Expr>
 		>;
 
-#ifndef __clang__
-	// workaround for compiler bug https://connect.microsoft.com/VisualStudio/feedback/details/1657760
+
+// version commented out below doesn't work for both MSVC (compiler bug https://connect.microsoft.com/VisualStudio/feedback/details/1657760)
+// as well as XCode 8 (leads to segfault in the compiler)
+//#define return_decltype_rvalue_by_val_variable_by_ref(...) -> tc::lvalue_or_decay_t< decltype((__VA_ARGS__)) > { \
+//	return (__VA_ARGS__); \
+//}
+
 #define return_decltype_rvalue_by_val_variable_by_ref(...) -> decltype(auto) {\
 	return boost::implicit_cast<tc::lvalue_or_decay_t< decltype((__VA_ARGS__)) >>((__VA_ARGS__)); \
 }
-#else
-#define return_decltype_rvalue_by_val_variable_by_ref(...) -> tc::lvalue_or_decay_t< decltype((__VA_ARGS__)) > { \
-	return (__VA_ARGS__); \
-}
-#endif
 }
 
 namespace decltype_return_test {

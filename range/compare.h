@@ -122,28 +122,42 @@ namespace tc {
 	///////////////////////////////////////////////////////////
 	// compare on specific types
 
-	template< typename Lhs, typename Rhs >
-	tc::order lexicographical_compare_3way( Lhs const& lhs, Rhs const& rhs ) noexcept {
-		auto itLhs=boost::begin( lhs );
-		auto const itLhsEnd=boost::end( lhs );
-		auto itRhs=boost::begin( rhs );
-		auto const itRhsEnd=boost::end( rhs );
+	namespace lexicographical_compare_3way_adl_barrier {
+		template< bool bNoPrefix, typename Lhs, typename Rhs >
+		tc::order lexicographical_compare_3way_impl( Lhs const& lhs, Rhs const& rhs ) noexcept {
+			auto itLhs=boost::begin( lhs );
+			auto const itLhsEnd=boost::end( lhs );
+			auto itRhs=boost::begin( rhs );
+			auto const itRhsEnd=boost::end( rhs );
 
-		// same as std::lexicographical_compare_3way(itLhs, itLhsEnd, itRhs, itRhsEnd), except for using compare instead of operator<
-		for(;;) {
-			if( itLhs==itLhsEnd ) {
-				return itRhs==itRhsEnd ? tc::order::equal : tc::order::less; // lhs shorter than rhs, thus <
+			// same as std::lexicographical_compare_3way(itLhs, itLhsEnd, itRhs, itRhsEnd), except for using compare instead of operator<
+			for(;;) {
+				if( itLhs==itLhsEnd ) {
+					_ASSERT(!bNoPrefix || itRhs==itRhsEnd);
+					return itRhs==itRhsEnd ? tc::order::equal : tc::order::less; // lhs shorter than rhs, thus <
+				}
+				if( itRhs==itRhsEnd ) {
+					_ASSERT(!bNoPrefix);
+					return tc::order::greater; // rhs shorter than lhs, thus >
+				}
+				RETURN_IF_NOT_EQUAL( tc::compare( *itLhs, *itRhs ) );
+				++itLhs;
+				++itRhs;
 			}
-			if( itRhs==itRhsEnd ) {
-				return tc::order::greater; // rhs shorter than lhs, thus >
-			}
-			RETURN_IF_NOT_EQUAL( tc::compare( *itLhs, *itRhs ) );
-			++itLhs;
-			++itRhs;
 		}
 	}
 
+	template< typename Lhs, typename Rhs >
+	tc::order lexicographical_compare_3way(Lhs const& lhs, Rhs const& rhs) noexcept {
+		return lexicographical_compare_3way_adl_barrier::lexicographical_compare_3way_impl</*bNoPrefix*/false>(lhs, rhs);
+	}
+	template< typename Lhs, typename Rhs >
+	tc::order lexicographical_compare_3way_noprefix(Lhs const& lhs, Rhs const& rhs) noexcept {
+		return lexicographical_compare_3way_adl_barrier::lexicographical_compare_3way_impl</*bNoPrefix*/true>(lhs, rhs);
+	}
+
 	DEFINE_FN( lexicographical_compare_3way );
+	DEFINE_FN( lexicographical_compare_3way_noprefix );
 
 	template< typename LFirst, typename LSecond, typename RFirst, typename RSecond >
 	tc::order compare( std::pair<LFirst, LSecond> const& lhs, std::pair<RFirst, RSecond> const& rhs ) noexcept {

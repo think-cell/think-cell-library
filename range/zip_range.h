@@ -16,6 +16,7 @@
 
 #include "range_adaptor.h"
 #include "functors.h"
+#include "utility.h"
 
 #include <boost/range/iterator_range.hpp>
 #include <boost/fusion/adapted/std_tuple.hpp>
@@ -56,30 +57,44 @@ namespace tc {
 			}
 
 			STATIC_FINAL(at_end_index)(index const& idx) const& noexcept -> bool {
-				return std::get<0>(m_tplrng)->at_end_index(std::get<0>(idx))
-#ifdef _CHECKS
-					&& all_at_end_index(idx, std::index_sequence_for<Ranges...>{})
-#endif
-				;
+				auto MemberRangeAtEnd = 
+					[&](auto nconstIndex) noexcept {
+						return std::get<nconstIndex()>(m_tplrng)->at_end_index(std::get<nconstIndex()>(idx));
+					};
+
+				bool const bAtEnd = MemberRangeAtEnd(std::integral_constant<std::size_t, 0>());
+
+				_ASSERT(tc::all_of(
+					tc::make_integer_sequence<std::size_t, 1, sizeof...(Ranges)>(),
+					[&](auto nconstIndex) noexcept { return MemberRangeAtEnd(nconstIndex) == bAtEnd; }
+				));
+
+				return bAtEnd;
 			}
 
 			STATIC_FINAL(increment_index)(index& idx) const& noexcept -> void {
-				increment_index_impl(idx, std::index_sequence_for<Ranges...>{});
+				tc::for_each(
+					std::make_index_sequence<sizeof...(Ranges)>(),
+					[&](auto nconstIndex) noexcept {
+						std::get<nconstIndex()>(m_tplrng)->increment_index(std::get<nconstIndex()>(idx));
+					}
+				);
 			}
 
 			STATIC_FINAL(decrement_index)(index& idx) const& noexcept -> void {
-				decrement_index_impl(idx, std::index_sequence_for<Ranges...>{});
+				tc::for_each(
+					std::make_index_sequence<sizeof...(Ranges)>(),
+					[&](auto nconstIndex) noexcept {
+						std::get<nconstIndex()>(m_tplrng)->decrement_index(std::get<nconstIndex()>(idx));
+					}
+				);
 			}
 
-			using dereference_type = std::tuple<
-				typename range_traits<Ranges>::reference...
-			>;
-
-			STATIC_FINAL(dereference_index)(index const& idx) const& noexcept -> dereference_type {
+			STATIC_FINAL(dereference_index)(index const& idx) const& noexcept -> decltype(auto) {
 				return dereference_index_impl(idx, std::index_sequence_for<Ranges...>{});
 			}
 
-			STATIC_FINAL(dereference_index)(index const& idx) & noexcept -> dereference_type {
+			STATIC_FINAL(dereference_index)(index const& idx) & noexcept -> decltype(auto) {
 				return dereference_index_impl(idx, std::index_sequence_for<Ranges...>{});
 			}
 
@@ -91,7 +106,12 @@ namespace tc {
 			using difference_type = int;// std::ptrdiff_t;
 
 			STATIC_FINAL(advance_index)(index& idx, difference_type d) const& noexcept -> void {
-				advance_index_impl(idx, d, std::index_sequence_for<Ranges...>{});
+				tc::for_each(
+					std::make_index_sequence<sizeof...(Ranges)>(),
+					[&](auto nconstIndex) noexcept {
+						std::get<nconstIndex()>(m_tplrng)->advance_index(std::get<nconstIndex()>(idx), d);
+					}
+				);
 			}
 
 			STATIC_FINAL(distance_to_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> difference_type {
@@ -110,47 +130,18 @@ namespace tc {
 			}
 
 			template<std::size_t... Is>
-			void increment_index_impl(index& idx, std::index_sequence<Is...>) const& noexcept {
-				using swallow = int[];
-				swallow{(std::get<Is>(m_tplrng)->increment_index(std::get<Is>(idx)) ,0)...};
-			}
-
-			template<std::size_t... Is>
-			void decrement_index_impl(index& idx, std::index_sequence<Is...>) const& noexcept {
-				using swallow = int[];
-				swallow{(std::get<Is>(m_tplrng)->decrement_index(std::get<Is>(idx)) ,0)...};
-			}
-
-			template<std::size_t... Is>
-			auto dereference_index_impl(index const& idx, std::index_sequence<Is...>) const& noexcept -> dereference_type {
-				return dereference_type{
+			auto dereference_index_impl(index const& idx, std::index_sequence<Is...>) const& noexcept {
+				return std::tuple<decltype(std::get<Is>(m_tplrng)->dereference_index(std::get<Is>(idx)))...>(
 					std::get<Is>(m_tplrng)->dereference_index(std::get<Is>(idx))...
-				};
+				);
 			}
 
 			template<std::size_t... Is>
-			auto dereference_index_impl(index const& idx, std::index_sequence<Is...>) & noexcept -> dereference_type {
-				return dereference_type{
+			auto dereference_index_impl(index const& idx, std::index_sequence<Is...>) & noexcept {
+				return std::tuple<decltype(std::get<Is>(m_tplrng)->dereference_index(std::get<Is>(idx)))...>(
 					std::get<Is>(m_tplrng)->dereference_index(std::get<Is>(idx))...
-				};
+				);
 			}
-
-			template<std::size_t... Is>
-			auto advance_index_impl(index& idx, difference_type d, std::index_sequence<Is...>) const& noexcept -> void {
-				using swallow = int[];
-				swallow{(std::get<Is>(m_tplrng)->advance_index(std::get<Is>(idx), d) ,0)...};
-			}
-
-#ifdef _CHECKS
-			bool all_at_end_index(index const& idx, std::index_sequence<>) const& noexcept {
-				return true;
-			}
-
-			template<std::size_t N, std::size_t... Is>
-			bool all_at_end_index(index const& idx, std::index_sequence<N, Is...>) const& noexcept {
-				return std::get<N>(m_tplrng)->at_end_index(std::get<N>(idx)) && all_at_end_index(idx, std::index_sequence<Is...>{});
-			}
-#endif
 
 			std::tuple<tc::reference_or_value<tc::index_range_t<Ranges>>...> m_tplrng;
 		};

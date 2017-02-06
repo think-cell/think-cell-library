@@ -22,8 +22,6 @@ namespace {
 
 //---- Basic ------------------------------------------------------------------------------------------------------------------
 UNITTESTDEF( basic ) {
-	using namespace tc;
-
 	TEST_init_hack(tc::vector, int, v, {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20});
 
 	auto evenvr = tc::filter(v, [](int const& v) noexcept { return (v%2==0);});
@@ -32,8 +30,6 @@ UNITTESTDEF( basic ) {
 	TEST_RANGE_EQUAL(vexp, evenvr);
 }
 
-	using namespace tc;
-
 	template<typename Func>
 	struct WrapVoidFunc final {
 		static_assert(
@@ -41,7 +37,7 @@ UNITTESTDEF( basic ) {
 			"type must be a reference type"
 		);
 
-		WrapVoidFunc(Func func, break_or_continue& breakorcontinue) noexcept :
+		WrapVoidFunc(Func func, tc::break_or_continue& breakorcontinue) noexcept :
 			m_func(std::move(func)), m_breakorcontinue(breakorcontinue)
 		{}
 
@@ -50,32 +46,32 @@ UNITTESTDEF( basic ) {
 		std::enable_if_t<
 			std::is_same<
 				decltype(std::declval<std::remove_reference_t<Func> >()(std::declval<Arg>())),
-				break_or_continue
+				tc::break_or_continue
 			>::value
 		>
 		operator()(Arg&& arg) & noexcept {
-			if (continue_ == m_breakorcontinue) {
+			if (tc::continue_ == m_breakorcontinue) {
 				m_breakorcontinue = m_func(std::forward<Arg>(arg));
 			}
 		}
 
 		// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 		template<typename Arg>
-		typename std::enable_if<
+		std::enable_if_t<
 			!std::is_same<
 				decltype(std::declval<std::remove_reference_t<Func> >()(std::declval<Arg>())),
-				break_or_continue
+				tc::break_or_continue
 			>::value
-		>::type
+		>
 		operator()(Arg&& arg) & noexcept {
-			if (continue_ == m_breakorcontinue) {
+			if (tc::continue_ == m_breakorcontinue) {
 				m_func(std::forward<Arg>(arg));
 			}
 		}
 
 		private:
 			Func m_func;
-			break_or_continue& m_breakorcontinue;
+			tc::break_or_continue& m_breakorcontinue;
 	};
 
 	template<typename Rng>
@@ -88,12 +84,12 @@ UNITTESTDEF( basic ) {
 		std::enable_if_t<
 			!std::is_same<
 				decltype(std::declval<base_>()(std::declval<Func>())),
-				break_or_continue
+				tc::break_or_continue
 			>::value,
-			break_or_continue
+			tc::break_or_continue
 		>
 		operator()(Func&& func) & noexcept {
-			break_or_continue breakorcontinue = continue_;
+			tc::break_or_continue breakorcontinue = tc::continue_;
 			base_::operator()(WrapVoidFunc<Func&&>(std::forward<Func>(func), breakorcontinue));
 			return breakorcontinue;
 		}
@@ -103,12 +99,12 @@ UNITTESTDEF( basic ) {
 		std::enable_if_t<
 			!std::is_same<
 				decltype(std::declval<base_>()(std::declval<Func>())),
-				break_or_continue
+				tc::break_or_continue
 			>::value,
-			break_or_continue
+			tc::break_or_continue
 		>
 		operator()(Func&& func) const& noexcept {
-			break_or_continue breakorcontinue = continue_;
+			tc::break_or_continue breakorcontinue = tc::continue_;
 			base_::operator()(WrapVoidFunc<Func&&>(std::forward<Func>(func), breakorcontinue));
 			return breakorcontinue;
 		}
@@ -118,9 +114,9 @@ UNITTESTDEF( basic ) {
 		std::enable_if_t<
 			std::is_same<
 				decltype(std::declval<base_>()(std::declval<Func>())),
-				break_or_continue
+				tc::break_or_continue
 			>::value,
-			break_or_continue
+			tc::break_or_continue
 		>
 		operator()(Func&& func) & noexcept {
 			return base_::operator()(std::forward<Func>(func));
@@ -131,9 +127,9 @@ UNITTESTDEF( basic ) {
 		std::enable_if_t<
 			std::is_same<
 				decltype(std::declval<base_>()(std::declval<Func>())),
-				break_or_continue
+				tc::break_or_continue
 			>::value,
-			break_or_continue
+			tc::break_or_continue
 		>
 		operator()(Func&& func) const& noexcept {
 			return base_::operator()(std::forward<Func>(func));
@@ -142,7 +138,7 @@ UNITTESTDEF( basic ) {
 
 	template<typename Rng>
 	auto void_range(Rng&& rng) return_decltype_rvalue_by_ref (
-		derived_or_base_cast<void_range_struct<Rng&&>>(std::forward<Rng>(rng))
+		tc::derived_or_base_cast<void_range_struct<Rng&&>>(std::forward<Rng>(rng))
 	)
 
 
@@ -159,8 +155,6 @@ namespace {
 }
 
 UNITTESTDEF( generator_range ) {
-   using namespace tc;
-   
    TEST_init_hack(tc::vector, int, vexp, {0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48});
 
    TEST_RANGE_EQUAL(vexp, tc::filter( void_range(generator_range()), [](int i) noexcept { return i%2==0; } ));
@@ -172,27 +166,16 @@ namespace {
 	struct generator_range_break final {
 		template< typename Func >
 		tc::break_or_continue operator()(Func func) {
-			using namespace tc;
 			for(int i=0;i<5000;++i) {
-				if (func(i)==break_) { return break_; }
+				if (func(i)==tc::break_) { return tc::break_; }
 			}
-			return continue_;
+			return tc::continue_;
 		}
 	};
 }
 
-// TODO, we need something like a tc::starts_with() and TC_RANGE_STARTS_WITH for this to make sense.
-//UNITTESTDEF( generator_range_break ) {
-//   using namespace tc;
-//
-//   TEST_init_hack(tc::vector, int, vexp, {0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48, 50});
-//   TEST_RANGE_EQUAL(vexp, tc::filter( generator_range_break(), [](int i) noexcept { return i%2==0; } ));
-//}
-
 //---- N3752 filters examples  ------------------------------------------------------------------------------------------------
 UNITTESTDEF( N3752 ) {
-   using namespace tc;
-
    TEST_init_hack(tc::vector, int, v, {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20});
 
    auto r =  tc::filter( tc::filter( tc::filter(
@@ -211,25 +194,12 @@ UNITTESTDEF( N3752 ) {
    TEST_RANGE_EQUAL(vexp, bir);
 }
 
-//---- Stacked filters --------------------------------------------------------------------------------------------------------
-// TODO, we need something like a tc::starts_with() and TC_RANGE_STARTS_WITH for this to make sense.
-//UNITTESTDEF( stacked_filters) {
-//   using namespace tc;
-//
-//   TEST_init_hack(tc::vector, int, vexp, {1, 7, 11, 13, 17, 19});
-//   TEST_RANGE_EQUAL(vexp, tc::filter( tc::filter( tc::filter(
-//                               generator_range_break(),
-//                               [](int i) noexcept { return i%2!=0; } ),
-//                               [](int i) noexcept { return i%3!=0; } ),
-//                               [](int i) noexcept { return i%5!=0; } ));
-//}
-
 UNITTESTDEF( zero_termination ) {
 	// only char is treated as zero-terminated character array.
 	// signed/unsigned char is treated as a regular array
 	{
 		char const ach[]={ 0x20, 0 };
-		// _ASSERTEQUAL( tc::size(ach), 1 ); // does not compile
+		_ASSERTEQUAL( tc::size(ach), 1 );
 		char const* pch=ach;
 		_ASSERTEQUAL( tc::size(pch), 1 );
 	}
@@ -237,13 +207,13 @@ UNITTESTDEF( zero_termination ) {
 		signed char const ach[]={ 0x20, 0 };
 		_ASSERTEQUAL( tc::size(ach), 2 );
 		// signed char const* pch=ach;
-		// _ASSERTEQUAL( tc::size(pch), 2 ); // does not compile
+		// _ASSERTEQUAL( tc::size(pch), 2 ); // correctly refuses to compile
 	}
 	{
 		unsigned char const ach[]={ 0x20, 0 };
 		_ASSERTEQUAL( tc::size(ach), 2 );
 		// unsigned char const* pch=ach;
-		// _ASSERTEQUAL( tc::size(pch), 2 ); // does not compile
+		// _ASSERTEQUAL( tc::size(pch), 2 ); // correctly refuses to compile
 	}
 }
 
@@ -320,11 +290,11 @@ UNITTESTDEF( ensure_index_range_on_chars ) {
 }
 
 UNITTESTDEF( construct_array_from_range ) {
-	auto rng=make_counting_range(0, 10);
-	tc::array<int, 10> an=rng;
+	auto rng=tc::make_counting_range(0, 10);
+	tc::array<int, 10> an(rng);
 	tc::array<int, 10> anCopy=an;
 	tc::array<std::vector<int>, 10> avecn(an);
-	tc::array<std::vector<int>&, 10> avecnRef=avecn;
+	tc::array<std::vector<int>&, 10> avecnRef(avecn);
 	tc::array<std::vector<int>, 10> avecnMoved=tc_move_always(avecn);
 	tc::for_each(rng, [&](int n) {
 		_ASSERTEQUAL(an[n], n);

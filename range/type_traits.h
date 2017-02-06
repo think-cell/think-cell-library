@@ -27,6 +27,7 @@
 		template<typename> static std::false_type test(...); \
 	public: \
 		static constexpr bool value = std::is_same<decltype(test<U>(0)), std::true_type>::value; \
+		using type = std::integral_constant<bool, value>; \
 	};
 
 // Use as type of constructor arguments that are required for enabling / disabling constructor through SFINAE.
@@ -516,6 +517,12 @@ namespace tc {
 		);
 	};
 
+	// Patch for XCode 8 - std::common_type<void, void> should be void, but fails to compile
+	template<>
+	struct common_type_decayed<void, void> {
+		using type = void;
+	}; 
+
 	template<typename T0, typename T1, typename... Args>
 	struct common_type_decayed<T0, T1, Args...> {
 		using type=common_type_decayed_t<T0, common_type_decayed_t<T1, Args...>>;
@@ -523,6 +530,11 @@ namespace tc {
 
 	template<typename... types>
 	struct common_reference;
+
+	template<typename T>
+	struct common_reference<T> {
+		using type = T;
+	};
 
 	template<typename... Args>
 	using common_reference_t =

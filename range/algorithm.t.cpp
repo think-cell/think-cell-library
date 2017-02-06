@@ -17,8 +17,6 @@
 #include "range.t.h"
 
 namespace {
-	using namespace tc;
-
 	void static_tests() noexcept {
 		// make_container with explicit move constructor
 		struct SMove { explicit SMove(tc::vector<int>&&) noexcept {} };
@@ -41,19 +39,19 @@ UNITTESTDEF( quantifiers ) {
 	int const existing_value = 5;
 	int const non_existing_value = 9;
 
-	auto const_range = slice(tc::as_const(v)); TEST_RANGE_LENGTH(const_range, 7);
-	
+	auto const_range = tc::slice(tc::as_const(v)); TEST_RANGE_LENGTH(const_range, 7);
+
 	_ASSERT( tc::find_first<tc::return_bool>(const_range, existing_value));
 	_ASSERT(!tc::find_first<tc::return_bool>(const_range, non_existing_value));
 
-	_ASSERT(! all_of(const_range, even));
-	_ASSERT(  any_of(const_range, even));
+	_ASSERT(! tc::all_of(const_range, even));
+	_ASSERT(  tc::any_of(const_range, even));
 
-	_ASSERT(  all_of(all_even, even));
-	_ASSERT(  any_of(all_even, even));
+	_ASSERT(  tc::all_of(all_even, even));
+	_ASSERT(  tc::any_of(all_even, even));
 
-	_ASSERT(! all_of(all_odd, even));
-	_ASSERT(! any_of(all_odd, even));
+	_ASSERT(! tc::all_of(all_odd, even));
+	_ASSERT(! tc::any_of(all_odd, even));
 }
 
 UNITTESTDEF( sort_accumulate_each_unique_range_2 ) {
@@ -104,7 +102,7 @@ UNITTESTDEF(filter_no_self_assignment_of_rvalues) {
 
 UNITTESTDEF( trim_leftright_if ) {
 	tc::vector<int> v{1,2,3,4,5,6,7,7,7};
-	auto rng = trim_left_if<tc::return_drop>(v, [] (int n) noexcept {return n<4;});
+	auto rng = tc::trim_left_if<tc::return_drop>(v, [] (int n) noexcept {return n<4;});
 	_ASSERT(std::begin(rng) != std::end(rng));
 	_ASSERTEQUAL(tc::size(rng), 6);
 	_ASSERTEQUAL(tc::size(tc::trim_right_if<tc::return_take>(rng, [] (int n) noexcept {return n==7;})), 3);
@@ -157,7 +155,7 @@ UNITTESTDEF(find_closest_if) {
 	struct IntCompareOnce final : boost::noncopyable {
 		IntCompareOnce(int n) noexcept :m_n(n) { }
 		bool operator==(int n) const& noexcept {
-			_ASSERT( change(m_bCompared, true) );
+			_ASSERT( tc::change(m_bCompared, true) );
 			return m_n==n;
 		}
 	private:
@@ -195,7 +193,7 @@ UNITTESTDEF(rangefilter_on_subrange) {
 
 	{
 		{
-			range_filter<tc::sub_range<tc::vector<int>&> > filter(rngn);
+			tc::range_filter<tc::sub_range<tc::vector<int>&> > filter(rngn);
 			auto it=boost::begin(rngn);
 			filter.keep(it++);
 			filter.keep(it++);

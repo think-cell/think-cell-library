@@ -14,6 +14,9 @@
 
 #pragma once
 
+#include "range_defines.h"
+#include <utility>
+
 namespace tc {
 	struct noop {
 		template<typename ...Args> void operator()(Args const&...) const& noexcept {}
@@ -34,7 +37,7 @@ namespace tc {
 		template< typename ...Args > T operator()( Args const&... ) const& noexcept { return tValue; }
 	};
 
-	#define MAKE_CONSTEXPR_FUNCTION(val) tc::constexpr_function< decltype(val), (val) >()
+	#define MAKE_CONSTEXPR_FUNCTION(val) (tc::constexpr_function< decltype(val), (val) >())
 
 	struct identity {
 		template< typename T >

@@ -318,9 +318,15 @@ namespace tc {
 	#pragma warning( disable: 4180 ) // qualifier applied to function type has no meaning; ignored
 
 		template< typename T >
-		T const& as_const(T& t) noexcept { 
+		T const& as_const(T& t) noexcept { // intention is to avoid side-effects
 			return static_cast<T const&>(t);
 		}
+		template <typename T>
+		T&& as_const(T&& t) noexcept { // needed in generic code when both values and references can occur
+			static_assert(!std::is_lvalue_reference<T&&>::value, "");
+			return std::forward<T&&>(t);
+		}
+
 		template< typename T >
 		std::remove_const_t<T>& as_mutable(T& t) noexcept {
 			return const_cast<std::remove_const_t<T>&>(t);

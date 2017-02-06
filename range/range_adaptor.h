@@ -42,6 +42,7 @@ namespace tc {
 	// Comes in two variations, one for generator ranges, one for iterator ranges. 
 	//
 	namespace range_iterator_from_index_impl {
+		TC_HAS_MEM_FN_XXX_TRAIT_DEF(end_index);
 
 		template<
 			typename Derived,
@@ -80,6 +81,12 @@ namespace tc {
 				return make_iterator(begin_index());
 			}
 
+			template<typename Derived_=Derived, std::enable_if_t<!has_mem_fn_end_index<Derived_>::value>* = nullptr>
+			end_sentinel end() const& noexcept {
+				return {};
+			}
+
+			template<typename Derived_ = Derived, std::enable_if_t<has_mem_fn_end_index<Derived_>::value>* = nullptr>
 			const_iterator end() const& MAYTHROW {
 				return make_iterator(end_index());
 			}
@@ -92,6 +99,7 @@ namespace tc {
 				return make_iterator(begin_index());
 			}
 
+			template<typename Derived_ = Derived, std::enable_if_t<has_mem_fn_end_index<Derived_>::value>* = nullptr>
 			iterator end() & MAYTHROW {
 				return make_iterator(end_index());
 			}
@@ -198,114 +206,24 @@ namespace tc {
 				move_if( *m_baserng, std::integral_constant< bool, !std::is_reference<Rng>::value >() )
 			)
 
-		private:
-
-			template< typename Func, bool Abortable >
-			struct adaptor;
+			template< typename Func >
+			break_or_continue operator()(Func func) /* no & */ MAYTHROW {
+				return tc::for_each(
+					base_range(),
+					[&](auto&&... args) mutable MAYTHROW {
+						return range_adaptor_access()(derived_cast<Derived>(*this), func, std::forward<decltype(args)>(args)...);
+					}
+				);
+			}
 
 			template< typename Func >
-			struct adaptor<Func, true> final {
-		private:
-				Derived const& m_derived;
-				tc::decay_t<Func> mutable m_func;
-
-			public:
-				explicit adaptor(Derived const& derived, Func&& func) noexcept
-				: m_derived( derived )
-				, m_func( std::forward<Func>(func) ) {}
-
-				template<typename... Args> break_or_continue operator()(Args&& ... args) const& MAYTHROW {
-					return continue_if_not_break(
-						range_adaptor_access(),
-						m_derived,
-						m_func,
-						std::forward<Args>(args)...
-					);
-				}
-			};
-
-			template< typename Func >
-			struct adaptor<Func, false> final {
-			private:
-				Derived const& m_derived;
-				tc::decay_t<Func> mutable m_func;
-
-			public:
-				explicit adaptor(Derived const& derived, Func&& func) noexcept
-					: m_derived( derived )
-					, m_func( std::forward<Func>(func) ) {}
-
-				template<typename... Args>
-				void operator()(Args&& ... args) const& MAYTHROW {
-					static_assert(
-						// Note: Instead of the following static_assert it would be possible to
-						// use return_decltype() and let the functor check in ensure_index_range
-						// check the correct type. The problem with that is, that
-						// VC12 very soon reaches compiler limits on chained decltypes. This
-						// chain is interrupted by returning void here.
-						!std::is_same<
-							decltype(range_adaptor_access()( m_derived, m_func, std::forward<Args>(args)... )),
-							break_or_continue
-						>::value,
-						"void generator ranges must not be used with functors returning break_or_continue!"
-					);
-					range_adaptor_access()( m_derived, m_func, std::forward<Args>(args)... );
-				}
-			};
-
-		public:
-
-			template< typename Func, std::enable_if_t<
-				std::is_same<
-					std::result_of_t<BaseRange&(adaptor<Func, true>)>,
-					break_or_continue
-				>::value>* = nullptr>
-			break_or_continue operator()(Func&& func) /* no & */ MAYTHROW {
-				return base_range()(adaptor<Func, true>(derived_cast<Derived>(*this), std::forward<Func>(func)));
-			}
-		
-			template< typename Func, std::enable_if_t<
-				!std::is_same<
-					std::result_of_t<BaseRange(adaptor<Func, true>)>,
-					break_or_continue
-				>::value
-			>* = nullptr>
-			void operator()(Func&& func) /* no & */ MAYTHROW {
-				static_assert(
-					std::is_same<
-						std::result_of_t<BaseRange&(adaptor<Func, false>)>,
-						void
-					>::value,
-					"Generator range must return either tc::break_or_continue or void"
+			break_or_continue operator()(Func func) const /* no & */ MAYTHROW {
+				return tc::for_each(
+					base_range(),
+					[&](auto&&... args) mutable MAYTHROW {
+						return range_adaptor_access()(derived_cast<Derived>(*this), func, std::forward<decltype(args)>(args)...);
+					}
 				);
-
-				base_range()(adaptor<Func, false>(derived_cast<Derived>(*this), std::forward<Func>(func)));
-			}
-
-			template< typename Func, std::enable_if_t<
-				std::is_same<
-					std::result_of_t<BaseRange const&(adaptor<Func, true>)>,
-					break_or_continue
-				>::value>* = nullptr>
-			break_or_continue operator()(Func&& func) const/* no & */ MAYTHROW {
-				return base_range()(adaptor<Func, true>(derived_cast<Derived>(*this), std::forward<Func>(func)));
-			}
-
-			template< typename Func, std::enable_if_t<
-				!std::is_same<
-					std::result_of_t<BaseRange const&(adaptor<Func, true>)>,
-					break_or_continue
-				>::value
-			>* = nullptr>
-			void operator()(Func&& func) const/* no & */ MAYTHROW {
-				static_assert(
-					std::is_same<
-						std::result_of_t<BaseRange const&(adaptor<Func, false>)>,
-						void
-					>::value,
-					"Generator range must return either tc::break_or_continue or void"
-				);
-				base_range()(adaptor<Func, false>(derived_cast<Derived>(*this), std::forward<Func>(func)));
 			}
 		};
 		//-------------------------------------------------------------------------------------------------------------------------
@@ -365,9 +283,9 @@ namespace tc {
 				return this->base_range().begin_index();
 			}
 
-			STATIC_OVERRIDE(end_index)() const& MAYTHROW -> index {
-				return this->base_range().end_index();
-			}
+			STATIC_OVERRIDE_MOD(template<typename Rng2=Rng>,end_index)() const& MAYTHROW return_decltype(
+				boost::implicit_cast<std::remove_reference_t<index_range_t<Rng2>> const&>(this->base_range()).end_index()
+			)
 
 			STATIC_OVERRIDE(at_end_index)(index const& idx) const& MAYTHROW -> bool {
 				return this->base_range().at_end_index(idx);

@@ -27,9 +27,6 @@ namespace tc {
 	}
 	using is_range_with_iterators_adl_barrier::is_range_with_iterators;
 
-	template<typename It>
-	struct const_iterator_;
-
 	template<typename It, typename ConstIt>
 	struct iterator_base;
 

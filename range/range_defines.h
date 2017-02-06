@@ -47,10 +47,26 @@
 		#define _ASSERTPRINT( cond, ... ) assert( cond )
 	#endif
 	#ifndef VERIFYEQUAL
-		#define VERIFYEQUAL( expr, constant ) (expr)
+		#include <utility>
+		namespace ErrorHandling {
+			template <typename Expr, typename Const>
+			Expr&& VerifyEqual(Expr&& expr, Const const& c) {
+				_ASSERTEQUAL(expr, c);
+				return std::forward<Expr>(expr);
+			}
+		}
+		#define VERIFYEQUAL( expr, constant ) ErrorHandling::VerifyEqual(expr, constant)
 	#endif
 	#ifndef VERIFY
-		#define VERIFY( expr ) (expr)
+		#include <utility>
+		namespace ErrorHandling {
+			template <typename Expr>
+			Expr&& Verify(Expr&& expr) {
+				_ASSERT(expr);
+				return std::forward<Expr>(expr);
+			}
+		}
+		#define VERIFY( expr ) ErrorHandling::Verify(expr)
 	#endif
 	#ifndef VERIFYINITIALIZED
 		#define VERIFYINITIALIZED( expr ) (expr)
@@ -62,7 +78,7 @@
 		#define NOEXCEPT( ... ) \
 			[&]() noexcept -> decltype(auto) { \
 				return (__VA_ARGS__); \
-			}
+			}()
 	#endif
 
 	#define MAYTHROW noexcept(false)

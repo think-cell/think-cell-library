@@ -274,12 +274,12 @@ namespace tc{
 		struct is_view_impl<singleton_range<T&>> : std::true_type{};
 
 		template< typename T >
-		struct is_view final : is_view_impl< tc::decay_t<T> > {};
+		struct is_view final : is_view_impl< std::remove_cv_t<T> > {};
 
 		template< typename T >
 		struct view_by_value final {
 			static_assert(!std::is_rvalue_reference<T>::value, "");
-			using type = std::conditional_t< is_view<T>::value
+			using type = std::conditional_t< is_view<std::remove_reference_t<T>>::value
 				, tc::decay_t<T>
 				, T
 			>;

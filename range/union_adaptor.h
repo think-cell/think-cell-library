@@ -46,13 +46,13 @@ namespace tc {
 			Comp m_comp;
 
 		public:
-			template<typename Rhs0, typename Rhs1, typename Comp>
-			explicit union_adaptor(Rhs0&& rhs0, Rhs1&& rhs1, Comp&& comp) noexcept
+			template<typename Rhs0, typename Rhs1, typename Comp2>
+			explicit union_adaptor(Rhs0&& rhs0, Rhs1&& rhs1, Comp2&& comp) noexcept
 				: m_baserng(
 					reference_or_value< index_range_t<Rng0> >(aggregate_tag(), std::forward<Rhs0>(rhs0)),
 					reference_or_value< index_range_t<Rng1> >(aggregate_tag(), std::forward<Rhs1>(rhs1))
 				),
-				m_comp(std::forward<Comp>(comp))
+				m_comp(std::forward<Comp2>(comp))
 			{}
 
 		private:
@@ -75,8 +75,8 @@ namespace tc {
 			auto operator()(Func func) const/* no & */ MAYTHROW -> break_or_continue
 			{
 				return tc::interleave(
-					boost::implicit_cast<Rng0 const&>(*std::get<0>(m_baserng)),
-					boost::implicit_cast<Rng1 const&>(*std::get<1>(m_baserng)),
+					*std::get<0>(m_baserng),
+					*std::get<1>(m_baserng),
 					m_comp,
 					std::ref(func),
 					std::ref(func),
@@ -88,8 +88,8 @@ namespace tc {
 			auto operator()(Func func) /* no & */ MAYTHROW -> break_or_continue
 			{
 				return tc::interleave(
-					boost::implicit_cast<Rng0&>(*std::get<0>(m_baserng)),
-					boost::implicit_cast<Rng1&>(*std::get<1>(m_baserng)),
+					*std::get<0>(m_baserng),
+					*std::get<1>(m_baserng),
 					m_comp,
 					std::ref(func),
 					std::ref(func),
@@ -149,9 +149,9 @@ namespace tc {
 		public:
 			using index = typename union_adaptor::index;
 
-			template<typename Rhs0, typename Rhs1, typename Comp>
-			explicit union_adaptor(Rhs0&& rhs0, Rhs1&& rhs1, Comp&& comp) noexcept
-				: union_adaptor<Comp, Rng0, Rng1, false>(std::forward<Rhs0>(rhs0), std::forward<Rhs1>(rhs1), std::forward<Comp>(comp))
+			template<typename Rhs0, typename Rhs1, typename Comp2>
+			explicit union_adaptor(Rhs0&& rhs0, Rhs1&& rhs1, Comp2&& comp) noexcept
+				: union_adaptor<Comp2, Rng0, Rng1, false>(std::forward<Rhs0>(rhs0), std::forward<Rhs1>(rhs1), std::forward<Comp2>(comp))
 			{}
 
 		private:

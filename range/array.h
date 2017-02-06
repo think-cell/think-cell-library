@@ -65,14 +65,15 @@ namespace tc {
 
 		private:
 			template<typename Func, std::size_t ...IndexPack>
-			constexpr array(func_tag, Func func, std::index_sequence<IndexPack...>) MAYTHROW 
-				: m_a{func(IndexPack)...} 
+			constexpr array(func_tag, Func func, std::index_sequence<IndexPack...>) MAYTHROW
+				: m_a{func(IndexPack)...}
 			{}
 		public:
 			template<typename Func>
-			array(func_tag, Func func) MAYTHROW 
-				: array(func_tag{}, func, std::make_index_sequence<N>()) 
+			array(func_tag, Func func) MAYTHROW
+				: array(func_tag{}, func, std::make_index_sequence<N>())
 			{}
+
 		private:
 			template<
 				typename... Params,
@@ -90,7 +91,6 @@ namespace tc {
 			{
 				static_assert(N == sizeof...(IndexPack)+1, "");
 			}
-
 		public:
 			template<
 				typename... Rhs,
@@ -103,6 +103,7 @@ namespace tc {
 				: array(fill_tag{}, std::make_index_sequence<N-1>(), std::forward<Rhs>(rhs)...)
 			{}
 
+		private:
 			template<
 				typename Arg0,
 				typename... Params,
@@ -120,7 +121,7 @@ namespace tc {
 			{
 				static_assert(N == sizeof...(IndexPack)+1, "");
 			}
-
+		public:
 			/*
 				TODO C++17:
 				- The condition !std::is_move_constructible is a workaround for a trait
@@ -132,50 +133,38 @@ namespace tc {
 				Then todo: Unify code paths.
 			*/
 			template<
-				typename Arg0,
 				typename... Rhs,
-				typename T_ = T,
 				std::enable_if_t<
-					!std::is_move_constructible<T_>::value
+					0 < sizeof...(Rhs)
+					&& !std::is_move_constructible<T>::value
 				>* = nullptr
 			>
-			constexpr array(fill_tag, Arg0&& arg0, Rhs&&... rhs) MAYTHROW
-				: array(fill_tag{}, std::make_index_sequence<N-1>(), std::forward<Arg0>(arg0), std::forward<Rhs>(rhs)...)
+			constexpr array(fill_tag, Rhs&&... rhs) MAYTHROW
+				: array(fill_tag{}, std::make_index_sequence<N-1>(), std::forward<Rhs>(rhs)...)
 			{}
 
-			// TODO: We inlined elementwise_construction_restrictiveness to fold_expression_bitwise_and<construction_restrictiveness...>,
-			//       because it caused an internal compiler error with *.pot.cpp files on VS2015. Check if future compilers fix this!
-			// make sure forwarding ctor has at least two parameters, so no ambiguity with copy/move ctors
-			template< typename First, typename Second, typename... Args,
+			template <typename... Args, std::enable_if_t< 1<sizeof...(Args) >* = nullptr,
 				std::enable_if_t<
-					implicit_construction == fold_expression_bitwise_and<
-						construction_restrictiveness<T, First>::value,
-						construction_restrictiveness<T, Second>::value,
-						construction_restrictiveness<T, Args>::value...
-					>::value
-					&& !std::is_same<tc::remove_cvref_t<First>, tc::fill_tag>::value
-				>* =nullptr
+					elementwise_construction_restrictiveness<T, Args...>::value == implicit_construction
+					&& !std::is_same<tc::remove_cvref_t<std::tuple_element_t<0, std::tuple<Args...>>>, tc::fill_tag>::value
+				>* = nullptr
 			>
-			constexpr array(First&& first, Second&& second, Args&& ... args) MAYTHROW
-				: m_a{static_cast<T>(std::forward<First>(first)), static_cast<T>(std::forward<Second>(second)), static_cast<T>(std::forward<Args>(args))...}
+			constexpr array(Args&& ... args) MAYTHROW
+				: m_a{static_cast<T>(std::forward<Args>(args))...}
 			{
-				static_assert(sizeof...(Args)==N-2, "array initializer list does not match number of elements");
+				static_assert(sizeof...(Args)==N, "array initializer list does not match number of elements");
 			}
 
-			template< typename First, typename Second, typename... Args,
+			template <typename... Args, std::enable_if_t< 1<sizeof...(Args) >* = nullptr,
 				std::enable_if_t<
-					explicit_construction == fold_expression_bitwise_and<
-						construction_restrictiveness<T, First>::value,
-						construction_restrictiveness<T, Second>::value,
-						construction_restrictiveness<T, Args>::value...
-					>::value
-					&& !std::is_same<tc::remove_cvref_t<First>, tc::fill_tag>::value
-				>* =nullptr
+					elementwise_construction_restrictiveness<T, Args...>::value == explicit_construction
+					&& !std::is_same<tc::remove_cvref_t<std::tuple_element_t<0, std::tuple<Args...>>>, tc::fill_tag>::value
+				>* = nullptr
 			>
-			constexpr explicit array(First&& first, Second&& second, Args&& ... args) MAYTHROW 
-				: m_a{static_cast<T>(std::forward<First>(first)), static_cast<T>(std::forward<Second>(second)), static_cast<T>(std::forward<Args>(args))...}
+			constexpr explicit array(Args&& ... args) MAYTHROW
+				: m_a{static_cast<T>(std::forward<Args>(args))...}
 			{
-				static_assert(sizeof...(Args)==N-2, "array initializer list does not match number of elements");
+				static_assert(sizeof...(Args)==N, "array initializer list does not match number of elements");
 			}
 
 		private:
@@ -189,12 +178,12 @@ namespace tc {
 			}
 		public:
 			template< typename Rng,
-				std::enable_if_t< 0!=N 
-					&& is_range_with_iterators<std::remove_reference_t<Rng>>::value 
+				std::enable_if_t< 0!=N
+					&& is_range_with_iterators<std::remove_reference_t<Rng>>::value
 					&& construction_restrictiveness<T, decltype(tc_front(std::declval<Rng&>()))>::value == implicit_construction
-				>* = nullptr 
+				>* = nullptr
 			>
-			array(Rng&& rng) MAYTHROW
+			explicit array(Rng&& rng) MAYTHROW
 				: array(range_tag(), boost::begin(rng), boost::end(rng), std::make_index_sequence<N-1>())
 			{}
 
@@ -340,15 +329,16 @@ namespace tc {
 				: array(func_tag{}, func, std::make_index_sequence<N>()) {}
 
 			// make sure forwarding ctor has at least two parameters, so no ambiguity with copy/move ctors
-			template< typename First, typename Second, typename... Args,
+			template <typename... Args,
 				std::enable_if_t<
-					implicit_construction == elementwise_construction_restrictiveness<T&, First&, Second&, Args&...>::value
+					1 < sizeof...(Args)
+					&& elementwise_construction_restrictiveness<T&, Args&...>::value == implicit_construction
 				>* =nullptr
 			>
-			array(First& first, Second& second, Args& ... args) MAYTHROW 
-				: m_a{std::addressof(first), std::addressof(second), std::addressof(args)...}
+			array(Args& ... args) MAYTHROW
+				: m_a{std::addressof(args)...}
 			{
-				static_assert(sizeof...(Args)==N-2, "array initializer list does not match number of elements");
+				static_assert(sizeof...(Args)==N, "array initializer list does not match number of elements");
 			}
 
 		private:
@@ -363,15 +353,15 @@ namespace tc {
 			}
 		public:
 			template< typename Rng,
-				std::enable_if_t< 0!=N 
-					&& is_range_with_iterators<std::remove_reference_t<Rng>>::value 
+				std::enable_if_t< 0!=N
+					&& is_range_with_iterators<std::remove_reference_t<Rng>>::value
 					&& construction_restrictiveness<T&, decltype(tc_front(std::declval<Rng&>()))>::value == implicit_construction
-				>* = nullptr 
+				>* = nullptr
 			>
-			array(Rng&& rng) MAYTHROW
+			explicit array(Rng&& rng) MAYTHROW
 				: array(range_tag(), boost::begin(rng), boost::end(rng), std::make_index_sequence<N-1>())
 			{}
-			
+
 			array const& operator=(array const& rhs) const& noexcept(std::is_nothrow_copy_assignable<T>::value) {
 				boost::copy(rhs, begin());
 				return *this;
@@ -450,18 +440,58 @@ namespace tc {
 		static_assert(has_mem_fn_size<array<int, 10>>::value, "");
 		static_assert(has_mem_fn_size<array<int&, 10>>::value, "");
 
+		static_assert(!std::is_convertible<array<int,10>, array<int, 9>>::value, "");
+		static_assert(!std::is_convertible<array<int,9>, array<int, 10>>::value, "");
+
 		template<typename T, std::size_t N>
 		auto constexpr_size(array<T, N> const&) -> std::integral_constant<std::size_t, N>;
+
+		struct deduce_tag;
+
+		template <typename T, typename...>
+		struct delayed_deduce {
+			using type = T;
+		};
+
+		template <typename... Ts>
+		struct delayed_deduce<deduce_tag, Ts...> : std::common_type<Ts...> {};
 	}
 	using array_adl_barrier::array;
-	
-	template< typename Rng >
+
+
+	template <typename tag = array_adl_barrier::deduce_tag, typename Rng>
 	auto make_array(Rng&& rng) noexcept {
-		return array<decltype(tc_front(rng)), decltype(constexpr_size(rng))::value>(std::forward<Rng>(rng));
+		static_assert(std::is_same<tag, array_adl_barrier::deduce_tag>::value, "");
+		return tc::array<decltype(tc_front(rng)), decltype(constexpr_size(rng))::value>(std::forward<Rng>(rng));
+	}
+
+	template <typename T = array_adl_barrier::deduce_tag, typename T0>
+	auto make_array(tc::aggregate_tag, T0&& t0) {
+		return tc::array<typename array_adl_barrier::delayed_deduce<T, T0>::type, 1>(fill_tag{}, std::forward<T0>(t0));
+	}
+
+	template <typename T = array_adl_barrier::deduce_tag, typename... Ts, std::enable_if_t<1 < sizeof...(Ts)>* = nullptr>
+	auto make_array(tc::aggregate_tag, Ts&&... ts) noexcept {
+		return tc::array<typename array_adl_barrier::delayed_deduce<T, Ts...>::type, sizeof...(Ts)>(std::forward<Ts>(ts)...);
 	}
 
 	template <typename T, std::size_t N>
 	struct decay<tc::array<T, N>> {
 		using type = tc::array<tc::decay_t<T>, N>;
 	};
+
+	template <typename... Ts>
+	constexpr std::size_t count_args(Ts&&...) { return sizeof...(Ts); }
+
+	template <typename... Ts>
+	tc::common_type_t<Ts&&...> declval_common_type(Ts&&...) noexcept;
 }
+
+#define MAKE_TYPED_CONSTEXPR_ARRAY(type, ...) \
+	[]() noexcept -> tc::array<type, tc::count_args(__VA_ARGS__)> const& { \
+		static constexpr tc::array<type, tc::count_args(__VA_ARGS__)> c_at(__VA_ARGS__); \
+		return c_at; \
+	}()
+
+#define MAKE_CONSTEXPR_ARRAY(...) \
+	MAKE_TYPED_CONSTEXPR_ARRAY(decltype(tc::declval_common_type(__VA_ARGS__)), __VA_ARGS__)

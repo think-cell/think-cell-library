@@ -214,24 +214,23 @@ namespace tc {
 		//  - a size member function, which is assumed to run in O(1)
 		//  - random_access iterators, which are assumed to be able to calculate size in O(1)
 
-		template<typename Rng, std::enable_if_t<has_mem_fn_size< Rng const >::value>* = nullptr >
+		template<typename Rng, std::enable_if_t<
+			has_mem_fn_size<Rng const>::value
+			&& is_range_with_iterators<Rng const>::value
+		>* = nullptr >
 		auto size(Rng const& rng) noexcept return_decltype(
 			rng.size()
 		)
 
 		template<typename Rng, std::enable_if_t<
-			!has_mem_fn_size< Rng const >::value &&
-			!std::is_pointer<std::decay_t<Rng>>::value &&
-			is_random_access_range<Rng>::value
+			!has_mem_fn_size<Rng const>::value
+			&& is_random_access_range<Rng>::value
 		>* = nullptr>
 		auto size(Rng const& rng) noexcept return_decltype(
-			boost::size(rng)
-		)
-
-		template<typename T, std::enable_if_t<tc::is_char< T >::value>* = nullptr>
-		auto size(T * pt) noexcept return_decltype(
-			strlen(pt)
-		)
+			tc::unsigned_cast(boost::end(rng) - boost::begin(rng))
+		) // Do not use boost::size. It always uses std::distance, which is O(n) for
+		  // ranges with boost::iterators::random_access_traversal_tag but not std::random_access_iterator_tag,
+		  // e.g., boost::transform_iterator
 
 		template<typename T, std::size_t N, std::enable_if_t<!tc::is_char< T >::value>* = nullptr>
 		constexpr auto size(T (&)[N]) noexcept return_decltype(
@@ -240,12 +239,12 @@ namespace tc {
 
 		TC_HAS_EXPR(size, tc::size_impl::size(std::declval<T>()))
 
-		template<typename Rng, std::enable_if_t<!tc::size_impl::has_size< Rng const >::value>* =nullptr>
+		template<typename Rng, std::enable_if_t<!tc::size_impl::has_size<Rng const>::value>* =nullptr>
 		auto size_linear(Rng const& rng) noexcept return_decltype(
 			boost::distance(rng)
 		)
 
-		template<typename Rng, std::enable_if_t<tc::size_impl::has_size< Rng const >::value>* =nullptr>
+		template<typename Rng, std::enable_if_t<tc::size_impl::has_size<Rng const>::value>* =nullptr>
 		auto size_linear(Rng const& rng) noexcept return_decltype(
 			tc::size_impl::size(rng)
 		)

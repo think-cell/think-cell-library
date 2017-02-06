@@ -20,391 +20,283 @@
 #include "meta.h"
 #include "types.h"
 #include "size.h"
-#include "as_lvalue.h"
-
-#include <boost/variant.hpp>
-#include <boost/serialization/strong_typedef.hpp>
-
+#include "utility.h"
+#include "invoke_with_constant.h"
+#include "indexed_variant.h"
+#include "algorithm.h"
 
 namespace tc {
-
 	namespace concat_adaptor_impl {
+		template<
+			bool HasIterator,
+			typename... Rng
+		>
+		struct concat_adaptor_impl;
+
+		template<typename... Rng>
+		using concat_adaptor = concat_adaptor_impl< tc::conjunction<tc::is_range_with_iterators<Rng>...>::value, Rng... >;
 
 		template<
-			typename Rng0,
-			typename Rng1,
-			bool HasIterator = is_range_with_iterators< Rng0 >::value && is_range_with_iterators< Rng1 >::value
+			typename... Rng
 		>
-		struct concat_adaptor;
-
-		template<
-			typename Rng0,
-			typename Rng1
-		>
-		struct concat_adaptor<Rng0, Rng1, false> {
+		struct concat_adaptor_impl<false, Rng...> {
 			std::tuple<
-				reference_or_value< index_range_t<Rng0> >,
-				reference_or_value< index_range_t<Rng1> >
+				tc::reference_or_value< tc::index_range_t<Rng> >...
 			> m_baserng;
 
-			template<typename Rhs0, typename Rhs1>
-			concat_adaptor(Rhs0&& rhs0, Rhs1&& rhs1) noexcept
+			template<typename... Rhs>
+			explicit concat_adaptor_impl(Rhs&&... rhs) noexcept
 				: m_baserng(
-					reference_or_value< index_range_t<Rng0> >(aggregate_tag(), std::forward<Rhs0>(rhs0)),
-					reference_or_value< index_range_t<Rng1> >(aggregate_tag(), std::forward<Rhs1>(rhs1))
+					tc::reference_or_value< tc::index_range_t<Rng> >(tc::aggregate_tag(), std::forward<Rhs>(rhs))...
 				)
 			{}
 
 			template< typename Func >
-			auto operator()(Func func) & MAYTHROW ->
-				std::enable_if_t<
-					std::is_same<
-						decltype((*std::get<0>(m_baserng))(std::ref(func))),
-						break_or_continue
-					>::value &&
-					std::is_same<
-						decltype((*std::get<1>(m_baserng))(std::ref(func))),
-						break_or_continue
-					>::value,
-					break_or_continue
-				>
-			{
-				RETURN_IF_BREAK((*std::get<0>(m_baserng))(std::ref(func)));
-				RETURN_IF_BREAK((*std::get<1>(m_baserng))(std::ref(func)));
-				return tc::continue_;
+			auto operator()(Func func) & MAYTHROW {
+				return 
+					tc::for_each(
+						std::index_sequence_for<Rng...>(),
+						[&](auto nconstIndex) MAYTHROW {
+							return tc::for_each(*std::get<nconstIndex()>(m_baserng), std::ref(func));
+						}
+					);
 			}
 
 			template< typename Func >
-			auto operator()(Func func) & MAYTHROW ->
-				typename std::enable_if<
-					!std::is_same<
-						decltype((*std::get<0>(m_baserng))(std::ref(func))),
-						break_or_continue
-					>::value ||
-					!std::is_same<
-						decltype((*std::get<1>(m_baserng))(std::ref(func))),
-						break_or_continue
-					>::value
-				>::type
-			{
-				(*std::get<0>(m_baserng))(std::ref(func));
-				(*std::get<1>(m_baserng))(std::ref(func));
-			}
-
-			template< typename Func >
-			auto operator()(Func func) const& MAYTHROW ->
-				std::enable_if_t<
-					std::is_same<
-						decltype((*std::get<0>(m_baserng))(std::ref(func))),
-						break_or_continue
-					>::value &&
-					std::is_same<
-						decltype((*std::get<1>(m_baserng))(std::ref(func))),
-						break_or_continue
-					>::value,
-					break_or_continue
-				>
-			{
-				RETURN_IF_BREAK((*std::get<0>(m_baserng))(std::ref(func)));
-				RETURN_IF_BREAK((*std::get<1>(m_baserng))(std::ref(func)));
-				return tc::continue_;
-			}
-
-			template< typename Func >
-			auto operator()(Func func) const& MAYTHROW ->
-				typename std::enable_if<
-					!std::is_same<
-						decltype((*std::get<0>(m_baserng))(std::ref(func))),
-						break_or_continue
-					>::value ||
-					!std::is_same<
-						decltype((*std::get<1>(m_baserng))(std::ref(func))),
-						break_or_continue
-					>::value
-				>::type
-			{
-				(*std::get<0>(m_baserng))(std::ref(func));
-				(*std::get<1>(m_baserng))(std::ref(func));
+			auto operator()(Func func) const& MAYTHROW {
+				return 
+					tc::for_each(
+						std::index_sequence_for<Rng...>(),
+						[&](auto nconstIndex) MAYTHROW {
+							return tc::for_each(*std::get<nconstIndex()>(m_baserng), std::ref(func));
+						}
+					);
 			}
 		};
 
 		template<
-			int N,
-			typename T0,
-			typename... T
+			typename... Rng
 		>
-		struct type_by_index final {
-			using type = typename type_by_index<N-1,T...>::type;
-		};
-
-		template<
-			typename T0,
-			typename... T
-		>
-		struct type_by_index<0, T0, T...> final {
-			using type = T0;
-		};
-
-		template<
-			typename BaseIndex0,
-			typename BaseIndex1
-		>
-		struct concat_index {
-		private:
-			BOOST_STRONG_TYPEDEF(BaseIndex0, Index0)
-			BOOST_STRONG_TYPEDEF(BaseIndex1, Index1)
-
-			boost::variant<Index0, Index1> m_varidx;
-
-			template<int N>
-			using index_t = typename type_by_index<N, Index0, Index1>::type;
-
-			template<typename Rhs>
-			concat_index(aggregate_tag, Rhs&& rhs) noexcept
-				: m_varidx(std::forward<Rhs>(rhs))
-			{}
-
-		public:
-			template<int N, typename Rhs>
-			static concat_index create(Rhs&& rhs) noexcept {
-				return concat_index(aggregate_tag(), index_t<N>(std::forward<Rhs>(rhs)));
-			}
-
-			template<int N>
-			index_t<N>& get() & noexcept {
-				return boost::get<index_t<N>>(m_varidx);
-			}
-
-			template<int N>
-			index_t<N> const& get() const & noexcept {
-				return boost::get<index_t<N>>(m_varidx);
-			}
-
-			int which() const {
-				return m_varidx.which();
-			}
-		};
-
-		template<
-			typename Rng0,
-			typename Rng1
-		>
-		struct concat_adaptor<Rng0, Rng1, true> :
-			concat_adaptor < Rng0, Rng1, false >,
-			range_iterator_from_index<
-				concat_adaptor<Rng0, Rng1, true>,
-				concat_index<
+		struct concat_adaptor_impl<true, Rng...> :
+			concat_adaptor_impl<false, Rng...>,
+			tc::range_iterator_from_index<
+				concat_adaptor_impl<true, Rng...>,
+				tc::indexed_variant<
 					typename std::remove_reference_t<
-						index_range_t<Rng0>
-					>::index,
-					typename std::remove_reference_t<
-						index_range_t<Rng1>
-					>::index
+						tc::index_range_t<Rng>
+					>::index...
 				>,
-				tc::demote_iterator_traversal_tag_t<traversal_t<Rng0>, traversal_t<Rng1>>
+				tc::demote_iterator_traversal_tag_t<tc::traversal_t<Rng>...>
 			>
 		{
 		private:
-			using this_type = concat_adaptor;
+			using this_type = concat_adaptor_impl;
 		public:
-
 			using index = typename this_type::index;
 
-			using concat_adaptor < Rng0, Rng1, false >::m_baserng;
+			using concat_adaptor_impl<false, Rng...>::m_baserng;
 
-			template<typename Rhs0, typename Rhs1>
-			concat_adaptor(Rhs0&& rhs0, Rhs1&& rhs1) noexcept
-				: concat_adaptor<Rng0,Rng1,false>(std::forward<Rhs0>(rhs0), std::forward<Rhs1>(rhs1))
+			template<typename... Rhs>
+			explicit concat_adaptor_impl(Rhs&&... rhs) noexcept
+				: concat_adaptor_impl<false, Rng...>(std::forward<Rhs>(rhs)...)
 			{}
 
 		private:
+			index create_begin_index(std::integral_constant<std::size_t, sizeof...(Rng)>) const& noexcept { _ASSERTFALSE; return {}; } // If this assertion fires, it means that an attempt to increment the end index or advance past it with positive distance has been attempted
+
+			template<std::size_t Index>
+			index create_begin_index(std::integral_constant<std::size_t, Index>) const& noexcept {
+				return index(tc::in_place_index<Index>, std::get<Index>(m_baserng)->begin_index());
+			}
+
+			index create_end_index(std::integral_constant<int, -1>) const& noexcept { _ASSERTFALSE; return {}; } // If this assertion fires, it means that an attempt to decrement the begin index or advance past it with negative distance has been attempted
+
+			template<int Index>
+			index create_end_index(std::integral_constant<int, Index>) const& noexcept {
+				return index(tc::in_place_index<Index>, std::get<Index>(m_baserng)->end_index());
+			}
+
+			template<int IndexFrom>
 			index correct_index(index idx) const& noexcept {
-				switch_no_default(idx.which()) {
-				case 0: if (std::get<0>(m_baserng)->at_end_index(idx.template get<0>())) idx = index::template create<1>(std::get<1>(m_baserng)->begin_index());
-				case 1:;
-				}
+				tc::for_each(
+					tc::make_integer_sequence<std::size_t, IndexFrom, sizeof...(Rng) - 1>(), // if the index is at end index of the last range, there's nothing to do
+					[&](auto nconstIndex) noexcept {
+						if (std::get<nconstIndex()>(m_baserng)->at_end_index(tc::get<nconstIndex()>(idx))) {
+							idx = create_begin_index(std::integral_constant<std::size_t, nconstIndex() + 1>());
+							return tc::continue_;
+						} else {
+							return tc::break_;
+						}
+					}
+				);
+
 				return idx;
 			}
 
 		public:
 			STATIC_FINAL(begin_index)() const& noexcept -> index {
-				return correct_index( index::template create<0>(std::get<0>(m_baserng)->begin_index()) );
+				return correct_index<0>(create_begin_index(std::integral_constant<std::size_t, 0>()));
 			}
 
 			STATIC_FINAL(end_index)() const& noexcept -> index {
-				return index::template create<1>( std::get<1>(m_baserng)->end_index() );
+				return create_end_index(std::integral_constant<int, sizeof...(Rng)-1>());
 			}
 
 			STATIC_FINAL(at_end_index)(index const& idx) const& noexcept -> bool {
-				return 1 == idx.which() && std::get<1>(m_baserng)->at_end_index(idx.template get<1>());
+				return sizeof...(Rng) - 1 == idx.index() && std::get<sizeof...(Rng) - 1>(m_baserng)->at_end_index(tc::get<sizeof...(Rng) - 1>(idx));
 			}
 
 			STATIC_FINAL(increment_index)(index& idx) const& noexcept -> void {
-				switch_no_default(idx.which()) {
-				case 0:
-					std::get<0>(m_baserng)->increment_index(idx.template get<0>());
-					idx = correct_index(idx);
-					break;
-				case 1:
-					{
-						auto& idx1 = idx.template get<1>();
-						_ASSERT(!std::get<1>(m_baserng)->at_end_index(idx1));
-						std::get<1>(m_baserng)->increment_index(idx1);
-					}
-				}
+				_ASSERT(!this->at_end_index(idx));
+
+				tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
+					[&](auto nconstIndex) noexcept { 
+						std::get<nconstIndex()>(m_baserng)->increment_index(tc::get<nconstIndex()>(idx));
+						idx = correct_index<nconstIndex()>(idx);
+					},
+					idx.index()
+				);
 			}
 
-			STATIC_FINAL(decrement_index)(index& idx) const& noexcept -> void{
-				switch_no_default(idx.which()) {
-				case 1:
-					{
-						auto& idx1 = idx.template get<1>();
-						if (!std::get<1>(m_baserng)->equal_index(std::get<1>(m_baserng)->begin_index(), idx1)) {
-							std::get<1>(m_baserng)->decrement_index(idx1);
-							return;
-						}
-					}
-					idx = index::template create<0>(std::get<0>(m_baserng)->end_index());
-				case 0:
-					{
-						auto& idx0 = idx.template get<0>();
-						_ASSERT(!std::get<0>(m_baserng)->equal_index(std::get<0>(m_baserng)->begin_index(), idx0));
-						std::get<0>(m_baserng)->decrement_index(idx0);
-					}
-				}
+			STATIC_FINAL(decrement_index)(index& idx) const& noexcept -> void {
+				tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
+					[&](auto nconstIndexStart) noexcept {
+						tc::for_each(
+							tc::make_reverse_integer_sequence<int, 0, nconstIndexStart() + 1>(),
+							[&](auto nconstIndex) noexcept {
+								auto& idxCurrent = tc::get<nconstIndex()>(idx);
+								if (std::get<nconstIndex()>(m_baserng)->equal_index(std::get<nconstIndex()>(m_baserng)->begin_index(), idxCurrent)) {
+									idx = create_end_index(std::integral_constant<int, nconstIndex() - 1>());
+									return tc::continue_;
+								} else {
+									std::get<nconstIndex()>(m_baserng)->decrement_index(idxCurrent);
+									return tc::break_;
+								}
+								
+							}
+						);
+					},
+					idx.index()
+				);
 			}
 
-			template<int N>
-			auto dereference_index_fwd(index const& idx) const& noexcept return_decltype(
-				std::get<N>(m_baserng)->dereference_index(idx.template get<N>())
-			)
-
-			STATIC_FINAL_MOD(template<typename R0=Rng0 BOOST_PP_COMMA() typename R1=Rng1>, dereference_index)(index const& idx) const& noexcept ->
-			tc::lvalue_or_decay_t<common_reference_t<
-				typename range_traits<R0>::reference,
-				typename range_traits<R1>::reference
-			>> {
-				switch_no_default(idx.which()) {
-					case 0: return dereference_index_fwd<0>(idx);
-					case 1: return dereference_index_fwd<1>(idx);
-				}
+			STATIC_FINAL(dereference_index)(index const& idx) const& noexcept -> decltype(auto) {
+				return tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
+					[&](auto nconstIndex) noexcept  -> decltype(auto) { // return_decltype leads to ICE 
+						return std::get<nconstIndex()>(m_baserng)->dereference_index(tc::get<nconstIndex()>(idx));
+					},
+					idx.index()
+				);
 			}
 
-			template<int N>
-			auto dereference_index_fwd(index const& idx) & noexcept return_decltype(
-				std::get<N>(m_baserng)->dereference_index(idx.template get<N>())
-			)
-
-			STATIC_FINAL_MOD(template<typename R0=Rng0 BOOST_PP_COMMA() typename R1=Rng1>, dereference_index)(index const& idx) & noexcept ->
-			tc::lvalue_or_decay_t<common_reference_t<
-				typename range_traits<R0>::reference,
-				typename range_traits<R1>::reference
-			>> {
-				switch_no_default(idx.which()) {
-					case 0: return dereference_index_fwd<0>(idx);
-					case 1: return dereference_index_fwd<1>(idx);
-				}
-			}
-
-			template<int N>
-			bool equal_index_fwd(index const& idxLhs, index const& idxRhs) const& noexcept {
-				return std::get<N>(m_baserng)->equal_index(idxLhs.template get<N>(), idxRhs.template get<N>());
+			STATIC_FINAL(dereference_index)(index const& idx) & noexcept -> decltype(auto) {
+				return tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
+					[&](auto nconstIndex) noexcept -> decltype(auto) { // return_decltype leads to ICE 
+						return std::get<nconstIndex()>(m_baserng)->dereference_index(tc::get<nconstIndex()>(idx));
+					},
+					idx.index()
+				);
 			}
 
 			STATIC_FINAL(equal_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> bool {
-				if ( idxLhs.which() != idxRhs.which() ) return false;
-				switch_no_default(idxLhs.which()) {
-					case 0: return equal_index_fwd<0>(idxLhs, idxRhs);
-					case 1: return equal_index_fwd<1>(idxLhs, idxRhs);
-				}
+				if ( idxLhs.index() != idxRhs.index() ) return false;
+
+				return tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
+					[&](auto nconstIndex) noexcept {
+						return std::get<nconstIndex()>(m_baserng)->equal_index(tc::get<nconstIndex()>(idxLhs), tc::get<nconstIndex()>(idxRhs));
+					},
+					idxLhs.index()
+				);
 			}
 
 			using difference_type = tc::common_type_t<
-				range_difference_type<Rng0,traversal_t<Rng0>>,
-				range_difference_type<Rng1,traversal_t<Rng1>>
+				tc::range_difference_type<Rng, tc::traversal_t<Rng>>...
 			>;
 
 			STATIC_FINAL(advance_index)(index& idx, difference_type d) const& noexcept -> void {
-				if (d < 0) {
-					switch_no_default(idx.which()) {
-					case 1:
-						{
-							auto dToBegin = std::get<1>(m_baserng)->distance_to_index(
-								idx.template get<1>(),
-								std::get<1>(m_baserng)->begin_index()
-							);
+				tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
+					[&](auto nconstIndexStart) noexcept {
+						if (d < 0) {
+							tc::for_each(
+								tc::make_reverse_integer_sequence<int, 0, nconstIndexStart() + 1>(),
+								[&](auto nconstIndex) noexcept {
+									auto dToBegin = std::get<nconstIndex()>(m_baserng)->distance_to_index(
+										tc::get<nconstIndex()>(idx),
+										std::get<nconstIndex()>(m_baserng)->begin_index()
+									);
 
-							if (!(d<dToBegin)) {
-								std::get<1>(m_baserng)->advance_index(idx.template get<1>(), d);
-								return;
-							}
-							d -= dToBegin;
-							idx = index::template create<0>(std::get<0>(m_baserng)->end_index());
-						}
-					case 0:
-						{
-#ifdef _CHECKS
-							auto dToBegin = std::get<0>(m_baserng)->distance_to_index(
-								idx.template get<0>(),
-								std::get<0>(m_baserng)->begin_index()
+									if (!(d < dToBegin)) {
+										std::get<nconstIndex()>(m_baserng)->advance_index(tc::get<nconstIndex()>(idx), d);
+										return tc::break_;
+									} else {
+										d -= dToBegin;
+										idx = create_end_index(std::integral_constant<int, nconstIndex() - 1>());
+										return tc::continue_;
+									}
+								}
 							);
+						} else {
+							tc::for_each(
+								tc::make_integer_sequence<std::size_t, nconstIndexStart(), sizeof...(Rng)>(),
+								[&](auto nconstIndex) noexcept {
+									auto dToEnd = std::get<nconstIndex()>(m_baserng)->distance_to_index(
+										tc::get<nconstIndex()>(idx),
+										std::get<nconstIndex()>(m_baserng)->end_index()
+									);
 
-							_ASSERT(!(d < dToBegin));
-#endif
-							std::get<0>(m_baserng)->advance_index(idx.template get<0>(), d);
-						}
-					}
-
-				} else {
-					switch_no_default(idx.which()) {
-					case 0:
-						{
-							auto dToEnd = std::get<0>(m_baserng)->distance_to_index(
-								idx.template get<0>(),
-								std::get<0>(m_baserng)->end_index()
+									if (d < dToEnd) {
+										std::get<nconstIndex()>(m_baserng)->advance_index(tc::get<nconstIndex()>(idx), d);
+										return tc::break_;
+									} else {
+										d -= dToEnd;
+										idx = create_begin_index(std::integral_constant<std::size_t, nconstIndex() + 1>());
+										return tc::continue_;
+									}
+								}
 							);
-
-							if (d < dToEnd) {
-								std::get<0>(m_baserng)->advance_index(idx.template get<0>(), d);
-								return;
-							}
-							d -= dToEnd;
-							idx = index::template create<1>(std::get<1>(m_baserng)->begin_index());
 						}
-					case 1:
-						{
-#ifdef _CHECKS
-							auto dToEnd = std::get<1>(m_baserng)->distance_to_index(
-								idx.template get<1>(),
-								std::get<1>(m_baserng)->end_index()
-							);
-							_ASSERT(!(dToEnd < d));
-#endif
-							std::get<1>(m_baserng)->advance_index(idx.template get<1>(), d);
-						}
-					}
-				}
+					},
+					idx.index()
+				);
 			}
 
 			STATIC_FINAL(distance_to_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> difference_type {
-				if (idxLhs.which() == idxRhs.which()) {
-					switch_no_default(idxLhs.which()) {
-						case 0: return std::get<0>(m_baserng)->distance_to_index(idxLhs.template get<0>(), idxRhs.template get<0>());
-						case 1: return std::get<1>(m_baserng)->distance_to_index(idxLhs.template get<1>(), idxRhs.template get<1>());
-					}
+				if (idxLhs.index() == idxRhs.index()) {
+					return tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
+						[&](auto nconstIndex) noexcept -> difference_type {
+							return std::get<nconstIndex()>(m_baserng)->distance_to_index(tc::get<nconstIndex()>(idxLhs), tc::get<nconstIndex()>(idxRhs));
+						},
+						idxLhs.index()
+					);
 				} else {
 					auto positive_distance = [&](index const& lhs, index const& rhs) noexcept {
-						return
-							std::get<0>(m_baserng)->distance_to_index(
-								lhs.template get<0>(),
-								std::get<0>(m_baserng)->end_index()
-							) +
-							std::get<1>(m_baserng)->distance_to_index(
-								std::get<1>(m_baserng)->begin_index(),
-								rhs.template get<1>()
-							);
+						return tc::accumulate(
+							tc::transform(
+								tc::make_counting_range(lhs.index() + 1, rhs.index()),
+								[&](auto nIndex) noexcept {
+									return tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
+										[&](auto nconstIndex) noexcept { return tc::numeric_cast<difference_type>(BaseRangeSize(nconstIndex)); },
+										nIndex
+									);
+								}
+							),
+							tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
+								[&](auto nconstIndex) noexcept -> difference_type {
+									return std::get<nconstIndex()>(m_baserng)->distance_to_index(tc::get<nconstIndex()>(lhs), std::get<nconstIndex()>(m_baserng)->end_index());
+								},
+								lhs.index()
+							) + 
+							tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
+								[&](auto nconstIndex) noexcept -> difference_type {
+									return std::get<nconstIndex()>(m_baserng)->distance_to_index(std::get<nconstIndex()>(m_baserng)->begin_index(), tc::get<nconstIndex()>(rhs));
+								},
+								rhs.index()
+							),
+							fn_assign_plus()
+						);
 					};
-					if (idxLhs.which() < idxRhs.which()) {
+
+					if (idxLhs.index() < idxRhs.index()) {
 						return positive_distance(idxLhs, idxRhs);
 					} else {
 						return -positive_distance(idxRhs, idxLhs);
@@ -412,22 +304,37 @@ namespace tc {
 				}
 			}
 
-			template<typename R0 = Rng0, typename R1 = Rng1, std::enable_if_t<
-				tc::size_impl::has_size<R0>::value &&
-				tc::size_impl::has_size<R1>::value
-			>* = nullptr>
-			auto size() const& noexcept return_decltype(
-				tc::size_impl::size(boost::implicit_cast<std::remove_reference_t<R0> const&>(*std::get<0>(this->m_baserng))) +
-				tc::size_impl::size(boost::implicit_cast<std::remove_reference_t<R1> const&>(*std::get<1>(this->m_baserng)))
-			)
+			template<typename IntConstant>
+			auto BaseRangeSize(IntConstant nconstIndex) const& noexcept {
+				return tc::size_impl::size(*std::get<nconstIndex()>(this->m_baserng));
+			}
+
+			template<typename... Rng>
+			constexpr static tc::conjunction<tc::size_impl::has_size<Rng>...> all_ranges_have_size(tc::type_list<Rng...>);
+
+			template<typename TypeListRng>
+			using all_ranges_have_size_t = decltype(all_ranges_have_size(TypeListRng())); // Cannot inline due to MSVC failing to compile "decltype(...)::value" (10/02/2017)
+
+			template<typename TypeListRng = tc::type_list<tc::index_range_t<Rng>...>, std::enable_if_t<all_ranges_have_size_t<TypeListRng>::value>* = nullptr>
+			auto size() const& noexcept {
+				return 
+					tc::accumulate(
+						tc::transform(
+							std::index_sequence_for<Rng...>(),
+							[&](auto nconstIndex) noexcept { return BaseRangeSize(nconstIndex); }
+						),
+						tc::common_type_decayed_t<decltype(tc::size_impl::size(std::declval<tc::index_range_t<Rng> const&>()))...>(0),
+						fn_assign_plus()
+					);
+			}
 		};
 	}
 
 	using concat_adaptor_impl::concat_adaptor;
 
-	template<typename Rng0, typename Rng1>
-	auto concat(Rng0&& rng0, Rng1&& rng1) noexcept return_ctor(
-		concat_adaptor< view_by_value_t<Rng0> BOOST_PP_COMMA() view_by_value_t<Rng1>>,
-		(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1))
-	)
+	template<typename... Rng>
+	auto concat(Rng&&... rng) noexcept {
+		static_assert(1 < sizeof...(Rng), "tc::concat can only be used with two or more ranges");
+		return concat_adaptor< tc::view_by_value_t<Rng>...>(std::forward<Rng>(rng)...);
+	}
 }

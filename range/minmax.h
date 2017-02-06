@@ -36,16 +36,16 @@ namespace tc {
 
 		public:
 			template<typename T0, typename T1>
-			struct common_min_type_decayed final : std::conditional< // in case of equality, tc::min returns the left value
-					std::is_signed<T0>::value && std::is_signed<T1>::value || std::numeric_limits<T0>::max() == std::numeric_limits<T1>::max(),
-					tc::common_type_t<T0,T1>,
-					std::conditional_t<
-						std::numeric_limits<T1>::max() < std::numeric_limits<T0>::max(),
-						T1,
-						T0
-					>
-				>
-			{};
+			struct common_min_type_decayed final : std::conditional<
+				std::is_signed<T0>::value == std::is_signed<T1>::value
+				? std::is_same<std::common_type_t<T0, T1>, T0>::value == std::is_signed<T0>::value
+				: std::is_signed<T0>::value,
+				T0,
+				T1
+			> {
+				static_assert(tc::is_actual_integer<T0>::value, "");
+				static_assert(tc::is_actual_integer<T1>::value, "");
+			};
 
 			template<typename T0, typename T1>
 			using common_min_type_t = typename common_min_type_decayed<tc::decay_t<T0>,tc::decay_t<T1>>::type;
@@ -57,7 +57,7 @@ namespace tc {
 
 			template<typename T0, typename T1>
 			struct common_min_type_decayed<tc::size_proxy<T0>, T1> {
-				using type = T1;
+				using type = common_min_type_t<std::make_unsigned_t<T0>, T1>;
 			};
 
 			template<typename T0, typename T1>

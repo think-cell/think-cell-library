@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <type_traits>
+
 namespace tc {
 	template<typename T>
 	using const_forward_t = std::conditional_t<std::is_lvalue_reference<T>::value, T, T const&&>;

@@ -34,9 +34,9 @@ if (MSVC)
     set(CMAKE_CXX_FLAGS_RELEASE        "/MT /O2 /Ob2 /D NDEBUG")
     set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/MT /Zi /O2 /Ob1 /D NDEBUG")
 else ()
-	add_definitions(-DCLANG)
+	set(CMAKE_CXX_COMPILER "clang++")
 
-	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++1z -stdlib=libc++ -Wall -pedantic -Wno-long-long -Wno-parentheses -Wno-unknown-pragmas -Wno-extra-semi -Wno-unused-function -Wno-unused-variable -Wno-unused-value -Wno-unused-private-field -fms-extensions -fdelayed-template-parsing")
+	set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++1z -stdlib=libc++ -Wall -pedantic -Wno-parentheses -Wno-unknown-pragmas -Wno-unused-function -Wno-unused-variable -Wno-unused-value -Wno-undefined-inline -fms-extensions -fdelayed-template-parsing")
 	set(CMAKE_CXX_LINK_FLAGS "${CMAKE_CXX_LINK_FLAGS} -stdlib=libc++")
 endif()
 
@@ -51,11 +51,12 @@ set(Header
 	break_or_continue.h
 	casts.h
 	compare.h
+	const_forward.h
 	container.h
 	container_traits.h
 	counting_range.h
-	empty_chain.h
 	empty.h
+	empty_chain.h
 	equal.h
 	equality_comparable.h
 	explicit_cast.h
@@ -69,9 +70,9 @@ set(Header
 	index_iterator.h
 	index_range.h
 	inherit_ctors.h
-	initializer_list.h
 	inplace.h
 	intersection_adaptor.h
+	invoke_with_constant.h
 	is_static_castable.h
 	join_adaptor.h
 	make_lazy.h
@@ -83,10 +84,11 @@ set(Header
 	partition_iterator.h
 	partition_range.h
 	quantifier.h
+	range.h
+	range.t.h
 	range_adaptor.h
 	range_defines.h
 	range_fwd.h
-	range.h
 	reference_or_value.h
 	renew.h
 	result_of.h
@@ -100,19 +102,19 @@ set(Header
 	storage_for.h
 	sub_range.h
 	tc_move.h
-	transform_adaptor.h
 	transform.h
+	transform_adaptor.h
 	trivial_functors.h
-	types.h
 	type_traits.h
+	types.h
 	union_adaptor.h
 	unique_range_adaptor.h
+	utility.h
 	zip_range.h
    )
 source_group(Header FILES ${Header})
 
 set(Tests
-	range.t.h
 	algorithm.t.cpp
 	compat.t.cpp
 	const.t.cpp
@@ -120,12 +122,13 @@ set(Tests
 	empty.t.cpp
 	equal.t.cpp
 	for_each.t.cpp
+	join_adaptor.t.cpp
 	merge_ranges.t.cpp
 	range.t.cpp
 	reverse_adaptor.t.cpp
 	sub_range.t.cpp
 	transform.t.cpp
-	type_traits_t.cpp
+	type_traits.t.cpp
 )
 source_group(Tests FILES ${Tests})
 

@@ -25,38 +25,17 @@
 
 namespace lookup {
 	struct NoBegin final {};
-	struct GlobalBegin final {};
-	struct AdlBegin final {};
-
-	int begin(AdlBegin&) noexcept { return 0; }
-	int begin(AdlBegin const&) noexcept { return 1; }
-}	
-
-long begin(lookup::GlobalBegin&) noexcept { return 2; }
-long begin(lookup::GlobalBegin const&) noexcept {return 3; }
+}
 
 namespace {
-	using namespace tc;
+	using HasStdBegin = tc::vector<int>;
+	using HasNoBegin = lookup::NoBegin;
+	using HasBoostBegin = boost::iterator_range< boost::range_iterator<std::array<unsigned long,1> const>::type >;
 
-	#pragma warning( push )
-	#pragma warning( disable: 4101 ) // we do not need the variables, but they make the expressions cleaner
+	STATIC_ASSERT(tc::is_range_with_iterators<HasStdBegin>::value);
+	STATIC_ASSERT(tc::is_range_with_iterators<HasBoostBegin>::value);
+	STATIC_ASSERT(!tc::is_range_with_iterators<HasNoBegin>::value);
 
-	void static_tests_adl_lookup() noexcept {
-		tc::vector<int> has_std_begin;
-		lookup::NoBegin has_no_begin;
-		lookup::GlobalBegin has_global_begin;
-		lookup::AdlBegin has_adl_begin;
-		boost::iterator_range< std::array<unsigned long,1>::const_iterator > has_boost_begin;
-
-		//STATIC_ASSERT(is_range_with_iterators<decltype(has_global_begin)>::value); Todo: find out how to make this work
-		//STATIC_ASSERT(is_range_with_iterators<decltype(has_adl_begin)>::value);
-		STATIC_ASSERT(is_range_with_iterators<decltype(has_std_begin)>::value);
-		STATIC_ASSERT(is_range_with_iterators<decltype(has_boost_begin)>::value);
-		STATIC_ASSERT(!is_range_with_iterators<decltype(has_no_begin)>::value);
-	}
-
-	#pragma warning( pop )
-	
 	struct TransFilterTest final {
 		template <typename T>
 		struct wrapped final {
@@ -73,21 +52,21 @@ namespace {
 
 		using WlList = tc::vector< wrapped_long > const&;
 		//using WlList = tc::vector< wrapped_long >;        // works!
-		WlList getWlList() const& noexcept { return m_list; } 
-	
-		using WlFilterdList = filter_adaptor<decltype(&filter35), WlList>;
+		WlList getWlList() const& noexcept { return m_list; }
+
+		using WlFilterdList = tc::filter_adaptor<decltype(&filter35), WlList>;
 		auto getWlFilterdList() const& noexcept return_decltype ( tc::filter(getWlList(), &filter35) )
 
-		// This is were it gets wiered, as soon as you somehow use has_range_iterator<WlFilterdList> (here at class scope)
-		// things go crashing down, even though has_range_iterator<WlFilterdList> is perfectly fine one line later at funtion scope
+		// This is were it gets weired, as soon as you somehow use has_range_iterator<WlFilterdList> (here at class scope)
+		// things go crashing down, even though has_range_iterator<WlFilterdList> is perfectly fine one line later at function scope
 
-		using WlFilterdTransformedList = transform_adaptor<decltype(&transf_times_100), WlFilterdList, true>; STATIC_ASSERT(is_range_with_iterators<WlFilterdList>::value);
-		//using WlFilterdTransformedList = transform_adaptor<decltype(&transf_times_100), WlFilterdList, is_range_with_iterators<WlFilterdList>::value>;
+		using WlFilterdTransformedList = tc::transform_adaptor<decltype(&transf_times_100), WlFilterdList, true>; STATIC_ASSERT(tc::is_range_with_iterators<WlFilterdList>::value);
+		//using WlFilterdTransformedList = transform_adaptor<decltype(&transf_times_100), WlFilterdList, tc::is_range_with_iterators<WlFilterdList>::value>;
 		//using WlFilterdTransformedList = transform_adaptor<decltype(&transf_times_100), WlFilterdList>;
 		WlFilterdTransformedList getWlFilterdTransformedList() const& noexcept {
-			STATIC_ASSERT(is_range_with_iterators<WlFilterdList>::value);
-			STATIC_ASSERT(is_range_with_iterators<WlFilterdTransformedList>::value);
-		
+			STATIC_ASSERT(tc::is_range_with_iterators<WlFilterdList>::value);
+			STATIC_ASSERT(tc::is_range_with_iterators<WlFilterdTransformedList>::value);
+
 			return  tc::transform(getWlFilterdList(), &transf_times_100 );
 		}
 		//auto getWlFilterdTransformedList() const return_decltype ( tc::transform(SolidFillList(), &transf_times_100) )
@@ -100,7 +79,6 @@ namespace {
 		private:
 			tc::vector<wrapped_long> m_list;
 	};
-	template<typename T> std::ostream& operator<<(std::ostream& os, TransFilterTest::wrapped<T> const& w) noexcept { os << w.m_t; return os; }
 
 
 UNITTESTDEF( TransFilterTest ) {
@@ -109,9 +87,7 @@ UNITTESTDEF( TransFilterTest ) {
 	auto const& res = t.getWlFilterdTransformedList();
 
 	UNUSED_TEST_VARIABLE(res);
-	//TEST_OUTPUT_RANGE(res);
-	//TEST_init_hack(tc::vector, std::size_t, original, {std::size_t(300), std::size_t(500)});
-	//TEST_RANGE_EQUAL(exp, res);
+	TEST_init_hack(tc::vector, std::size_t, original, {std::size_t(300), std::size_t(500)});
 }
 
 UNITTESTDEF( boost_iterator_range_compat ) {
@@ -125,16 +101,13 @@ UNITTESTDEF( boost_iterator_range_compat ) {
 	auto mutable_range = boost::make_iterator_range(v); TEST_RANGE_LENGTH(mutable_range, 8);
 	TEST_RANGE_EQUAL(original, mutable_range);
 
-	boost::iterator_range< std::array<unsigned long,1>::const_iterator > const baul_r = boost::make_iterator_range(baul);
+	boost::iterator_range< boost::range_iterator<std::array<unsigned long,1> const>::type > const baul_r = boost::make_iterator_range(baul);
 
-	//STATIC_ASSERT(is_range_with_iterators<decltype(baul)>::value);
-	//STATIC_ASSERT(has_range_const_iterator<decltype(baul)>::value);
-	//STATIC_ASSERT(std::is_same<range_iterator<decltype(baul)>::type, std::array<unsigned long,1>::iterator >::value );
-	//STATIC_ASSERT(std::is_same<range_const_iterator<decltype(baul)>::type, std::array<unsigned long,1>::const_iterator >::value );
-	
+	STATIC_ASSERT(tc::is_range_with_iterators<decltype(baul)>::value);
+
 	TEST_RANGE_EQUAL(baul_exp, baul_r);
 
-	auto baul_our_r = slice(baul);
+	auto baul_our_r = tc::slice(baul);
 	TEST_RANGE_EQUAL(baul_exp, baul_our_r);
 
 }
@@ -146,12 +119,7 @@ UNITTESTDEF( boost_range_traits_compat ) {
 	auto fr = tc::filter(original, [](int i) noexcept { return i%2==0; });
 
 	STATIC_ASSERT(std::is_same<decltype(std::begin(fr)), decltype(boost::begin(fr))>::value);
-	//STATIC_ASSERT(std::is_same<typename tc::range_iterator<decltype(fr)>::type, typename boost::range_iterator<decltype(fr)>::type>::value);
-	//STATIC_ASSERT(std::is_same<typename tc::range_size<decltype(fr)>::type, typename boost::range_size<decltype(fr)>::type>::value);
-	//STATIC_ASSERT(std::is_same<typename tc::range_category<decltype(fr)>::type, typename boost::range_category<decltype(fr)>::type>::value);
-	//STATIC_ASSERT(std::is_same<typename tc::range_category<decltype(original)>::type, std::random_access_iterator_tag>::value);
-	//STATIC_ASSERT(std::is_same<typename tc::range_category<decltype(fr)>::type, std::bidirectional_iterator_tag>::value);
-	
+
 	auto bir = boost::make_iterator_range(fr);
 	TEST_RANGE_EQUAL(exp, bir);
 }
@@ -180,15 +148,6 @@ struct outer final {
 		return tc::filter( tc::transform(tc::as_const(m_in), free_id()), filter_stub() );
 	}
 };
-
-void static_tests() noexcept {
-
-	//STATIC_ASSERT(std::is_same<typename tc::range_iterator<int>::type, error::no_iterator_detected>::value);
-	//STATIC_ASSERT(std::is_same<typename tc::range_size<int>::type, std::size_t>::value);
-	//STATIC_ASSERT(std::is_same<typename tc::range_category<int>::type, error::iterator_category_not_detected>::value);
-	//STATIC_ASSERT(std::is_same<typename tc::range_reference<int>::type, error::reference_type_not_detected>::value);
-	//STATIC_ASSERT(std::is_same<typename tc::range_difference<int>::type, error::difference_type_not_detected>::value);
-}
 
 UNITTESTDEF( deduce_traits ) {
 	TEST_init_hack(tc::vector, int, exp, {100,200,300,400,500,600,700,800});

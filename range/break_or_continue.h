@@ -117,24 +117,24 @@ namespace tc {
 		{}
 	};
 
-	// TODO: extend to more functions
-	template< typename F0, typename F1 >
-	void cyclic_improve(F0 f0, F1 f1) noexcept {
-		int nBreakAfter=1;
-		for (;;) {
+	inline bool cyclic_improve_impl(int n, int& nSkipRule) noexcept {
+		return false;
+	}
 
-			if (f0()) {
-				nBreakAfter=1;
-			} else if( 0==nBreakAfter ) {
-				break;
-			}
-
-			if (f1()) {
-				nBreakAfter=0;
-			} else if( 1==nBreakAfter ) {
-				break;
-			}
-
+	template<typename F0, typename... F>
+	bool cyclic_improve_impl(int n, int& nSkipRule, F0& f0, F&... f) {
+		if (n != nSkipRule && f0()) {
+			nSkipRule = n;
+			return true;
+		} else {
+			return cyclic_improve_impl(n+1, nSkipRule, f...);
 		}
+	}
+
+	template< typename... F >
+	bool cyclic_improve(F... f) noexcept {
+		int nSkipRule=-1;
+		while(cyclic_improve_impl(0, nSkipRule, f...)) {}
+		return -1 != nSkipRule;
 	}
 }

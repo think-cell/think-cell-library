@@ -19,58 +19,38 @@
 #include "range.t.h"
 
 #include <type_traits>
-#include <iostream>
 
 #include "unique_range_adaptor.h"
 #include "intersection_adaptor.h"
 
 namespace {
-	using namespace tc;
+	using SRVI = tc::make_sub_range_result<tc::vector<int>&>::type;
+	using CSRVI = tc::make_sub_range_result<tc::vector<int> const&>::type;
 
-	//-------------------------------------------------------------------------------------------------------------------------
-
-	using SRVI = make_sub_range_result<tc::vector<int>&>::type;
-	using CSRVI = make_sub_range_result<tc::vector<int> const&>::type;
-
-	using SSRVI = make_sub_range_result<make_sub_range_result<tc::vector<int>&>::type>::type;
-	using CSSRVI = make_sub_range_result<make_sub_range_result<tc::vector<int> const&>::type>::type;
-
-	//void const_ref_test(SRVI const& rng) {
-	//	//CSRVI const_rng(rng);  // TODO: this fails, but shouldn't! sub_range does detect this, but range_adapter can't cope ...
-	//	SRVI non_const_rng(rng); // Todo: should not work!
-	//}
-
-	//void ref_test(SRVI & rng) {
-	//	CSRVI const_rng(rng);
-	//	SRVI non_const_rng(rng);
-	//}
+	using SSRVI = tc::make_sub_range_result<tc::make_sub_range_result<tc::vector<int>&>::type>::type;
+	using CSSRVI = tc::make_sub_range_result<tc::make_sub_range_result<tc::vector<int> const&>::type>::type;
 
 	UNITTESTDEF( sub_range_array ) {
 
 		int arr[4] = {1,2,3,4};
 		auto arr_rng = tc::slice_by_index(arr, 1,3);
 
-		sub_range<iterator_base<int *>> mutable_iter_rng = arr_rng;
-		sub_range<iterator_base<int const*>> iter_rng = arr_rng;
+		tc::sub_range<tc::iterator_base<int *>> mutable_iter_rng = arr_rng;
+		tc::sub_range<tc::iterator_base<int const*>> iter_rng = arr_rng;
 	}
 
 
 	UNITTESTDEF( const_sub_range_char_ptr ) {
-		sub_range<tc::iterator_base<char const*>> srccp = "test";
+		tc::sub_range<tc::iterator_base<char const*>> srccp = "test";
 	}
 
 	//-------------------------------------------------------------------------------------------------------------------------
 
-	using SRVI = make_sub_range_result<tc::vector<int>&>::type;
-	using CSRVI = make_sub_range_result<tc::vector<int> const&>::type;
+	using SRVI = tc::make_sub_range_result<tc::vector<int>&>::type;
+	using CSRVI = tc::make_sub_range_result<tc::vector<int> const&>::type;
 
-	using SSRVI = make_sub_range_result<make_sub_range_result<tc::vector<int>&>::type>::type;
-	using CSSRVI = make_sub_range_result<make_sub_range_result<tc::vector<int> const&>::type>::type;
-
-	void const_ref_test(SRVI const& /*rng*/) noexcept {
-		//CSRVI const_rng(rng);    // same as const_rng2 below. TODO: this fails, but shouldn't!
-		//SRVI non_const_rng(rng); // same as non_const_rng4 below. fails to compile, as it should.
-	}
+	using SSRVI = tc::make_sub_range_result<tc::make_sub_range_result<tc::vector<int>&>::type>::type;
+	using CSSRVI = tc::make_sub_range_result<tc::make_sub_range_result<tc::vector<int> const&>::type>::type;
 
 	void ref_test(SRVI & rng) noexcept {
 		CSRVI const_rng(rng);
@@ -78,11 +58,9 @@ namespace {
 	}
 
 	UNITTESTDEF( const_sub_range ) {
-		//static_assert(!std::is_convertible<CSRVI, SRVI>::value, "const sub-range is convertible to sub-range breaking const correctness (explicit)");
-
 		tc::vector<int> v;
-		auto srvi = slice(v);
-		auto csrvi = slice(tc::as_const(v));
+		auto srvi = tc::slice(v);
+		auto csrvi = tc::slice(tc::as_const(v));
 
 		(void) srvi;
 		(void) csrvi;
@@ -90,32 +68,17 @@ namespace {
 		SRVI non_const_rng(srvi);
 
 		CSRVI const_rng(srvi);
-		//CSRVI const_rng2(tc::as_const(srvi));   // TODO: this fails, but shouldn't! sub_range does detect this, but range_adapter can't cope ...
-
-		//auto sr = as_const(srvi);
-		//auto sr = slice(tc::as_const(srvi));
-		//auto sr = as_const(slice(v, boost::begin(v), boost::end(v))); // ??
-
-		//static_assert(!std::is_convertible<decltype(csrvi), decltype(srvi)>::value, "const sub-range is convertible to sub-range breaking const correctness (decltype)"); // this assert fires! TODO: fix, should also improve error msg below
-		//SRVI non_const_rng2(csrvi);             // fails to compile, as it should, msg is correct but still pretty horrible
-		//SRVI non_const_rng3(tc::as_const(v));     // fails to compile, as it should, msg is correct but still pretty horrible
-		//SRVI non_const_rng4 = as_const(srvi); // fails to compile, as it should
-
-		//_ASSERT(false);
-
-		//ref_test(srvi);
-		//const_ref_test(srvi);
 	}
 
 	UNITTESTDEF( sub_sub_range_rvalue ) {
 
 		tc::vector<int> v;
 
-		auto srvi = slice(v);
-		auto csrvi = slice(tc::as_const(v));
+		auto srvi = tc::slice(v);
+		auto csrvi = tc::slice(tc::as_const(v));
 
-		auto ssrvi = slice(slice(v));
-		auto cssrvi = slice(slice(tc::as_const(v)));
+		auto ssrvi = tc::slice(tc::slice(v));
+		auto cssrvi = tc::slice(tc::slice(tc::as_const(v)));
 
 		static_assert(std::is_same<decltype(ssrvi), decltype(srvi)>::value, "Sub-sub-range does not flatten to sub-range (decltype)");
 		static_assert(std::is_same<decltype(cssrvi), decltype(csrvi)>::value, "const sub-sub-range does not flatten to const sub-range (decltype)");
@@ -125,11 +88,11 @@ namespace {
 
 		tc::vector<int> v;
 
-		auto srvi = slice(v);
-		auto csrvi = slice(tc::as_const(v));
+		auto srvi = tc::slice(v);
+		auto csrvi = tc::slice(tc::as_const(v));
 
-		auto ssrvi = slice(srvi);
-		auto cssrvi = slice(csrvi);
+		auto ssrvi = tc::slice(srvi);
+		auto cssrvi = tc::slice(csrvi);
 
 		// sanity checks
 		static_assert(std::is_same<decltype(srvi), SRVI>::value, "make_sub_range_result gives wrong result");
@@ -151,15 +114,13 @@ namespace {
 		TEST_init_hack(tc::vector, int, v, {1,2,3,4,5,6,7,8,9});
 		TEST_init_hack(tc::vector, int, exp36, {4,5,6});
 
-		auto sr = slice(v);
-		auto csr = slice(tc::as_const(v));
+		auto sr = tc::slice(v);
+		auto csr = tc::slice(tc::as_const(v));
 
 		// use range_difference to specify bounds
 		auto ssr1 = tc::slice_by_index(sr, 3, 6);
 		auto cssr1 = tc::slice_by_index(csr, 3, 6);
 
-		//_ASSERTEQUAL(ssr1, exp36);
-		//_ASSERTEQUAL(cssr1, exp36);
 		static_assert(std::is_same<decltype(ssr1), decltype(sr)>::value, "Sub-sub-range does not flatten to sub-range");
 		static_assert(std::is_same<decltype(cssr1), decltype(csr)>::value, "const sub-sub-range does not flatten to const sub-range");
 
@@ -170,35 +131,27 @@ namespace {
 		tc::vector<int> v;
 
 		// don't try that at work! - Seriously: sub_range is build to work correctly in a variety of situations,
-		// but normaly it should not be necessary to manualy utter the type. Use slice and make_sub_range_result instead.
+		// but normally it should not be necessary to manually utter the type. Use slice and make_sub_range_result instead.
 		// if you do need to say the type (e.g. when deducting sth.)  ...
 		//_ASSERT(false);
-		auto srvi = sub_range<tc::vector<int>&>(v);                                                      // create a sub range from unrelated range
-		auto ssrvi = sub_range<tc::vector<int>&>(sub_range<tc::vector<int>&>(v));                       // copy sub range
-		//auto s2rvi = sub_range<tc::vector<int>&>(sub_range<sub_range<tc::vector<int>&>>(v));            // flatten sub range
-
-		//auto s3rvi = sub_range<tc::vector<int>&>(sub_range<sub_range<sub_range<tc::vector<int>&>>>(v)); // recursive flatten
-		//auto s4rvi = sub_range<tc::vector<int>&>(sub_range<sub_range<sub_range<sub_range<tc::vector<int>&>>>>(v));
-
-		// ... make sure to not build sub sub ranges (see below) - those should not occur in the wild.
-		//auto ssr = sub_range<sub_range<tc::vector<int>&>>(sub_range<tc::vector<int>&>(v));
-		//auto ssr2 = sub_range<sub_range<tc::vector<int>&>>(v);
+		auto srvi = tc::sub_range<tc::vector<int>&>(v); // create a sub range from unrelated range
+		auto ssrvi = tc::sub_range<tc::vector<int>&>(tc::sub_range<tc::vector<int>&>(v)); // copy sub range
 	}
 
 	UNITTESTDEF(union_range_tests) {
 		TEST_RANGE_EQUAL(
-			tc::make_initializer_list({1,2,3,4}),
+			MAKE_CONSTEXPR_ARRAY(1,2,3,4),
 			tc::union_range(
-				tc::make_initializer_list({1,4}),
-				tc::make_initializer_list({2,3})
+				MAKE_CONSTEXPR_ARRAY(1,4),
+				MAKE_CONSTEXPR_ARRAY(2,3)
 			)
 		);
 
 		TEST_RANGE_EQUAL(
-			tc::make_initializer_list({4,3,2,1,0}),
+			MAKE_CONSTEXPR_ARRAY(4,3,2,1,0),
 			tc::union_range(
-				tc::make_initializer_list({4,2,0}),
-				tc::make_initializer_list({3,2,1}),
+				MAKE_CONSTEXPR_ARRAY(4,2,0),
+				MAKE_CONSTEXPR_ARRAY(3,2,1),
 				[](int lhs, int rhs) noexcept {return tc::compare(rhs,lhs);}
 			)
 		);
@@ -207,8 +160,8 @@ namespace {
 			3,
 			*tc::upper_bound<tc::return_border>(
 				tc::union_range(
-					tc::make_initializer_list({1,2,4}),
-					tc::make_initializer_list({2,3})
+					MAKE_CONSTEXPR_ARRAY(1,2,4),
+					MAKE_CONSTEXPR_ARRAY(2,3)
 				),
 				2
 			)
@@ -216,13 +169,13 @@ namespace {
 
 		{
 			auto rng = tc::union_range(
-				tc::make_initializer_list({1,2,3,3,4,4,5}),
-				tc::make_initializer_list({1,1,1,3,4,4,4})
+				MAKE_CONSTEXPR_ARRAY(1,2,3,3,4,4,5),
+				MAKE_CONSTEXPR_ARRAY(1,1,1,3,4,4,4)
 			);
 
 			TEST_RANGE_EQUAL(
 				rng,
-				tc::make_initializer_list({1,1,1,2,3,3,4,4,4,5})
+				MAKE_CONSTEXPR_ARRAY(1,1,1,2,3,3,4,4,4,5)
 			);
 
 			{
@@ -241,8 +194,8 @@ namespace {
 		}
 		{
 			auto rng = tc::union_range(
-				tc::make_initializer_list({1,1,1,1,1,1,1,1,1}),
-				tc::make_initializer_list({1,1})
+				MAKE_CONSTEXPR_ARRAY(1,1,1,1,1,1,1,1,1),
+				MAKE_CONSTEXPR_ARRAY(1,1)
 			);
 			auto it = tc::lower_bound<tc::return_border>(rng,1);
 			_ASSERTEQUAL(*it,1);
@@ -252,7 +205,7 @@ namespace {
 #ifdef _CHECKS
 	struct GenRange final {
 		template<typename Func>
-		auto operator()(Func func) const& noexcept -> break_or_continue {
+		auto operator()(Func func) const& noexcept -> tc::break_or_continue {
 			RETURN_IF_BREAK(func(1));
 			RETURN_IF_BREAK(func(3));
 			RETURN_IF_BREAK(func(5));
@@ -264,12 +217,12 @@ namespace {
 		tc::vector<double> m_vecf = tc::vector<double>({1,3,5});
 
 		template<typename Func>
-		auto operator()(Func func) & noexcept -> break_or_continue {
+		auto operator()(Func func) & noexcept -> tc::break_or_continue {
 			return tc::for_each(m_vecf, std::ref(func));
 		}
 
 		template<typename Func>
-		auto operator()(Func func) const& noexcept -> break_or_continue {
+		auto operator()(Func func) const& noexcept -> tc::break_or_continue {
 			return tc::for_each(m_vecf, std::ref(func));
 		}
 	};
@@ -279,10 +232,10 @@ namespace {
 
 	UNITTESTDEF(union_range_generator) {
 		TEST_RANGE_EQUAL(
-			tc::make_initializer_list({1,2,3,5,6}),
+			MAKE_CONSTEXPR_ARRAY(1,2,3,5,6),
 			tc::union_range(
 				GenRange(),
-				tc::make_initializer_list({2,6})
+				MAKE_CONSTEXPR_ARRAY(2,6)
 			)
 		);
 
@@ -297,7 +250,7 @@ namespace {
 		);
 
 		TEST_RANGE_EQUAL(
-			tc::make_initializer_list({1.1,3.1,5.1}),
+			MAKE_CONSTEXPR_ARRAY(1.1,3.1,5.1),
 			rngMut
 		);
 
@@ -312,16 +265,16 @@ namespace {
 
 		TEST_RANGE_EQUAL(
 			tc::slice(rgntrnsfn, boost::begin(rgntrnsfn), boost::end(rgntrnsfn)),
-			tc::make_initializer_list({1,4,9})
+			MAKE_CONSTEXPR_ARRAY(1,4,9)
 		);
 
 		TEST_RANGE_EQUAL(
-			tc::make_initializer_list({ 1, 2, 3 }),
+			MAKE_CONSTEXPR_ARRAY( 1, 2, 3 ),
 			tc::untransform(tc::slice(rgntrnsfn, boost::begin(rgntrnsfn), boost::end(rgntrnsfn)))
 		);
 
 		TEST_RANGE_EQUAL(
-			tc::make_initializer_list({ 2 }),
+			tc::make_singleton_range( 2 ),
 			tc::untransform(tc::equal_range(tc::transform(vecn, [](int n) noexcept {return n*n; }), 4))
 		);
 
@@ -329,7 +282,7 @@ namespace {
 			auto rng = tc::transform(tc::filter(vecn, [](int n) noexcept {return n<3;}), [](int n) noexcept {return n*n; });
 
 			TEST_RANGE_EQUAL(
-				tc::make_initializer_list({ 2 }),
+				tc::make_singleton_range( 2 ),
 				tc::untransform(tc::equal_range(rng, 4))
 			);
 		}
@@ -342,7 +295,7 @@ namespace {
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value, "");
 			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
 			TEST_RANGE_EQUAL(
-				tc::make_initializer_list({1,2,3}),
+				MAKE_CONSTEXPR_ARRAY(1,2,3),
 				rng
 			);
 		}
@@ -355,7 +308,7 @@ namespace {
 			static_assert(std::is_lvalue_reference<decltype((rng))>::value, "");
 			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
 			TEST_RANGE_EQUAL(
-				tc::make_initializer_list({1,2,3}),
+				MAKE_CONSTEXPR_ARRAY(1,2,3),
 				rng
 			);
 		}
@@ -367,7 +320,7 @@ namespace {
 			static_assert(std::is_rvalue_reference<decltype(rng)>::value, "");
 			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
 			TEST_RANGE_EQUAL(
-				tc::make_initializer_list({1,2,3}),
+				MAKE_CONSTEXPR_ARRAY(1,2,3),
 				rng
 			);
 		}
@@ -382,7 +335,7 @@ namespace {
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value, "");
 			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
 			TEST_RANGE_EQUAL(
-				tc::make_initializer_list({1,2,3}),
+				MAKE_CONSTEXPR_ARRAY(1,2,3),
 				rng
 			);
 		}
@@ -397,7 +350,7 @@ namespace {
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value, "");
 			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
 			TEST_RANGE_EQUAL(
-				tc::make_initializer_list({1,2,3}),
+				MAKE_CONSTEXPR_ARRAY(1,2,3),
 				rng
 			);
 		}
@@ -412,7 +365,7 @@ namespace {
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value, "");
 			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
 			TEST_RANGE_EQUAL(
-				tc::make_initializer_list({1,2,3}),
+				MAKE_CONSTEXPR_ARRAY(1,2,3),
 				rng
 			);
 		}
@@ -428,7 +381,7 @@ namespace {
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value, "");
 			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
 			TEST_RANGE_EQUAL(
-				tc::make_initializer_list({1,2,3}),
+				MAKE_CONSTEXPR_ARRAY(1,2,3),
 				rng
 			);
 		}
@@ -443,7 +396,7 @@ namespace {
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value, "");
 			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
 			TEST_RANGE_EQUAL(
-				tc::make_initializer_list({1,2,3}),
+				MAKE_CONSTEXPR_ARRAY(1,2,3),
 				rng
 			);
 		}
@@ -453,13 +406,13 @@ namespace {
 		tc::vector<int> vecn{1,2,3,3,5,5,7};
 
 		{
-			auto rngExpected = tc::make_initializer_list({
-				tc::make_initializer_list({1}),
-				tc::make_initializer_list({2}),
-				tc::make_initializer_list({3,3}),
-				tc::make_initializer_list({5,5}),
-				tc::make_initializer_list({7})
-			});
+			std::initializer_list<int> const rngExpected[] = { // extends life-time of underlying arrays
+				{1},
+				{2},
+				{3,3},
+				{5,5},
+				{7}
+			};
 
 			{
 				auto it = boost::begin(rngExpected);
@@ -504,12 +457,12 @@ namespace {
 		};
 
 		{
-			auto rngExpected = tc::make_initializer_list({
-				tc::make_initializer_list({1,2}),
-				tc::make_initializer_list({3,3}),
-				tc::make_initializer_list({5,5}),
-				tc::make_initializer_list({7})
-			});
+			std::initializer_list<int> const rngExpected[] = { // extends life-time of underlying arrays
+				{1,2},
+				{3,3},
+				{5,5},
+				{7}
+			};
 			auto it = boost::begin(rngExpected);
 			tc::for_each(
 				tc::front_unique_range(vecn, Pred),
@@ -522,11 +475,11 @@ namespace {
 		}
 
 		{
-			auto rngExpected = tc::make_initializer_list({
-				tc::make_initializer_list({1,2,3,3}),
-				tc::make_initializer_list({5,5}),
-				tc::make_initializer_list({7})
-			});
+			std::initializer_list<int> const rngExpected[] = { // extends life-time of underlying arrays
+				{1,2,3,3},
+				{5,5},
+				{7}
+			};
 			auto it = boost::begin(rngExpected);
 			tc::for_each(
 				tc::adjacent_unique_range(vecn, Pred),
@@ -542,17 +495,17 @@ namespace {
 	UNITTESTDEF(difference_range) {
 		TEST_RANGE_EQUAL(
 			tc::difference(
-				tc::make_initializer_list({1,2,2,4,7,8,8,11,11}),
-				tc::make_initializer_list({2,3,4,8,8})
+				MAKE_CONSTEXPR_ARRAY(1,2,2,4,7,8,8,11,11),
+				MAKE_CONSTEXPR_ARRAY(2,3,4,8,8)
 			),
-			tc::make_initializer_list({1,2,7,11,11})
+			MAKE_CONSTEXPR_ARRAY(1,2,7,11,11)
 		);
 	}
 
 	UNITTESTDEF(tc_unique) {
 		TEST_RANGE_EQUAL(
-			tc::adjacent_unique(tc::make_initializer_list({1,2,2,4,7,8,8,11,11})),
-			tc::make_initializer_list({1,2,4,7,8,11})
+			tc::adjacent_unique(MAKE_CONSTEXPR_ARRAY(1,2,2,4,7,8,8,11,11)),
+			MAKE_CONSTEXPR_ARRAY(1,2,4,7,8,11)
 		);
 
 		tc::vector<int> vecn{1,1,2,2};
@@ -612,7 +565,7 @@ namespace {
 
 		TEST_RANGE_EQUAL(
 			vecmn,
-			tc::make_initializer_list({1,2,3,4})
+			MAKE_CONSTEXPR_ARRAY(1,2,3,4)
 		);
 	}
 }

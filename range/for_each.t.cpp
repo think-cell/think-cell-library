@@ -17,8 +17,6 @@
 
 //---- for_each ---------------------------------------------------------------------------------------------------------------
 namespace {
-	using namespace tc;
-
 	struct all_called_mock final {
 		all_called_mock() noexcept : m_expect(0), m_index(0), m_break_at(0), m_copyed_or_moved_from(false) {}
 		all_called_mock(tc::vector<int> const& v, std::size_t break_at = 0, bool expect_break = true) noexcept
@@ -63,7 +61,7 @@ namespace {
 			m_copyed_or_moved_from = false;
 		}
 
-		break_or_continue operator()(int val) & noexcept {
+		tc::break_or_continue operator()(int val) & noexcept {
 			if (m_copyed_or_moved_from) {
 				TEST_OUTPUT(<< "used copyed or moved consumer for real work!\n");
 			}
@@ -78,7 +76,7 @@ namespace {
 				_ASSERT(val == m_expect[m_index]);
 			}
 			++m_index;
-			return (m_index <= m_break_at)? continue_ : break_;
+			return (m_index <= m_break_at)? tc::continue_ : tc::break_;
 		}
 
 		private:
@@ -92,35 +90,34 @@ namespace {
 	all_called_mock g_mock;
 
 	void foo(int i) noexcept { g_mock(i); }
-		
+
 //-----------------------------------------------------------------------------------------------------------------------------
 UNITTESTDEF( for_each ) {
-	using namespace tc;
 	using std::placeholders::_1;
 
 	TEST_init_hack(tc::vector, int, v, {1,2,3,4,5,6,7,8,9,10});
 	TEST_init_hack(tc::vector, int, exp, {1,2,3,4,5,6,7,8,9,10});
 
-	auto gv = make_generator_range(v);
+	auto gv = tc::make_generator_range(v);
 
 	// call with functor object.
-	for_each(v, all_called_mock(exp));
-	for_each(gv, all_called_mock(exp));
+	tc::for_each(v, all_called_mock(exp));
+	tc::for_each(gv, all_called_mock(exp));
 
 	// test if break_ works
-	for_each(gv, all_called_mock(exp, 5));
+	tc::for_each(gv, all_called_mock(exp, 5));
 
 	// call with function
-	g_mock.mock_reset(exp); for_each(v, foo);
-	g_mock.mock_reset(exp); for_each(gv, foo);
+	g_mock.mock_reset(exp); tc::for_each(v, foo);
+	g_mock.mock_reset(exp); tc::for_each(gv, foo);
 
 	//call with pointer to function
-	g_mock.mock_reset(exp); for_each(v, &foo);
-	g_mock.mock_reset(exp); for_each(gv, &foo);
+	g_mock.mock_reset(exp); tc::for_each(v, &foo);
+	g_mock.mock_reset(exp); tc::for_each(gv, &foo);
 
 	// call with lambda
-	g_mock.mock_reset(exp); for_each(v, [](int i) noexcept { g_mock(i); });
-	g_mock.mock_reset(exp); for_each(gv, [](int i) noexcept { g_mock(i); });
+	g_mock.mock_reset(exp); tc::for_each(v, [](int i) noexcept { g_mock(i); });
+	g_mock.mock_reset(exp); tc::for_each(gv, [](int i) noexcept { g_mock(i); });
 
 	// Todo: call with mem func, std::function and bind
 }
@@ -128,18 +125,18 @@ UNITTESTDEF( for_each ) {
 
 //---- test break behavior  ---------------------------------------------------------------------------------------------------
 	struct iterate final {
-		break_or_continue generator_break_consumer_break(function< break_or_continue(int) > func) const& noexcept {
+		tc::break_or_continue generator_break_consumer_break(tc::function< tc::break_or_continue(int) > func) const& noexcept {
 			for(int i = 1; i<11; ++i) {
-				if(func(i) == break_) { return break_; }
+				if(func(i) == tc::break_) { return tc::break_; }
 			}
-			return continue_;
+			return tc::continue_;
 		}
 
-		break_or_continue generator_break_consumer_nobreak(std::function<void (int)> func) const& noexcept {
+		tc::break_or_continue generator_break_consumer_nobreak(std::function<void (int)> func) const& noexcept {
 			for(int i = 1; i<11; ++i) {
 				func(i);
 			}
-			return continue_;
+			return tc::continue_;
 		}
 
 		void generator_nobreak_consumer_nobreak(std::function<void (int)> func) const& noexcept {
@@ -149,14 +146,14 @@ UNITTESTDEF( for_each ) {
 			return;
 		}
 
-		void generator_nobreak_consumer_break_correct(function< break_or_continue(int) > func) const& noexcept {
+		void generator_nobreak_consumer_break_correct(tc::function< tc::break_or_continue(int) > func) const& noexcept {
 			for(int i = 1; i<11; ++i) {
-				if(func(i) == break_) { return; }
+				if(func(i) == tc::break_) { return; }
 			}
 			return;
 		}
 
-		void generator_nobreak_consumer_break_incorrect(function< break_or_continue(int) > func) const& noexcept {
+		void generator_nobreak_consumer_break_incorrect(tc::function< tc::break_or_continue(int) > func) const& noexcept {
 			for(int i = 1; i<11; ++i) {
 				func(i);
 			}
@@ -167,7 +164,7 @@ UNITTESTDEF( for_each ) {
 	struct consumer_break final {
 		consumer_break(tc::vector<int> const& v, std::size_t break_at = 0, bool expect_break = true) noexcept : m_mock(v, break_at, expect_break) {}
 
-		break_or_continue operator()(int i) /* no & */ noexcept { return m_mock(i); }
+		tc::break_or_continue operator()(int i) /* no & */ noexcept { return m_mock(i); }
 		private:
 			all_called_mock m_mock;
 	};
@@ -187,18 +184,16 @@ UNITTESTDEF( for_each ) {
 
 //-----------------------------------------------------------------------------------------------------------------------------
 UNITTESTDEF( break_behavior ) {
-	using namespace tc;
-
 	TEST_init_hack(tc::vector, int, exp, {1,2,3,4,5,6,7,8,9,10});
 
 	// call on various implicit ranges
-	for_each(std::bind(&iterate::generator_break_consumer_break, iterate(), std::placeholders::_1), consumer_break(exp, 4));
-	for_each(std::bind(&iterate::generator_break_consumer_nobreak, iterate(), std::placeholders::_1), consumer_nobreak(exp, 5, false));
-	for_each(std::bind(&iterate::generator_nobreak_consumer_nobreak, iterate(), std::placeholders::_1), consumer_nobreak(exp, 6, false));
+	tc::for_each(std::bind(&iterate::generator_break_consumer_break, iterate(), std::placeholders::_1), consumer_break(exp, 4));
+	tc::for_each(std::bind(&iterate::generator_break_consumer_nobreak, iterate(), std::placeholders::_1), consumer_nobreak(exp, 5, false));
+	tc::for_each(std::bind(&iterate::generator_nobreak_consumer_nobreak, iterate(), std::placeholders::_1), consumer_nobreak(exp, 6, false));
 
 	// these two are undefined and must not compile
-//	for_each(std::bind(&iterate::generator_nobreak_consumer_break_correct, iterate(), std::placeholders::_1), all_called_mock(exp, 7));
-//	for_each(std::bind(&iterate::generator_nobreak_consumer_break_incorrect, iterate(), std::placeholders::_1), all_called_mock(exp, 8, false));
+//	tc::for_each(std::bind(&iterate::generator_nobreak_consumer_break_correct, iterate(), std::placeholders::_1), all_called_mock(exp, 7));
+//	tc::for_each(std::bind(&iterate::generator_nobreak_consumer_break_incorrect, iterate(), std::placeholders::_1), all_called_mock(exp, 8, false));
 }
 
 UNITTESTDEF(for_each_adjacent_triple_initialization_order) {
@@ -207,11 +202,8 @@ UNITTESTDEF(for_each_adjacent_triple_initialization_order) {
 	int a[2] = { f(), f() };
 	_ASSERT(1 == a[0] && 2 == a[1]);
 
-	// Does not work in VC12:
-	/*
 	tc::array<int, 2> a2{ f(), f() };
 	_ASSERT(3 == a2[0] && 4 == a2[1]);
-	*/
 }
 
 #ifdef _CHECKS
@@ -244,7 +236,7 @@ UNITTESTDEF(for_each_adjacent_triple_deref) {
 
 	TEST_RANGE_EQUAL(
 		vecn,
-		make_initializer_list({1,2,3,2,1})
+		MAKE_CONSTEXPR_ARRAY(1,2,3,2,1)
 	);
 
 	int nTransforms = 0;
@@ -268,7 +260,7 @@ UNITTESTDEF(for_each_adjacent_triple_deref) {
 			std::ref(overloads)
 		);
 
-		TEST_RANGE_EQUAL(overloads.m_n, make_initializer_list({3,0,0}));
+		TEST_RANGE_EQUAL(overloads.m_n, MAKE_CONSTEXPR_ARRAY(3,0,0));
 	}
 
 	{
@@ -278,7 +270,7 @@ UNITTESTDEF(for_each_adjacent_triple_deref) {
 			std::ref(overloads)
 		);
 
-		TEST_RANGE_EQUAL(overloads.m_n, make_initializer_list({0,2,1}));
+		TEST_RANGE_EQUAL(overloads.m_n, MAKE_CONSTEXPR_ARRAY(0,2,1));
 	}
 }
 
@@ -299,12 +291,12 @@ UNITTESTDEF(for_each_ordered_pair) {
 	_ASSERT(tc::find_unique<tc::return_bool>(vecpairnn, std::make_pair(3, 4)));
 
 	tc::for_each_ordered_pair(
-		make_initializer_list<int>({}),
+		std::initializer_list<int>({}),
 		[](int, int) noexcept { _ASSERTFALSE; }
 	);
 
 	tc::for_each_ordered_pair(
-		make_initializer_list<int>({1}),
+		tc::make_singleton_range(1),
 		[](int, int) noexcept { _ASSERTFALSE; }
 	);
 }

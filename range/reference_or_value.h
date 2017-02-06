@@ -51,7 +51,7 @@ namespace tc {
 
 			reference_or_value& operator=(reference_or_value&& other) & noexcept {
 				_ASSERT(this != std::addressof(other));
-				tc::renew(*this, aggregate_tag(), tc_move(tc_move(other).m_t));
+				tc::renew(*this, aggregate_tag(), tc_move(other).m_t);
 				return *this;
 			}
 			
@@ -157,17 +157,17 @@ namespace tc {
 			auto get() && noexcept ->decltype(auto) {
 				return *tc_move(m_t);
 			}
-			template<typename FuncTo>
-			auto pass_to(FuncTo&& functo) const& noexcept ->decltype(auto) {
-				return std::forward<FuncTo>(functo)(*m_t);
+			template<typename FuncTo, typename ...Args>
+			auto pass_to(FuncTo&& functo, Args&& ...args) const& noexcept ->decltype(auto) {
+				return std::forward<FuncTo>(functo)(*m_t, std::forward<Args>(args)...);
 			}
-			template<typename FuncTo>
-			auto pass_to(FuncTo&& functo) & noexcept ->decltype(auto) {
-				return std::forward<FuncTo>(functo)(*m_t);
+			template<typename FuncTo, typename ...Args>
+			auto pass_to(FuncTo&& functo, Args&& ...args) & noexcept ->decltype(auto) {
+				return std::forward<FuncTo>(functo)(*m_t, std::forward<Args>(args)...);
 			}
-			template<typename FuncTo>
-			auto pass_to(FuncTo&& functo) && noexcept ->decltype(auto) {
-				return std::forward<FuncTo>(functo)(*tc_move(m_t));
+			template<typename FuncTo, typename ...Args>
+			auto pass_to(FuncTo&& functo, Args&& ...args) && noexcept ->decltype(auto) {
+				return std::forward<FuncTo>(functo)(*tc_move(m_t), std::forward<Args>(args)...);
 			}
 		};
 
@@ -178,9 +178,9 @@ namespace tc {
 			}
 
 			void get() const& noexcept {}
-			template<typename FuncTo>
-			auto pass_to(FuncTo&& functo) const& noexcept ->decltype(auto) {
-				return std::forward<FuncTo>(functo)();
+			template<typename FuncTo, typename ...Args>
+			auto pass_to(FuncTo&& functo, Args&& ...args) const& noexcept ->decltype(auto) {
+				return std::forward<FuncTo>(functo)(std::forward<Args>(args)...);
 			}
 		};
 	}

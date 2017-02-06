@@ -364,7 +364,7 @@ UNITTESTDEF(minTest) {
 	static_assert(
 		std::is_same<
 			decltype(tc::min(std::declval<std::uint16_t>(), std::declval<std::int32_t>()))
-			, std::uint16_t
+			, std::int32_t
 		>::value,
 		""
 	);
@@ -438,19 +438,17 @@ UNITTESTDEF(minTest) {
 	);
 
 	static_assert(
-		std::numeric_limits<unsigned int>::max() != std::numeric_limits<unsigned long>::max() ||
 		std::is_same<
 			decltype(tc::min(std::declval<unsigned long>(),std::declval<unsigned int>())),
-			tc::common_type_t<unsigned long,unsigned int>
+			unsigned int
 		>::value,
 		""
 	);
 
 	static_assert(
-		std::numeric_limits<unsigned long>::max() != std::numeric_limits<unsigned int>::max() ||
 		std::is_same<
 			decltype(tc::min(std::declval<unsigned int>(),std::declval<unsigned long>())),
-			tc::common_type_t<unsigned int,unsigned long>
+			unsigned int
 		>::value,
 		""
 	);

@@ -80,7 +80,7 @@ struct define_fn_dummy final {};
 		template< typename O > auto operator()( O & o ) const return_variable_by_ref( o.func )       \
 		template< typename O > auto operator()( O const& o ) const return_variable_by_ref( o.func )  \
 		template< typename O, std::enable_if_t<!std::is_reference<O>::value>* = nullptr >            \
-		auto operator()( O&& o ) const return_decltype_rvalue_by_ref( tc_move(tc_move(o).func) )     \
+		auto operator()( O&& o ) const return_decltype_rvalue_by_ref( (tc_move(o).func) )     \
 	}; \
 	std::true_type returns_reference_to_argument(dot_member_ ## func); /*mark as returning reference to argument*/ \
 	struct dot_mem_fn_ ## func { \
@@ -185,3 +185,6 @@ INFIX_FN_( assign_minus, -= )
 INFIX_FN_( assign, = )
 
 #undef INFIX_FN_
+
+#define ALLOW_NOEXCEPT( ... ) \
+	decltype(static_cast<__VA_ARGS__>(nullptr))

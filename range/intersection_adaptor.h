@@ -38,13 +38,13 @@ namespace tc {
 			Comp m_comp;
 
 		public:
-			template<typename Rhs0, typename Rhs1, typename Comp>
-			explicit intersection_difference_adaptor(Rhs0&& rhs0, Rhs1&& rhs1, Comp&& comp) noexcept
+			template<typename Rhs0, typename Rhs1, typename Comp2>
+			explicit intersection_difference_adaptor(Rhs0&& rhs0, Rhs1&& rhs1, Comp2&& comp) noexcept
 				: m_baserng(
 					reference_or_value< index_range_t<Rng0> >(aggregate_tag(), std::forward<Rhs0>(rhs0)),
 					reference_or_value< index_range_t<Rng1> >(aggregate_tag(), std::forward<Rhs1>(rhs1))
 				),
-				m_comp(std::forward<Comp>(comp))
+				m_comp(std::forward<Comp2>(comp))
 			{}
 
 		private:
@@ -70,8 +70,8 @@ namespace tc {
 #pragma warning( disable: 4127 ) // conditional expression is constant
 				if (bIntersection) {
 					return tc::interleave(
-						boost::implicit_cast<std::remove_reference_t<Rng0> const&>(*std::get<0>(m_baserng)),
-						boost::implicit_cast<std::remove_reference_t<Rng1> const&>(*std::get<1>(m_baserng)),
+						*std::get<0>(m_baserng),
+						*std::get<1>(m_baserng),
 						std::ref(m_comp),
 						MAKE_CONSTEXPR_FUNCTION(tc::continue_),
 						MAKE_CONSTEXPR_FUNCTION(tc::continue_),
@@ -79,8 +79,8 @@ namespace tc {
 					);
 				} else {
 					return tc::interleave(
-						boost::implicit_cast<std::remove_reference_t<Rng0> const&>(*std::get<0>(m_baserng)),
-						boost::implicit_cast<std::remove_reference_t<Rng1> const&>(*std::get<1>(m_baserng)),
+						*std::get<0>(m_baserng),
+						*std::get<1>(m_baserng),
 						std::ref(m_comp),
 						std::ref(func),
 						MAKE_CONSTEXPR_FUNCTION(tc::continue_),

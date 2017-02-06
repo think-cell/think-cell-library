@@ -23,6 +23,7 @@
 #include "empty.h"
 #include "scope.h"
 #include "size.h"
+#include "utility.h"
 
 #include <boost/optional.hpp>
 #include <boost/range/begin.hpp>
@@ -32,60 +33,71 @@
 
 namespace tc {
 
-	namespace tuple_for_each_detail {
-		template <typename Tuple, typename Func, std::size_t... Is>
-		void tuple_for_each_impl(Tuple&& tuple, Func func, std::index_sequence<Is...>) noexcept {
-			using swallow = int[];
-			swallow{(func(std::get<Is>(std::forward<Tuple>(tuple))), 0)...};
-		}
-	}
-
 	//-------------------------------------------------------------------------------------------------------------------------
 	// for_each	
-	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
+
+	// Primary for_each dispatcher
 	template<typename Rng, typename Func>
+	break_or_continue for_each(Rng&& rng, Func&& func) MAYTHROW {
+		return for_each_impl(std::forward<Rng>(rng), std::forward<Func>(func), tc::type_list<std::conditional_t<std::is_array<std::remove_reference_t<Rng>>::value, tc::remove_cvref_t<Rng>, tc::decay_t<Rng>>>());
+	}
+
+	// Non-index iterator-based ranges
+	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
+	template<typename Rng, typename Func, typename RngDecayed>
 	std::enable_if_t<
-		is_range_with_iterators< Rng >::value &&
-		!has_index< std::remove_reference_t<Rng> >::value,
-	break_or_continue > for_each(Rng&& rng, Func func) MAYTHROW {
+		is_range_with_iterators< RngDecayed >::value &&
+		!has_index< RngDecayed >::value,
+	break_or_continue > for_each_impl(Rng&& rng, Func func, tc::type_list<RngDecayed>) MAYTHROW {
 		for(auto it = boost::begin(rng); it!= boost::end(rng); ++it) {
 			RETURN_IF_BREAK( continue_if_not_break(func, *it) );
 		}
 		return continue_;
 	}
-	
+
+	// Non-breakable ranges
 	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
-	template<typename Rng, typename Func>
+	template<typename Rng, typename Func, typename RngDecayed>
 	std::enable_if_t<
-		!(is_range_with_iterators< Rng >::value &&
-		!has_index< std::remove_reference_t<Rng> >::value) &&
+		!(is_range_with_iterators< RngDecayed >::value &&
+		!has_index< RngDecayed >::value) &&
 		std::is_void< decltype( std::declval<Rng>()( std::declval<Func>())) >::value,
-	break_or_continue > for_each(Rng&& rng, Func func) MAYTHROW {
-		std::forward<Rng>(rng)( void_generator_type_check_impl::ensure_non_break_or_continue_functor<Func>(func));
+	break_or_continue > for_each_impl(Rng&& rng, Func func, tc::type_list<RngDecayed>) MAYTHROW {
+		std::forward<Rng>(rng)( void_generator_type_check_impl::ensure_non_break_or_continue_functor<Func>(func) );
 		return continue_;
 	}
 
+	// Breakable ranges
 	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
-	template<typename Rng, typename Func>
+	template<typename Rng, typename Func, typename RngDecayed>
 	std::enable_if_t<
-		!(is_range_with_iterators< Rng >::value &&
-		!has_index< std::remove_reference_t<Rng> >::value) &&
+		!(is_range_with_iterators< RngDecayed >::value &&
+		!has_index< RngDecayed >::value) &&
 		std::is_same< break_or_continue, decltype( std::declval<Rng>()( std::declval<Func>())) >::value,
-	break_or_continue > for_each(Rng&& rng, Func&& func) MAYTHROW {
-		return std::forward<Rng>(rng)( std::forward<Func>(func));
+	break_or_continue > for_each_impl(Rng&& rng, Func&& func, tc::type_list<RngDecayed>) MAYTHROW {
+		return std::forward<Rng>(rng)( std::forward<Func>(func) );
 	}
 
-	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
-	template<typename Tuple, typename Func>
-	std::enable_if_t<
-		is_instance<std::tuple, std::remove_reference_t<Tuple>>::value,
-	break_or_continue > for_each(Tuple&& tuple, Func func) MAYTHROW {
-		tuple_for_each_detail::tuple_for_each_impl(
-			std::forward<Tuple>(tuple), 
-			void_generator_type_check_impl::ensure_non_break_or_continue_functor<Func>(func), 
-			std::make_index_sequence<std::tuple_size<std::remove_reference_t<Tuple>>::value>()
+	// Integer sequences
+	template<typename IntSequence, typename Func, typename TIndex, TIndex... Is>
+	break_or_continue for_each_impl(IntSequence&&, Func func, tc::type_list<std::integer_sequence<TIndex, Is...>>) MAYTHROW {
+		tc::break_or_continue breakorcontinue = tc::continue_;
+
+		using swallow = std::initializer_list<bool>;
+		swallow{(tc::continue_ == breakorcontinue && ((breakorcontinue = tc::continue_if_not_break(func, std::integral_constant<TIndex, Is>())), true))...};
+
+		return breakorcontinue;
+	}
+
+	// Tuples
+	template<typename Tuple, typename Func, typename... Ts>
+	break_or_continue for_each_impl(Tuple&& tuple, Func func, tc::type_list<std::tuple<Ts...>>) MAYTHROW {
+		return for_each(
+			std::make_index_sequence<std::tuple_size<std::remove_reference_t<Tuple>>::value>(),
+			[&](auto nconstIndex) MAYTHROW {
+				return func(std::get<nconstIndex()>(std::forward<Tuple>(tuple)));
+			}
 		);
-		return continue_;
 	}
 
 	DEFINE_FN(for_each);
