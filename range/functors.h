@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -13,6 +13,8 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 
 #pragma once
+
+#include "range_defines.h"
 
 ////////////////////////////////
 // functor equivalents for operators, free functions and member functions
@@ -125,13 +127,12 @@ DEFINE_FN2( operator delete, fn_operator_delete )
 DEFINE_FN( first );
 DEFINE_FN( second );
 
-DEFINE_FN(emplace_back);
-
 DEFINE_FN2( boost::begin, fn_boost_begin );
 template<int N> DEFINE_FN2( std::get<N>, fn_std_get );
 
 // Cannot use DEFINE_FN2_TMPL here, since casts are build in and the compiler
 //(both clang and MSVC) does not accept passing a parameter pack to *_cast
+#pragma push_macro("DEFINE_CAST_")
 #define DEFINE_CAST_(name)                                          \
 	template <typename To>                                          \
 	struct fn_ ## name {                                            \
@@ -143,7 +144,7 @@ DEFINE_CAST_(static_cast)
 DEFINE_CAST_(reinterpret_cast)
 DEFINE_CAST_(const_cast)
 
-#undef DEFINE_CAST_
+#pragma pop_macro("DEFINE_CAST_")
 
 namespace tc {
 	struct fn_subscript final {
@@ -165,8 +166,40 @@ namespace tc {
 		auto operator()( Lhs&& lhs ) const
 			return_decltype_rvalue_by_ref( !std::forward<Lhs>(lhs))
 	};
+
+	namespace overload_adl_barrier {
+		template<typename Result, typename F1, typename... Fs>
+		struct overload : tc::decay_t<F1>, overload<Result, Fs...>
+		{
+			using tc::decay_t<F1>::operator();
+			using overload<Result, Fs...>::operator();
+
+			overload(F1&& f1, Fs&& ... fs) noexcept : tc::decay_t<F1>(std::forward<F1>(f1)), overload<Result, Fs...>(std::forward<Fs>(fs)...) {}
+		};
+
+		template<typename Result, typename F1>
+		struct overload<Result, F1> : tc::decay_t<F1>
+		{
+			// Define result_type instead of deriving from boost::static_visitor<Result> to avoid ADL for boost.
+			using result_type = Result;
+
+			using tc::decay_t<F1>::operator();
+
+			overload(F1&& f1) noexcept : tc::decay_t<F1>(std::forward<F1>(f1)) {}
+		};
+	}
+
+	// C++17 deduction guide needed for class template argument deduction as replacement for make_overload. Note: ctor overload(F1&& f1) is not a universal reference by default.
+	// template<typename Func>
+	// overload(Func&&) noexcept -> overload<Func>;
+
+	template <typename Result, typename... F>
+	overload_adl_barrier::overload<Result, F...> make_overload(F&& ... f) noexcept {
+		return overload_adl_barrier::overload<Result, F...>(std::forward<F>(f)...) ;
+	}
 }
 
+#pragma push_macro("INFIX_FN_")
 #define INFIX_FN_( name, op ) \
 	struct fn_ ## name { \
 		template<typename Lhs, typename Rhs> \
@@ -184,7 +217,7 @@ INFIX_FN_( assign_plus, += )
 INFIX_FN_( assign_minus, -= )
 INFIX_FN_( assign, = )
 
-#undef INFIX_FN_
+#pragma pop_macro("INFIX_FN_")
 
 #define ALLOW_NOEXCEPT( ... ) \
 	decltype(static_cast<__VA_ARGS__>(nullptr))

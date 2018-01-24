@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -31,7 +31,11 @@ namespace tc {
 		template<typename TIndex, TIndex... Is, typename Func, typename... Args>
 		decltype(auto) invoke_with_constant_impl(std::integer_sequence<TIndex, Is...>, Func&& func, TIndex nIndex, Args&&... args) MAYTHROW {
 			using result_type = common_reference_t<
-				std::result_of_t<std::decay_t<Func>&(std::integral_constant<TIndex, Is>, Args&&...)>...
+#ifdef __clang__
+				std::result_of_t<std::decay_t<Func>&(std::integral_constant<TIndex, Is>, Args&&...)>... // C++11, deprecated in C++17
+#else
+				std::invoke_result_t<std::decay_t<Func>&, std::integral_constant<TIndex, Is>, Args&&...>... // C++17
+#endif
 			>;
 
 			static constexpr std::add_pointer_t<result_type(std::remove_reference_t<Func>, Args&&...)> apfn[] = {
@@ -48,7 +52,7 @@ namespace tc {
 
 	template<typename ContiguousIntegerSequence, typename Func, typename... Args>
 	decltype(auto) invoke_with_constant(Func&& func, typename ContiguousIntegerSequence::value_type nIndex, Args&&... args) MAYTHROW {
-		static_assert(tc::is_contiguous_integer_sequence<ContiguousIntegerSequence>::value && 0 < ContiguousIntegerSequence::size(), "");
+		static_assert(tc::is_contiguous_integer_sequence<ContiguousIntegerSequence>::value && 0 < ContiguousIntegerSequence::size());
 
 		return invoke_with_constant_impl::invoke_with_constant_impl(ContiguousIntegerSequence(), std::forward<Func>(func), nIndex, std::forward<Args>(args)...);
 	}

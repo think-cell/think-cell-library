@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -15,4 +15,4 @@
 #pragma once
 #include "type_traits.h"
 
-#define modified(obj, ...) ([&]() noexcept { auto _=tc::make_copy(obj); {__VA_ARGS__;} return _; }())
+#define modified(obj, ...) ([&]() noexcept { auto _=tc::decay_copy(obj); {__VA_ARGS__;} return _; }())

@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -57,7 +57,7 @@ namespace tc {
 
 	template<typename It, typename Enable=void >
 	struct element {
-		static_assert( tc::is_decayed<It>::value, "" );
+		static_assert( tc::is_decayed<It>::value );
 		struct type : It {
 			using difference_type=typename std::iterator_traits<It>::difference_type;
 			using value_type=typename std::iterator_traits<It>::value_type;
@@ -97,6 +97,12 @@ namespace tc {
 				return tc::base_cast<It>(*this).operator->();
 			}
 
+			template <typename It_ = It>
+			auto element_base() const& noexcept {
+				using ItBase = element<decltype(tc::base_cast<It>(*this).element_base())>;
+				return m_bValid ? ItBase{tc::base_cast<It>(*this).element_base()} : ItBase{};
+			}
+
 		private:
 			bool m_bValid;
 		};
@@ -104,7 +110,7 @@ namespace tc {
 
 	template<typename It>
 	struct element< It, std::enable_if_t< has_bool_cast<It>::value > > {
-		static_assert( tc::is_decayed<It>::value, "" );
+		static_assert( tc::is_decayed<It>::value );
 		using type=It;
 	};
 
@@ -145,7 +151,7 @@ namespace tc {
 			, range_difference_type< conditional_const_t<IndexRange,bConst>,Traversal>
 		>
 		{
-			static_assert( tc::is_decayed< IndexRange >::value, "" );
+			static_assert( tc::is_decayed< IndexRange >::value );
 
 		private:
 			friend class boost::iterator_core_access;

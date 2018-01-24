@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -12,7 +12,14 @@
 // If not, see <http://www.gnu.org/licenses/>. 
 //-----------------------------------------------------------------------------------------------------------------------------
 
+#pragma once
+
+#include "range_defines.h"
+
 #if _HAS_CXX17
+
+#include "type_traits.h"
+#include "return_decltype.h"
 
 #include <variant>
 
@@ -26,7 +33,7 @@ namespace tc {
 	)
 
 	template<std::size_t I>
-	constexpr auto const in_place_index = std::in_place_index<I>;
+	constexpr auto in_place_index = std::in_place_index<I>;
 }
 
 #else
@@ -40,7 +47,7 @@ namespace tc {
 namespace tc {
 	namespace indexed_variant_impl {
 		template<typename... Ts, std::size_t... Is>
-		static boost::variant<tc::tagged_type<std::integral_constant<std::size_t, Is>, Ts>...> indexed_variant_base(std::index_sequence<Is...>);
+		static boost::variant<tc::tagged_type<INTEGRAL_CONSTANT(Is), Ts>...> indexed_variant_base(std::index_sequence<Is...>);
 
 		template<typename... Ts>
 		using indexed_variant_base_t = decltype(indexed_variant_base<Ts...>(std::index_sequence_for<Ts...>()));
@@ -50,7 +57,7 @@ namespace tc {
 		explicit in_place_index_t() = default;
 	};
 	template <std::size_t I>
-	constexpr in_place_index_t<I> const in_place_index{};
+	constexpr in_place_index_t<I> in_place_index{};
 
 	template<typename... Ts>
 	struct indexed_variant : indexed_variant_impl::indexed_variant_base_t<Ts...> {
@@ -61,7 +68,7 @@ namespace tc {
 		using type_at = typename type_by_index<I, Ts...>::type;
 
 		template<std::size_t I>
-		using variant_member_type_at = tc::tagged_type<std::integral_constant<std::size_t, I>, type_at<I>>;
+		using variant_member_type_at = tc::tagged_type<INTEGRAL_CONSTANT(I), type_at<I>>;
 
 	public:
 		indexed_variant() = default;

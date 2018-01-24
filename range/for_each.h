@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -24,6 +24,7 @@
 #include "scope.h"
 #include "size.h"
 #include "utility.h"
+#include "conditional.h"
 
 #include <boost/optional.hpp>
 #include <boost/range/begin.hpp>
@@ -38,50 +39,77 @@ namespace tc {
 
 	// Primary for_each dispatcher
 	template<typename Rng, typename Func>
-	break_or_continue for_each(Rng&& rng, Func&& func) MAYTHROW {
+	auto for_each(Rng&& rng, Func&& func) MAYTHROW {
 		return for_each_impl(std::forward<Rng>(rng), std::forward<Func>(func), tc::type_list<std::conditional_t<std::is_array<std::remove_reference_t<Rng>>::value, tc::remove_cvref_t<Rng>, tc::decay_t<Rng>>>());
 	}
 
 	// Non-index iterator-based ranges
-	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
-	template<typename Rng, typename Func, typename RngDecayed>
-	std::enable_if_t<
-		is_range_with_iterators< RngDecayed >::value &&
-		!has_index< RngDecayed >::value,
-	break_or_continue > for_each_impl(Rng&& rng, Func func, tc::type_list<RngDecayed>) MAYTHROW {
+	template<typename Rng, typename Func, typename RngDecayed, 
+		std::enable_if_t<
+			tc::is_range_with_iterators< RngDecayed >::value && !tc::has_index< RngDecayed >::value
+		>* = nullptr
+	>
+	auto for_each_impl(Rng&& rng, Func func, tc::type_list<RngDecayed>) MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, *boost::begin(rng))), INTEGRAL_CONSTANT(tc::continue_)> {
 		for(auto it = boost::begin(rng); it!= boost::end(rng); ++it) {
-			RETURN_IF_BREAK( continue_if_not_break(func, *it) );
+			RETURN_IF_BREAK( tc::continue_if_not_break(func, *it) );
 		}
-		return continue_;
+		return INTEGRAL_CONSTANT(tc::continue_)();
 	}
 
-	// Non-breakable ranges
-	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
-	template<typename Rng, typename Func, typename RngDecayed>
-	std::enable_if_t<
-		!(is_range_with_iterators< RngDecayed >::value &&
-		!has_index< RngDecayed >::value) &&
-		std::is_void< decltype( std::declval<Rng>()( std::declval<Func>())) >::value,
-	break_or_continue > for_each_impl(Rng&& rng, Func func, tc::type_list<RngDecayed>) MAYTHROW {
-		std::forward<Rng>(rng)( void_generator_type_check_impl::ensure_non_break_or_continue_functor<Func>(func) );
-		return continue_;
+	// Non-breakable iteration over index ranges
+	template<typename Rng, typename Func, typename RngDecayed, 
+		std::enable_if_t<
+			!(tc::is_range_with_iterators< RngDecayed >::value && !tc::has_index< RngDecayed >::value) && 
+			(std::is_void<decltype(std::declval<Rng>()(std::declval<Func>())) >::value ||
+			std::is_same<decltype(std::declval<Rng>()(std::declval<Func>())), INTEGRAL_CONSTANT(tc::continue_)>::value)
+		>* = nullptr
+	>
+	INTEGRAL_CONSTANT(tc::continue_) for_each_impl(Rng&& rng, Func&& func, tc::type_list<RngDecayed>) MAYTHROW {
+		std::forward<Rng>(rng)( void_generator_type_check_impl::ensure_non_breaking_functor<Func>(std::forward<Func>(func)) );
+		return {};
 	}
 
-	// Breakable ranges
-	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
-	template<typename Rng, typename Func, typename RngDecayed>
-	std::enable_if_t<
-		!(is_range_with_iterators< RngDecayed >::value &&
-		!has_index< RngDecayed >::value) &&
-		std::is_same< break_or_continue, decltype( std::declval<Rng>()( std::declval<Func>())) >::value,
-	break_or_continue > for_each_impl(Rng&& rng, Func&& func, tc::type_list<RngDecayed>) MAYTHROW {
+	// Always-breaking iteration over index ranges
+	template<typename Rng, typename Func, typename RngDecayed, 
+		std::enable_if_t<
+			!(tc::is_range_with_iterators< RngDecayed >::value && !tc::has_index< RngDecayed >::value) && 
+			std::is_same<decltype(std::declval<Rng>()(std::declval<Func>())), INTEGRAL_CONSTANT(tc::break_)>::value
+		>* = nullptr
+	>
+	INTEGRAL_CONSTANT(tc::break_) for_each_impl(Rng&& rng, Func&& func, tc::type_list<RngDecayed>) MAYTHROW {
+		std::forward<Rng>(rng)( void_generator_type_check_impl::ensure_always_breaking_functor<Func>(std::forward<Func>(func)) );
+		return {};
+	}
+
+	// Breakable iteration over index ranges
+	template<typename Rng, typename Func, typename RngDecayed,
+		std::enable_if_t<
+			!(tc::is_range_with_iterators< RngDecayed >::value && !tc::has_index< RngDecayed >::value) && 
+			std::is_same<decltype(std::declval<Rng>()(std::declval<Func>())), tc::break_or_continue>::value
+		>* = nullptr
+	>
+	auto for_each_impl(Rng&& rng, Func&& func, tc::type_list<RngDecayed>) MAYTHROW {
 		return std::forward<Rng>(rng)( std::forward<Func>(func) );
+	}
+
+	// Enumset
+	template<typename Enumset, typename Func, typename Enum>
+	auto for_each_impl(Enumset&& enumset, Func func, tc::type_list<tc::enumset<Enum>>) MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, std::declval<Enum&>())), INTEGRAL_CONSTANT(tc::continue_)> {
+		for (Enum e = tc::contiguous_enum<Enum>::begin(); e != tc::contiguous_enum<Enum>::end(); ++e) {
+			if ((enumset&e)) {
+				RETURN_IF_BREAK(tc::continue_if_not_break(func, e));
+			}
+		}
+		return INTEGRAL_CONSTANT(tc::continue_)();
 	}
 
 	// Integer sequences
 	template<typename IntSequence, typename Func, typename TIndex, TIndex... Is>
-	break_or_continue for_each_impl(IntSequence&&, Func func, tc::type_list<std::integer_sequence<TIndex, Is...>>) MAYTHROW {
-		tc::break_or_continue breakorcontinue = tc::continue_;
+	auto for_each_impl(IntSequence&&, Func func, tc::type_list<std::integer_sequence<TIndex, Is...>>) MAYTHROW {
+		tc::common_type_t<
+			INTEGRAL_CONSTANT(tc::continue_),
+			decltype(tc::continue_if_not_break(func, std::integral_constant<TIndex, Is>()))...
+		> breakorcontinue = INTEGRAL_CONSTANT(tc::continue_)();
 
 		using swallow = std::initializer_list<bool>;
 		swallow{(tc::continue_ == breakorcontinue && ((breakorcontinue = tc::continue_if_not_break(func, std::integral_constant<TIndex, Is>())), true))...};
@@ -91,7 +119,7 @@ namespace tc {
 
 	// Tuples
 	template<typename Tuple, typename Func, typename... Ts>
-	break_or_continue for_each_impl(Tuple&& tuple, Func func, tc::type_list<std::tuple<Ts...>>) MAYTHROW {
+	auto for_each_impl(Tuple&& tuple, Func func, tc::type_list<std::tuple<Ts...>>) MAYTHROW {
 		return for_each(
 			std::make_index_sequence<std::tuple_size<std::remove_reference_t<Tuple>>::value>(),
 			[&](auto nconstIndex) MAYTHROW {
@@ -107,14 +135,14 @@ namespace tc {
 
 	// enable_if to ensure that removal preserves iterators would be nice, but is difficult for adapted ranges.
 	template< typename Rng, typename Func >
-	break_or_continue for_each_may_remove_current(Rng&& rng, Func func) MAYTHROW {
-		static_assert( !tc::range_filter_by_move_element< std::remove_reference_t<Rng> >::value, "" );
+	auto for_each_may_remove_current(Rng&& rng, Func func) MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, *boost::begin(rng))), INTEGRAL_CONSTANT(tc::continue_)> {
+		static_assert( !tc::range_filter_by_move_element< std::remove_reference_t<Rng> >::value );
 		auto it=boost::begin(rng);
 		auto const itEnd=boost::end(rng);
 		while( it!=itEnd ) {
-			if( break_==continue_if_not_break(func, *it++) ) return break_;
+			RETURN_IF_BREAK(tc::continue_if_not_break(func, *it++));
 		}
-		return continue_;
+		return INTEGRAL_CONSTANT(tc::continue_)();
 	}
 
 	DEFINE_FN(for_each_may_remove_current);
@@ -123,19 +151,19 @@ namespace tc {
 	// for_each_ordered_pair
 
 	template< typename Rng, typename Func >
-	tc::break_or_continue for_each_ordered_pair(Rng const& rng, Func func) MAYTHROW {
+	auto for_each_ordered_pair(Rng const& rng, Func func) MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, *boost::begin(rng), *boost::begin(rng))), INTEGRAL_CONSTANT(tc::continue_)> {
 		auto const itEndRng = boost::end(rng);
 		for(auto itEnd = boost::begin(rng); itEnd != itEndRng; ++itEnd) {
-			tc::reference_or_value<typename boost::range_reference<Rng const>::type> ref(aggregate_tag(), *itEnd);
+			tc::reference_or_value<tc::range_reference_t<Rng const>> ref(aggregate_tag(), *itEnd);
 			
 			RETURN_IF_BREAK(
 				tc::for_each(
 					tc::take(rng, itEnd),
-					std::bind(func, std::placeholders::_1, std::ref(*ref))
+					[&](auto const& _) MAYTHROW { return func(_, *ref); }
 				)
 			);
 		}
-		return tc::continue_;
+		return INTEGRAL_CONSTANT(tc::continue_)();
 	}
 
 	template<typename T>
@@ -169,37 +197,33 @@ namespace tc {
 			}
 		};
 		boost::variant<empty, T const*, T> m_variant;
-		static_assert( tc::is_decayed< T >::value, "" );
+		static_assert( tc::is_decayed< T >::value );
 	};
 
 	namespace for_each_adjacent_pair_adl_barrier {
 		template<typename T, typename Func>
 		struct Fn final {
-			Fn(Func& func) noexcept
-				: m_func(func)
-			{}
-			break_or_continue operator()(T const& t) & MAYTHROW {
-				if( m_param && break_==continue_if_not_break(m_func, *m_param, t) ) {
-					return break_;
-				}
-				m_param = t;
-				return continue_;
-			}
-			break_or_continue operator()(T&& t) & MAYTHROW {
-				if( m_param && break_==continue_if_not_break(m_func, *m_param, t) ) {
-					return break_;
-				}
-				m_param = tc_move(t);
-				return continue_;
-			}
 		private:
 			Func& m_func;
 			parameter_storage<T> m_param;
+		public:
+			Fn(Func& func) noexcept
+				: m_func(func)
+			{}
+
+			template<typename U>
+			auto operator()(U&& u) & MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(m_func, *m_param, u)), INTEGRAL_CONSTANT(tc::continue_)> {
+				if (m_param) {
+					RETURN_IF_BREAK(tc::continue_if_not_break(m_func, *m_param, u));
+				}
+				m_param = std::forward<U>(u);
+				return INTEGRAL_CONSTANT(tc::continue_)();
+			}
 		};
 	}
 
 	template<typename T, typename Rng, typename Func, std::enable_if_t<!is_range_with_iterators<Rng>::value>* = nullptr>
-	break_or_continue for_each_adjacent_pair(Rng const& rng, Func func) MAYTHROW {
+	auto for_each_adjacent_pair(Rng const& rng, Func func) MAYTHROW {
 		return tc::for_each( rng, for_each_adjacent_pair_adl_barrier::Fn<T, Func>(func) );
 	}
 
@@ -215,23 +239,9 @@ namespace tc {
 			:  m_pt(std::addressof(t)), m_paccuop(std::addressof(accuop))
 			{}
 
-			template< typename S, std::enable_if_t<
-				std::is_same<
-					std::result_of_t<AccuOp const&(T&, S &&)>,
-					break_or_continue
-				>::value>* = nullptr>
-			break_or_continue operator()(S&& s) const& MAYTHROW {
-				return (*m_paccuop)( *m_pt, std::forward<S>(s) );
-			}
-
-			template< typename S, std::enable_if_t<
-				!std::is_same<
-					std::result_of_t<AccuOp const&(T&, S &&)>,
-					break_or_continue
-				>::value
-			>* = nullptr>
-			void operator()(S&& s) const& MAYTHROW {
-				(*m_paccuop)( *m_pt, std::forward<S>(s) );
+			template<typename S>
+			auto operator()(S&& s) const& MAYTHROW {
+				return tc::continue_if_not_break(*m_paccuop, *m_pt, std::forward<S>(s));
 			}
 		};
 	}
@@ -246,28 +256,25 @@ namespace tc {
 		template< typename T, typename AccuOp >
 		struct accumulator_with_front final {
 			boost::optional<T> & m_t;
+
 			AccuOp m_accuop;
+
 			accumulator_with_front( boost::optional<T>& t, AccuOp&& accuop ) noexcept
-			:  m_t(t), m_accuop(accuop)
+				: m_t(t)
+				, m_accuop(std::forward<AccuOp>(accuop))
 			{}
+
 			template< typename S >
-			break_or_continue operator()( S&& s ) /* no & */ MAYTHROW {
-				if( m_t ) {
-					return continue_if_not_break( m_accuop, *m_t, std::forward<S>(s) );
-				} else {
-					m_t=std::forward<S>(s);
-					return continue_;
-				}
+			auto operator()( S&& s ) /* no & */ MAYTHROW {
+				return CONDITIONAL(
+					m_t,
+					tc::continue_if_not_break( m_accuop, *m_t, std::forward<S>(s) ),
+					m_t=std::forward<S>(s) BOOST_PP_COMMA() INTEGRAL_CONSTANT(tc::continue_)()
+				);
 			}
 		};
 	}
 	using accumulator_with_front_adl_barrier::accumulator_with_front;
-
-	template< typename Rng, typename AccuOp >
-	boost::optional< typename tc::range_value< std::remove_reference_t<Rng> >::type > accumulate_with_front(Rng&& rng, AccuOp&& accuop) MAYTHROW {
-		return accumulate_with_front2< typename tc::range_value< std::remove_reference_t<Rng> >::type >(std::forward<Rng>(rng),std::forward<AccuOp>(accuop));
-	}
-
 
 	template<typename Value, typename AccuOp>
 	auto make_accumulator_with_front(boost::optional<Value>& value, AccuOp&& accumulate) noexcept
@@ -275,10 +282,15 @@ namespace tc {
 
 	template< typename T, typename Rng, typename AccuOp >
 	boost::optional<T> accumulate_with_front2(Rng&& rng, AccuOp&& accuop) MAYTHROW {
-		static_assert(tc::is_decayed< T >::value,"");
+		static_assert(tc::is_decayed< T >::value);
 		boost::optional<T> t;
 		tc::for_each(std::forward<Rng>(rng), tc::make_accumulator_with_front(t,std::forward<AccuOp>(accuop)));
 		return t;
+	}
+
+	template< typename Rng, typename AccuOp >
+	boost::optional< typename tc::range_value< std::remove_reference_t<Rng> >::type > accumulate_with_front(Rng&& rng, AccuOp&& accuop) MAYTHROW {
+		return accumulate_with_front2< typename tc::range_value< std::remove_reference_t<Rng> >::type >(std::forward<Rng>(rng),std::forward<AccuOp>(accuop));
 	}
 
 	/////////////////////////////////////////////////////
@@ -303,7 +315,7 @@ namespace tc {
 			auto operator()(Func func) const& MAYTHROW {
 				tc::decay_t<T> accu = *m_init;
 				return tc::for_each( *m_baserng, [&] (auto&& arg) MAYTHROW {
-					m_accuop(accu, tc_move_if_owned(arg));
+					m_accuop(accu, std::forward<decltype(arg)>(arg));
 					return func(accu);
 				});
 			}
@@ -314,6 +326,17 @@ namespace tc {
 		};
 	}
 	using partial_sum_adl_barrier::partial_sum_adaptor;
+
+	namespace range_reference_adl_barrier {
+		template <typename Rng, typename T, typename AccuOp>
+		struct range_reference<partial_sum_adaptor<Rng,T,AccuOp>> {
+			using type = std::add_lvalue_reference_t<tc::decay_t<T>>;
+		};
+
+		template <typename Rng, typename T, typename AccuOp>
+		struct range_reference<partial_sum_adaptor<Rng,T,AccuOp> const> :  range_reference<partial_sum_adaptor<Rng,T,AccuOp>> {};
+	}
+
 
 	template <typename Rng, typename T, typename AccuOp>
 	auto partial_sum(Rng&& rng, T&& init, AccuOp&& accuop) noexcept return_ctor(

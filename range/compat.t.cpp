@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -57,7 +57,7 @@ namespace {
 		using WlFilterdList = tc::filter_adaptor<decltype(&filter35), WlList>;
 		auto getWlFilterdList() const& noexcept return_decltype ( tc::filter(getWlList(), &filter35) )
 
-		// This is were it gets weired, as soon as you somehow use has_range_iterator<WlFilterdList> (here at class scope)
+		// This is were it gets weird, as soon as you somehow use has_range_iterator<WlFilterdList> (here at class scope)
 		// things go crashing down, even though has_range_iterator<WlFilterdList> is perfectly fine one line later at function scope
 
 		using WlFilterdTransformedList = tc::transform_adaptor<decltype(&transf_times_100), WlFilterdList, true>; STATIC_ASSERT(tc::is_range_with_iterators<WlFilterdList>::value);
@@ -116,7 +116,7 @@ UNITTESTDEF( boost_range_traits_compat ) {
 	TEST_init_hack(tc::vector, unsigned long, original, {1,2,3,4,5,6,7,8});
 	TEST_init_hack(tc::vector, unsigned long, exp, {2,4,6,8});
 
-	auto fr = tc::filter(original, [](int i) noexcept { return i%2==0; });
+	auto fr = tc::filter(original, [](unsigned long i) noexcept { return i%2==0; });
 
 	STATIC_ASSERT(std::is_same<decltype(std::begin(fr)), decltype(boost::begin(fr))>::value);
 
@@ -157,7 +157,7 @@ UNITTESTDEF( deduce_traits ) {
 	TEST_RANGE_EQUAL( exp, trange );
 
 	tc::vector<int> res;
-	tc::for_each( o.trans_range(), [&](int const& id) noexcept { res.emplace_back(id); } );
+	tc::for_each( o.trans_range(), [&](int const& id) noexcept { tc::cont_emplace_back(res, id); } );
 	TEST_RANGE_EQUAL(exp, res);
 }
 

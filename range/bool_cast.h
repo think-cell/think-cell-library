@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -13,6 +13,7 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 
 #pragma once
+#include "range_defines.h"
 #include "type_traits.h"
 
 namespace tc {
@@ -21,5 +22,5 @@ namespace tc {
 		return static_cast<bool>( VERIFYINITIALIZED(t) );
 	}
 
-	TC_HAS_EXPR(bool_cast, tc::bool_cast(std::declval<T>()))
+	TC_HAS_EXPR(bool_cast, (T), tc::bool_cast(std::declval<T>()))
 }

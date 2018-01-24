@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -21,6 +21,7 @@
 #include "types.h"
 #include "modified.h"
 #include "compare.h"
+#include "algorithm.h"
 
 namespace tc {
 
@@ -64,7 +65,7 @@ namespace tc {
 				{}
 
 				template<typename T0, typename T1>
-				tc::break_or_continue operator()(T0&& arg0, T1&&) const {
+				auto operator()(T0&& arg0, T1&&) const {
 					return tc::continue_if_not_break(m_func, std::forward<T0>(arg0));
 				}
 
@@ -72,9 +73,9 @@ namespace tc {
 
 		public:
 			template< typename Func >
-			auto operator()(Func func) const/* no & */ MAYTHROW -> break_or_continue
+			auto operator()(Func func) const/* no & */ MAYTHROW
 			{
-				return tc::interleave(
+				return tc::interleave_2(
 					*std::get<0>(m_baserng),
 					*std::get<1>(m_baserng),
 					m_comp,
@@ -85,9 +86,9 @@ namespace tc {
 			}
 
 			template< typename Func >
-			auto operator()(Func func) /* no & */ MAYTHROW -> break_or_continue
+			auto operator()(Func func) /* no & */ MAYTHROW
 			{
-				return tc::interleave(
+				return tc::interleave_2(
 					*std::get<0>(m_baserng),
 					*std::get<1>(m_baserng),
 					m_comp,
@@ -304,7 +305,7 @@ namespace tc {
 							std::get<1>(tc::as_mutable(this->m_baserng))->make_iterator(get_idx<1>(idx)),
 							std::get<1>(tc::as_mutable(this->m_baserng))->make_iterator(get_idx<1>(idxEnd)),
 							ref0,
-							tc::greaterfrom3way(std::bind(std::ref(this->m_comp), std::placeholders::_2, std::placeholders::_1))
+							tc::greaterfrom3way([&](auto const& _1, auto const& _2) noexcept { return this->m_comp(_2, _1); })
 						)
 					);
 

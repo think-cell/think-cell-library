@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -21,8 +21,8 @@
 #define tc_inplace(expr) \
 	(expr)=(expr)
 
-TC_HAS_MEM_FN_XXX_TRAIT_DEF( negate )
-TC_HAS_MEM_FN_XXX_TRAIT_DEF( bitwise_not )
+TC_HAS_MEM_FN_XXX_TRAIT_DEF( negate, & )
+TC_HAS_MEM_FN_XXX_TRAIT_DEF( bitwise_not, & )
 
 namespace tc {
 	namespace inplace_adl_barrier {

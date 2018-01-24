@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -28,40 +28,41 @@
 namespace tc {
 	template<typename T>
 	std::size_t strlen( T const* pt ) noexcept {
+		_ASSERT(pt);
 		return std::char_traits<T>::length(pt);
 	}
 
 	// cast may not be necessary, but let's avoid problems even in case of user-defined T
 	template< typename T >
 	bool isasciidigit( T ch ) noexcept {
-		return tc::char_cast<T>('0')<=ch && ch<=tc::char_cast<T>('9');
+		return tc::explicit_cast<T>('0')<=ch && ch<=tc::explicit_cast<T>('9');
 	}
 
 	template< typename T >
 	bool isasciiupper( T ch ) noexcept {
-		return tc::char_cast<T>('A')<=ch && ch<=tc::char_cast<T>('Z');
+		return tc::explicit_cast<T>('A')<=ch && ch<=tc::explicit_cast<T>('Z');
 	}
 
 	template< typename T >
 	bool isasciilower( T ch ) noexcept {
-		return tc::char_cast<T>('a')<=ch && ch<=tc::char_cast<T>('z');
+		return tc::explicit_cast<T>('a')<=ch && ch<=tc::explicit_cast<T>('z');
 	}
 
 	template< typename T >
 	bool isasciicntrl( T ch ) noexcept {
-		return tc::char_cast<T>('\0')<=ch && ch<=tc::char_cast<T>('\x1f') || tc::char_cast<T>('\x7f')==ch;
+		return tc::explicit_cast<T>('\0')<=ch && ch<=tc::explicit_cast<T>('\x1f') || tc::explicit_cast<T>('\x7f')==ch;
 	}
 	DEFINE_FN(isasciicntrl)
 
 	template< typename T >
 	bool isasciiblank( T ch ) noexcept {
-		return tc::char_cast<T>('\t')==ch || tc::char_cast<T>(' ')==ch;
+		return tc::explicit_cast<T>('\t')==ch || tc::explicit_cast<T>(' ')==ch;
 	}
 
 	template< typename T >
 	bool isasciispace( T ch ) noexcept {
 		return tc::isasciiblank(ch) || 
-			tc::char_cast<T>('\xa')<=ch && ch<=tc::char_cast<T>('\xd'); // \n, \v, \f, \r
+			tc::explicit_cast<T>('\xa')<=ch && ch<=tc::explicit_cast<T>('\xd'); // \n, \v, \f, \r
 	}
 	DEFINE_FN(isasciispace)
 	
@@ -85,8 +86,75 @@ namespace tc {
 	}
 	DEFINE_FN(toasciilower)
 
-	template< typename T >
-	struct range_value : boost::range_value<T> {};
+	namespace range_reference_adl_barrier {
+		template<typename Rng, bool>
+		struct range_reference_base_with_const;
+
+		template<typename Rng>
+		struct range_reference_base_with_const<Rng, true> {
+			using type = typename Rng::const_reference;
+		};
+
+		template<typename Rng>
+		struct range_reference_base_with_const<Rng, false> {
+			using type = typename Rng::reference;
+		};
+
+		// Rationale: range_reference is the type that should be deduced when range is plugged into for_each.
+		template< typename Rng, typename Enable=void>
+		struct range_reference : range_reference_base_with_const<Rng, std::is_const<Rng>::value> {};
+
+		template< typename Rng >
+		struct range_reference<Rng, std::enable_if_t<std::is_reference<Rng>::value>> : range_reference<std::remove_reference_t<Rng>> {};
+
+		template< typename Rng >
+		struct range_reference<Rng, std::enable_if_t<!std::is_reference<Rng>::value && is_range_with_iterators<Rng>::value> > {
+			using type = typename std::iterator_traits<typename boost::range_iterator<Rng>::type>::reference;
+		};
+	}
+	using range_reference_adl_barrier::range_reference;
+
+	template<typename T>
+	using range_reference_t = typename range_reference<T>::type;
+	
+	namespace range_value_adl_barrier {
+		template< typename Rng, typename Enable = void >
+		struct range_value final {
+			using type = tc::decay_t<tc::range_reference_t<Rng>>;
+		};
+
+		template< typename Rng>
+		struct range_value<Rng, std::enable_if_t<is_range_with_iterators<Rng>::value> > final {
+			using type = tc::decay_t<tc::range_reference_t<Rng>>;
+			static_assert(std::is_same<
+				type,
+				typename std::iterator_traits<typename boost::range_iterator<Rng>::type>::value_type
+			>::value);
+		};
+	}
+	using range_value_adl_barrier::range_value;
+
+	template<typename T>
+	using range_value_t = typename range_value<T>::type;
+
+	namespace generator_range_reference_adl_barrier {
+		template<typename ConstReferenceType, typename ReferenceType, typename Func>
+		struct FuncWithReference : tc::decay_t<Func> {
+			using reference = ReferenceType;
+			using const_reference = ConstReferenceType;
+
+			using tc::decay_t<Func>::operator();
+
+			FuncWithReference(Func&& func) noexcept
+				: tc::decay_t<Func>(std::forward<Func>(func))
+			{}
+		};
+	}
+
+	template<typename ConstReferenceType, typename ReferenceType = ConstReferenceType, typename Func>
+	generator_range_reference_adl_barrier::FuncWithReference<ConstReferenceType, ReferenceType, Func> generator_range_reference(Func&& func) {
+		return generator_range_reference_adl_barrier::FuncWithReference<ConstReferenceType, ReferenceType, Func>(std::forward<Func>(func));
+	}
 }
 
 #pragma push_macro("CHAR_RANGE")
@@ -224,7 +292,7 @@ namespace tc{
 	}
 	using is_char_range_adl_barrier::is_char_range;
 
-	static_assert( is_char_range<wchar_t const* const>::value, "" );
+	static_assert( is_char_range<wchar_t const* const>::value );
 
 	//////////////////////////////
 	// Ranges are either containers or views, which are references to consecutive elements in containers.
@@ -278,7 +346,7 @@ namespace tc{
 
 		template< typename T >
 		struct view_by_value final {
-			static_assert(!std::is_rvalue_reference<T>::value, "");
+			static_assert(!std::is_rvalue_reference<T>::value);
 			using type = std::conditional_t< is_view<std::remove_reference_t<T>>::value
 				, tc::decay_t<T>
 				, T
@@ -290,15 +358,6 @@ namespace tc{
 
 	template<typename T>
 	using view_by_value_t = typename view_by_value<T>::type;
-	
-	/////////////////////////////////////////////
-	// is_instance
-
-	template<template<typename...> class X, typename T> struct is_instance : public std::false_type {};
-	template<template<typename...> class X, typename T> struct is_instance<X, T const> : public is_instance<X, T> {};
-	template<template<typename...> class X, typename T> struct is_instance<X, T volatile> : public is_instance<X, T> {};
-	template<template<typename...> class X, typename T> struct is_instance<X, T const volatile> : public is_instance<X, T> {};
-	template<template<typename...> class X, typename... Y> struct is_instance<X, X<Y...>> : public std::true_type {};
 
 	/////////////////////////////////////////////
 	// verify_class

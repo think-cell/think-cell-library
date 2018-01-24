@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -22,8 +22,8 @@
 UNITTESTDEF(merge_ranges_with_simple_usecase) {
 
 	tc::vector<tc::vector<int>> vecvecn;
-	vecvecn.emplace_back(std::initializer_list<int>{1,3,5});
-	vecvecn.emplace_back(std::initializer_list<int>{2,4});
+	tc::cont_emplace_back(vecvecn, std::initializer_list<int>{1,3,5});
+	tc::cont_emplace_back(vecvecn, std::initializer_list<int>{2,4});
 
 	int N=0;
 	tc::for_each(
@@ -44,7 +44,7 @@ UNITTESTDEF(zip_range_adaptor_test) {
 		auto rng = tc::zip(vecn,vecn2);
 
 		_ASSERT(std::get<0>(*boost::begin(rng)) == 1);
-		_ASSERTEQUAL(std::addressof(std::get<1>(*std::begin(rng))),std::addressof(vecn2[0]));
+		_ASSERTEQUAL(std::addressof(std::get<1>(*boost::begin(rng))),std::addressof(vecn2[0]));
 
 		auto it = boost::begin(vecn);
 		auto it2 = boost::begin(vecn2);
@@ -84,12 +84,12 @@ UNITTESTDEF(zip_range_adaptor_test) {
 
 UNITTESTDEF(merge_ranges_with_unique_range_2) {
 	tc::vector<tc::vector<int>> vecvecn;
-	vecvecn.emplace_back(std::initializer_list<int>{1,1,3,3,3,5,5,5,5});
-	vecvecn.emplace_back(std::initializer_list<int>{2,2,4});
+	tc::cont_emplace_back(vecvecn, std::initializer_list<int>{1,1,3,3,3,5,5,5,5});
+	tc::cont_emplace_back(vecvecn, std::initializer_list<int>{2,2,4});
 
 	tc::vector<tc::vector<int>> vecvecn2;
-	vecvecn2.emplace_back(std::initializer_list<int>{101,102,103,104,105,106,107,108,109});
-	vecvecn2.emplace_back(std::initializer_list<int>{110,111,112});
+	tc::cont_emplace_back(vecvecn2, std::initializer_list<int>{101,102,103,104,105,106,107,108,109});
+	tc::cont_emplace_back(vecvecn2, std::initializer_list<int>{110,111,112});
 
 	auto lesspred = tc::projected(tc::fn_less(), fn_std_get<0>());
 

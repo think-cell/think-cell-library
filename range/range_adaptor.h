@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -18,6 +18,7 @@
 #include "range_defines.h"
 #include "meta.h"
 #include "types.h"
+#include "for_each.h"
 
 #include "casts.h"
 #include "static_polymorphism.h"
@@ -42,7 +43,9 @@ namespace tc {
 	// Comes in two variations, one for generator ranges, one for iterator ranges. 
 	//
 	namespace range_iterator_from_index_impl {
-		TC_HAS_MEM_FN_XXX_TRAIT_DEF(end_index);
+		BOOST_PP_EXPAND(TC_HAS_MEM_FN_XXX_TRAIT_DEF BOOST_PP_EMPTY() (STATIC_VIRTUAL_METHOD_NAME(end_index), const&));
+		template<typename T>
+		using implements_mem_fn_end_index = BOOST_PP_CAT(has_mem_fn_, STATIC_VIRTUAL_METHOD_NAME(end_index))<T>;
 
 		template<
 			typename Derived,
@@ -53,7 +56,7 @@ namespace tc {
 		private:
 			using this_type = range_iterator_from_index;
 		public:
-			static_assert( boost::iterators::detail::is_iterator_traversal<Traversal>::value, "" );
+			static_assert( boost::iterators::detail::is_iterator_traversal<Traversal>::value );
 			////////////////////////////////////////////////////////
 			// simulate iterator interface on top of index interface
 
@@ -81,12 +84,12 @@ namespace tc {
 				return make_iterator(begin_index());
 			}
 
-			template<typename Derived_=Derived, std::enable_if_t<!has_mem_fn_end_index<Derived_>::value>* = nullptr>
+			template<typename Derived_=Derived, std::enable_if_t<!implements_mem_fn_end_index<Derived_>::value>* = nullptr>
 			end_sentinel end() const& noexcept {
 				return {};
 			}
 
-			template<typename Derived_ = Derived, std::enable_if_t<has_mem_fn_end_index<Derived_>::value>* = nullptr>
+			template<typename Derived_ = Derived, std::enable_if_t<implements_mem_fn_end_index<Derived_>::value>* = nullptr>
 			const_iterator end() const& MAYTHROW {
 				return make_iterator(end_index());
 			}
@@ -99,7 +102,7 @@ namespace tc {
 				return make_iterator(begin_index());
 			}
 
-			template<typename Derived_ = Derived, std::enable_if_t<has_mem_fn_end_index<Derived_>::value>* = nullptr>
+			template<typename Derived_ = Derived, std::enable_if_t<implements_mem_fn_end_index<Derived_>::value>* = nullptr>
 			iterator end() & MAYTHROW {
 				return make_iterator(end_index());
 			}
@@ -173,7 +176,7 @@ namespace tc {
 			, Traversal
 			, false
 		> {
-			static_assert( !std::is_rvalue_reference<Rng>::value, "" );
+			static_assert( !std::is_rvalue_reference<Rng>::value );
 			reference_or_value< index_range_t<Rng> > m_baserng;
 		
 		// protected:
@@ -207,7 +210,7 @@ namespace tc {
 			)
 
 			template< typename Func >
-			break_or_continue operator()(Func func) /* no & */ MAYTHROW {
+			auto operator()(Func func) /* no & */ MAYTHROW {
 				return tc::for_each(
 					base_range(),
 					[&](auto&&... args) mutable MAYTHROW {
@@ -217,7 +220,7 @@ namespace tc {
 			}
 
 			template< typename Func >
-			break_or_continue operator()(Func func) const /* no & */ MAYTHROW {
+			auto operator()(Func func) const /* no & */ MAYTHROW {
 				return tc::for_each(
 					base_range(),
 					[&](auto&&... args) mutable MAYTHROW {
@@ -325,6 +328,30 @@ namespace tc {
 		};
 	}
 	using range_adaptor_impl::range_adaptor;
+
+	namespace range_reference_adl_barrier {
+		template<typename Rng, bool bConst>
+		struct reference_for_value_or_reference_with_index_range {
+			using type = tc::range_reference_t<
+				decltype(
+					*std::declval<
+						tc::apply_if_t<
+							bConst,
+							std::add_const,
+							reference_or_value< index_range_t<Rng> >
+						>
+					&>()
+				)
+			>;
+		};
+
+		template<typename Rng, bool bConst>
+		using reference_for_value_or_reference_with_index_range_t = typename reference_for_value_or_reference_with_index_range<Rng, bConst>::type;
+
+		template< typename Derived, typename Rng, typename Traversal >
+		struct range_reference<range_adaptor<Derived, Rng, Traversal, false> > : reference_for_value_or_reference_with_index_range<Rng, false> {};
+
+		template< typename Derived, typename Rng, typename Traversal >
+		struct range_reference<range_adaptor<Derived, Rng, Traversal, false> const> : reference_for_value_or_reference_with_index_range<Rng, true> {};
+	}
 }
-
-

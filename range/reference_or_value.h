@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -25,7 +25,8 @@ namespace tc {
 	namespace reference_or_value_adl_barrier {
 		template< typename T >
 		struct reference_or_value final {
-			static_assert( !std::is_reference<T>::value, "" );
+			static_assert( !std::is_void<T>::value );
+			static_assert( !std::is_reference<T>::value );
 			static_assert( !std::is_const<T>::value, "T const seems to be strange. Are you sure?" );
 
 			using value_type = std::remove_cv_t<T>;
@@ -138,14 +139,14 @@ namespace tc {
 	using reference_or_value_adl_barrier::reference_or_value;
 
 	namespace stores_result_of_adl_barrier {
-		template< typename Func, typename Enable=void >
+		template< typename Func, typename Enable, typename... Args >
 		struct stores_result_of final {
 		private:
-			tc::reference_or_value< std::result_of_t< Func() > > m_t;
+			tc::reference_or_value< std::result_of_t< Func(Args...) > > m_t;
 
 		public:
-			stores_result_of( Func&& func ) MAYTHROW
-				: m_t(aggregate_tag(), std::forward<Func>(func)())
+			stores_result_of( Func&& func, Args... args ) MAYTHROW
+				: m_t(aggregate_tag(), std::forward<Func>(func)(static_cast<Args>(args)...))
 			{}
 
 			auto get() const& noexcept ->decltype(auto) {
@@ -157,32 +158,33 @@ namespace tc {
 			auto get() && noexcept ->decltype(auto) {
 				return *tc_move(m_t);
 			}
-			template<typename FuncTo, typename ...Args>
-			auto pass_to(FuncTo&& functo, Args&& ...args) const& noexcept ->decltype(auto) {
-				return std::forward<FuncTo>(functo)(*m_t, std::forward<Args>(args)...);
+			template<typename FuncTo, typename ...ArgsTo>
+			auto pass_to(FuncTo&& functo, ArgsTo&& ...args) const& noexcept ->decltype(auto) {
+				return std::forward<FuncTo>(functo)(*m_t, std::forward<ArgsTo>(args)...);
 			}
-			template<typename FuncTo, typename ...Args>
-			auto pass_to(FuncTo&& functo, Args&& ...args) & noexcept ->decltype(auto) {
-				return std::forward<FuncTo>(functo)(*m_t, std::forward<Args>(args)...);
+			template<typename FuncTo, typename ...ArgsTo>
+			auto pass_to(FuncTo&& functo, ArgsTo&& ...args) & noexcept ->decltype(auto) {
+				return std::forward<FuncTo>(functo)(*m_t, std::forward<ArgsTo>(args)...);
 			}
-			template<typename FuncTo, typename ...Args>
-			auto pass_to(FuncTo&& functo, Args&& ...args) && noexcept ->decltype(auto) {
-				return std::forward<FuncTo>(functo)(*tc_move(m_t), std::forward<Args>(args)...);
+			template<typename FuncTo, typename ...ArgsTo>
+			auto pass_to(FuncTo&& functo, ArgsTo&& ...args) && noexcept ->decltype(auto) {
+				return std::forward<FuncTo>(functo)(*tc_move(m_t), std::forward<ArgsTo>(args)...);
 			}
 		};
 
-		template< typename Func >
-		struct stores_result_of<Func, std::enable_if_t< std::is_void< std::result_of_t< Func() > >::value > > final {
-			stores_result_of( Func&& func ) MAYTHROW {
-				std::forward<Func>(func)();
+		template< typename Func, typename... Args >
+		struct stores_result_of<Func, std::enable_if_t< std::is_void< std::result_of_t< Func(Args...) > >::value >, Args... > final {
+			stores_result_of( Func&& func, Args... args ) MAYTHROW {
+				std::forward<Func>(func)(static_cast<Args>(args)...);
 			}
 
 			void get() const& noexcept {}
-			template<typename FuncTo, typename ...Args>
-			auto pass_to(FuncTo&& functo, Args&& ...args) const& noexcept ->decltype(auto) {
-				return std::forward<FuncTo>(functo)(std::forward<Args>(args)...);
+			template<typename FuncTo, typename ...ArgsTo>
+			auto pass_to(FuncTo&& functo, ArgsTo&& ...args) const& noexcept ->decltype(auto) {
+				return std::forward<FuncTo>(functo)(std::forward<ArgsTo>(args)...);
 			}
 		};
 	}
-	using stores_result_of_adl_barrier::stores_result_of;
+	template< typename Func, typename... Args >
+	using stores_result_of=stores_result_of_adl_barrier::stores_result_of<Func, void, Args...>;
 }

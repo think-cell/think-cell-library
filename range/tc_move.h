@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -33,7 +33,7 @@ template<typename T>
 constexpr T&& tc_move_impl(std::remove_reference_t<T>&& t) noexcept {
 	static_assert(!std::is_lvalue_reference<T>::value, "Are you sure you want to move out of an lvalue reference? Then use tc_move_always.");
 	static_assert(!std::is_const<std::remove_reference_t<T>>::value, "Cannot move out of const.");
-	// TODO: static_assert(std::is_nothrow_move_constructible<std::remove_reference_t<T>>::value, "" );
+	// TODO: static_assert(std::is_nothrow_move_constructible<std::remove_reference_t<T>>::value);
 	return static_cast<T&&>(t);
 }
 
@@ -42,7 +42,7 @@ constexpr T&& tc_move_impl(std::remove_reference_t<T>&& t) noexcept {
 
 template<typename T>
 constexpr std::remove_reference_t<T>&& tc_move_always(T&& t) noexcept { // same as std::move, but asserts on non-constness of argument
-	static_assert(!std::is_const<std::remove_reference_t<T>>::value, "");
+	static_assert(!std::is_const<std::remove_reference_t<T>>::value);
 	return static_cast<std::remove_reference_t<T>&&>(t);
 }
 

@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -115,7 +115,7 @@ namespace tc {
 			}
 
 			STATIC_FINAL(distance_to_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> difference_type {
-				return tc::numeric_cast<difference_type>(std::get<0>(m_tplrng)->distance_to_index(std::get<0>(idxLhs), std::get<0>(idxRhs)));
+				return tc::explicit_cast<difference_type>(std::get<0>(m_tplrng)->distance_to_index(std::get<0>(idxLhs), std::get<0>(idxRhs)));
 			}
 
 		private:

@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell range library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -35,7 +35,7 @@ struct scoped_assign_tag final {};
 
 template< typename T >
 struct scoped_restorer : private tc::nonmovable {
-	static_assert(!std::is_array<std::remove_reference_t<T>>::value, "");
+	static_assert(!std::is_array<std::remove_reference_t<T>>::value);
 	static_assert(
 		std::is_lvalue_reference<T>::value,
 		"There may be use cases for non-lvalue types here. "
@@ -80,8 +80,22 @@ struct scoped_assigner
 	using scoped_restorer<T>::operator=;
 };
 
+template< typename T >
+struct scoped_assigner_better
+:	scoped_restorer<T> {
+	template<typename Val, typename Better>
+	explicit scoped_assigner_better( T& data, Val&& val, Better better ) noexcept
+	:	scoped_restorer<T>( data )
+	{
+		tc::assign_better(data, std::forward<Val>(val), tc_move(better));
+	}
+};
+
+
 #define restore_after_scope(var) scoped_restorer< decltype((var)) > UNIQUE_IDENTIFIER(var);
 #define scoped_assign(var,value) scoped_assigner< decltype((var)) > UNIQUE_IDENTIFIER((var),(value));
+#define scoped_assign_better(var, value, better) scoped_assigner_better< decltype((var)) > UNIQUE_IDENTIFIER((var),(value),(better));
+#define scoped_assign_max(var, value) scoped_assign_better((var),(value),tc::fn_greater());
 
 #if _MSC_VER_FULL <= 190023026
 	#define scoped_assign_for_baseclass_member(var,value) scoped_assigner< decltype(var)& > UNIQUE_IDENTIFIER((var),(value));

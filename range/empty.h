@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "range_defines.h"
 #include <utility>
 #include "trivial_functors.h"
 
@@ -57,7 +58,7 @@ namespace tc {
 		&& !is_range_with_iterators<Rng const>::value
 	>* = nullptr>
 	bool empty(Rng const& rng) noexcept {
-		return continue_==tc::for_each( rng, MAKE_CONSTEXPR_FUNCTION(break_) );
+		return continue_==tc::for_each( rng, MAKE_CONSTEXPR_FUNCTION(INTEGRAL_CONSTANT(tc::break_)()) );
 	}
 
 	DEFINE_FN2(tc::empty, fn_empty) // Prevent ADL of std::empty (C++17)

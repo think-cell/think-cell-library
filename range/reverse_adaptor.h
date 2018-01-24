@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -47,25 +47,29 @@ namespace tc {
 			{}
 
 			template< typename Func >
-			tc::break_or_continue operator()(Func func) /* no & */ MAYTHROW {
-				auto const itBegin=boost::begin(*m_baserng);
-				auto itEnd=boost::end(*m_baserng);
-				while( itEnd!=itBegin ) {
-					--itEnd;
-					if( break_==continue_if_not_break(func, *itEnd) ) return break_;
-				}
-				return continue_;
+			auto operator()(Func func) /* no & */ MAYTHROW {
+				return [&]() MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, *boost::begin(*m_baserng))), INTEGRAL_CONSTANT(tc::continue_)> {
+					auto const itBegin=boost::begin(*m_baserng);
+					auto itEnd=boost::end(*m_baserng);
+					while( itEnd!=itBegin ) {
+						--itEnd;
+						RETURN_IF_BREAK(tc::continue_if_not_break(func, *itEnd));
+					}
+					return INTEGRAL_CONSTANT(tc::continue_)();
+				}();
 			}
 
 			template< typename Func >
-			tc::break_or_continue operator()(Func func) const/* no & */ MAYTHROW {
-				auto const itBegin=boost::begin(*m_baserng);
-				auto itEnd=boost::end(*m_baserng);
-				while( itEnd!=itBegin ) {
-					--itEnd;
-					if( break_==continue_if_not_break(func, *itEnd) ) return break_;
-				}
-				return continue_;
+			auto operator()(Func func) const /* no & */ MAYTHROW {
+				return [&]() MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, *boost::begin(*m_baserng))), INTEGRAL_CONSTANT(tc::continue_)> {
+					auto const itBegin=boost::begin(*m_baserng);
+					auto itEnd=boost::end(*m_baserng);
+					while( itEnd!=itBegin ) {
+						--itEnd;
+						RETURN_IF_BREAK(tc::continue_if_not_break(func, *itEnd));
+					}
+					return INTEGRAL_CONSTANT(tc::continue_)();
+				}();
 			}
 
 			STATIC_FINAL(begin_index)() const& noexcept -> index {

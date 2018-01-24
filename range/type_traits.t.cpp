@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -17,67 +17,118 @@
 #include "range.t.h"
 
 
-static_assert(std::is_same< tc::remove_rvalue_reference_t<int>, int >::value, "");
-static_assert(std::is_same< tc::remove_rvalue_reference_t<int const>, int const >::value, "");
-static_assert(std::is_same< tc::remove_rvalue_reference_t<int&>, int& >::value, "");
-static_assert(std::is_same< tc::remove_rvalue_reference_t<int const&>, int const& >::value, "");
-static_assert(std::is_same< tc::remove_rvalue_reference_t<int&&>, int >::value, "");
-static_assert(std::is_same< tc::remove_rvalue_reference_t<int const&&>, int const >::value, "");
-static_assert(std::is_same< tc::remove_rvalue_reference_t<std::vector<int>>, std::vector<int> >::value, "");
-static_assert(std::is_same< tc::remove_rvalue_reference_t<std::vector<int> const>, std::vector<int> const >::value, "");
-static_assert(std::is_same< tc::remove_rvalue_reference_t<std::vector<int>&>, std::vector<int>& >::value, "");
-static_assert(std::is_same< tc::remove_rvalue_reference_t<std::vector<int> const&>, std::vector<int> const& >::value, "");
-static_assert(std::is_same< tc::remove_rvalue_reference_t<std::vector<int>&&>, std::vector<int> >::value, "");
-static_assert(std::is_same< tc::remove_rvalue_reference_t<std::vector<int> const&&>, std::vector<int> const >::value, "");
+static_assert(std::is_same< tc::remove_rvalue_reference_t<int>, int >::value);
+static_assert(std::is_same< tc::remove_rvalue_reference_t<int const>, int const >::value);
+static_assert(std::is_same< tc::remove_rvalue_reference_t<int&>, int& >::value);
+static_assert(std::is_same< tc::remove_rvalue_reference_t<int const&>, int const& >::value);
+static_assert(std::is_same< tc::remove_rvalue_reference_t<int&&>, int >::value);
+static_assert(std::is_same< tc::remove_rvalue_reference_t<int const&&>, int const >::value);
+static_assert(std::is_same< tc::remove_rvalue_reference_t<std::vector<int>>, std::vector<int> >::value);
+static_assert(std::is_same< tc::remove_rvalue_reference_t<std::vector<int> const>, std::vector<int> const >::value);
+static_assert(std::is_same< tc::remove_rvalue_reference_t<std::vector<int>&>, std::vector<int>& >::value);
+static_assert(std::is_same< tc::remove_rvalue_reference_t<std::vector<int> const&>, std::vector<int> const& >::value);
+static_assert(std::is_same< tc::remove_rvalue_reference_t<std::vector<int>&&>, std::vector<int> >::value);
+static_assert(std::is_same< tc::remove_rvalue_reference_t<std::vector<int> const&&>, std::vector<int> const >::value);
 
+namespace void_t_test {
+	template< typename T, typename=void >
+	struct Foo {
+		constexpr static int const value = 0;
+	};
+	template< typename T >
+	struct Foo<T, tc::void_t<typename T::type1>> {
+		constexpr static int const value = 1;
+	};
+	template< typename T >
+	struct Foo<T, tc::void_t<typename T::type2>> {
+		constexpr static int const value = 2;
+	};
 
-static_assert( tc::is_safely_convertible<int, double>::value, "" );
+	struct Bar0 { };
+	struct Bar1 {
+		using type1 = int;
+	};
+	struct Bar2 {
+		using type2 = int;
+	};
 
-static_assert( std::is_convertible<double, int>::value, "" );
-static_assert( !tc::is_safely_convertible<double, int>::value, "" );
+	static_assert(0==Foo<Bar0>::value);
+	static_assert(1==Foo<Bar1>::value);
+	static_assert(2==Foo<Bar2>::value);
 
-static_assert( std::is_convertible<float, int>::value, "" );
-static_assert( !tc::is_safely_convertible<float, int>::value, "" );
+	struct WithFunction {
+		void func();
+	};
+	struct WithoutFunction { };
 
-static_assert( std::is_convertible<int, unsigned int>::value, "" );
-static_assert( !tc::is_safely_convertible<int, unsigned int>::value, "" );
+	TC_HAS_EXPR(func, (T), std::declval<T&>().func());
 
-static_assert( std::is_convertible<unsigned int, int>::value, "" );
-static_assert( !tc::is_safely_convertible<unsigned int, int>::value, "" );
+	static_assert(has_func<WithFunction>::value);
+	static_assert(!has_func<WithoutFunction>::value);
 
-static_assert(std::is_convertible<int*, bool>::value, "");
-static_assert(!tc::is_safely_convertible<int*, bool>::value, "");
+	std::false_type check_has_func1(...);
+	template< typename T >
+	std::true_type check_has_func1(T&& t, std::enable_if_t<has_func<T>::value>* = nullptr);
+
+	static_assert(decltype(check_has_func1(std::declval<WithFunction>()))::value);
+	static_assert(!decltype(check_has_func1(std::declval<WithoutFunction>()))::value);
+
+	template< typename T, std::enable_if_t<!has_func<T>::value>* = nullptr >
+	std::false_type check_has_func2(T&&);
+	template< typename T, std::enable_if_t<has_func<T>::value>* = nullptr >
+	std::true_type check_has_func2(T&& t);
+
+	static_assert(decltype(check_has_func2(std::declval<WithFunction>()))::value);
+	static_assert(!decltype(check_has_func2(std::declval<WithoutFunction>()))::value);
+}
+
+static_assert( tc::is_safely_convertible<int, double>::value );
+
+static_assert( std::is_convertible<double, int>::value );
+static_assert( !tc::is_safely_convertible<double, int>::value );
+
+static_assert( std::is_convertible<float, int>::value );
+static_assert( !tc::is_safely_convertible<float, int>::value );
+
+static_assert( std::is_convertible<int, unsigned int>::value );
+static_assert( !tc::is_safely_convertible<int, unsigned int>::value );
+
+static_assert( std::is_convertible<unsigned int, int>::value );
+static_assert( !tc::is_safely_convertible<unsigned int, int>::value );
+
+static_assert(std::is_convertible<int*, bool>::value);
+static_assert(!tc::is_safely_convertible<int*, bool>::value);
 
 // scoped enum (enum class)
 enum class TEnumClass { a, b, c };
 enum TEnum { x, y, z };
-static_assert( !tc::is_safely_convertible<int, TEnumClass>::value, "" );
-static_assert( !tc::is_safely_convertible<TEnumClass, int>::value, "" );
+static_assert( !tc::is_safely_convertible<int, TEnumClass>::value );
+static_assert( !tc::is_safely_convertible<TEnumClass, int>::value );
 
 // unscoped enum (primitive enum)
 enum TPrimitiveEnum { a, b, c };
-static_assert( !tc::is_safely_convertible<int, TPrimitiveEnum>::value, "" );
-static_assert( std::is_convertible<TPrimitiveEnum, std::underlying_type_t<TPrimitiveEnum> >::value, "" );
-static_assert( !tc::is_safely_convertible<TPrimitiveEnum, std::underlying_type_t<TPrimitiveEnum>>::value, "" );
+static_assert( !tc::is_safely_convertible<int, TPrimitiveEnum>::value );
+static_assert( std::is_convertible<TPrimitiveEnum, std::underlying_type_t<TPrimitiveEnum> >::value );
+static_assert( !tc::is_safely_convertible<TPrimitiveEnum, std::underlying_type_t<TPrimitiveEnum>>::value );
 
 enum TPrimitiveEnum2 { l, m };
-static_assert( !tc::is_safely_convertible<TPrimitiveEnum, TPrimitiveEnum2>::value, "" );
+static_assert( !tc::is_safely_convertible<TPrimitiveEnum, TPrimitiveEnum2>::value );
 
 struct SBase {};
 struct SDerived final : SBase {};
-static_assert(std::is_convertible<SDerived, SBase>::value, "");
-static_assert(!tc::is_safely_convertible<SDerived, SBase>::value, "");
+static_assert(std::is_convertible<SDerived, SBase>::value);
+static_assert(!tc::is_safely_convertible<SDerived, SBase>::value);
 
 struct SToInt final {
 	operator int() const& noexcept;
 };
 
-static_assert(!std::is_convertible<SBase, int>::value, "");
-static_assert(std::is_convertible<SToInt, int>::value, "");
-static_assert(tc::is_safely_convertible<SToInt, int>::value, "");
+static_assert(!std::is_convertible<SBase, int>::value);
+static_assert(std::is_convertible<SToInt, int>::value);
+static_assert(tc::is_safely_convertible<SToInt, int>::value);
 
-static_assert(std::is_convertible<SToInt, int const&>::value, "");
-static_assert(!tc::is_safely_convertible<SToInt, int const&>::value, "");
+static_assert(std::is_convertible<SToInt, int const&>::value);
+static_assert(!tc::is_safely_convertible<SToInt, int const&>::value);
 
 struct A {};
 struct B : A {
@@ -88,80 +139,70 @@ static_assert(
 	std::is_same<
 		tc::common_reference_t<A&&, A>,
 		A
-	>::value,
-	""
+	>::value
 );
 
 static_assert(
 	std::is_same<
 		tc::common_reference_t<A&&, A&&>,
 		A&&
-	>::value,
-	""
+	>::value
 );
 
 static_assert(
 	std::is_same<
 		tc::common_reference_t<A&, A&>,
 		A&
-	>::value,
-	""
+	>::value
 );
 
 static_assert(
 	std::is_same<
 		tc::common_reference_t<A&, A&&>,
 		A const&&
-	>::value,
-	""
+	>::value
 );
 
 static_assert(
 	std::is_same<
 		tc::common_reference_t<A const&&, A&&>,
 		A const&&
-	>::value,
-	""
+	>::value
 );
 
 static_assert(
 	std::is_same<
 		tc::common_reference_t<A const&, A&>,
 		A const&
-	>::value,
-	""
+	>::value
 );
 
 static_assert(
 	std::is_same<
 		tc::common_reference_t<B const&, A volatile&>,
 		A const volatile&
-	>::value,
-	""
+	>::value
 );
 
 static_assert(
 	std::is_same<
 		tc::common_reference_t<B&, A volatile&&>,
 		A const volatile&&
-	>::value,
-	""
+	>::value
 );
 
 static_assert(
 	std::is_same<
 		tc::common_reference_t<B const&&, A volatile&>,
 		A const volatile&&
-	>::value,
-	""
+	>::value
 );
 
 static_assert(
 	std::is_same<
 		tc::common_reference_t<B const&&, B volatile&>,
 		B const volatile &&
-	>::value,
-	""
+	>::value
 );
 
 /*
@@ -170,8 +211,7 @@ static_assert(
 	std::is_same<
 		tc::common_reference_t<B&, A>,
 		A
-	>::value,
-	""
+	>::value
 );
 */
 /*
@@ -179,15 +219,14 @@ static_assert(
 	std::is_same<
 		tc::common_reference_t<SToInt,int>,
 		int
-	>::value,
-	""
+	>::value
 );
 */
 
 #if PERFORMUNITTESTS
 namespace {
 struct S;
-std::unordered_set<S const*> g_sets;
+tc::unordered_set<S const*> g_sets;
 
 struct S{
 	S() {
@@ -241,48 +280,42 @@ static_assert(
 	std::is_same<
 		tc::common_type_t<int, short>,
 		int
-	>::value,
-	""
+	>::value
 );
 
 static_assert(
 	std::is_same<
 		tc::common_type_t<tc::size_proxy<int>, short>,
 		short
-	>::value,
-	""
+	>::value
 );
 
 static_assert(
 	std::is_same<
 		tc::common_type_t<int, tc::size_proxy<short>>,
 		int
-	>::value,
-	""
+	>::value
 );
 
 static_assert(
 	std::is_same<
 		tc::common_type_t<int, tc::size_proxy<short>&>,
 		int
-	>::value,
-	""
+	>::value
 );
 
 static_assert(
 	std::is_same<
 		tc::common_type_t<int, tc::size_proxy<short>&&>,
 		int
-	>::value,
-	""
+	>::value
 );
 
 static_assert(
 	std::is_same<
 		tc::common_type_t<int, tc::size_proxy<short>, tc::size_proxy<long>>,
 		int
-	>::value,
-	""
+	>::value
 );
 
 /*
@@ -291,8 +324,7 @@ static_assert(
 	std::is_same<
 		tc::common_type_t<int, unsigned int>,
 		unsigned int
-	>::value,
-	""
+	>::value
 );
 */
 
@@ -302,8 +334,7 @@ static_assert(
 	std::is_same<
 		tc::common_type_t<char, char16_t>,
 		int
-	>::value,
-	""
+	>::value
 );
 */
 
@@ -313,8 +344,7 @@ static_assert(
 	std::is_same<
 		tc::common_type_t<B,A>,
 		A
-	>::value,
-	""
+	>::value
 );
 */
 
@@ -322,8 +352,7 @@ static_assert(
 	std::is_same<
 		decltype(tc::min(std::declval<tc::size_proxy<long>>(), std::declval<short>())),
 		short
-	>::value,
-	""
+	>::value
 );
 
 UNITTESTDEF(minTest) {
@@ -333,8 +362,7 @@ UNITTESTDEF(minTest) {
 		std::is_same<
 			tc::common_reference_t<decltype(tc::size(vecn)),short>,
 			short
-		>::value,
-		""
+		>::value
 	);
 
 	tc::common_reference_t<decltype(tc::size(vecn)),int> ref = tc::size(vecn);
@@ -357,16 +385,14 @@ UNITTESTDEF(minTest) {
 		std::is_same<
 			decltype(tc::min(std::declval<std::int16_t>(), std::declval<std::int32_t>()))
 			, std::int32_t
-		>::value,
-		""
+		>::value
 	);
 
 	static_assert(
 		std::is_same<
 			decltype(tc::min(std::declval<std::uint16_t>(), std::declval<std::int32_t>()))
 			, std::int32_t
-		>::value,
-		""
+		>::value
 	);
 
 	{
@@ -425,31 +451,27 @@ UNITTESTDEF(minTest) {
 		std::is_same<
 			decltype(tc::min(std::declval<int>(),std::declval<long>())),
 			tc::common_type_t<int,long>
-		>::value,
-		""
+		>::value
 	);
 
 	static_assert(
 		std::is_same<
 			decltype(tc::min(std::declval<long>(),std::declval<int>())),
 			tc::common_type_t<long,int>
-		>::value,
-		""
+		>::value
 	);
 
 	static_assert(
 		std::is_same<
 			decltype(tc::min(std::declval<unsigned long>(),std::declval<unsigned int>())),
-			unsigned int
-		>::value,
-		""
+			unsigned long
+		>::value
 	);
 
 	static_assert(
 		std::is_same<
 			decltype(tc::min(std::declval<unsigned int>(),std::declval<unsigned long>())),
-			unsigned int
-		>::value,
-		""
+			unsigned long
+		>::value
 	);
 }

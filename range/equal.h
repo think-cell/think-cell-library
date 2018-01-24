@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -25,8 +25,6 @@
 #include "noncopyable.h"
 
 #include <functional>
-#include <unordered_set>
-#include <unordered_map>
 
 namespace tc{
 
@@ -61,10 +59,10 @@ namespace tc{
 	template<typename LRng, typename RRng, typename Pred, std::enable_if_t<is_range_with_iterators< RRng >::value>* = nullptr>
 		bool equal(LRng const& lrng, RRng const& rrng, Pred&& pred) noexcept {
 		// TODO: this does not protect us against inputs such as transform(unordered_set)
-		static_assert(!tc::is_instance<std::unordered_set, LRng>::value, "");
-		static_assert(!tc::is_instance<std::unordered_map, LRng>::value, "");
-		static_assert(!tc::is_instance<std::unordered_set, RRng>::value, "");
-		static_assert(!tc::is_instance<std::unordered_map, RRng>::value, "");
+		static_assert(!tc::is_instance<std::unordered_set, LRng>::value);
+		static_assert(!tc::is_instance<std::unordered_map, LRng>::value);
+		static_assert(!tc::is_instance<std::unordered_set, RRng>::value);
+		static_assert(!tc::is_instance<std::unordered_map, RRng>::value);
 
 		equal_impl::is_equal_elem<RRng, Pred> equalpred(rrng, std::forward<Pred>(pred));
 		tc::for_each(lrng, std::ref(equalpred));
@@ -74,8 +72,8 @@ namespace tc{
 
 	// forward to the symetric case above
 	template<typename LRng, typename RRng, typename Pred, std::enable_if_t<!is_range_with_iterators< RRng >::value && is_range_with_iterators< LRng >::value>* = nullptr>
-		bool equal(LRng const& lrng, RRng const& rrng, Pred pred) noexcept {
-		return tc::equal(rrng, lrng, std::bind(pred, std::placeholders::_2, std::placeholders::_1)); 
+	bool equal(LRng const& lrng, RRng const& rrng, Pred pred) noexcept {
+		return tc::equal(rrng, lrng, [&](auto const& _1, auto const& _2) noexcept { return pred(_2, _1); }); 
 	}
 
 	// is_arithmetic helpful for generic programming
@@ -105,6 +103,20 @@ namespace tc{
 			--itL;
 			if( !tc::bool_cast(pred(*itL,*itR)) ) return false;
 		}
+	}
+
+	template <typename Lhs, typename Rhs, std::enable_if_t<
+		tc::is_range_with_iterators<Lhs>::value && tc::is_range_with_iterators<Rhs>::value
+	>* = nullptr>
+	bool value_equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
+		return tc::equal(lhs, rhs);
+	}
+
+	template <typename Lhs, typename Rhs, std::enable_if_t<
+		!tc::is_range_with_iterators<Lhs>::value && !tc::is_range_with_iterators<Rhs>::value
+	>* = nullptr>
+	bool value_equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
+		return tc::equal_to(lhs, rhs);
 	}
 }
 

@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -14,7 +14,6 @@
 
 #pragma once
 
-#include "return_decltype.h"
 #include <boost/mpl/has_xxx.hpp>
 #include <type_traits>
 
@@ -32,7 +31,10 @@ namespace tc {
 		template< typename Lhs, typename Rhs, std::enable_if_t<
 			has_equality_comparable_tag<Lhs>::value || has_equality_comparable_tag<Rhs>::value
 		>* = nullptr >
-		auto operator!=(Lhs const& lhs, Rhs const& rhs) noexcept return_decltype( !(lhs==rhs) )
+		bool operator!=(Lhs const& lhs, Rhs const& rhs) noexcept {
+			static_assert(std::is_same<bool, decltype(lhs==rhs)>::value);
+			return !(lhs==rhs);
+		}
 	}
 	using equality_comparable_adl_barrier::equality_comparable;
 }

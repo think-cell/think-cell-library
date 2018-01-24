@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -29,7 +29,7 @@ UNITTESTDEF(concat_void_generator_test) {
 	);
 
 	tc::vector<int> vecn;
-	auto PushBack = [&](int n) noexcept { vecn.push_back(n); };
+	auto PushBack = [&](int n) noexcept { tc::cont_emplace_back(vecn, n); };
 
 	rng(PushBack);
 	tc::as_const(rng)(PushBack);
@@ -48,7 +48,7 @@ UNITTESTDEF(concat_break_or_continue_generator_test) {
 	);
 
 	tc::vector<int> vecn;
-	auto PushBack = [&](int n) noexcept { vecn.push_back(n); return tc::continue_if(1 != n); };
+	auto PushBack = [&](int n) noexcept { tc::cont_emplace_back(vecn, n); return tc::continue_if(1 != n); };
 
 	rng(PushBack);
 	tc::as_const(rng)(PushBack);
@@ -90,7 +90,7 @@ UNITTESTDEF(concat_index_test) {
 				)),
 			[](int i) noexcept { return i % 2 == 1; }
 		),
-		[&](int i) noexcept { vecn.push_back(i); return 3 == i ? tc::break_ : tc::continue_; }
+		[&](int i) noexcept { tc::cont_emplace_back(vecn, i); return 3 == i ? tc::break_ : tc::continue_; }
 	));
 
 	TEST_RANGE_EQUAL(vecn, tc::make_array(tc::aggregate_tag{}, 5, 1, 3));
@@ -129,8 +129,8 @@ UNITTESTDEF(concat_different_value_types_test) {
 	struct SFunctor {
 		tc::vector<int> m_vec;
 
-		void operator()(int i) & noexcept { m_vec.push_back(i); }
-		void operator()(S s) & noexcept { m_vec.push_back(s.m_i); }
+		void operator()(int i) & noexcept { tc::cont_emplace_back(m_vec, i); }
+		void operator()(S s) & noexcept { tc::cont_emplace_back(m_vec, s.m_i); }
 	} functor;
 
 	tc::for_each(rng, std::ref(functor));
@@ -146,7 +146,7 @@ UNITTESTDEF(concat_empty_test) {
 UNITTESTDEF(concat_shallow_const_test) {
 	tc::vector<int> vecn{1};
 	auto const rng = tc::concat(vecn, vecn);
-	static_assert(std::is_same<decltype(*boost::begin(rng)), int&>::value, "");
+	static_assert(std::is_same<decltype(*boost::begin(rng)), int&>::value);
 
 	*boost::begin(rng) = 2;
 	TEST_RANGE_EQUAL(rng, tc::make_array(tc::aggregate_tag{}, 2, 2));
@@ -155,7 +155,19 @@ UNITTESTDEF(concat_shallow_const_test) {
 UNITTESTDEF(concat_deep_const_test) {
 	auto const rng = tc::concat(tc::make_singleton_range(1), tc::make_singleton_range(2));
 
-	static_assert(std::is_same<decltype(*boost::begin(rng)), int const&>::value, "");
+	static_assert(std::is_same<decltype(*boost::begin(rng)), int const&>::value);
 
 	_ASSERTEQUAL(*boost::begin(rng), 1);
+}
+
+UNITTESTDEF(ConcatAdvanceToEndIterator) {
+	tc::vector<int> vecn(1, 0);
+	tc::begin_next(tc::concat(vecn, vecn), tc::size(vecn) * 2);
+
+	auto rng = tc::concat(vecn,vecn);
+	auto it = boost::begin(rng);
+	it +=2;
+	_ASSERT(boost::end(rng) == it);
+	it -= 2;
+	_ASSERT(boost::begin(rng) == it);
 }

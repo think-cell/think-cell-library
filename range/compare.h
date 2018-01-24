@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -16,34 +16,19 @@
 
 #include "assign.h"
 #include "return_decltype.h"
-#ifdef TC_PRIVATE
-#include "Library/HeaderOnly/enum.h"
-#endif
+#include "enum.h"
 #include "quantifier.h"
 #include "container.h" // tc::vector
 #include "functors.h"
 
 namespace tc {
-	namespace order_t_adl_barrier {
-		enum class order {
-			less, equal, greater, end__
-		};
-#ifdef TC_PRIVATE
-		DEFINE_CONTIGUOUS_ENUM(order,order::less,order::end__)
-#endif
+	DEFINE_SCOPED_ENUM(order,BOOST_PP_EMPTY(),(less)(equal)(greater))
 
+	namespace order_adl_barrier {
 		inline order operator-(order ord) noexcept {
-#ifdef TC_PRIVATE
 			return order::less+(order::greater-ord);
-#else
-			using TUnderlying = std::underlying_type_t<order>;
-			return static_cast<order>(
-				static_cast<TUnderlying>(order::less) + (static_cast<TUnderlying>(order::greater) - static_cast<TUnderlying>(ord))
-			);
-#endif
 		}
 	}
-	using order_t_adl_barrier::order;
 
 	// < involving NAN always returns false, so it is not even a partial order
 	// specialization for wchar_t in MSVC does not have has_quiet_NAN:
@@ -191,7 +176,7 @@ namespace tc {
 	// argument-wise transformation
 
 	namespace projected_impl_adl_barrier {
-		// cannot be implemted as a lambda because lambdas are not assignable
+		// cannot be implemented as a lambda because lambdas are not assignable
 		template< typename Func, typename Transform>
 		struct projected_impl final
 		{
@@ -282,25 +267,30 @@ namespace tc {
 	template<typename FCompare, typename Base>
 	struct F2wayFrom3way /* final */ : private Base {
 	private:
-		FCompare m_fnCompare;
+		tc::decay_t<FCompare> m_fnCompare;
 	public:
 		F2wayFrom3way() noexcept {} // default-constructible if m_fnCompare is default-constructible, practical for using as STL container comparator template parameter
-		F2wayFrom3way( FCompare fnCompare ) noexcept : m_fnCompare(fnCompare) {}
+
+		explicit F2wayFrom3way( FCompare&& fnCompare ) noexcept : m_fnCompare(std::forward<FCompare>(fnCompare)) {}
+
 		template< typename Lhs, typename Rhs > bool operator()( Lhs&& lhs, Rhs&& rhs ) const& noexcept {
 			return tc::base_cast<Base>(*this)(m_fnCompare(std::forward<Lhs>(lhs), std::forward<Rhs>(rhs)), tc::order::equal);
 		}
 		using is_transparent = void;
 	};
 
-	template< typename FCompare> F2wayFrom3way<FCompare, tc::fn_less> lessfrom3way( FCompare fnCompare ) noexcept {
-		return F2wayFrom3way<FCompare, tc::fn_less>( fnCompare );
+	template< typename FCompare>
+	F2wayFrom3way<FCompare, tc::fn_less> lessfrom3way( FCompare&& fnCompare ) noexcept {
+		return F2wayFrom3way<FCompare, tc::fn_less>( std::forward<FCompare>(fnCompare) );
 	}
 
-	template< typename FCompare> F2wayFrom3way<FCompare, tc::fn_greater> greaterfrom3way( FCompare fnCompare ) noexcept {
-		return F2wayFrom3way<FCompare, tc::fn_greater>( fnCompare );
+	template< typename FCompare>
+	F2wayFrom3way<FCompare, tc::fn_greater> greaterfrom3way( FCompare&& fnCompare ) noexcept {
+		return F2wayFrom3way<FCompare, tc::fn_greater>( std::forward<FCompare>(fnCompare) );
 	}
 
-	template< typename FCompare> F2wayFrom3way<FCompare, tc::fn_equal_to> equalfrom3way( FCompare fnCompare ) noexcept {
-		return F2wayFrom3way<FCompare, tc::fn_equal_to>( fnCompare );
+	template< typename FCompare>
+	F2wayFrom3way<FCompare, tc::fn_equal_to> equalfrom3way( FCompare&& fnCompare ) noexcept {
+		return F2wayFrom3way<FCompare, tc::fn_equal_to>( std::forward<FCompare>(fnCompare) );
 	}
 } // namespace tc

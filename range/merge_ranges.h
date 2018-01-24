@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -29,7 +29,7 @@ namespace tc {
 			}
 		};
 
-		template<typename Rng, std::enable_if_t<!std::is_reference< typename boost::range_reference<Rng>::type >::value>* =nullptr>
+		template<typename Rng, std::enable_if_t<!std::is_reference< tc::range_reference_t<Rng> >::value>* =nullptr>
 		auto make_cached(Rng const& rng) {
 			return tc::make_vector(
 				tc::transform(
@@ -42,7 +42,7 @@ namespace tc {
 			);
 		}
 
-		template<typename Rng, std::enable_if_t<std::is_reference< typename boost::range_reference<std::remove_reference_t<Rng>>::type >::value>* =nullptr>
+		template<typename Rng, std::enable_if_t<std::is_reference< tc::range_reference_t<Rng> >::value>* =nullptr>
 		auto make_cached(Rng&& rng) -> Rng&& {
 			return std::forward<Rng>(rng);
 		}
@@ -61,7 +61,7 @@ namespace tc {
 			{}
 
 			template< typename Func >
-			tc::break_or_continue operator()(Func func) const& MAYTHROW {
+			auto operator()(Func func) const& MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, tc_front(tc_front(*m_baserng)))), INTEGRAL_CONSTANT(tc::continue_)> {
 				auto vecrngrng = tc::make_vector(
 					tc::transform(
 						*m_baserng,
@@ -80,10 +80,10 @@ namespace tc {
 
 					if (!it) break;
 
-					if( break_==continue_if_not_break(func, tc_front(*it)) ) return break_;
+					RETURN_IF_BREAK(tc::continue_if_not_break(func, tc_front(*it)));
 					tc::drop_first_inplace(*it);
 				}
-				return tc::continue_;
+				return INTEGRAL_CONSTANT(tc::continue_)();
 			}
 
 		};
@@ -94,6 +94,22 @@ namespace tc {
 			(aggregate_tag(), std::forward<RngRng>(rngrng) BOOST_PP_COMMA() std::forward<Pred>(pred))
 		)
 	}
+
+	namespace range_reference_adl_barrier {
+		template< typename RngRng, bool bConst >
+		struct range_reference_merge_many_adaptor {
+			using type = tc::range_reference_t<
+				reference_for_value_or_reference_with_index_range_t<RngRng, bConst>
+			>;
+		};
+
+		template<typename RngRng, typename Pred>
+		struct range_reference<merge_many_adaptor_adl_barrier::merge_many_adaptor<RngRng, Pred>> : range_reference_merge_many_adaptor<RngRng, false> {};
+
+		template<typename RngRng, typename Pred>
+		struct range_reference<merge_many_adaptor_adl_barrier::merge_many_adaptor<RngRng, Pred> const> : range_reference_merge_many_adaptor<RngRng, true> {};
+	}
+
 
 	template<typename RngRng, typename Pred>
 	auto merge_many(RngRng&& rngrng, Pred&& pred) {

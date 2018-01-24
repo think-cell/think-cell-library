@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version.
@@ -23,6 +23,8 @@
 #include "unique_range_adaptor.h"
 #include "intersection_adaptor.h"
 
+#include "interval.h"
+
 namespace {
 	using SRVI = tc::make_sub_range_result<tc::vector<int>&>::type;
 	using CSRVI = tc::make_sub_range_result<tc::vector<int> const&>::type;
@@ -33,7 +35,7 @@ namespace {
 	UNITTESTDEF( sub_range_array ) {
 
 		int arr[4] = {1,2,3,4};
-		auto arr_rng = tc::slice_by_index(arr, 1,3);
+		auto arr_rng = tc::slice_by_interval(arr, tc::make_interval(1, 3));
 
 		tc::sub_range<tc::iterator_base<int *>> mutable_iter_rng = arr_rng;
 		tc::sub_range<tc::iterator_base<int const*>> iter_rng = arr_rng;
@@ -118,8 +120,8 @@ namespace {
 		auto csr = tc::slice(tc::as_const(v));
 
 		// use range_difference to specify bounds
-		auto ssr1 = tc::slice_by_index(sr, 3, 6);
-		auto cssr1 = tc::slice_by_index(csr, 3, 6);
+		auto ssr1 = tc::slice_by_interval(sr, tc::make_interval(3, 6));
+		auto cssr1 = tc::slice_by_interval(csr, tc::make_interval(3, 6));
 
 		static_assert(std::is_same<decltype(ssr1), decltype(sr)>::value, "Sub-sub-range does not flatten to sub-range");
 		static_assert(std::is_same<decltype(cssr1), decltype(csr)>::value, "const sub-sub-range does not flatten to const sub-range");
@@ -292,8 +294,8 @@ namespace {
 			auto&& rng = tc::untransform(tc::transform(vecn, [](int n) noexcept {return n*n;}));
 			_ASSERT(3 == tc::size(vecn));
 			_ASSERT(std::addressof(*boost::begin(rng)) == std::addressof(*boost::begin(vecn)));
-			static_assert(std::is_lvalue_reference<decltype(rng)>::value, "");
-			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
+			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
+			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
 				MAKE_CONSTEXPR_ARRAY(1,2,3),
 				rng
@@ -305,8 +307,8 @@ namespace {
 			auto&& rng = tc::untransform(tc::transform(tc::as_const(vecn), [](int n) noexcept {return n*n;}));
 			_ASSERT(3 == tc::size(vecn));
 			_ASSERT(std::addressof(*boost::begin(rng)) == std::addressof(*boost::begin(vecn)));
-			static_assert(std::is_lvalue_reference<decltype((rng))>::value, "");
-			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
+			static_assert(std::is_lvalue_reference<decltype((rng))>::value);
+			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
 				MAKE_CONSTEXPR_ARRAY(1,2,3),
 				rng
@@ -317,8 +319,8 @@ namespace {
 			// r-value transform with r-value range
 			auto&& rng = tc::untransform(tc::transform(tc::vector<int>{1, 2, 3}, [](int n) noexcept {return n*n;}));
 			_ASSERT(3 == tc::size(vecn));
-			static_assert(std::is_rvalue_reference<decltype(rng)>::value, "");
-			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
+			static_assert(std::is_rvalue_reference<decltype(rng)>::value);
+			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
 				MAKE_CONSTEXPR_ARRAY(1,2,3),
 				rng
@@ -332,8 +334,8 @@ namespace {
 			auto&& rng = tc::untransform(trnsfrng);
 			_ASSERT(3 == tc::size(vecn));
 			_ASSERT(std::addressof(*boost::begin(rng)) == std::addressof(*boost::begin(vecn)));
-			static_assert(std::is_lvalue_reference<decltype(rng)>::value, "");
-			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
+			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
+			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
 				MAKE_CONSTEXPR_ARRAY(1,2,3),
 				rng
@@ -347,8 +349,8 @@ namespace {
 			auto&& rng = tc::untransform(trnsfrng);
 			_ASSERT(3 == tc::size(vecn));
 			_ASSERT(std::addressof(*boost::begin(rng)) == std::addressof(*boost::begin(vecn)));
-			static_assert(std::is_lvalue_reference<decltype(rng)>::value, "");
-			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
+			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
+			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
 				MAKE_CONSTEXPR_ARRAY(1,2,3),
 				rng
@@ -362,8 +364,8 @@ namespace {
 			auto&& rng = tc::untransform(trnsfrng);
 			_ASSERT(3 == tc::size(vecn));
 			_ASSERT(std::addressof(*boost::begin(rng)) == std::addressof(*boost::begin(vecn)));
-			static_assert(std::is_lvalue_reference<decltype(rng)>::value, "");
-			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
+			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
+			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
 				MAKE_CONSTEXPR_ARRAY(1,2,3),
 				rng
@@ -378,8 +380,8 @@ namespace {
 				std::addressof(*boost::begin(trnsfrng).element_base()),
 				std::addressof(*boost::begin(rng))
 			);
-			static_assert(std::is_lvalue_reference<decltype(rng)>::value, "");
-			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
+			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
+			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
 				MAKE_CONSTEXPR_ARRAY(1,2,3),
 				rng
@@ -393,8 +395,8 @@ namespace {
 				std::addressof(*boost::begin(trnsfrng).element_base()),
 				std::addressof(*boost::begin(rng))
 			);
-			static_assert(std::is_lvalue_reference<decltype(rng)>::value, "");
-			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value, "");
+			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
+			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
 				MAKE_CONSTEXPR_ARRAY(1,2,3),
 				rng
@@ -418,7 +420,7 @@ namespace {
 				auto it = boost::begin(rngExpected);
 				tc::for_each(
 					tc::adjacent_unique_range(vecn),
-					[&](tc::make_sub_range_result<tc::vector<int>&>::type subrng) noexcept {
+					[&](auto const& subrng) noexcept {
 						TEST_RANGE_EQUAL(subrng, *it);
 						++it;
 					}
@@ -430,7 +432,7 @@ namespace {
 				auto it = boost::begin(rngExpected);
 				tc::for_each(
 					tc::adjacent_unique_range(tc::as_const(vecn)),
-					[&](tc::make_sub_range_result<tc::vector<int> const&>::type subrng) noexcept {
+					[&](auto const& subrng) noexcept {
 						TEST_RANGE_EQUAL(subrng, *it);
 						++it;
 					}
@@ -442,7 +444,7 @@ namespace {
 				auto it = boost::begin(rngExpected);
 				tc::for_each(
 				tc::adjacent_unique_range(vecn),
-					[&](tc::make_sub_range_result<tc::vector<int>&>::type subrng) noexcept {
+					[&](auto const& subrng) noexcept {
 						TEST_RANGE_EQUAL(subrng, *it);
 						++it;
 					}
@@ -466,7 +468,7 @@ namespace {
 			auto it = boost::begin(rngExpected);
 			tc::for_each(
 				tc::front_unique_range(vecn, Pred),
-				[&](tc::make_sub_range_result<tc::vector<int>&>::type subrng) noexcept {
+				[&](auto const& subrng) noexcept {
 					TEST_RANGE_EQUAL(subrng, *it);
 					++it;
 				}
@@ -483,7 +485,7 @@ namespace {
 			auto it = boost::begin(rngExpected);
 			tc::for_each(
 				tc::adjacent_unique_range(vecn, Pred),
-				[&](tc::make_sub_range_result<tc::vector<int>&>::type subrng) noexcept {
+				[&](auto const& subrng) noexcept {
 					TEST_RANGE_EQUAL(subrng, *it);
 					++it;
 				}
@@ -552,15 +554,15 @@ namespace {
 
 	UNITTESTDEF(tc_unique_inplace) {
 		tc::vector<MovingInt> vecmn; // list initializtion not possible with move-only element type
-		vecmn.emplace_back(1);
-		vecmn.emplace_back(1);
-		vecmn.emplace_back(1);
-		vecmn.emplace_back(2);
-		vecmn.emplace_back(2);
-		vecmn.emplace_back(2);
-		vecmn.emplace_back(3);
-		vecmn.emplace_back(4);
-		vecmn.emplace_back(4);
+		tc::cont_emplace_back(vecmn, 1);
+		tc::cont_emplace_back(vecmn, 1);
+		tc::cont_emplace_back(vecmn, 1);
+		tc::cont_emplace_back(vecmn, 2);
+		tc::cont_emplace_back(vecmn, 2);
+		tc::cont_emplace_back(vecmn, 2);
+		tc::cont_emplace_back(vecmn, 3);
+		tc::cont_emplace_back(vecmn, 4);
+		tc::cont_emplace_back(vecmn, 4);
 		tc::adjacent_unique_inplace(vecmn);
 
 		TEST_RANGE_EQUAL(

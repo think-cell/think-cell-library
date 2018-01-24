@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -33,9 +33,7 @@ namespace tc {
 		struct unique_adaptor
 			: range_iterator_generator_from_index<
 				unique_adaptor<Rng, Equals>,
-				typename std::remove_reference<
-					index_range_t<Rng>
-				>::type::index,
+				typename std::remove_reference_t<index_range_t<Rng>>::index,
 				typename boost::range_detail::demote_iterator_traversal_tag<
 					boost::iterators::bidirectional_traversal_tag,
 					traversal_t<Rng>
@@ -183,9 +181,7 @@ namespace tc {
 			: range_iterator_generator_from_index<
 				Derived,
 				unique_range_index<
-					typename std::remove_reference_t<
-						index_range_t<Rng>
-					>::index
+					typename std::remove_reference_t<index_range_t<Rng>>::index
 				>,
 				typename boost::range_detail::demote_iterator_traversal_tag<
 					boost::iterators::forward_traversal_tag,

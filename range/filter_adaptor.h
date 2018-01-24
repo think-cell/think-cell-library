@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -19,6 +19,7 @@
 #include "tc_move.h" 
 #include "range_adaptor.h"
 #include "meta.h"
+#include "conditional.h"
 
 namespace tc {
 
@@ -27,41 +28,31 @@ namespace tc {
 		template< typename Pred, typename Rng, bool HasIterator=is_range_with_iterators< Rng >::value >
 		struct filter_adaptor;
 
-		template< typename Pred, typename Rng >
-		struct filter_adaptor<Pred, Rng, false> : range_adaptor<filter_adaptor<Pred,Rng>, Rng
+		template<typename Pred, typename Rng>
+		using filter_adaptor_base_t = range_adaptor<filter_adaptor<Pred,Rng>, Rng
 			, boost::iterators::bidirectional_traversal_tag // filter_adaptor is bidirectional at best
-		> {
+		>;
+
+		template< typename Pred, typename Rng >
+		struct filter_adaptor<Pred, Rng, false> : filter_adaptor_base_t<Pred,Rng> {
         private:
-			using base_ = range_adaptor<filter_adaptor<Pred,Rng>, Rng
-				, boost::iterators::bidirectional_traversal_tag // filter_adaptor is bidirectional at best
-			>;
+			using base_ = filter_adaptor_base_t<Pred,Rng>;
 
 		protected:
-			static_assert( tc::is_decayed<Pred>::value, "" );
+			static_assert( tc::is_decayed<Pred>::value );
 			Pred m_pred;
 
 		private:
 			friend struct range_adaptor_impl::range_adaptor_access;
 
-			template< typename Apply, typename A0, std::enable_if_t<
-				std::is_same<
-					std::result_of_t< Apply( A0 )>,
-					break_or_continue
-				>::value>* = nullptr>
-			break_or_continue apply(Apply&& apply, A0&& a0) const& MAYTHROW {
-				if( m_pred( a0 ) ) return std::forward<Apply>(apply)(std::forward<A0>(a0));
-				else return continue_;
-			}
-
-			template< typename Apply, typename A0, std::enable_if_t<
-				!std::is_same<
-					std::result_of_t< Apply( A0 )>,
-					break_or_continue
-				>::value
-			>* = nullptr>
-			void apply(Apply&& apply, A0&& a0) const& MAYTHROW {
-				if( m_pred( a0 ) ) std::forward<Apply>(apply)(std::forward<A0>(a0));
-			}
+			template< typename Apply, typename A0>
+			auto apply(Apply&& apply, A0&& a0) const& MAYTHROW return_by_val(
+				CONDITIONAL(
+					m_pred(a0),
+					tc::continue_if_not_break(std::forward<Apply>(apply), std::forward<A0>(a0)),
+					INTEGRAL_CONSTANT(tc::continue_)()
+				)
+			)
 
 		public:
 			template< typename RngRef, typename PredRef >
@@ -133,6 +124,25 @@ namespace tc {
 		};
 	}
 	using filter_adaptor_impl::filter_adaptor;
+
+	namespace range_reference_adl_barrier {
+		template< typename Pred, typename Rng, bool bConst >
+		struct range_reference_filter_adaptor_base {
+			using type=tc::range_reference_t<
+				tc::apply_if_t<
+					bConst,
+					std::add_const,
+					filter_adaptor_impl::filter_adaptor_base_t<Pred, Rng>
+				>
+			>;
+		};
+
+		template< typename Pred, typename Rng >
+		struct range_reference<filter_adaptor<Pred, Rng, false> > : range_reference_filter_adaptor_base<Pred, Rng, false> {};
+
+		template< typename Pred, typename Rng >
+		struct range_reference<filter_adaptor<Pred, Rng, false> const> : range_reference_filter_adaptor_base<Pred, Rng, true> {};
+	}
 
 	template<typename Rng, typename Pred>
 	auto filter(Rng&& rng, Pred&& pred) noexcept

@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -52,12 +52,11 @@ namespace tc {
 		}
 
 		template< template<typename> class RangeReturn, typename Rng, typename Value >
-		typename RangeReturn<Rng>::type
-		upper_bound(Rng&& rng, Value const& val) noexcept {
-			return RangeReturn<Rng>::
+		auto upper_bound(Rng&& rng, Value const& val) noexcept return_decltype_rvalue_by_ref(
+			RangeReturn<Rng>::
 				pack_border(iterator::upper_bound(boost::begin(rng), boost::end(rng), val),
-					 std::forward<Rng>(rng));
-		}
+					 std::forward<Rng>(rng))
+		)
 
 		template< template<typename> class RangeReturn, typename Rng, typename Value, typename SortPredicate >
 		typename RangeReturn<Rng>::type

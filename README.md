@@ -37,9 +37,9 @@ This is equivalent to https://github.com/boostorg/range/pull/40 (accepted, but n
 The tests and examples are in range/*.t.cpp
 
 Tested with:
-* Visual C++ 2017 RC4
-* clang Apple LLVM 8.0.0
-* clang 3.8 (due to a libc++ bug you need to also include the libc++abi-dev headers)
+* Visual C++ 2017 Version 15.5
+* clang Apple LLVM 9.0.0
+* clang 4.0 (due to a libc++ bug you need to also include the libc++abi-dev headers)
 
 Usage on Windows:
 

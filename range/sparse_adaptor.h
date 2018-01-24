@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -65,18 +65,18 @@ namespace tc {
 				{}
 
 				template<typename PairIndexValue>
-				auto operator()(PairIndexValue&& pairindexvalue) const& MAYTHROW -> tc::break_or_continue {
+				auto operator()(PairIndexValue&& pairindexvalue) const& MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(m_func, *m_default)), INTEGRAL_CONSTANT(tc::continue_)> {
 					for (; m_n < std::get<0>(pairindexvalue); ++m_n) {
 						RETURN_IF_BREAK(tc::continue_if_not_break(m_func, *m_default));
 					}
 					RETURN_IF_BREAK(tc::continue_if_not_break(m_func, std::get<1>(std::forward<PairIndexValue>(pairindexvalue))));
-					return tc::continue_;
+					return INTEGRAL_CONSTANT(tc::continue_)();
 				}
 			};
 
 		public:
 			template<typename Func>
-			auto operator()(Func func) const& MAYTHROW -> break_or_continue
+			auto operator()(Func func) const& MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, *m_default)), INTEGRAL_CONSTANT(tc::continue_)>
 			{
 				std::size_t n=0;
 				RETURN_IF_BREAK(tc::for_each(
@@ -86,16 +86,14 @@ namespace tc {
 				for (; n < m_nEnd; ++n) {
 					RETURN_IF_BREAK(tc::continue_if_not_break(func, *m_default));
 				}
-				return tc::continue_;
+				return INTEGRAL_CONSTANT(tc::continue_)();
 			}
 		};
 
 		template<typename Rng>
 		struct sparse_adaptor_index {
 			std::size_t m_n;
-			typename std::remove_reference<
-				index_range_t<Rng>
-			>::type::index m_idxBase;
+			typename std::remove_reference_t<index_range_t<Rng>>::index m_idxBase;
 		};
 
 		template<

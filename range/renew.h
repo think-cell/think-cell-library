@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -52,21 +52,21 @@ namespace tc {
 
 	template< typename T >
 	void renew_default(T& t) noexcept {
-		// static_assert( std::is_nothrow_default_constructible<T>::value, "");
+		// static_assert( std::is_nothrow_default_constructible<T>::value );
 		tc::dtor(t);
 		::new (static_cast<void*>(std::addressof(t))) T; // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
 	}
 
 	template< typename T >
 	void renew_value(T& t) noexcept	{
-		// static_assert( std::is_nothrow_default_constructible<T>::value, "");
+		// static_assert( std::is_nothrow_default_constructible<T>::value );
 		tc::dtor(t);
 		::new (static_cast<void*>(std::addressof(t))) T(); // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
 	}
 
 	template<typename T, typename First, typename... Args>
 	T& renew(T& t, First&& first, Args&& ... args) noexcept {
-		// static_assert( std::is_nothrow_constructible<T, First&&, Args&& ...>::value, "");
+		// static_assert( std::is_nothrow_constructible<T, First&&, Args&& ...>::value );
 		tc::dtor(t);
 		// In C++, new T(...) is direct initialization just like T t(...).
 		// For non-class types, only implicit conversions are considered, so it is equivalent to T t=...

@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -29,7 +29,7 @@ namespace tc {
 		template<typename TIndex, TIndex IdxFrom, TIndex IdxTo, bool bIncreasing>
 		struct offset_integer_sequence final {
 		private:
-			static_assert(IdxFrom <= IdxTo, "");
+			static_assert(IdxFrom <= IdxTo);
 
 			template<TIndex IdxFirst, TIndex... Is>
 			static constexpr std::integer_sequence<TIndex, (bIncreasing ? IdxFirst + Is : IdxFirst - Is)...> make(std::integer_sequence<TIndex, Is...>);
@@ -45,11 +45,11 @@ namespace tc {
 	using make_reverse_integer_sequence = typename offset_integer_sequence_impl::offset_integer_sequence<TIndex, IdxFrom, IdxTo, /* bIncreasing */ false>::type;
 
 	namespace make_integer_sequence_test {
-		static_assert(std::is_same<tc::make_integer_sequence<int, -1, 3>, std::integer_sequence<int, -1, 0, 1, 2>>::value, "");
-		static_assert(std::is_same<tc::make_integer_sequence<int, 2, 2>, std::integer_sequence<int>>::value, "");
+		static_assert(std::is_same<tc::make_integer_sequence<int, -1, 3>, std::integer_sequence<int, -1, 0, 1, 2>>::value);
+		static_assert(std::is_same<tc::make_integer_sequence<int, 2, 2>, std::integer_sequence<int>>::value);
 
-		static_assert(std::is_same<tc::make_reverse_integer_sequence<int, -1, 3>, std::integer_sequence<int, 2, 1, 0, -1>>::value, "");
-		static_assert(std::is_same<tc::make_reverse_integer_sequence<int, 2, 2>, std::integer_sequence<int>>::value, "");
+		static_assert(std::is_same<tc::make_reverse_integer_sequence<int, -1, 3>, std::integer_sequence<int, 2, 1, 0, -1>>::value);
+		static_assert(std::is_same<tc::make_reverse_integer_sequence<int, 2, 2>, std::integer_sequence<int>>::value);
 	}
 
 	//////////////////////////////////////////////////////////////////////////
@@ -69,20 +69,20 @@ namespace tc {
 	using is_contiguous_integer_sequence = decltype(is_contiguous_integer_sequence_impl::is_contiguous_integer_sequence(std::declval<IntSequence>()));
 
 	namespace is_contiguous_integer_sequence_test {
-		static_assert(is_contiguous_integer_sequence<std::make_index_sequence<0>>::value, "");
-		static_assert(is_contiguous_integer_sequence<std::make_index_sequence<1>>::value, "");
-		static_assert(is_contiguous_integer_sequence<std::make_index_sequence<2>>::value, "");
-		static_assert(is_contiguous_integer_sequence<std::make_index_sequence<10>>::value, "");
+		static_assert(is_contiguous_integer_sequence<std::make_index_sequence<0>>::value);
+		static_assert(is_contiguous_integer_sequence<std::make_index_sequence<1>>::value);
+		static_assert(is_contiguous_integer_sequence<std::make_index_sequence<2>>::value);
+		static_assert(is_contiguous_integer_sequence<std::make_index_sequence<10>>::value);
 
-		static_assert(is_contiguous_integer_sequence<make_integer_sequence<int, 1, 1>>::value, "");
-		static_assert(is_contiguous_integer_sequence<make_integer_sequence<int, 1, 5>>::value, "");
-		static_assert(!is_contiguous_integer_sequence<make_reverse_integer_sequence<int, 1, 3>>::value, "");
+		static_assert(is_contiguous_integer_sequence<make_integer_sequence<int, 1, 1>>::value);
+		static_assert(is_contiguous_integer_sequence<make_integer_sequence<int, 1, 5>>::value);
+		static_assert(!is_contiguous_integer_sequence<make_reverse_integer_sequence<int, 1, 3>>::value);
 
-		static_assert(is_contiguous_integer_sequence<std::integer_sequence<int, -2, -1, 0, 1, 2, 3>>::value, "");
-		static_assert(!is_contiguous_integer_sequence<std::integer_sequence<int, 0, 2>>::value, "");
-		static_assert(!is_contiguous_integer_sequence<std::integer_sequence<int, 0, 2, 3>>::value, "");
+		static_assert(is_contiguous_integer_sequence<std::integer_sequence<int, -2, -1, 0, 1, 2, 3>>::value);
+		static_assert(!is_contiguous_integer_sequence<std::integer_sequence<int, 0, 2>>::value);
+		static_assert(!is_contiguous_integer_sequence<std::integer_sequence<int, 0, 2, 3>>::value);
 
-		static_assert(!is_contiguous_integer_sequence<int>::value, "");
+		static_assert(!is_contiguous_integer_sequence<int>::value);
 	}
 
 	//////////////////////////////////////////////////////////////////////////
@@ -121,4 +121,17 @@ namespace tc {
 
 	template<typename... Ts>
 	struct type_list final {};
+
+	//////////////////////////////////////////////////////////////////////////
+	// INTEGRAL_CONSTANT
+
+	// TODO c++17
+	// namespace tc {
+	//	template<auto v>
+	//	using integral_constant = std::integral_constant<std::remove_const_t<decltype(v)>, v>;
+	// }
+	//
+	// USAGE:
+	// tc::integral_constant<tc::break_> etc.
+	#define INTEGRAL_CONSTANT(val) std::integral_constant<tc::decay_t<decltype(val)>, val>
 }

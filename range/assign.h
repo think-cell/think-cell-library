@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -13,6 +13,7 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 
 #pragma once
+#include "range_defines.h"
 #include "functors.h"
 #include "return_decltype.h"
 #include <atomic>
@@ -36,7 +37,7 @@ bool equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
 
 template<typename Lhs, typename Rhs, std::enable_if_t< tc::is_actual_arithmetic<Lhs>::value && tc::is_actual_arithmetic<Rhs>::value >* =nullptr >
 bool equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
-	return tc::numeric_cast<decltype(lhs+rhs)>(lhs)==tc::numeric_cast<decltype(lhs+rhs)>(rhs);
+	return tc::explicit_cast<decltype(lhs+rhs)>(lhs)==tc::explicit_cast<decltype(lhs+rhs)>(rhs);
 }
 
 // overloadable version of operator<
@@ -47,7 +48,7 @@ bool less(Lhs const& lhs, Rhs const& rhs) noexcept {
 
 template<typename Lhs, typename Rhs, std::enable_if_t< tc::is_actual_arithmetic<Lhs>::value && tc::is_actual_arithmetic<Rhs>::value >* =nullptr >
 bool less(Lhs const& lhs, Rhs const& rhs) noexcept {
-	return tc::numeric_cast<decltype(lhs+rhs)>(lhs)<tc::numeric_cast<decltype(lhs+rhs)>(rhs);
+	return tc::explicit_cast<decltype(lhs+rhs)>(lhs)<tc::explicit_cast<decltype(lhs+rhs)>(rhs);
 }
 
 struct fn_equal_to {
@@ -103,7 +104,7 @@ struct fn_less_equal {
 
 template< typename Var, typename Val, typename Better >
 bool assign_better( Var&& var, Val&& val, Better better ) noexcept {
-	static_assert( tc::is_safely_assignable<Var, Val>::value, "" );
+	static_assert( tc::is_safely_assignable<Var&&, Val&&>::value );
 	if( better(VERIFYINITIALIZED(val), VERIFYINITIALIZED(var)) ) {
 		std::forward<Var>(var)=std::forward<Val>(val);
 		return true;
@@ -127,7 +128,7 @@ bool assign_better( std::atomic<Var>&& var, Val&& val, Better better ) noexcept 
 
 template< typename Var, typename Val >
 bool change( Var&& var, Val&& val ) noexcept {
-	return tc::assign_better( std::forward<Var>(var), std::forward<Val>(val), std::bind(tc::fn_not_equal_to(), std::placeholders::_2, std::placeholders::_1) ); // var==val, not val==var
+	return tc::assign_better( std::forward<Var>(var), std::forward<Val>(val), [](auto const& val_, auto const& var_) noexcept { return !tc::equal_to(var_, val_); } ); // var==val, not val==var
 }
 
 template< typename Var, typename Val >
@@ -162,7 +163,13 @@ void change_with_or(Var&& var, Val&& val, bool& bChanged) noexcept {
 
 DEFINE_FN( assign_max );
 DEFINE_FN( assign_min );
-DEFINE_FN( assign_better );
+
+template< typename Func >
+auto fn_assign_better(Func func) {
+	return [func_=tc_move(func)](auto&&... args) noexcept {
+		return tc::assign_better(std::forward<decltype(args)>(args)..., func_);
+	};
+}
 
 ////////////////////////////////////
 // change for float/double
@@ -175,13 +182,13 @@ DEFINE_FN( assign_better );
 
 template< typename Lhs, typename Rhs >
 bool binary_equal( Lhs const& lhs, Rhs const& rhs ) noexcept {
-	static_assert( sizeof(lhs)==sizeof(rhs), "" );
+	static_assert( sizeof(lhs)==sizeof(rhs) );
 	return 0==std::memcmp(std::addressof(lhs),std::addressof(rhs),sizeof(lhs));
 }
 
 template< typename Dst, typename Src >
 bool binary_change( Dst& dst, Src const& src ) noexcept {
-	static_assert( sizeof(Dst)==sizeof(src), "" );
+	static_assert( sizeof(Dst)==sizeof(src) );
 	if( !binary_equal(dst,src) ) {
 		std::memcpy(std::addressof(dst),std::addressof(src),sizeof(dst));
 		return true;
@@ -190,6 +197,7 @@ bool binary_change( Dst& dst, Src const& src ) noexcept {
 	}
 }
 
+#pragma push_macro("change_for_float")
 #define change_for_float( TFloat ) \
 template< typename S > \
 bool change( TFloat& tVar, S&& sValue ) noexcept { \
@@ -205,6 +213,6 @@ bool change( TFloat& tVar, S&& sValue ) noexcept { \
 change_for_float( float )
 change_for_float( double )
 
-#undef change_for_float
+#pragma pop_macro("change_for_float")
 
 } // namespace tc

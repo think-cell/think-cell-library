@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -103,7 +103,7 @@ namespace tc {
 			#endif
 			{
 				using node_type = boost::multi_index::detail::ordered_index_node<AugmentPolicy, NodeBase>;
-				using TNodeVector = tc::static_vector<
+				using TNodeVector = typename tc::static_vector<
 					node_type*, 
 					2* // 2*log(N) is maximum hight of RB tree
 						(CHAR_BIT*sizeof(std::size_t)-3) // 2^3==8 roughly minimum size of node
@@ -116,7 +116,7 @@ namespace tc {
 					node_type* pnodeParent=node_type::from_impl(pnode->parent());
 
 					for(;;) {
-						vecpnode.emplace_back(pnode);
+						tc::cont_emplace_back(vecpnode, pnode);
 						node_type* pnodeGrandparent=node_type::from_impl(pnodeParent->parent());
 						if(pnode==pnodeGrandparent) return vecpnode; // abort if pnode is root
 						pnode=pnodeParent;
@@ -200,13 +200,17 @@ namespace tc {
 		// Iterator functions forwarding to partition_point
 
 		template< typename It, typename Value, typename UnaryPredicate >
-		It lower_bound(It itBegin,It itEnd,Value const& val,UnaryPredicate&& pred) noexcept {
-			return iterator::partition_point(itBegin,itEnd,std::bind(std::forward<UnaryPredicate>(pred),std::placeholders::_1,std::cref(val)));
+		It lower_bound(It itBegin,It itEnd,Value const& val,UnaryPredicate pred) noexcept {
+			return iterator::partition_point(
+				itBegin,
+				itEnd,
+				[&](auto const& _) noexcept { return pred(_, val); }
+			);
 		}
 
 		template< typename It, typename Value, typename UnaryPredicate >
 		It upper_bound(It itBegin,It itEnd,Value const& val,UnaryPredicate&& pred) noexcept {
-			return iterator::partition_point(itBegin,itEnd,tc::not_fn(std::bind(std::forward<UnaryPredicate>(pred),std::cref(val),std::placeholders::_1)));
+			return iterator::partition_point(itBegin,itEnd,[&](auto const& _) noexcept { return !pred(val, _); });
 		}
 
 		template< typename It, typename Value, typename SortPredicate >

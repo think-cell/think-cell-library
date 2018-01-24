@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -15,16 +15,17 @@
 #include "range.h"
 #include "container.h" // tc::vector
 #include "range.t.h"
+#include "join_adaptor.h"
 
 namespace {
 	void static_tests() noexcept {
-		// make_container with explicit move constructor
+		// explicit_cast with explicit move constructor
 		struct SMove { explicit SMove(tc::vector<int>&&) noexcept {} };
-		tc::make_container<SMove>(tc::vector<int>());
+		tc::explicit_cast<SMove>(tc::vector<int>());
 
-		// make_container with explicit constructor
+		// explicit_cast with explicit constructor
 		struct SCopy { explicit SCopy(tc::vector<int>) noexcept {} };
-		tc::make_container<SCopy>(tc::vector<int>());
+		tc::explicit_cast<SCopy>(tc::vector<int>());
 	}
 
 UNITTESTDEF( quantifiers ) {
@@ -63,7 +64,7 @@ UNITTESTDEF( sort_accumulate_each_unique_range_2 ) {
 	{
 		tc::vector< SValAccu > vec;
 		for( int i=0; i < 5; ++i ) {
-			vec.emplace_back( 1, 1 );
+			tc::cont_emplace_back( vec, 1, 1 );
 		}
 		tc::sort_accumulate_each_unique_range(
 			vec,
@@ -103,7 +104,7 @@ UNITTESTDEF(filter_no_self_assignment_of_rvalues) {
 UNITTESTDEF( trim_leftright_if ) {
 	tc::vector<int> v{1,2,3,4,5,6,7,7,7};
 	auto rng = tc::trim_left_if<tc::return_drop>(v, [] (int n) noexcept {return n<4;});
-	_ASSERT(std::begin(rng) != std::end(rng));
+	_ASSERT(boost::begin(rng) != boost::end(rng));
 	_ASSERTEQUAL(tc::size(rng), 6);
 	_ASSERTEQUAL(tc::size(tc::trim_right_if<tc::return_take>(rng, [] (int n) noexcept {return n==7;})), 3);
 }
@@ -216,6 +217,94 @@ UNITTESTDEF(is_strictly_sorted){
 	int an[]={0,1,2,3,4,5};
 	_ASSERT(tc::is_strictly_sorted(an));
 	_ASSERT(!tc::is_strictly_sorted(tc::reverse(an)));
+}
+
+UNITTESTDEF(remove_inplace_parser) {
+	std::string input = "0123<font>4567<font10><font11><font12>89<font14><font";
+	tc::remove_inplace(input, tc::lit("<font") > *(tc::char_<char> - tc::lit('>')) > tc::lit('>'));
+	_ASSERTEQUAL(input, "0123456789<font");
+}
+
+UNITTESTDEF(Naryinterleave) {
+	tc::vector<int> const vecnA({3,4,7,9});
+	tc::vector<int> vecnB({2,4,8,9,11,17});
+	auto const vecnBCopy = vecnB;
+	tc::vector<int> const vecnC({-100,1000});
+
+	tc::vector<int> vecnResult = tc::make_vector(tc::concat(vecnA, vecnB, vecnC));
+	tc::sort_inplace(vecnResult);
+	auto itResult = boost::begin(vecnResult);
+
+	_ASSERTEQUAL(
+		tc::continue_,
+		tc::interleave_n(
+			tc::fn_compare(),
+			[&](auto const&... pairitb) noexcept {
+				auto tplpairitb = std::make_tuple(pairitb...);
+				if (std::get<0>(tplpairitb).second) {
+					_ASSERTEQUAL(*itResult,*std::get<0>(tplpairitb).first);
+					++itResult;
+				}
+				if (std::get<1>(tplpairitb).second) {
+					_ASSERTEQUAL(*itResult,*std::get<1>(tplpairitb).first);
+					*std::get<1>(tplpairitb).first += 100;
+					++itResult;
+				}
+				if (std::get<2>(tplpairitb).second) {
+					_ASSERTEQUAL(*itResult,*std::get<2>(tplpairitb).first);
+					++itResult;
+				}
+			},
+			vecnA, vecnB, vecnC
+		)
+	);
+
+	_ASSERT(tc::equal(
+		tc::transform(vecnBCopy, [](int n) noexcept {return n+100;}),
+		vecnB
+	));
+}
+
+UNITTESTDEF(NaryinterleaveBreak) {
+	tc::vector<int> const vecnA({ 3,4,7,9 });
+	tc::vector<int> vecnB({ 2,4,8,9,11,17 });
+	auto const vecnBCopy = vecnB;
+	tc::vector<int> const vecnC({ -100,1000 });
+
+	tc::vector<int> vecnResult = tc::make_vector(tc::concat(vecnA, vecnB, vecnC));
+	tc::sort_inplace(vecnResult);
+	auto itResult = boost::begin(vecnResult);
+
+	_ASSERTEQUAL(
+		tc::break_,
+		tc::interleave_n(
+			tc::fn_compare(),
+			[&](auto const&... pairitb) noexcept {
+				auto tplpairitb = std::make_tuple(pairitb...);
+				if (std::get<0>(tplpairitb).second) {
+					_ASSERTEQUAL(*itResult, *std::get<0>(tplpairitb).first);
+					++itResult;
+					if (7 == *std::get<0>(tplpairitb).first) return tc::break_;
+				}
+				if (std::get<1>(tplpairitb).second) {
+					_ASSERTEQUAL(*itResult, *std::get<1>(tplpairitb).first);
+					*std::get<1>(tplpairitb).first += 100;
+					++itResult;
+				}
+				if (std::get<2>(tplpairitb).second) {
+					_ASSERTEQUAL(*itResult, *std::get<2>(tplpairitb).first);
+					++itResult;
+				}
+				return tc::continue_;
+			},
+			vecnA, vecnB, vecnC
+		)
+	);
+
+	_ASSERT(tc::equal(
+		tc::transform(vecnBCopy, [](int n) noexcept {return n < 7 ? n + 100 : n; }),
+		vecnB
+	));
 }
 
 }

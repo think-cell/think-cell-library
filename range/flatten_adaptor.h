@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -15,6 +15,7 @@
 #pragma once
 
 #include "range_defines.h"
+#include "range_adaptor.h"
 #include "reference_or_value.h"
 #include "index_range.h"
 #include "for_each.h"
@@ -38,12 +39,27 @@ namespace tc {
 
 			template< typename Func >
 			auto operator()(Func func) const& MAYTHROW {
-				return tc::for_each(*m_baserng, std::bind(tc::fn_for_each(), std::placeholders::_1, std::ref(func)));
+				return tc::for_each(*m_baserng, [&](auto&& _) MAYTHROW { return tc::for_each(std::forward<decltype(_)>(_), func); });
 			}
 		};
 	}
 
 	using flatten_adaptor_adl_barrier::flatten_adaptor;
+
+	namespace range_reference_adl_barrier {
+		template< typename Rng, bool bConst >
+		struct range_reference_flatten_adaptor {
+			using type = tc::range_reference_t<
+				reference_for_value_or_reference_with_index_range_t<Rng, bConst>
+			>;
+		};
+
+		template< typename Rng >
+		struct range_reference<flatten_adaptor<Rng>> : range_reference_flatten_adaptor<Rng, false> {};
+
+		template< typename Rng >
+		struct range_reference<flatten_adaptor<Rng> const> : range_reference_flatten_adaptor<Rng, true> {};
+	}
 
 	template<typename Rng>
 	auto flatten(Rng&& rng) noexcept return_ctor(

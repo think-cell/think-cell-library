@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -29,12 +29,7 @@ namespace tc {
 		struct transform_adaptor_access final {
 			template< typename Func, typename Rng, bool bHasIterator >
 			static Func&& get_func(transform_adaptor<Func,Rng,bHasIterator>&& rng) noexcept {
-#if !defined(__clang__) && !defined(_DEBUG) && _MSC_VER==1900 && _MSC_FULL_VER == 190023026
-				// workaround for compiler bug https://connect.microsoft.com/VisualStudio/feedback/details/1706489
-				return tc_move(rng.m_func);
-#else
 				return tc_move(rng).m_func;
-#endif
 			}
 		};
 
@@ -47,7 +42,7 @@ namespace tc {
 		protected:
 			using range_adaptor = base_;
 
-			static_assert( tc::is_decayed< Func >::value, "" );
+			static_assert( tc::is_decayed< Func >::value );
 			Func m_func;
 
 		private:
@@ -55,7 +50,7 @@ namespace tc {
 			friend struct transform_adaptor_impl::transform_adaptor_access;
 			template< typename Apply, typename... Args>
 			auto apply(Apply&& apply, Args&& ... args) const& MAYTHROW return_decltype (
-				std::forward<Apply>(apply)( m_func(std::forward<Args>(args)...) )
+				tc::continue_if_not_break(std::forward<Apply>(apply), m_func(std::forward<Args>(args)...))
 			)
 
 		public:
@@ -134,6 +129,32 @@ namespace tc {
 		auto constexpr_size(transform_adaptor<Func, Rng, b> const& rng) -> decltype(constexpr_size(rng.base_range()));
 	}
 
+	namespace range_reference_adl_barrier {
+		template< typename Func, typename Rng, bool bConst >
+		struct range_reference_transform_adaptor {
+			using type = decltype(
+				std::declval<Func&>()(
+					std::declval<
+						tc::range_reference_t<
+							tc::apply_if_t<
+								bConst,
+								std::add_const,
+								range_adaptor<transform_adaptor<Func,Rng>, Rng >
+							>
+						>
+					>()
+				)
+			);
+		};
+
+
+		template< typename Func, typename Rng >
+		struct range_reference<transform_adaptor<Func, Rng, false> > : range_reference_transform_adaptor<Func, Rng, false> {};
+
+		template< typename Func, typename Rng >
+		struct range_reference<transform_adaptor<Func, Rng, false> const> : range_reference_transform_adaptor<Func, Rng, true> {};
+	}
+
 	namespace replace_if_impl {
 		template< typename Func, typename T >
 		struct replace_if final {
@@ -148,18 +169,20 @@ namespace tc {
 			{}
 			template< typename S >
 			auto operator()(S&& s) const& MAYTHROW ->decltype(auto) {
-				return tc::conditional(m_func(s),m_t,std::forward<S>(s));
+				return CONDITIONAL(m_func(s),m_t,std::forward<S>(s));
 			}
 		};
 	}
 
 	template<typename Rng, typename Func, typename T>
-	auto replace_if(Rng&& rng, Func func, T&& t) noexcept
-		return_decltype( tc::transform( std::forward<Rng>(rng), replace_if_impl::replace_if<Func,T>(std::forward<Func>(func),std::forward<T>(t) ) ) )
+	auto replace_if(Rng&& rng, Func func, T&& t) noexcept {
+		return tc::transform( std::forward<Rng>(rng), replace_if_impl::replace_if<Func,T>(std::forward<Func>(func),std::forward<T>(t) ) );
+	}
 
 	template<typename Rng, typename S, typename T>
-	auto replace(Rng&& rng, S&& s, T&& t) noexcept
-		return_decltype( tc::replace_if( std::forward<Rng>(rng), std::bind( tc::fn_equal_to(), std::placeholders::_1, std::forward<S>(s) ), std::forward<T>(t) ) )
+	auto replace(Rng&& rng, S&& s, T&& t) noexcept {
+		return tc::replace_if( std::forward<Rng>(rng), [s_=tc::decay_copy(std::forward<S>(s))](auto const& _) noexcept { return tc::equal_to(_, s_); }, std::forward<T>(t) );
+	}
 
 	template <typename Rng, typename Func, typename T>
 	Rng& replace_if_inplace(Rng& rng, Func func, T const& t) noexcept {
@@ -173,7 +196,7 @@ namespace tc {
 
 	template<typename Rng, typename S, typename T>
 	Rng& replace_inplace(Rng& rng, S&& s, T const& t) noexcept {
-		return tc::replace_if_inplace( rng, std::bind( tc::fn_equal_to(), std::placeholders::_1, std::forward<S>(s) ), t );
+		return tc::replace_if_inplace( rng, [&](auto const& _) noexcept { return tc::equal_to(_, s); }, t );
 	}
 }
 

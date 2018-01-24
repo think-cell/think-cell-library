@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -200,25 +200,29 @@ namespace tc {
 			STATIC_VIRTUAL(at_end_index)
 
 			template< typename Func >
-			tc::break_or_continue operator()(Func func) /* no & */ MAYTHROW {
-				for( auto idx=begin_index();
-					!at_end_index(idx);
-					this->increment_index(idx)
-				) {
-					RETURN_IF_BREAK( tc::continue_if_not_break( func, this->dereference_index(idx) ) );
-				}
-				return tc::continue_;
+			auto operator()(Func func) /* no & */ MAYTHROW {
+				return [&]() MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, this->dereference_index(begin_index()))), INTEGRAL_CONSTANT(tc::continue_)> {
+					for( auto idx=begin_index();
+						!at_end_index(idx);
+						this->increment_index(idx)
+					) {
+						RETURN_IF_BREAK( tc::continue_if_not_break( func, this->dereference_index(idx) ) );
+					}
+					return INTEGRAL_CONSTANT(tc::continue_)();
+				}();
 			}
 
 			template< typename Func >
-			tc::break_or_continue operator()(Func func) const /* no & */ MAYTHROW {
-				for( auto idx=begin_index();
-					!at_end_index(idx);
-					this->increment_index(idx)
-				) {
-					RETURN_IF_BREAK( tc::continue_if_not_break( func, this->dereference_index(idx) ) );
-				}
-				return tc::continue_;
+			auto operator()(Func func) const /* no & */ MAYTHROW {
+				return [&]() MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, this->dereference_index(begin_index()))), INTEGRAL_CONSTANT(tc::continue_)> {
+					for( auto idx=begin_index();
+						!at_end_index(idx);
+						this->increment_index(idx)
+					) {
+						RETURN_IF_BREAK( tc::continue_if_not_break( func, this->dereference_index(idx) ) );
+					}
+					return INTEGRAL_CONSTANT(tc::continue_)();
+				}();
 			}
 		};
 	}
@@ -226,25 +230,49 @@ namespace tc {
 
 	namespace void_generator_type_check_impl {
 		template<typename Func>
-		struct ensure_non_break_or_continue_functor final {
-			explicit ensure_non_break_or_continue_functor(Func& f) noexcept
+		struct ensure_non_breaking_functor final {
+			explicit ensure_non_breaking_functor(Func&& f) noexcept
 				: m_func(f)
 			{}
 
 			template<typename... Args>
-			void operator()(Args&&... args) & noexcept {
+			decltype(auto) operator()(Args&&... args) & MAYTHROW {
 				static_assert(
 					!std::is_same<
 						decltype(m_func(std::forward<Args>(args)...)),
 						break_or_continue
+					>::value &&
+					!std::is_same<
+						decltype(m_func(std::forward<Args>(args)...)),
+						INTEGRAL_CONSTANT(tc::break_)
 					>::value,
-					"Functor to void range must not return break_or_continue"
-					);
-				m_func(std::forward<Args>(args)...);
+					"Functor may return break_, but range does not support it."
+				);
+				return m_func(std::forward<Args>(args)...); // MAYTHROW
 			}
 
 		private:
-			Func& m_func;
+			tc::decay_t<Func&&> m_func;
+		};
+		template<typename Func>
+		struct ensure_always_breaking_functor final {
+			explicit ensure_always_breaking_functor(Func&& f) noexcept
+				: m_func(f)
+			{}
+
+			template<typename... Args>
+			decltype(auto) operator()(Args&&... args) & MAYTHROW {
+				static_assert(
+					std::is_same<
+						decltype(m_func(std::forward<Args>(args)...)),
+						INTEGRAL_CONSTANT(tc::break_)
+					>::value
+				);
+				return m_func(std::forward<Args>(args)...); // MAYTHROW
+			}
+
+		private:
+			tc::decay_t<Func&&> m_func;
 		};
 	}
 

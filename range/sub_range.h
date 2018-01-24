@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -111,7 +111,7 @@ namespace tc {
 		tc::make_mutable_ptr(raw_ptr( rng.data() )) + rng.size()
 	)
 
-	TC_HAS_EXPR(ptr_begin, tc::ptr_begin(std::declval<T>()))
+	TC_HAS_EXPR(ptr_begin, (T), tc::ptr_begin(std::declval<T>()))
 	
 	//-------------------------------------------------------------------------------------------------------------------------
 	// fwd decls 
@@ -303,20 +303,22 @@ namespace tc {
 			, m_idxEnd(tc::iterator2index(tc_move(itEnd)))
 			{}
 
-			template< typename Func > break_or_continue operator()(Func func) /* no & */ MAYTHROW {
-				break_or_continue bc=continue_;
-				for( index i=this->begin_index();
-					!this->at_end_index(i) && continue_==(bc=continue_if_not_break( func, this->dereference_index(i) ));
-					this->increment_index(i) );
-				return bc;
+			template< typename Func > auto operator()(Func func) /* no & */ MAYTHROW {
+				return [&]() MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, this->dereference_index(this->begin_index()))), INTEGRAL_CONSTANT(tc::continue_)> {
+					for (index i = this->begin_index(); !this->at_end_index(i); this->increment_index(i)) {
+						RETURN_IF_BREAK(tc::continue_if_not_break(func, this->dereference_index(i)));
+					}
+					return INTEGRAL_CONSTANT(tc::continue_)();
+				}();
 			}
 
-			template< typename Func > break_or_continue operator()(Func func) const/* no & */ MAYTHROW {
-				break_or_continue bc=continue_;
-				for( index i=this->begin_index();
-					!this->at_end_index(i) && continue_==(bc=continue_if_not_break( func, this->dereference_index(i) ));
-					this->increment_index(i) );
-				return bc;
+			template< typename Func > auto operator()(Func func) const /* no & */ MAYTHROW {
+				return [&]() MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, this->dereference_index(this->begin_index()))), INTEGRAL_CONSTANT(tc::continue_)> {
+					for (index i = this->begin_index(); !this->at_end_index(i); this->increment_index(i)) {
+						RETURN_IF_BREAK(tc::continue_if_not_break(func, this->dereference_index(i)));
+					}
+					return INTEGRAL_CONSTANT(tc::continue_)();
+				}();
 			}
 
 			STATIC_FINAL(begin_index)() const& noexcept -> index {
@@ -500,9 +502,9 @@ namespace tc {
 		) noexcept {
 			_ASSERT(0 <= n);
 			_ASSERTNOTIFY(bLinear || n <= 2);
-			typename boost::range_iterator< std::remove_reference_t<Rng> >::type it=boost::begin(rng);
+			auto it=boost::begin(rng);
 #ifdef _CHECKS
-			typename boost::range_iterator< std::remove_reference_t<Rng> >::type const itBound=boost::end(rng);
+			auto const itBound=boost::end(rng);
 #endif
 			while (0<n) {
 				_ASSERT(it!=itBound);
@@ -554,9 +556,9 @@ namespace tc {
 		) noexcept {
 			_ASSERT(0 <= n);
 			_ASSERTNOTIFY(n <= 2);
-			typename boost::range_iterator< std::remove_reference_t<Rng> >::type it=boost::end(rng);
+			auto it=boost::end(rng);
 #ifdef _CHECKS
-			typename boost::range_iterator< std::remove_reference_t<Rng> >::type const itBound=boost::begin(rng);
+			auto const itBound=boost::begin(rng);
 #endif
 			while (0<n) {
 				_ASSERT(it!=itBound);
@@ -728,11 +730,6 @@ namespace tc {
 		tc::take(std::forward<Rng>(rng), tc::end_prev(rng, n))
 	)
 
-	template< typename Rng >
-	auto slice_by_index(Rng&& rng, typename boost::range_size< std::remove_reference_t<Rng> >::type nFrom, typename boost::range_size< std::remove_reference_t<Rng> >::type nTo) noexcept return_decltype(
-		tc::slice(std::forward<Rng>(rng), tc::begin_next(rng, nFrom), tc::begin_next(rng, nTo))
-	)
-
 	//-------------------------------------------------------------------------------------------------------------------------
 	// truncate
 
@@ -888,9 +885,12 @@ namespace tc {
 		struct return_void final {
 			using type = void;
 
-			static type pack_border(typename boost::range_iterator< std::remove_reference_t<Rng> >::type, Rng&&) noexcept {}
+			template<typename It>
+			static type pack_border(It&&, Rng&&) noexcept {}
+			template<typename It, typename Ref>
+			static type pack_element(It&&, Rng&&, Ref&&) noexcept {}
 			template<typename Ref>
-			static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type, Rng&&, Ref&&) noexcept {}
+			static type pack_element(Rng&&, Ref&&) noexcept {}
 			static type pack_no_element(Rng&& rng) noexcept {}
 		};
 
@@ -906,6 +906,15 @@ namespace tc {
 			static type pack_border(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng) noexcept {
 				_ASSERT(it != boost::begin(rng));
 				return boost::prior(it);
+			}
+		};
+
+		template< typename Rng >
+		struct return_element_before_or_null final {
+			using type = element_t< typename boost::range_iterator< std::remove_reference_t<Rng> >::type >;
+
+			static type pack_border(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng) noexcept {
+				return it != boost::begin(rng) ? static_cast<type>(boost::prior(it)) : type{}; // value initialization to initialize pointers to nullptr
 			}
 		};
 
@@ -931,13 +940,12 @@ namespace tc {
 
 		// returning range
 
-		template< typename Rng >
+		template< typename >
 		struct return_take final {
-			using type = typename make_sub_range_result<Rng>::type;
-
-			static type pack_border(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng) noexcept {
-				return tc::take(std::forward<Rng>(rng), it);
-			}
+			template <typename Rng>
+			static auto pack_border(typename boost::range_iterator< std::remove_reference_t<Rng> >::type it, Rng&& rng) noexcept return_decltype_rvalue_by_ref(
+				tc::take(std::forward<Rng>(rng), it)
+			)
 		};
 
 		template< typename Rng >
@@ -956,12 +964,16 @@ namespace tc {
 		struct return_bool {
 			using type = bool;
 
-			template<typename Anything, typename Ref>
-			static type pack_element(Anything&&, Rng&&, Ref&&) noexcept {
+			template<typename It, typename Ref>
+			static type pack_element(It&&, Rng&&, Ref&&) noexcept {
 				return true;
 			}
-			template<typename Anything, typename It>
-			static type pack_view(Anything&&, It&&, It&&) noexcept {
+			template<typename Ref>
+			static type pack_element(Rng&&, Ref&&) noexcept {
+				return true;
+			}
+			template<typename It>
+			static type pack_view(Rng&&, It&&, It&&) noexcept {
 				return true;
 			}
 			static type pack_no_element(Rng&& rng) noexcept {
@@ -1013,24 +1025,32 @@ namespace tc {
 
 		template< typename Rng >
 		struct return_value final {
-			using type = tc::decay_t< typename boost::range_reference< std::remove_reference_t<Rng> >::type >;
+			using type = tc::range_value_t< Rng >;
 
+			template<typename It, typename Ref>
+			static type pack_element(It&&, Rng&&, Ref&& ref) noexcept {
+				return std::forward<Ref>(ref);
+			}
 			template<typename Ref>
-			static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type, Rng&&, Ref&& ref) noexcept {
+			static type pack_element(Rng&&, Ref&& ref) noexcept {
 				return std::forward<Ref>(ref);
 			}
 			static type pack_no_element(Rng&&) noexcept {
 				_ASSERTFALSE;
-				return ConstructDefaultOrTerminate<type>();
+				return tc::construct_default_or_terminate<type>();
 			}
 		};
 
 		template< typename Rng >
 		struct return_value_or_default final {
-			using type = tc::decay_t< typename boost::range_reference< std::remove_reference_t<Rng> >::type >;
+			using type = tc::range_value_t< Rng >;
 
+			template<typename It, typename Ref>
+			static type pack_element(It&&, Rng&&, Ref&& ref) noexcept {
+				return std::forward<Ref>(ref);
+			}
 			template<typename Ref>
-			static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type, Rng&&, Ref&& ref) noexcept {
+			static type pack_element(Rng&&, Ref&& ref) noexcept {
 				return std::forward<Ref>(ref);
 			}
 			static type pack_no_element(Rng&&) noexcept {
@@ -1040,10 +1060,14 @@ namespace tc {
 
 		template< typename Rng >
 		struct return_value_or_none final {
-			using type = boost::optional< tc::decay_t< typename boost::range_reference< std::remove_reference_t<Rng> >::type > >;
+			using type = boost::optional< tc::range_value_t< Rng > >;
 
+			template<typename It, typename Ref>
+			static type pack_element(It&&, Rng&&, Ref&& ref) noexcept {
+				return std::forward<Ref>(ref);
+			}
 			template<typename Ref>
-			static type pack_element(typename boost::range_iterator< std::remove_reference_t<Rng> >::type, Rng&&, Ref&& ref) noexcept {
+			static type pack_element(Rng&&, Ref&& ref) noexcept {
 				return std::forward<Ref>(ref);
 			}
 			static type pack_no_element(Rng&&) noexcept {
@@ -1360,9 +1384,24 @@ namespace tc {
 				return tc::drop(std::forward<Rng>(rng), boost::begin(rng));
 			}
 		};
+
+		template<typename>
+		struct return_view {
+			template<typename Rng>
+			static auto pack_view(Rng&& rng, typename boost::range_iterator< std::remove_reference_t<Rng> >::type itBegin, typename boost::range_iterator< std::remove_reference_t<Rng> >::type itEnd) noexcept {
+				return tc::slice(std::forward<Rng>(rng), itBegin, itEnd);
+			}
+
+			template<typename Rng>
+			static auto pack_no_element(Rng&& rng) noexcept {
+				_ASSERTFALSE;
+				return tc::slice(std::forward<Rng>(rng), boost::begin(rng), boost::end(rng));
+			}
+		};
 	} // namespace return_xxx_adl_barrier
 	using return_xxx_adl_barrier::return_void;
 	using return_xxx_adl_barrier::return_element_before;
+	using return_xxx_adl_barrier::return_element_before_or_null;
 	using return_xxx_adl_barrier::return_border;
 	using return_xxx_adl_barrier::return_border_index;
 	using return_xxx_adl_barrier::return_take;
@@ -1393,6 +1432,7 @@ namespace tc {
 	using return_xxx_adl_barrier::return_drop_after;
 	using return_xxx_adl_barrier::return_drop_after_or_empty;
 	using return_xxx_adl_barrier::return_drop_after_or_all;
+	using return_xxx_adl_barrier::return_view;
 
 	//-------------------------------------------------------------------------------------------------------------------------
 	// as_pointers
@@ -1423,6 +1463,35 @@ namespace tc {
 	template< typename T >
 	using ptr_range = sub_range < iterator_base<T*> >;
 
+	template< typename HashAlgorithm, typename T >
+	void hash_append(HashAlgorithm& h, tc::ptr_range<T> const& rng) noexcept {
+		tc::for_each( rng, [&](auto const& t) noexcept {
+			tc::hash_append( h, t );
+		});
+		tc::hash_append( h, boost::implicit_cast<std::uint64_t>(tc::size(rng)) );
+	}
+
+	template<
+		typename T1,
+		typename T2
+	>
+	struct common_type_decayed<tc::ptr_range<T1>, tc::ptr_range<T2>> {
+		static_assert(sizeof(T1) == sizeof(T2));
+		using type = tc::ptr_range<std::remove_pointer_t<tc::common_type_t<T1*, T2*>>>;
+	};
+
+	template<
+		typename T1,
+		typename T2,
+		std::size_t N1,
+		std::size_t N2
+	>
+	struct common_reference<T1(&)[N1], T2(&)[N2]> {
+		static_assert(!tc::is_char<T1>::value && !tc::is_char<T2>::value);
+		static_assert(N1 != N2);
+		using type = tc::common_reference_t<tc::ptr_range<T1>, tc::ptr_range<T2>>;
+	};
+
 	//--------------------------------------------------------------------------------------------------------------------------
 	// as_blob
 	// reinterprets a range of items as a range of bytes
@@ -1434,22 +1503,23 @@ namespace tc {
 	// - char is bad because it is either signed or unsigned, so it has the same problem.
 	// - unsigned char is better than std::uint8_t because the latter must be 8 bit, but we mean the smallest addressable unit, which is char and may be larger (or smaller?) on other platforms.
 
-	static_assert(!tc::is_range_with_iterators< void const* >::value,"");
+	static_assert(!tc::is_range_with_iterators< void const* >::value);
 
 	template<typename T, std::enable_if_t<tc::is_range_with_iterators< T >::value>* = nullptr>
-	tc::ptr_range<unsigned char const> as_blob(T const& t) noexcept {
-		auto const& rng=tc::as_pointers(t);
+	auto as_blob(T&& t) noexcept {
+		auto const& rng=tc::as_pointers(std::forward<T>(t));
 		static_assert( std::is_trivially_copyable< typename tc::range_value< std::remove_reference_t< decltype( rng ) > >::type >::value, "as_blob only works on std::is_trivially_copyable types" );
+		using cv_value_type = std::remove_pointer_t<decltype(tc::ptr_begin(rng))>;
 		return tc::make_iterator_range( 
-			reinterpret_cast<unsigned char const*>( tc::ptr_begin(rng) ),
-			reinterpret_cast<unsigned char const*>( tc::ptr_end(rng) )
+			reinterpret_cast<same_cvref_t<unsigned char, cv_value_type>*>( tc::ptr_begin(rng) ),
+			reinterpret_cast<same_cvref_t<unsigned char, cv_value_type>*>( tc::ptr_end(rng) )
 		);
 	}
 
 	template<typename T>
 	tc::ptr_range<T const> as_typed_range(tc::ptr_range<unsigned char const> rng) noexcept {
-		static_assert( tc::is_decayed<T>::value, "" );
-		static_assert( std::is_trivially_copyable<T>::value, "" );
+		static_assert( tc::is_decayed<T>::value );
+		static_assert( std::is_trivially_copyable<T>::value );
 		_ASSERT( 0==tc::size(rng)%sizeof(T) );
 		return tc::make_iterator_range( 
 			reinterpret_cast<T const*>(tc::ptr_begin(rng) ),
@@ -1457,9 +1527,62 @@ namespace tc {
 		);
 	}
 
+	namespace typed_source_adl_barrier {
+		template<typename Sink, typename Char>
+		struct typed_source_sink_adapter final {
+			typed_source_sink_adapter(Sink& sink) noexcept : m_sink(sink) {}
+
+			struct stream_traits {
+				using value_type = unsigned char;
+
+				static void append(typed_source_sink_adapter& adapter, unsigned char byte) MAYTHROW {
+					static_assert(sizeof(Char) == sizeof(unsigned char), "not yet implemented for wide Char");
+					static_assert(std::is_trivially_copyable<Char>::value);
+					adapter.m_sink << reinterpret_cast<Char>(byte); // MAYTHROW
+				}
+
+				template<typename Rng>
+				static void append_range(typed_source_sink_adapter& adapter, Rng&& rngbyte) MAYTHROW {
+					adapter.m_sink << tc::as_typed_range<Char>(std::forward<Rng>(rngbyte)); // MAYTHROW
+				}
+			};
+
+			friend stream_traits tc_stream_traits(typed_source_sink_adapter&) noexcept;
+
+		private:
+			Sink& m_sink;
+		};
+
+		template<typename Char, typename Source>
+		struct typed_source : tc::noncopyable {
+			using native_value_type = Char;
+
+			explicit typed_source(Source&& source) noexcept : m_source(tc::aggregate_tag(), std::forward<Source>(source)) {}
+
+			template<typename Sink, typename TypedSource>
+			friend std::enable_if_t<
+				std::is_same<std::remove_reference_t<TypedSource>, typed_source<Char, Source>>::value,
+				Sink&> operator<<(Sink& sink, TypedSource&& source) MAYTHROW {
+				using ::operator<<;
+				typed_source_sink_adapter<Sink, Char>(sink) << *std::forward<TypedSource>(source).m_source; // MAYTHROW
+				return sink;
+			}
+
+		private:
+			tc::reference_or_value<Source> m_source;
+		};
+
+		template<typename Char, typename Source>
+		auto make_typed_source(Source&& source) noexcept {
+			return typed_source<Char, Source>(std::forward<Source>(source));
+		}
+	}
+	using typed_source_adl_barrier::typed_source;
+	using typed_source_adl_barrier::make_typed_source;
+
 	template<typename T, std::enable_if_t<!tc::is_range_with_iterators< T >::value>* = nullptr>
-	tc::ptr_range<unsigned char const> as_blob(T const& t) noexcept {
-		return as_blob( tc::make_singleton_range(t) );
+	auto as_blob(T&& t) noexcept {
+		return as_blob( tc::make_singleton_range(/* no std::forward<T> */ t) );
 	}
 
 	namespace assert_no_overlap_impl {

@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -17,18 +17,8 @@
 #include <boost/numeric/conversion/conversion_traits.hpp>
 
 #include <type_traits>
-
-// Use if you have to check if an expression compiles, e.g., to check if an operator is defined, a cast is valid etc
-#define TC_HAS_EXPR(name, expr) \
-	template<typename U> \
-	struct BOOST_PP_CAT(has_,name) { \
-	private: \
-		template<typename T> static auto test(int) -> decltype((expr), std::true_type()); \
-		template<typename> static std::false_type test(...); \
-	public: \
-		static constexpr bool value = std::is_same<decltype(test<U>(0)), std::true_type>::value; \
-		using type = std::integral_constant<bool, value>; \
-	};
+#include <boost/mpl/identity.hpp>
+#include "generic_macros.h"
 
 // Use as type of constructor arguments that are required for enabling / disabling constructor through SFINAE.
 // To be replaced by template parameter default when Visual C++ supports template parameter defaults for functions.
@@ -36,22 +26,48 @@ struct unused_arg final {};
 
 namespace tc {
 	//////////////////////////
+	// void_t
+
+#ifdef __clang__
+	// If {template< typename... Args > using void_t = void;} is used, the test fails to compile with:
+	// error: redefinition of 'Foo<type-parameter-0-0, void>'
+	//	struct Foo<T, void_t<typename T::type2>> {
+	//         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+	// note: previous definition is here
+	//	struct Foo<T, void_t<typename T::type1>> {
+	//         ^
+	//------------------------------
+	// see also https://bugs.llvm.org/show_bug.cgi?id=26086
+	// The implementation at http://en.cppreference.com/w/cpp/types/void_t solves the problem
+	template<typename... Args>
+	struct make_void {
+		using type = void;
+	};
+
+	template< typename... Args >
+	using void_t = typename tc::make_void<Args...>::type;
+#else
+	using std::void_t;
+#endif
+
+	//////////////////////////
 	// remove_cvref
 
 	template<typename T>
 	using remove_cvref_t = std::remove_cv_t< std::remove_reference_t<T> >;
 
+	//////////////////////////
+	// decay
 	template<typename T>
 	struct decay {
 		using type = std::decay_t<T>; // must still do function-to-pointer
 	};
 
-	//////////////////////////
-	// decay
-
 	// forbid decaying of C arrays, they decay to pointers, very unlike std/tc::array
 	template<typename T>
 	struct do_not_decay_arrays {};
+
+#pragma push_macro("DECAY_ARRAY_IMPL")
 #define DECAY_ARRAY_IMPL(cv) \
 	template<typename T> \
 	struct decay<T cv[]> { \
@@ -68,7 +84,7 @@ namespace tc {
 		DECAY_ARRAY_IMPL(volatile)
 		DECAY_ARRAY_IMPL(const volatile)
 #endif
-#undef DECAY_ARRAY_IMPL
+#pragma pop_macro("DECAY_ARRAY_IMPL")
 
 	template<typename T>
 	struct decay<T volatile> {
@@ -100,9 +116,9 @@ namespace tc {
 
 	//	auto a=b; uses std::decay
 	// <=>
-	//	auto a=make_copy(b); uses tc::decay_t
+	//	auto a=decay_copy(b); uses tc::decay_t
 	template<typename T>
-	tc::decay_t<T&&> make_copy(T&& t) noexcept {
+	constexpr tc::decay_t<T&&> decay_copy(T&& t) noexcept {
 		return std::forward<T>(t);
 	}
 	
@@ -171,7 +187,7 @@ namespace tc {
 	struct is_base_of_decayed : std::integral_constant< bool,
 		tc::is_base_of< Base, tc::decay_t<Derived> >::value
 	> {
-		static_assert(tc::is_decayed<Base>::value, "");
+		static_assert(tc::is_decayed<Base>::value);
 	};
 
 	//////////////////////////
@@ -213,7 +229,7 @@ namespace tc {
 		struct is_safely_convertible_to_arithmetic_value<TSource, TTarget, std::enable_if_t<std::is_class<std::remove_reference_t<TSource>>::value>>
 			: std::true_type
 		{
-			static_assert(std::is_arithmetic<TTarget>::value, "");
+			static_assert(std::is_arithmetic<TTarget>::value);
 		};
 
 #pragma warning(push)
@@ -240,7 +256,7 @@ namespace tc {
 					)
 			>
 		{
-			static_assert(std::is_convertible<TSource, TTarget>::value, "");
+			static_assert(std::is_convertible<TSource, TTarget>::value);
 		};
 
 #pragma warning(pop)
@@ -249,7 +265,7 @@ namespace tc {
 		struct is_safely_convertible_to_arithmetic_value<TSource, TTarget, std::enable_if_t<std::is_arithmetic<std::remove_reference_t<TSource>>::value>>
 			: is_safely_convertible_between_arithmetic_values<std::remove_reference_t<TSource>, TTarget>
 		{
-			static_assert(std::is_arithmetic<TTarget>::value, "");
+			static_assert(std::is_arithmetic<TTarget>::value);
 		};
 	
 		// dispatch requried because logical operators are not lazy during template instantiation
@@ -265,7 +281,7 @@ namespace tc {
 				std::is_same<std::remove_cv_t<TTarget>, tc::remove_cvref_t<TSource>>::value || !tc::is_base_of<TTarget, std::remove_reference_t<TSource>>::value
 			>
 		{
-			static_assert(!std::is_reference<TTarget>::value, "");
+			static_assert(!std::is_reference<TTarget>::value);
 		};
 
 
@@ -277,7 +293,7 @@ namespace tc {
 				is_safely_convertible_to_arithmetic_value<TSource, TTarget>::value
 			>
 		{
-			static_assert(!std::is_reference<TTarget>::value, "");
+			static_assert(!std::is_reference<TTarget>::value);
 		};
 
 
@@ -286,7 +302,7 @@ namespace tc {
 			// std::is_convertible does the right thing for enums
 			: std::true_type
 		{
-			static_assert(!std::is_reference<TTarget>::value, "");
+			static_assert(!std::is_reference<TTarget>::value);
 		};
 	}
 
@@ -326,7 +342,7 @@ namespace tc {
 				std::is_same<std::remove_cv_t<TTarget>, tc::remove_cvref_t<TSource>>::value || !tc::is_base_of<TTarget, std::remove_reference_t<TSource>>::value
 			>
 		{
-			static_assert(!std::is_reference<TTarget>::value, "");
+			static_assert(!std::is_reference<TTarget>::value);
 		};
 
 
@@ -341,7 +357,7 @@ namespace tc {
 				|| tc::is_actual_arithmetic<std::remove_reference_t<TSource>>::value && tc::is_actual_arithmetic<TTarget>::value
 			>
 		{
-			static_assert(!std::is_reference<TTarget>::value, "");
+			static_assert(!std::is_reference<TTarget>::value);
 		};
 
 
@@ -350,14 +366,29 @@ namespace tc {
 			// std::is_constructible does the right thing for enums
 			: std::true_type
 		{
-			static_assert(!std::is_reference<TTarget>::value, "");
+			static_assert(!std::is_reference<TTarget>::value);
 		};
 	}
 
-	template<typename TTarget, typename TSource>
-	struct is_safely_constructible : 
+	template<typename TTarget, typename ...Args>
+	struct is_safely_constructible :
 		std::integral_constant<
-			bool,	
+			bool,
+			// Require std::is_class<TTarget>:
+			// - class types and const references to class types are std::is_constructible from two or more aguments. Initializing
+			//	 a const reference using uniform initialization with multiple arguments would bind the reference to a temporary,
+			//   which we do not allow,
+			// - non-reference types may be std::is_constructible from zero arguments. We do not want this for native types like int.
+			std::is_class<TTarget>::value && std::is_constructible<TTarget, Args...>::value
+		>
+	{
+		static_assert(1 != sizeof...(Args));
+	};
+
+	template<typename TTarget, typename TSource>
+	struct is_safely_constructible<TTarget, TSource> :
+		std::integral_constant<
+			bool,
 			std::is_constructible<TTarget, TSource>::value
 			&& (
 				std::is_reference<TTarget>::value
@@ -412,7 +443,7 @@ struct construction_restrictiveness : std::integral_constant<
 	)
 	: forbidden_construction
 > {
-	static_assert(1!=sizeof...(Args), "");
+	static_assert(1!=sizeof...(Args));
 };
 
 // Similar to http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2015/n4387.html :
@@ -431,7 +462,7 @@ struct construction_restrictiveness<TTarget, TSource> : std::integral_constant<
 		)
 		: forbidden_construction
 > {
-	static_assert(!std::is_rvalue_reference<TTarget>::value, "");
+	static_assert(!std::is_rvalue_reference<TTarget>::value);
 };
 
 // WORKAROUND until compiler supports C++17 fold expressions
@@ -460,6 +491,23 @@ struct elementwise_construction_restrictiveness final
 FOLD_EXPRESSION(|, int, 0, bitwise_or);
 
 namespace tc {
+	namespace template_apply_identity_impl {
+		template< typename... Args >
+		struct dummy_tuple{ };
+
+		template< template<typename...> class T, typename ArgTuple, typename=void >
+		struct apply_args { };
+
+		template< template<typename...> class T, typename... Args >
+		struct apply_args<T, dummy_tuple<Args...>, tc::void_t<typename Args::type...>> {
+			using type = T<typename Args::type...>;
+		};
+
+		template< template<typename...> class T, typename... Args >
+		using template_apply_identity = apply_args<T, dummy_tuple<Args...>>;
+	}
+	using template_apply_identity_impl::template_apply_identity;
+
 	template<typename... Args>
 	struct common_type_decayed;
 
@@ -467,16 +515,20 @@ namespace tc {
 	using common_type_decayed_t = typename common_type_decayed<Args...>::type;
 
 	template<typename... Args>
-	using common_type_t = typename common_type_decayed<typename tc::decay<Args>::type...>::type; // decay_t triggers a compiler bug https://connect.microsoft.com/VisualStudio/Feedback/Details/2173269 when used from tc::make_array (passing parameter pack from template alias to template alias)
+	using common_type_t = typename common_type_decayed<tc::decay_t<Args>...>::type;
 
 	template<typename T>
 	struct common_type_decayed<T> {
 		using type=T;
 	};
 
+	template<typename T0, typename T1, typename=void>
+	struct common_type_decayed_base { };
+
+	// common_type is not sfinae-friendly
 	template<typename T0, typename T1>
-	struct common_type_decayed<T0, T1> {
-		using type=std::common_type_t<T0,T1>;
+	struct common_type_decayed_base<T0, T1, tc::void_t<decltype(std::declval<bool>() ? std::declval<T0>() : std::declval<T1>())>> {
+		using type = std::common_type_t<T0, T1>;
 
 		template< template<typename> class Condition>
 		struct same_category : std::integral_constant<bool, !(Condition<T0>::value || Condition<T1>::value) || Condition<type>::value > {
@@ -517,6 +569,28 @@ namespace tc {
 		);
 	};
 
+	template<typename T0, typename T1>
+	struct common_type_decayed<T0, T1> : common_type_decayed_base<T0, T1> {};
+
+	template<typename T, T t>
+	struct common_type_decayed<T, std::integral_constant<T, t>> {
+		using type = std::common_type_t<T, std::integral_constant<T, t>>;
+	};
+
+	template<typename T, T t>
+	struct common_type_decayed<std::integral_constant<T, t>, T> {
+		using type = std::common_type_t<std::integral_constant<T, t>, T>;
+	};
+
+	template<typename T, T t1, T t2>
+	struct common_type_decayed<std::integral_constant<T, t1>, std::integral_constant<T, t2>> {
+#ifdef __clang__
+		using type = std::common_type_t<std::integral_constant<T, t1>, std::integral_constant<T, t2>>;
+#else
+		using type = std::conditional_t<t1 == t2, std::integral_constant<T, t1>, T>;
+#endif
+	};
+
 	// Patch for XCode 8 - std::common_type<void, void> should be void, but fails to compile
 	template<>
 	struct common_type_decayed<void, void> {
@@ -524,9 +598,8 @@ namespace tc {
 	}; 
 
 	template<typename T0, typename T1, typename... Args>
-	struct common_type_decayed<T0, T1, Args...> {
-		using type=common_type_decayed_t<T0, common_type_decayed_t<T1, Args...>>;
-	};
+	struct common_type_decayed<T0, T1, Args...>
+		: template_apply_identity<tc::common_type_t, boost::mpl::identity<T0>, common_type_decayed<T1, Args...>> { };
 
 	template<typename... types>
 	struct common_reference;
@@ -540,6 +613,13 @@ namespace tc {
 	using common_reference_t =
 		typename common_reference<Args...>::type
 	;
+
+	template<bool bCondition, template<typename> class template_, typename T>
+	using apply_if_t = std::conditional_t<
+		bCondition,
+		typename template_<T>::type,
+		T
+	>;
 
 	template<
 		typename T0,
@@ -557,18 +637,18 @@ namespace tc {
 		>;
 
 		template<typename ValueType>
-		using constness = std::conditional_t<
+		using constness = apply_if_t<
 			std::is_const<T0Value>::value || std::is_const<T1Value>::value
 				|| std::is_rvalue_reference<T0>::value != std::is_rvalue_reference<T1>::value,
-			std::add_const_t<ValueType>,
+			std::add_const,
 			ValueType
 		>;
 
 		template<typename ValueType>
-		using volatileness = std::conditional_t<
+		using volatileness = apply_if_t<
 			std::is_volatile<T0Value>::value ||
 			std::is_volatile<T1Value>::value,
-			std::add_volatile_t<ValueType>,
+			std::add_volatile,
 			ValueType
 		>;
 
@@ -611,28 +691,6 @@ namespace tc {
 	template<typename head, typename... tail>
 	struct common_reference<head,tail...> : common_reference<head, common_reference_t<tail...>> {};
 
-	namespace other_trait_operations_adl_barrier {
-		// c++17 std::conjunction
-		template<typename...>
-		struct conjunction : std::true_type { };
-
-		template<typename B1> struct conjunction<B1> : B1 { };
-
-		template<typename B1, typename... Bn>
-		struct conjunction<B1, Bn...> : std::conditional_t<B1::value != false, conjunction<Bn...>, B1>  {};
-
-		// c++17 std::disjunction
-		template<typename...>
-		struct disjunction : std::false_type { };
-
-		template<typename B1> struct disjunction<B1> : B1 { };
-
-		template<typename B1, typename... Bn>
-		struct disjunction<B1, Bn...> : std::conditional_t<B1::value != false, B1, disjunction<Bn...>>  {};
-	}
-	using other_trait_operations_adl_barrier::conjunction;
-	using other_trait_operations_adl_barrier::disjunction;
-
 	template< typename Func >
 	struct delayed_returns_reference_to_argument {
 		using type=decltype(returns_reference_to_argument(std::declval<Func>())); // invoke ADL
@@ -642,7 +700,7 @@ namespace tc {
 		template<typename Func, typename TargetExpr, typename... SourceExpr>
 		struct transform_return final {
 			static constexpr bool bDecay=std::conditional_t<
-				!tc::conjunction<std::is_reference<SourceExpr>...>::value && std::is_rvalue_reference<TargetExpr>::value
+				!std::conjunction<std::is_reference<SourceExpr>...>::value && std::is_rvalue_reference<TargetExpr>::value
 				, delayed_returns_reference_to_argument<Func>
 				, std::false_type
 			>::type::value;
@@ -656,4 +714,16 @@ namespace tc {
 
 	template<typename... Args>
 	using transform_return_t = typename transform_return_adl_barrier::transform_return<Args...>::type;
+
+	template <typename...>
+	struct dependent_false : std::false_type {};
+
+	/////////////////////////////////////////////
+	// is_instance
+
+	template<template<typename...> class X, typename T> struct is_instance : public std::false_type {};
+	template<template<typename...> class X, typename T> struct is_instance<X, T const> : public is_instance<X, T> {};
+	template<template<typename...> class X, typename T> struct is_instance<X, T volatile> : public is_instance<X, T> {};
+	template<template<typename...> class X, typename T> struct is_instance<X, T const volatile> : public is_instance<X, T> {};
+	template<template<typename...> class X, typename... Y> struct is_instance<X, X<Y...>> : public std::true_type {};
 }

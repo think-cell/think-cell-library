@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -43,22 +43,22 @@ namespace tc {
 			explicit operator T const&() /* no & */ noexcept;
 		};
 
-		static_assert(is_static_castable<S*, T*>::value, "");
-		static_assert(is_static_castable<T*, S*>::value, "");
-		static_assert(is_static_castable<T, S>::value, "");
+		static_assert(is_static_castable<S*, T*>::value);
+		static_assert(is_static_castable<T*, S*>::value);
+		static_assert(is_static_castable<T, S>::value);
 
-		static_assert(!is_static_castable<T const*, S*>::value, "");
-		static_assert(is_static_castable<S*, T const*>::value, "");
+		static_assert(!is_static_castable<T const*, S*>::value);
+		static_assert(is_static_castable<S*, T const*>::value);
 
-		static_assert(!is_static_castable<T, U>::value, "");
-		static_assert(!is_static_castable<U, T>::value, "");
+		static_assert(!is_static_castable<T, U>::value);
+		static_assert(!is_static_castable<U, T>::value);
 
-		static_assert(is_static_castable<T, X>::value, "");
-		static_assert(is_static_castable<T const&, X>::value, "");
-		static_assert(!is_static_castable<X, T>::value, "");
+		static_assert(is_static_castable<T, X>::value);
+		static_assert(is_static_castable<T const&, X>::value);
+		static_assert(!is_static_castable<X, T>::value);
 
-		static_assert(!is_static_castable<Y const, T const&>::value, "");
-		static_assert(is_static_castable<Y, T const&>::value, "");
+		static_assert(!is_static_castable<Y const, T const&>::value);
+		static_assert(is_static_castable<Y, T const&>::value);
 	}
 #pragma warning (pop)
 }

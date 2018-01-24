@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -34,7 +34,7 @@ namespace tc {
 		struct concat_adaptor_impl;
 
 		template<typename... Rng>
-		using concat_adaptor = concat_adaptor_impl< tc::conjunction<tc::is_range_with_iterators<Rng>...>::value, Rng... >;
+		using concat_adaptor = concat_adaptor_impl< std::conjunction<tc::is_range_with_iterators<Rng>...>::value, Rng... >;
 
 		template<
 			typename... Rng
@@ -238,21 +238,27 @@ namespace tc {
 						} else {
 							tc::for_each(
 								tc::make_integer_sequence<std::size_t, nconstIndexStart(), sizeof...(Rng)>(),
-								[&](auto nconstIndex) noexcept {
-									auto dToEnd = std::get<nconstIndex()>(m_baserng)->distance_to_index(
-										tc::get<nconstIndex()>(idx),
-										std::get<nconstIndex()>(m_baserng)->end_index()
-									);
-
-									if (d < dToEnd) {
-										std::get<nconstIndex()>(m_baserng)->advance_index(tc::get<nconstIndex()>(idx), d);
+								tc::make_overload<tc::break_or_continue>(
+									[&](std::integral_constant<std::size_t, sizeof...(Rng)-1>) noexcept {
+										std::get<sizeof...(Rng)-1>(m_baserng)->advance_index(tc::get<sizeof...(Rng)-1>(idx), d);
 										return tc::break_;
-									} else {
-										d -= dToEnd;
-										idx = create_begin_index(std::integral_constant<std::size_t, nconstIndex() + 1>());
-										return tc::continue_;
+									},
+									[&](auto nconstIndex) noexcept {
+										auto dToEnd = std::get<nconstIndex()>(m_baserng)->distance_to_index(
+											tc::get<nconstIndex()>(idx),
+											std::get<nconstIndex()>(m_baserng)->end_index()
+										);
+
+										if (d < dToEnd) {
+											std::get<nconstIndex()>(m_baserng)->advance_index(tc::get<nconstIndex()>(idx), d);
+											return tc::break_;
+										} else {
+											d -= dToEnd;
+											idx = create_begin_index(std::integral_constant<std::size_t, nconstIndex() + 1>());
+											return tc::continue_;
+										}
 									}
-								}
+								)
 							);
 						}
 					},
@@ -275,7 +281,7 @@ namespace tc {
 								tc::make_counting_range(lhs.index() + 1, rhs.index()),
 								[&](auto nIndex) noexcept {
 									return tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
-										[&](auto nconstIndex) noexcept { return tc::numeric_cast<difference_type>(BaseRangeSize(nconstIndex)); },
+										[&](auto nconstIndex) noexcept { return tc::explicit_cast<difference_type>(BaseRangeSize(nconstIndex)); },
 										nIndex
 									);
 								}
@@ -310,7 +316,7 @@ namespace tc {
 			}
 
 			template<typename... Rng>
-			constexpr static tc::conjunction<tc::size_impl::has_size<Rng>...> all_ranges_have_size(tc::type_list<Rng...>);
+			constexpr static std::conjunction<tc::size_impl::has_size<Rng>...> all_ranges_have_size(tc::type_list<Rng...>);
 
 			template<typename TypeListRng>
 			using all_ranges_have_size_t = decltype(all_ranges_have_size(TypeListRng())); // Cannot inline due to MSVC failing to compile "decltype(...)::value" (10/02/2017)
@@ -331,6 +337,21 @@ namespace tc {
 	}
 
 	using concat_adaptor_impl::concat_adaptor;
+
+	namespace range_reference_adl_barrier {
+		template<bool bConst, typename... Rng>
+		struct range_reference_concat_adaptor {
+			using type = tc::common_reference_t<
+				reference_for_value_or_reference_with_index_range_t<Rng, bConst>...
+			>;
+		};
+
+		template<typename... Rng>
+		struct range_reference<concat_adaptor_impl::concat_adaptor_impl<false, Rng...>> : range_reference_concat_adaptor<false, Rng...> {};
+
+		template<typename... Rng>
+		struct range_reference<concat_adaptor_impl::concat_adaptor_impl<false, Rng...> const> : range_reference_concat_adaptor<true, Rng...> {};
+	}
 
 	template<typename... Rng>
 	auto concat(Rng&&... rng) noexcept {

@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -15,6 +15,8 @@
 #include "range.h"
 #include "container.h" // tc::vector
 #include "range.t.h"
+#include "flatten_adaptor.h"
+#include "join_adaptor.h"
 
 #include "sparse_adaptor.h"
 
@@ -41,31 +43,14 @@ UNITTESTDEF( basic ) {
 			m_func(std::move(func)), m_breakorcontinue(breakorcontinue)
 		{}
 
-		// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 		template<typename Arg>
-		std::enable_if_t<
-			std::is_same<
-				decltype(std::declval<std::remove_reference_t<Func> >()(std::declval<Arg>())),
-				tc::break_or_continue
-			>::value
-		>
-		operator()(Arg&& arg) & noexcept {
+		void operator()(Arg&& arg) & noexcept {
 			if (tc::continue_ == m_breakorcontinue) {
-				m_breakorcontinue = m_func(std::forward<Arg>(arg));
-			}
-		}
-
-		// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
-		template<typename Arg>
-		std::enable_if_t<
-			!std::is_same<
-				decltype(std::declval<std::remove_reference_t<Func> >()(std::declval<Arg>())),
-				tc::break_or_continue
-			>::value
-		>
-		operator()(Arg&& arg) & noexcept {
-			if (tc::continue_ == m_breakorcontinue) {
-				m_func(std::forward<Arg>(arg));
+				if constexpr( std::is_same<decltype(std::declval<std::remove_reference_t<Func> >()(std::declval<Arg>())), tc::break_or_continue>::value ) {
+					m_breakorcontinue = m_func(std::forward<Arg>(arg));
+				} else {
+					m_func(std::forward<Arg>(arg));
+				}
 			}
 		}
 
@@ -75,64 +60,30 @@ UNITTESTDEF( basic ) {
 	};
 
 	template<typename Rng>
-	struct void_range_struct final : public std::remove_reference<Rng>::type {
+	struct void_range_struct final : std::remove_reference_t<Rng> {
 
 		using base_ = std::remove_reference_t<Rng>;
 
-		// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
-		template< typename Func >
-		std::enable_if_t<
-			!std::is_same<
-				decltype(std::declval<base_>()(std::declval<Func>())),
-				tc::break_or_continue
-			>::value,
-			tc::break_or_continue
-		>
-		operator()(Func&& func) & noexcept {
-			tc::break_or_continue breakorcontinue = tc::continue_;
-			base_::operator()(WrapVoidFunc<Func&&>(std::forward<Func>(func), breakorcontinue));
-			return breakorcontinue;
+		template< typename Func>
+		tc::break_or_continue operator()(Func&& func) & noexcept {
+			if constexpr( std::is_same<decltype(std::declval<base_>()(std::declval<Func>())), tc::break_or_continue>::value ) {
+				return base_::operator()(std::forward<Func>(func));
+			} else {
+				tc::break_or_continue breakorcontinue = tc::continue_;
+				base_::operator()(WrapVoidFunc<Func&&>(std::forward<Func>(func), breakorcontinue));
+				return breakorcontinue;
+			}
 		}
 
-		// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
-		template< typename Func >
-		std::enable_if_t<
-			!std::is_same<
-				decltype(std::declval<base_>()(std::declval<Func>())),
-				tc::break_or_continue
-			>::value,
-			tc::break_or_continue
-		>
-		operator()(Func&& func) const& noexcept {
-			tc::break_or_continue breakorcontinue = tc::continue_;
-			base_::operator()(WrapVoidFunc<Func&&>(std::forward<Func>(func), breakorcontinue));
-			return breakorcontinue;
-		}
-
-		// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
-		template< typename Func >
-		std::enable_if_t<
-			std::is_same<
-				decltype(std::declval<base_>()(std::declval<Func>())),
-				tc::break_or_continue
-			>::value,
-			tc::break_or_continue
-		>
-		operator()(Func&& func) & noexcept {
-			return base_::operator()(std::forward<Func>(func));
-		}
-
-		// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
-		template< typename Func >
-		std::enable_if_t<
-			std::is_same<
-				decltype(std::declval<base_>()(std::declval<Func>())),
-				tc::break_or_continue
-			>::value,
-			tc::break_or_continue
-		>
-		operator()(Func&& func) const& noexcept {
-			return base_::operator()(std::forward<Func>(func));
+		template< typename Func>
+		tc::break_or_continue operator()(Func&& func) const& noexcept {
+			if constexpr( std::is_same<decltype(std::declval<base_>()(std::declval<Func>())), tc::break_or_continue>::value ) {
+				return base_::operator()(std::forward<Func>(func));
+			} else {
+				tc::break_or_continue breakorcontinue = tc::continue_;
+				base_::operator()(WrapVoidFunc<Func&&>(std::forward<Func>(func), breakorcontinue));
+				return breakorcontinue;
+			}
 		}
 	};
 
@@ -218,10 +169,10 @@ UNITTESTDEF( zero_termination ) {
 }
 
 UNITTESTDEF( ensure_index_range_on_chars ) {
-	static_assert( tc::is_range_with_iterators<char*>::value, "" );
-	static_assert( tc::is_range_with_iterators<char const*>::value, "" );
-	static_assert( tc::is_range_with_iterators<char* &>::value, "" );
-	static_assert( tc::is_range_with_iterators<char* const&>::value, "" );
+	static_assert( tc::is_range_with_iterators<char*>::value );
+	static_assert( tc::is_range_with_iterators<char const*>::value );
+	static_assert( tc::is_range_with_iterators<char* &>::value );
+	static_assert( tc::is_range_with_iterators<char* const&>::value );
 
 	struct check_5_chars final {
 		void operator()( char ) {
@@ -303,6 +254,296 @@ UNITTESTDEF( construct_array_from_range ) {
 		_ASSERTEQUAL(tc::size(avecnRef[n]), 0);
 		_ASSERTEQUAL(tc::size(avecnMoved[n]), n);
 	});
+}
+
+struct GeneratorInt {
+	using reference = int;
+	using const_reference = int;
+	template<typename Func>
+	tc::break_or_continue operator()(Func func) const& {
+		RETURN_IF_BREAK( tc::continue_if_not_break(func, 1));
+		RETURN_IF_BREAK( tc::continue_if_not_break(func, 6));
+		RETURN_IF_BREAK( tc::continue_if_not_break(func, 3));
+		RETURN_IF_BREAK( tc::continue_if_not_break(func, 4));
+		return tc::continue_;
+	}
+};
+
+struct GeneratorLong {
+	using reference = long;
+	template<typename Func>
+	tc::break_or_continue operator()(Func func) const& {
+		RETURN_IF_BREAK( tc::continue_if_not_break(func, 1l));
+		RETURN_IF_BREAK( tc::continue_if_not_break(func, 6l));
+		RETURN_IF_BREAK( tc::continue_if_not_break(func, 3l));
+		RETURN_IF_BREAK( tc::continue_if_not_break(func, 4l));
+		return tc::continue_;
+	}
+
+};
+
+struct GeneratorGeneratorInt {
+	using reference = GeneratorInt;
+	template<typename Func>
+	tc::break_or_continue operator()(Func func) const& {
+		RETURN_IF_BREAK( tc::continue_if_not_break(func, GeneratorInt()) );
+		RETURN_IF_BREAK( tc::continue_if_not_break(func, GeneratorInt()) );
+		return tc::continue_;
+	}
+};
+
+struct GeneratorMutableInt {
+	int m_an[3] = {1,2,3};
+
+	using reference=int&;
+	using const_reference=int const&;
+
+	template<typename Func>
+	tc::break_or_continue operator()(Func func) & {
+		RETURN_IF_BREAK( tc::continue_if_not_break(func, m_an[0]) );
+		RETURN_IF_BREAK( tc::continue_if_not_break(func, m_an[1]) );
+		RETURN_IF_BREAK( tc::continue_if_not_break(func, m_an[2]) );
+		return tc::continue_;
+	}
+};
+
+} // end anonymous namespace
+
+namespace {
+
+static_assert(
+	std::is_same<
+		tc::range_reference_t<GeneratorMutableInt>,
+		int&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::range_reference_t<GeneratorMutableInt const>,
+		int const&
+	>::value
+);
+
+struct dummy_pred {
+	template<typename T>
+	bool operator()(T const&) noexcept;
+};
+
+static_assert(
+	std::is_same<
+		tc::range_reference_t<decltype(
+			tc::filter(
+				std::declval<GeneratorMutableInt>(),
+				dummy_pred()
+			)
+		)>,
+		int&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::range_reference_t<std::add_const_t<decltype(
+			tc::filter(
+				std::declval<GeneratorMutableInt>(),
+				dummy_pred()
+			)
+		)>>,
+		int const&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::range_reference_t<
+			decltype(
+				tc::filter(
+					std::declval<GeneratorMutableInt&>(),
+					dummy_pred()
+				)
+			)
+		>,
+		int&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::range_reference_t<
+			std::add_const_t<decltype(
+				tc::filter(
+					std::declval<GeneratorMutableInt&>(),
+					dummy_pred()
+				)
+			)>
+		>,
+		int&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::range_reference_t<
+			decltype(
+				tc::filter(
+					std::declval<GeneratorMutableInt const&>(),
+					dummy_pred()
+				)
+			)
+		>,
+		int const&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::range_reference_t<
+			std::add_const_t<decltype(
+				tc::filter(
+					std::declval<GeneratorMutableInt const&>(),
+					dummy_pred()
+				)
+			)>
+		>,
+		int const&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::range_reference_t<
+			std::add_const_t<decltype(
+				tc::concat(
+					std::declval<GeneratorMutableInt&>(),
+					std::declval<GeneratorMutableInt&>()
+				)
+			)>
+		>,
+		int&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::range_reference_t<
+			decltype(
+				tc::concat(
+					std::declval<GeneratorInt&>(),
+					std::declval<GeneratorMutableInt&>()
+				)
+			)
+		>,
+		int
+	>::value
+);
+
+UNITTESTDEF(filter_with_generator_range) {
+	_ASSERTEQUAL(
+		6,
+		tc::max_element<tc::return_value>(
+			GeneratorInt()
+		)
+	);
+	
+	_ASSERTEQUAL(
+		3,
+		tc::max_element<tc::return_value>(
+			tc::filter(
+				GeneratorInt(),
+				[](int n) noexcept {return 1==n%2;}
+			)
+		)
+	);
+
+	tc::for_each(
+		GeneratorInt(),
+		[](int&& n) noexcept {
+			n += 1;
+		}
+	);
+
+	_ASSERTEQUAL(
+		-1,
+		tc::max_element<tc::return_value>(
+			tc::transform(
+				GeneratorInt(),
+				[](int n) noexcept {return -n;}
+			)
+		)
+	);
+
+	auto const tr1 = tc::transform(
+		GeneratorInt(),
+		[](int n) noexcept {return -n;}
+	);
+
+	static_assert(
+		std::is_same<
+			tc::range_reference_t<decltype(tr1)>,
+			int
+		>::value
+	);
+
+	auto const filtered = tc::filter(
+		GeneratorInt(),
+		[](int n) noexcept {return n>0;}
+	);
+	static_assert(
+		std::is_same<
+			tc::range_reference_t<decltype(filtered)>,
+			int
+		>::value
+	);
+
+
+	auto vecn = tc::make_vector(GeneratorInt());
+
+	{
+		auto vecn2 = tc::make_vector(tc::flatten(GeneratorGeneratorInt()));
+		_ASSERTEQUAL(
+			8,
+			tc::size(vecn2)
+		);
+	}
+
+	auto vecgenint = tc::make_vector(GeneratorGeneratorInt());
+	{
+		auto vecn2 = tc::make_vector(tc::flatten(vecgenint));
+		_ASSERTEQUAL(
+			8,
+			tc::size(vecn2)
+		);
+	}
+
+	static_assert(
+		std::is_same<
+			tc::range_reference_t<
+				decltype(tc::flatten(vecgenint))
+			>,
+			int
+		>::value
+	);
+	auto vecnx = tc::make_vector(tc::concat(GeneratorInt(), GeneratorInt()));
+	_ASSERTEQUAL(8, tc::size(vecnx));
+
+	static_assert(
+		std::is_same<
+			tc::range_reference_t<
+				decltype(tc::concat(GeneratorInt(), GeneratorLong()))
+			>,
+			long
+		>::value
+	);
+
+	static_assert(
+		std::is_same<
+			tc::range_reference_t<
+				decltype(tc::concat(GeneratorLong(), GeneratorLong()))
+			>,
+			long
+		>::value
+	);
 }
 
 }

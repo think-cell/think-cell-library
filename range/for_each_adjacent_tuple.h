@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -45,10 +45,10 @@ namespace tc {
 	using iterator_cache_adl_barrier::iterator_cache;
 
 	template< typename Rng, typename Func, int... i >
-	tc::break_or_continue for_each_adjacent_tuple_impl(Rng&& rng, Func func, std::integer_sequence<int, i...>) MAYTHROW {
+	auto for_each_adjacent_tuple_impl(Rng&& rng, Func func, std::integer_sequence<int, i...>) MAYTHROW -> tc::common_type_t<INTEGRAL_CONSTANT(tc::continue_), decltype(tc::continue_if_not_break(func, *boost::begin(rng), (i, *boost::begin(rng))...))> {
 		constexpr int N= sizeof...(i)+1;
 		if (tc::size_bounded(rng, N)<N) {
-			return continue_;
+			return INTEGRAL_CONSTANT(tc::continue_)();
 		} else {
 			auto const itEnd = boost::end(rng);
 			auto it = boost::begin(rng);
@@ -82,7 +82,7 @@ namespace tc {
 	}
 
 	template< int N, typename Rng, typename Func, std::enable_if_t< is_range_with_iterators<Rng>::value >* =nullptr >
-	tc::break_or_continue for_each_adjacent_tuple(Rng&& rng, Func func) MAYTHROW {
+	auto for_each_adjacent_tuple(Rng&& rng, Func func) MAYTHROW {
 		return for_each_adjacent_tuple_impl(std::forward<Rng>(rng), std::forward<Func>(func), std::make_integer_sequence<int,N-1>());
 	}
 }

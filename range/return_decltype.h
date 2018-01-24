@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -92,18 +92,18 @@ namespace decltype_return_test {
 	struct A{
 		int a;
 		void access_a() & noexcept {
-			static_assert( std::is_same<decltype(a),int>::value, "");
-			static_assert( std::is_same<decltype((a)),int&>::value, "");
+			static_assert( std::is_same<decltype(a),int>::value );
+			static_assert( std::is_same<decltype((a)),int&>::value );
 		}
 		int& b;
 		void access_b() & noexcept {
-			static_assert( std::is_same<decltype(b),int&>::value, "");
-			static_assert( std::is_same<decltype((b)),int&>::value, "");
+			static_assert( std::is_same<decltype(b),int&>::value );
+			static_assert( std::is_same<decltype((b)),int&>::value );
 		}
 		int&& c;
 		void access_c() & noexcept {
-			static_assert( std::is_same<decltype(c),int&&>::value, "");
-			static_assert( std::is_same<decltype((b)),int&>::value, "");
+			static_assert( std::is_same<decltype(c),int&&>::value );
+			static_assert( std::is_same<decltype((b)),int&>::value );
 		}
 	};
 }

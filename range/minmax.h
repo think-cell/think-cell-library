@@ -3,26 +3,10 @@
 #include "range_fwd.h"
 #include "assign.h"
 #include "size.h"
+#include "conditional.h"
 
 namespace tc {
-	template<typename Lhs, typename Rhs>
-	auto conditional(tc::bool_context b, Lhs&& lhs, Rhs&& rhs) noexcept->tc::common_reference_t<Lhs&&, Rhs&&> {
-		using result_type = tc::common_reference_t<Lhs&&, Rhs&&>;
-		if (b) {
-			return static_cast<result_type>(std::forward<Lhs>(lhs)); // static_cast needed for conversion from const& to const&&
-		} else {
-			return static_cast<result_type>(std::forward<Rhs>(rhs)); // static_cast needed for conversion from const& to const&&
-		}
-	}
-
-	namespace best_adl_barrier {
-		template<typename T, std::enable_if_t<tc::is_instance<tc::size_proxy,T>::value && std::is_signed<T>::value>* =nullptr>
-		void AssertSizeProxy(T const& t) {
-			_ASSERT(-1!=t);
-		}
-		template<typename T, std::enable_if_t<!(tc::is_instance<tc::size_proxy,T>::value && std::is_signed<T>::value)>* =nullptr>
-		void AssertSizeProxy(T const& t) {}
-		
+	namespace best_adl_barrier {	
 		template<typename Better>
 		struct best_impl final {
 
@@ -31,95 +15,24 @@ namespace tc {
 			{}
 
 		private:
-			static_assert( tc::is_decayed<Better>::value, "" );
+			static_assert( tc::is_decayed<Better>::value );
 			Better m_better;
 
 		public:
-			template<typename T0, typename T1>
-			struct common_min_type_decayed final : std::conditional<
-				std::is_signed<T0>::value == std::is_signed<T1>::value
-				? std::is_same<std::common_type_t<T0, T1>, T0>::value == std::is_signed<T0>::value
-				: std::is_signed<T0>::value,
-				T0,
-				T1
-			> {
-				static_assert(tc::is_actual_integer<T0>::value, "");
-				static_assert(tc::is_actual_integer<T1>::value, "");
-			};
-
-			template<typename T0, typename T1>
-			using common_min_type_t = typename common_min_type_decayed<tc::decay_t<T0>,tc::decay_t<T1>>::type;
-
-			template<typename T0, typename T1>
-			struct common_min_type_decayed<tc::size_proxy<T0>, tc::size_proxy<T1>> final {
-				using type = tc::size_proxy<common_min_type_t<std::make_unsigned_t<T0>, std::make_unsigned_t<T1>>>;
-			};
-
-			template<typename T0, typename T1>
-			struct common_min_type_decayed<tc::size_proxy<T0>, T1> {
-				using type = common_min_type_t<std::make_unsigned_t<T0>, T1>;
-			};
-
-			template<typename T0, typename T1>
-			struct common_min_type_decayed<T0, tc::size_proxy<T1>> final : common_min_type_decayed<tc::size_proxy<T1>, T0> {
-			};
-
-			template<typename T>
-			struct is_actual_integer_or_size_proxy final
-			:	std::integral_constant<bool, tc::is_actual_integer<T>::value || tc::is_instance<tc::size_proxy,T>::value > {
-			};
-
 			template<typename T>
 			constexpr auto operator()(T&& t) const& noexcept -> T&& {
 				return std::forward<T>(t);
 			}
 			
-			template<
-				typename T0,
-				typename T1,
-				std::enable_if_t<
-					std::is_same<Better, tc::fn_less>::value &&
-					is_actual_integer_or_size_proxy<
-						tc::common_reference_t<T0&&, T1&&>
-					>::value
-				>* = nullptr
-			>
-			auto operator()(T0&& t0, T1&& t1) const& noexcept
-				-> common_min_type_t<T0, T1>
-			{
-				using result_type = common_min_type_t<T0,T1>;
-				AssertSizeProxy(t0);
-				AssertSizeProxy(t1);
-				if( m_better(t1,t0) ) {
-					return static_cast<result_type>(t1);
-				} else {
-					return static_cast<result_type>(t0);
-				}
+			template<typename T0, typename T1, typename... Args>
+			constexpr auto operator()(T0&& t0, T1&& t1, Args&&... args) const& noexcept -> decltype(auto) {
+				return CONDITIONAL(
+					m_better(t0, t1),
+					operator()(std::forward<T0>(t0), std::forward<Args>(args)...),
+					operator()(std::forward<T1>(t1), std::forward<Args>(args)...)
+				);
 			}
 
-			template<
-				typename T0,
-				typename T1,
-				std::enable_if_t<!(
-					std::is_same<Better, tc::fn_less>::value &&
-					is_actual_integer_or_size_proxy<
-						tc::common_reference_t<T0&&, T1&&>
-					>::value)
-				>* = nullptr
-			>
-			auto operator()(T0&& t0, T1&& t1) const& noexcept ->decltype(auto) {
-				return tc::conditional(m_better(t1,t0), std::forward<T1>(t1), std::forward<T0>(t0) );
-			}
-
-			template<
-				typename First,
-				typename Second,
-				typename Third,
-				typename... Args
-			>
-			constexpr auto operator()(First&& first, Second&& second, Third&& third, Args&&... args) const& noexcept return_decltype_rvalue_by_ref(
-				operator()(operator()(std::forward<First>(first), std::forward<Second>(second)), std::forward<Third>(third), std::forward<Args>(args)...)
-			)
 		};
 	}
 

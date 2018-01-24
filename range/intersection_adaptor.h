@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -17,6 +17,7 @@
 #include "range_defines.h"
 #include "range_fwd.h"
 #include "compare.h"
+#include "algorithm.h"
 
 namespace tc {
 
@@ -56,7 +57,7 @@ namespace tc {
 				{}
 
 				template<typename T0, typename T1>
-				tc::break_or_continue operator()(T0&& arg0, T1&&) const& MAYTHROW {
+				auto operator()(T0&& arg0, T1&&) const& MAYTHROW {
 					return tc::continue_if_not_break(m_func, std::forward<T0>(arg0));
 				}
 
@@ -64,30 +65,27 @@ namespace tc {
 
 		public:
 			template< typename Func >
-			auto operator()(Func func) const& MAYTHROW -> break_or_continue
+			auto operator()(Func func) const& MAYTHROW
 			{
-#pragma warning ( push )
-#pragma warning( disable: 4127 ) // conditional expression is constant
-				if (bIntersection) {
-					return tc::interleave(
+				if constexpr (bIntersection) {
+					return tc::interleave_2(
 						*std::get<0>(m_baserng),
 						*std::get<1>(m_baserng),
 						std::ref(m_comp),
-						MAKE_CONSTEXPR_FUNCTION(tc::continue_),
-						MAKE_CONSTEXPR_FUNCTION(tc::continue_),
+						tc::noop(),
+						tc::noop(),
 						FForwardFirstArgOnly<Func>(func)
 					);
 				} else {
-					return tc::interleave(
+					return tc::interleave_2(
 						*std::get<0>(m_baserng),
 						*std::get<1>(m_baserng),
 						std::ref(m_comp),
 						std::ref(func),
-						MAKE_CONSTEXPR_FUNCTION(tc::continue_),
-						MAKE_CONSTEXPR_FUNCTION(tc::continue_)
+						tc::noop(),
+						tc::noop()
 					);
 				}
-#pragma warning ( pop )
 			}
 		};
 	}

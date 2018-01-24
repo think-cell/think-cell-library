@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -13,6 +13,7 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 
 #pragma once
+#include "range_defines.h"
 #include "const_forward.h"
 #include "compare.h"
 #include "implements_compare.h"
@@ -28,6 +29,7 @@
 namespace tc {
 	struct fill_tag final {};
 	struct func_tag final {};
+	struct range_tag final {};
 
 	namespace array_adl_barrier {
 		template< typename T, std::size_t N >
@@ -71,7 +73,7 @@ namespace tc {
 		public:
 			template<typename Func>
 			array(func_tag, Func func) MAYTHROW
-				: array(func_tag{}, func, std::make_index_sequence<N>())
+				: array(tc::func_tag(), func, std::make_index_sequence<N>())
 			{}
 
 		private:
@@ -89,7 +91,7 @@ namespace tc {
 					T(std::forward<Params>(params)...)
 				}
 			{
-				static_assert(N == sizeof...(IndexPack)+1, "");
+				static_assert(N == sizeof...(IndexPack)+1);
 			}
 		public:
 			template<
@@ -119,7 +121,7 @@ namespace tc {
 					{std::forward<Arg0>(arg0), std::forward<Params>(params)...}
 				}
 			{
-				static_assert(N == sizeof...(IndexPack)+1, "");
+				static_assert(N == sizeof...(IndexPack)+1);
 			}
 		public:
 			/*
@@ -143,33 +145,29 @@ namespace tc {
 				: array(fill_tag{}, std::make_index_sequence<N-1>(), std::forward<Rhs>(rhs)...)
 			{}
 
-			template <typename... Args, std::enable_if_t< 1<sizeof...(Args) >* = nullptr,
+			template <typename... Args,
 				std::enable_if_t<
 					elementwise_construction_restrictiveness<T, Args...>::value == implicit_construction
-					&& !std::is_same<tc::remove_cvref_t<std::tuple_element_t<0, std::tuple<Args...>>>, tc::fill_tag>::value
 				>* = nullptr
 			>
-			constexpr array(Args&& ... args) MAYTHROW
+			constexpr array(tc::aggregate_tag, Args&& ... args) MAYTHROW
 				: m_a{static_cast<T>(std::forward<Args>(args))...}
 			{
 				static_assert(sizeof...(Args)==N, "array initializer list does not match number of elements");
 			}
 
-			template <typename... Args, std::enable_if_t< 1<sizeof...(Args) >* = nullptr,
+			template <typename... Args,
 				std::enable_if_t<
 					elementwise_construction_restrictiveness<T, Args...>::value == explicit_construction
-					&& !std::is_same<tc::remove_cvref_t<std::tuple_element_t<0, std::tuple<Args...>>>, tc::fill_tag>::value
 				>* = nullptr
 			>
-			constexpr explicit array(Args&& ... args) MAYTHROW
+			constexpr explicit array(tc::aggregate_tag, Args&& ... args) MAYTHROW
 				: m_a{static_cast<T>(std::forward<Args>(args))...}
 			{
 				static_assert(sizeof...(Args)==N, "array initializer list does not match number of elements");
 			}
 
 		private:
-			struct range_tag final {};
-
 			template<typename Iterator, std::size_t ...IndexPack>
 			array(range_tag, Iterator it, Iterator itEnd, std::index_sequence<IndexPack...>) MAYTHROW
 				: m_a{*it, (IndexPack, *++it)...}
@@ -247,7 +245,9 @@ namespace tc {
 				_ASSERT(i<N);
 				return std::forward<T>(*(data() + i)); // forward instead of tc_move does the right thing if T is a reference
 			}
-			T const&& operator[](std::size_t i) const&& noexcept = delete;
+			T const&& operator[](std::size_t i) const&& noexcept {
+				return static_cast<T const&&>((*this)[i]);
+			}
 
 			void fill(T const& t) & noexcept {
 				std::fill_n(data(), N, t);
@@ -269,6 +269,11 @@ namespace tc {
 				return tc::equal(lhs, rhs);
 			}
 
+			template<typename HashAlgorithm>
+			friend void hash_append(HashAlgorithm& h, array const& at) noexcept {
+				tc::hash_append(h, at.m_a);
+			}
+
 #ifdef TC_PRIVATE
 			// persistence
 			friend void LoadType(array& at, CXmlReader& loadhandler) noexcept {
@@ -278,10 +283,7 @@ namespace tc {
 			// error reporting
 			friend SReportStream& operator<<(SReportStream& rs, array const& at) noexcept {
 				rs << "tc::array(";
-#pragma warning( push ) 
-#pragma warning( disable: 4127 ) // conditional expression is constant
-				if (0<N) {
-#pragma warning( pop ) 
+				if constexpr(0<N) {
 					for (std::size_t i = 0;;) {
 						rs << at[i];
 						++i;
@@ -296,7 +298,7 @@ namespace tc {
 
 		template< typename T, std::size_t N >
 		struct array<T&, N> : tc::implements_compare_partial<array<T&, N>> {
-			static_assert( !std::is_reference<T>::value, "" );
+			static_assert( !std::is_reference<T>::value );
 		private:
 			T* m_a[N];
 
@@ -326,16 +328,16 @@ namespace tc {
 		public:
 			template<typename Func>
 			array(func_tag, Func func) MAYTHROW 
-				: array(func_tag{}, func, std::make_index_sequence<N>()) {}
+				: array(tc::func_tag(), func, std::make_index_sequence<N>())
+			{}
 
 			// make sure forwarding ctor has at least two parameters, so no ambiguity with copy/move ctors
 			template <typename... Args,
 				std::enable_if_t<
-					1 < sizeof...(Args)
-					&& elementwise_construction_restrictiveness<T&, Args&...>::value == implicit_construction
+					elementwise_construction_restrictiveness<T&, Args&...>::value == implicit_construction
 				>* =nullptr
 			>
-			array(Args& ... args) MAYTHROW
+			constexpr array(tc::aggregate_tag, Args& ... args) MAYTHROW
 				: m_a{std::addressof(args)...}
 			{
 				static_assert(sizeof...(Args)==N, "array initializer list does not match number of elements");
@@ -421,10 +423,7 @@ namespace tc {
 			// error reporting
 			friend SReportStream& operator<<(SReportStream& rs, array const& at) noexcept {
 				rs << "tc::array(";
-#pragma warning( push ) 
-#pragma warning( disable: 4127 ) // conditional expression is constant
-				if (0<N) {
-#pragma warning( pop ) 
+				if constexpr(0<N) {
 					for (std::size_t i = 0;;) {
 						rs << at[i];
 						++i;
@@ -437,11 +436,11 @@ namespace tc {
 #endif
 		};
 
-		static_assert(has_mem_fn_size<array<int, 10>>::value, "");
-		static_assert(has_mem_fn_size<array<int&, 10>>::value, "");
+		static_assert(has_mem_fn_size<array<int, 10>>::value);
+		static_assert(has_mem_fn_size<array<int&, 10>>::value);
 
-		static_assert(!std::is_convertible<array<int,10>, array<int, 9>>::value, "");
-		static_assert(!std::is_convertible<array<int,9>, array<int, 10>>::value, "");
+		static_assert(!std::is_convertible<array<int,10>, array<int, 9>>::value);
+		static_assert(!std::is_convertible<array<int,9>, array<int, 10>>::value);
 
 		template<typename T, std::size_t N>
 		auto constexpr_size(array<T, N> const&) -> std::integral_constant<std::size_t, N>;
@@ -449,31 +448,46 @@ namespace tc {
 		struct deduce_tag;
 
 		template <typename T, typename...>
-		struct delayed_deduce {
+		struct delayed_deduce final {
 			using type = T;
 		};
 
 		template <typename... Ts>
-		struct delayed_deduce<deduce_tag, Ts...> : std::common_type<Ts...> {};
+		struct delayed_deduce<deduce_tag, Ts...> final {
+			using type = tc::common_type_t<Ts...>;
+		};
 	}
 	using array_adl_barrier::array;
 
 
-	template <typename tag = array_adl_barrier::deduce_tag, typename Rng>
-	auto make_array(Rng&& rng) noexcept {
-		static_assert(std::is_same<tag, array_adl_barrier::deduce_tag>::value, "");
-		return tc::array<decltype(tc_front(rng)), decltype(constexpr_size(rng))::value>(std::forward<Rng>(rng));
+	template <typename Rng>
+	constexpr auto make_array(Rng&& rng) noexcept {
+		return tc::array<tc::decay_t<decltype(tc_front(rng))>, decltype(constexpr_size(rng))::value>(std::forward<Rng>(rng));
 	}
 
-	template <typename T = array_adl_barrier::deduce_tag, typename T0>
-	auto make_array(tc::aggregate_tag, T0&& t0) {
-		return tc::array<typename array_adl_barrier::delayed_deduce<T, T0>::type, 1>(fill_tag{}, std::forward<T0>(t0));
+	template <typename T = array_adl_barrier::deduce_tag, typename... Ts, std::enable_if_t<!std::is_reference<T>::value>* = nullptr>
+	constexpr auto make_array(tc::aggregate_tag, Ts&&... ts) noexcept {
+		static_assert(!std::is_reference<typename array_adl_barrier::delayed_deduce<T, Ts...>::type>::value);
+		return tc::array<typename array_adl_barrier::delayed_deduce<T, Ts...>::type, sizeof...(Ts)>(tc::aggregate_tag(), std::forward<Ts>(ts)...);
 	}
 
-	template <typename T = array_adl_barrier::deduce_tag, typename... Ts, std::enable_if_t<1 < sizeof...(Ts)>* = nullptr>
-	auto make_array(tc::aggregate_tag, Ts&&... ts) noexcept {
-		return tc::array<typename array_adl_barrier::delayed_deduce<T, Ts...>::type, sizeof...(Ts)>(std::forward<Ts>(ts)...);
+	// If T is a reference, force argument type T for all given arguments. That way, conversions
+	// take place in the calling expression, and cases such as
+	//
+	//		tc::find_unique<tc::return_bool>(tc::make_array<Foo const&>(convertible_to_Foo), foo);
+	//
+	// will work as expected. With the usual variadic template + std::forward pattern, conversions
+	// would take place inside the array constructor, resulting in a dangling reference.
+
+	// Unfortunately, there seems to be no way to make this work in C++ without using macros
+#define MAKE_ARRAY_LVALUE_REF(z, n, d) \
+	template <typename T,std::enable_if_t<std::is_lvalue_reference<T>::value>* = nullptr> \
+	auto make_array(tc::aggregate_tag, BOOST_PP_ENUM_PARAMS(n, T t)) noexcept { \
+		return tc::array<T, n>(tc::aggregate_tag(), BOOST_PP_ENUM_PARAMS(n, t)); \
 	}
+
+	BOOST_PP_REPEAT_FROM_TO(1, 20, MAKE_ARRAY_LVALUE_REF, _)
+#undef MAKE_ARRAY_LVALUE_REF
 
 	template <typename T, std::size_t N>
 	struct decay<tc::array<T, N>> {
@@ -489,7 +503,7 @@ namespace tc {
 
 #define MAKE_TYPED_CONSTEXPR_ARRAY(type, ...) \
 	[]() noexcept -> tc::array<type, tc::count_args(__VA_ARGS__)> const& { \
-		static constexpr tc::array<type, tc::count_args(__VA_ARGS__)> c_at(__VA_ARGS__); \
+		static constexpr tc::array<type, tc::count_args(__VA_ARGS__)> c_at(tc::aggregate_tag(), __VA_ARGS__); \
 		return c_at; \
 	}()
 

@@ -1,6 +1,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 // think-cell public library
-// Copyright (C) 2016 think-cell Software GmbH
+// Copyright (C) 2016-2018 think-cell Software GmbH
 //
 // This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as 
 // published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. 
@@ -76,7 +76,7 @@ namespace {
 				_ASSERT(val == m_expect[m_index]);
 			}
 			++m_index;
-			return (m_index <= m_break_at)? tc::continue_ : tc::break_;
+			return tc::continue_if(m_index <= m_break_at);
 		}
 
 		private:
@@ -125,35 +125,35 @@ UNITTESTDEF( for_each ) {
 
 //---- test break behavior  ---------------------------------------------------------------------------------------------------
 	struct iterate final {
-		tc::break_or_continue generator_break_consumer_break(tc::function< tc::break_or_continue(int) > func) const& noexcept {
+		tc::break_or_continue generator_break_consumer_break(tc::function_view< tc::break_or_continue(int) > func) const& noexcept {
 			for(int i = 1; i<11; ++i) {
 				if(func(i) == tc::break_) { return tc::break_; }
 			}
 			return tc::continue_;
 		}
 
-		tc::break_or_continue generator_break_consumer_nobreak(std::function<void (int)> func) const& noexcept {
+		tc::break_or_continue generator_break_consumer_nobreak(tc::function_view<void (int)> func) const& noexcept {
 			for(int i = 1; i<11; ++i) {
 				func(i);
 			}
 			return tc::continue_;
 		}
 
-		void generator_nobreak_consumer_nobreak(std::function<void (int)> func) const& noexcept {
+		void generator_nobreak_consumer_nobreak(tc::function_view<void (int)> func) const& noexcept {
 			for(int i = 1; i<11; ++i) {
 				func(i);
 			}
 			return;
 		}
 
-		void generator_nobreak_consumer_break_correct(tc::function< tc::break_or_continue(int) > func) const& noexcept {
+		void generator_nobreak_consumer_break_correct(tc::function_view< tc::break_or_continue(int) > func) const& noexcept {
 			for(int i = 1; i<11; ++i) {
 				if(func(i) == tc::break_) { return; }
 			}
 			return;
 		}
 
-		void generator_nobreak_consumer_break_incorrect(tc::function< tc::break_or_continue(int) > func) const& noexcept {
+		void generator_nobreak_consumer_break_incorrect(tc::function_view< tc::break_or_continue(int) > func) const& noexcept {
 			for(int i = 1; i<11; ++i) {
 				func(i);
 			}
@@ -161,7 +161,7 @@ UNITTESTDEF( for_each ) {
 		}
 	};
 
-	struct consumer_break final {
+	struct consumer_break /*final*/ {
 		consumer_break(tc::vector<int> const& v, std::size_t break_at = 0, bool expect_break = true) noexcept : m_mock(v, break_at, expect_break) {}
 
 		tc::break_or_continue operator()(int i) /* no & */ noexcept { return m_mock(i); }
@@ -187,27 +187,16 @@ UNITTESTDEF( break_behavior ) {
 	TEST_init_hack(tc::vector, int, exp, {1,2,3,4,5,6,7,8,9,10});
 
 	// call on various implicit ranges
-	tc::for_each(std::bind(&iterate::generator_break_consumer_break, iterate(), std::placeholders::_1), consumer_break(exp, 4));
-	tc::for_each(std::bind(&iterate::generator_break_consumer_nobreak, iterate(), std::placeholders::_1), consumer_nobreak(exp, 5, false));
-	tc::for_each(std::bind(&iterate::generator_nobreak_consumer_nobreak, iterate(), std::placeholders::_1), consumer_nobreak(exp, 6, false));
+	tc::for_each([](auto&& func) noexcept { return iterate().generator_break_consumer_break(std::forward<decltype(func)>(func)); }, consumer_break(exp, 4));
+	tc::for_each([](auto&& func) noexcept { return iterate().generator_break_consumer_nobreak(std::forward<decltype(func)>(func)); }, consumer_nobreak(exp, 5, false));
+	tc::for_each([](auto&& func) noexcept { iterate().generator_nobreak_consumer_nobreak(std::forward<decltype(func)>(func)); }, consumer_nobreak(exp, 6, false));
 
 	// these two are undefined and must not compile
-//	tc::for_each(std::bind(&iterate::generator_nobreak_consumer_break_correct, iterate(), std::placeholders::_1), all_called_mock(exp, 7));
-//	tc::for_each(std::bind(&iterate::generator_nobreak_consumer_break_incorrect, iterate(), std::placeholders::_1), all_called_mock(exp, 8, false));
+//	tc::for_each([](auto&& func) noexcept { iterate().generator_nobreak_consumer_break_correct(std::forward<decltype(func)>(func)); }, all_called_mock(exp, 7));
+//	tc::for_each([](auto&& func) noexcept { iterate().generator_nobreak_consumer_break_incorrect(std::forward<decltype(func)>(func)); }, all_called_mock(exp, 8, false));
 }
 
-UNITTESTDEF(for_each_adjacent_triple_initialization_order) {
-	int n=0;
-	auto f = [&]() noexcept {return ++n;};
-	int a[2] = { f(), f() };
-	_ASSERT(1 == a[0] && 2 == a[1]);
-
-	tc::array<int, 2> a2{ f(), f() };
-	_ASSERT(3 == a2[0] && 4 == a2[1]);
-}
-
-#ifdef _CHECKS
-
+UNITTESTDEF(for_each_adjacent_tuple_deref) {
 	struct lr_overloads final{
 		std::array<int,3> m_n;
 
@@ -221,9 +210,7 @@ UNITTESTDEF(for_each_adjacent_triple_initialization_order) {
 		void operator()(int&&, int const&, int const&) & noexcept { ++m_n[1]; }
 		void operator()(int&&, int&&, int&&) & noexcept { ++m_n[2]; }
 	};
-#endif
 
-UNITTESTDEF(for_each_adjacent_triple_deref) {
 	tc::vector<int> vecn{0,0,0,0,0};
 	tc::for_each_adjacent_tuple<3>(
 		vecn,
@@ -280,7 +267,7 @@ UNITTESTDEF(for_each_ordered_pair) {
 	tc::vector<std::pair<int, int>> vecpairnn;
 	tc::for_each_ordered_pair(
 		vecn,
-		std::bind(mem_fn_emplace_back(), std::ref(vecpairnn), std::placeholders::_1, std::placeholders::_2)
+		[&](auto&& _1, auto&& _2) noexcept { tc::cont_emplace_back(vecpairnn, std::forward<decltype(_1)>(_1), std::forward<decltype(_2)>(_2)); }
 	);
 	_ASSERTEQUAL(tc::size(vecpairnn), 6);
 	_ASSERT(tc::find_unique<tc::return_bool>(vecpairnn, std::make_pair(1, 2)));
