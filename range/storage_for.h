@@ -140,7 +140,7 @@ namespace tc {
 		private:
 			void check_pattern() const& noexcept {
 				// RT#12004: g_mtxSharedHeap's destructor fails this check in the Excel insider build 16.0.6568.2036
-				// because this version does not realease all its locks on CTCAddInModule so that tc::shared_heap::shutdown()
+				// because this version does not release all its locks on CTCAddInModule so that tc::shared_heap::shutdown()
 				// and thus g_mtxSharedHeap.dtor() are never called. This build appears to be broken. It throws and does
 				// not handle 0xC0000008 (An invalid handle was specified) while closing even without think-cell installed.
 				// I could not reproduce the error in the next Excel insider build 16.0.6701.1008. -Edgar 2016-03-14
@@ -160,7 +160,7 @@ namespace tc {
 				m_pt=std::addressof(t);
 			}
 
-			// referenece semantics == no deep constness
+			// reference semantics == no deep constness
 			T* operator->() const& noexcept {
 				return m_pt;
 			}
