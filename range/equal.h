@@ -70,7 +70,7 @@ namespace tc{
 		return equalpred.result();
 	}
 
-	// forward to the symetric case above
+	// forward to the symmetric case above
 	template<typename LRng, typename RRng, typename Pred, std::enable_if_t<!is_range_with_iterators< RRng >::value && is_range_with_iterators< LRng >::value>* = nullptr>
 	bool equal(LRng const& lrng, RRng const& rrng, Pred pred) noexcept {
 		return tc::equal(rrng, lrng, [&](auto const& _1, auto const& _2) noexcept { return pred(_2, _1); }); 
