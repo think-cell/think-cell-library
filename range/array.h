@@ -128,7 +128,7 @@ namespace tc {
 				TODO C++17:
 				- The condition !std::is_move_constructible is a workaround for a trait
 				  such as "is_implicit_constructible".
-				- Initialization of m_a needs explicit T if T is only explict constructible, and must not have T() if
+				- Initialization of m_a needs explicit T if T is only explicit constructible, and must not have T() if
 				  a move-ctor is not available.
 				C++17 will solve this by:
 				- guaranteed copy elision -> T(...) can be used for non-movable types
