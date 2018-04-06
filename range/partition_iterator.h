@@ -105,7 +105,7 @@ namespace tc {
 				using node_type = boost::multi_index::detail::ordered_index_node<AugmentPolicy, NodeBase>;
 				using TNodeVector = typename tc::static_vector<
 					node_type*, 
-					2* // 2*log(N) is maximum hight of RB tree
+					2* // 2*log(N) is maximum height of RB tree
 						(CHAR_BIT*sizeof(std::size_t)-3) // 2^3==8 roughly minimum size of node
 				>;
 
