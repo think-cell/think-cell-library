@@ -98,7 +98,7 @@
 #define OP_PAIR_TO_2ND_ELEMENT(state, data, pair) \
 	BOOST_PP_SEQ_ELEM(1, pair)
 
-// Macro for accessing nameless union members withing MS structs, which we can't control (can't name the union).
+// Macro for accessing nameless union members within MS structs, which we can't control (can't name the union).
 // In Mac nameless union is not allowed, so the union has a name.
 #ifdef __clang__
 #define WIN32_UNION_MEMBER(_obj_ptr, _member) \
