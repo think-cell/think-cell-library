@@ -530,7 +530,7 @@ namespace tc {
 		using type = interval_adl_barrier::interval< tc::decay_t<T> >;
 	};
 
-// In addition to intervals where the values of .begin and .end represent definite geometric positions in a 1-dimenional, ordered universe modelled by T, we use
+// In addition to intervals where the values of .begin and .end represent definite geometric positions in a 1-dimensional, ordered universe modelled by T, we use
 // interval<T> for ordered pairs of T where values form abstract positions in a more general sense, e.g., interval< Ref<CGridline> >.
 //
 // For intervals of the second kind, T::operator< might not exist at all, or - as in Ref<CGridline> - may implement a different ordering than the one we mean.
@@ -541,7 +541,7 @@ namespace tc {
 // Alternative paths (discussion with Volker, Vladimir, Edgar):
 //
 // - "use a std::pair for intervals of the second type"
-//   BAD IDEA, obscures semantic, we cleary want some parts of the interval interface, e.g., transform.
+//   BAD IDEA, obscures semantic, we clearly want some parts of the interval interface, e.g., transform.
 //
 // - "intervals of non-fundamental T are of second type"
 //   COUNTEREXAMPLE: _gridvalue.
