@@ -268,7 +268,7 @@ namespace tc {
 			static_assert(std::is_arithmetic<TTarget>::value);
 		};
 	
-		// dispatch requried because logical operators are not lazy during template instantiation
+		// dispatch requeried because logical operators are not lazy during template instantiation
 		template <typename TSource, typename TTarget, typename=void>
 		struct is_safely_convertible_to_value : std::false_type {};
 
@@ -431,7 +431,7 @@ template<typename TTarget, typename ...Args>
 struct construction_restrictiveness : std::integral_constant<
 	int,
 	// Require std::is_class<TTarget>:
-	// - class types and const references to class types are std::is_constructible from two or more aguments. Initializing
+	// - class types and const references to class types are std::is_constructible from two or more arguments. Initializing
 	//	 a const reference using uniform initialization with multiple arguments would bind the reference to a temporary,
 	//   which we do not allow,
 	// - non-reference types may be std::is_constructible from zero arguments. We do not want this for native types like int.

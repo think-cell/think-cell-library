@@ -802,7 +802,7 @@ namespace tc {
 	auto make_iterator_range_impl( It itBegin, It itEnd ) noexcept
 		return_ctor( tc::sub_range<tc::iterator_base<It>>, ( tc::iterator_base<It>(), tc_move(itBegin), tc_move(itEnd) ) )
 
-	// There is an other make_iterator_range_impl overload for range adaptor based iterarors in range_adaptor.h
+	// There is an other make_iterator_range_impl overload for range adaptor based iterators in range_adaptor.h
 
 	// make sure ADL lookup of index_iterator::make_iterator_range works
 	template< typename ItBegin, typename ItEnd >

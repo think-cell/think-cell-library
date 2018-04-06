@@ -92,7 +92,7 @@ namespace tc {
 			:	m_it(std::forward<Rhs>(rhs).m_it)
 			{}
 
-			// explicitly define the copy constructor to do what the template above does, as it would if the implicit copy consturctor wouldn't interfere
+			// explicitly define the copy constructor to do what the template above does, as it would if the implicit copy constructor wouldn't interfere
 			index_from_iterator( index_from_iterator const& rhs ) noexcept
 			:	m_it(rhs.m_it)
 			{}

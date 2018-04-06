@@ -458,7 +458,7 @@ namespace tc {
 	> \
 	class_name(class_name<T2> const&& other) = delete; /*explicitly delete this constructor, otherwise class_name(class_name<T2> const&) above may be chosen*/ \
 	\
-	/* inherit implicit and explicit copy and move constructors from dense_map (only if argument is actual dense_map<base_::dense_map_key_type, T>) as explict constructors*/ \
+	/* inherit implicit and explicit copy and move constructors from dense_map (only if argument is actual dense_map<base_::dense_map_key_type, T>) as explicit constructors*/ \
 	template <typename K, typename T2, \
 		std::enable_if_t<tc::is_safely_constructible<base_, tc::dense_map<K, T2> const&>::value>* =nullptr \
 	> \

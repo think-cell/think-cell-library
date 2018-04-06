@@ -271,7 +271,7 @@ namespace tc {
 
 	namespace idiv_impl {
 		// The standard guarantees that integer division rounds to zero.
-		// [expr.mul]/4 (oder 5.6/4) 
+		// [expr.mul]/4 (order 5.6/4) 
 		template< typename Num, typename Denom, typename Round >
 		Num idiv( Num num, Denom denom, Round round ) noexcept {
 			static_assert( tc::is_actual_integer_like<Num>::value );

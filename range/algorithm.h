@@ -546,7 +546,7 @@ namespace tc {
 	}
 
 	/*
-		In contrase to std::unique, tc::adjacent_unique / tc::adjacent_unique_inplace always compares adjacent elements. This allows implementing
+		In contrast to std::unique, tc::adjacent_unique / tc::adjacent_unique_inplace always compares adjacent elements. This allows implementing
 		bidirectional tc::adjacent_unique, with tc::adjacent_unique_inplace yielding the same result.
 	*/
 	template< typename Cont, typename Equals=tc::fn_equal_to >
