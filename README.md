@@ -21,30 +21,19 @@ But please understand that, for the above-mentioned reasons, we are not keen on 
  
 Does hacking our library give you a kick, and do you think you can contribute more? We are a friendly and driven bunch of C++ enthusiasts with a knack for elegant algorithms, and we are always looking for [new colleagues](https://www.think-cell.com/career).
 
---------------------
-Compile instructions
---------------------
-	cmake ./range/
-	make
-
-If the boost library is not in the default location, you can specify the path with
-
-	cmake -DBOOST_ROOT=/path/to/boost_1_59_0 ./range/
-
+------------------
+Usage instructions
+------------------
 You need to apply boost_patches/has_range_iterator.patch to your boost library.
-This is equivalent to https://github.com/boostorg/range/pull/40 (accepted, but not merged into release yet)
+This is equivalent to https://github.com/boostorg/range/pull/40 (accepted, but not merged into release yet).
 
-The tests and examples are in range/*.t.cpp
+And you need the following compiler settings:
 
-Tested with:
-* Visual C++ 2017 Version 15.5
-* clang Apple LLVM 9.0.0
-* clang 4.0 (due to a libc++ bug you need to also include the libc++abi-dev headers)
+##### Visual C++ 19.15 (Visual Studio 2017 15.8)
+* `/std:c++latest`
+* `/permissive` (we are working on `/permissive-` a.k.a. *Conformance Mode*)
 
-Usage on Windows:
+##### clang Apple LLVM 9.1.0 (Xcode 9.4)
+* `-std=c++17`
 
-	#define NOMINMAX
-	#include <windows.h>
-	#include "range/range.h"
-
-
+`range.example.cpp` provides a good entry point to get started quickly. If you want to see more examples, there are some unit tests in `tc/*.t.cpp`.
