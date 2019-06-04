@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -42,17 +42,17 @@ namespace tc {
 	using set_string=std::set<std::basic_string<Char>, Compare, Allocator>;
 
 #ifdef TC_PRIVATE
-	template<typename Char, typename Hash=tc::fn_hash_range, typename KeyEqual=decltype(tc::equalfrom3way(tc::fn_lexicographical_compare_3way())), typename Allocator=std::allocator<std::basic_string<Char>>>
+	template<typename Char, typename Hash=tc::fn_hash_range<std::size_t>, typename KeyEqual=decltype(tc::equalfrom3way(tc::fn_lexicographical_compare_3way())), typename Allocator=std::allocator<std::basic_string<Char>>>
 	using unordered_set_string=boost::multi_index_container<
 		std::basic_string<Char>,
 		boost::multi_index::indexed_by<boost::multi_index::hashed_unique<boost::multi_index::identity<std::basic_string<Char>>, Hash, KeyEqual>>,
 		Allocator
 	>;
 
-	template<typename Key, typename Hash=tc::fn_hash, typename KeyEqual=tc::fn_equal_to, typename Allocator=std::allocator<Key>>
+	template<typename Key, typename Hash=tc::fn_hash<std::size_t>, typename KeyEqual=tc::fn_equal_to, typename Allocator=std::allocator<Key>>
 	using unordered_set=std::unordered_set<Key, Hash, KeyEqual, Allocator>;
 
-	template<typename Key, typename T, typename Hash=tc::fn_hash, typename KeyEqual=tc::fn_equal_to, typename Allocator=std::allocator<std::pair<const Key, T>>>
+	template<typename Key, typename T, typename Hash=tc::fn_hash<std::size_t>, typename KeyEqual=tc::fn_equal_to, typename Allocator=std::allocator<std::pair<const Key, T>>>
 	using unordered_map=std::unordered_map<Key, T, Hash, KeyEqual, Allocator>;
 #else
 	template<typename Char, typename Hash=std::hash<std::basic_string<Char>>, typename KeyEqual=tc::fn_equal_to, typename Allocator=std::allocator<std::basic_string<Char>>>

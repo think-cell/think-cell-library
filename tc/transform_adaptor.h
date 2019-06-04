@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -19,7 +19,7 @@
 #include "transform.h"
 
 namespace tc {
-	namespace transform_adaptor_impl {
+	namespace no_adl {
 		struct transform_adaptor_access final {
 			template< typename Func, typename Rng, bool bHasIterator >
 			static Func&& get_func(transform_adaptor<Func,Rng,bHasIterator>&& rng) noexcept {
@@ -29,7 +29,7 @@ namespace tc {
 
 
 		template< typename Func, typename Rng >
-		struct transform_adaptor<Func,Rng,false> : public range_adaptor<transform_adaptor<Func,Rng>, Rng > {
+		struct [[nodiscard]] transform_adaptor<Func,Rng,false> : public range_adaptor<transform_adaptor<Func,Rng>, Rng > {
 		private:
 			using base_ = range_adaptor<transform_adaptor<Func,Rng>, Rng >;
 
@@ -40,6 +40,7 @@ namespace tc {
 			Func m_func;
 
 		private:
+			template<typename, typename>
 			friend struct no_adl::range_adaptor_access;
 			friend struct transform_adaptor_access;
 			template< typename Apply, typename... Args>
@@ -51,22 +52,22 @@ namespace tc {
 			// other ctors
 			template< typename RngOther, typename FuncOther >
 			explicit transform_adaptor( RngOther&& rng, FuncOther&& func ) noexcept
-				: base_(aggregate_tag(), std::forward<RngOther>(rng))
+				: base_(aggregate_tag, std::forward<RngOther>(rng))
 				, m_func(std::forward<FuncOther>(func))
 			{}
 
-			template< typename Rng2 = Rng, std::enable_if_t<tc::has_size<Rng2>::value>* = nullptr >
+			template< ENABLE_SFINAE, std::enable_if_t<tc::has_size<SFINAE_TYPE(Rng)>::value>* = nullptr >
 			constexpr auto size() const& noexcept {
 				return tc::size_raw(*this->m_baserng);
 			}
 		};
 
 		template< typename Func, typename Rng >
-		struct transform_adaptor<Func,Rng,true> : public transform_adaptor<Func,Rng,false> {
+		struct [[nodiscard]] transform_adaptor<Func,Rng,true> : public transform_adaptor<Func,Rng,false> {
         private:
 			using base_ = transform_adaptor<Func,Rng,false>;
 			using range_adaptor = typename base_::range_adaptor; // using not accepted by MSVC
-
+			template<typename, typename>
 			friend struct no_adl::range_adaptor_access;
 		public:
 			using typename base_::index;
@@ -105,35 +106,14 @@ namespace tc {
 				return idx;
 			}
 		};
-	}
 
-	namespace no_adl {
 		template<typename Func, typename Rng, bool bConst>
 		struct constexpr_size<tc::transform_adaptor<Func,Rng,bConst>> : tc::constexpr_size<tc::remove_cvref_t<Rng>> {};
 
-		template< typename Func, typename Rng, bool bConst >
-		struct range_reference_transform_adaptor {
-			using type = decltype(
-				std::declval<Func&>()(
-					std::declval<
-						tc::range_reference_t<
-							tc::apply_if_t<
-								bConst,
-								std::add_const,
-								range_adaptor<transform_adaptor<Func,Rng>, Rng >
-							>
-						>
-					>()
-				)
-			);
+		template< typename Func, typename Rng >
+		struct value_type_base<transform_adaptor<Func, Rng, false>, tc::void_t<decltype(std::declval<Func const&>()(std::declval<tc::range_value_t<Rng>>()))>> {
+			using value_type = tc::decay_t<decltype(std::declval<Func const&>()(std::declval<tc::range_value_t<Rng>>()))>;
 		};
-
-
-		template< typename Func, typename Rng >
-		struct range_reference<transform_adaptor<Func, Rng, false> > : range_reference_transform_adaptor<Func, Rng, false> {};
-
-		template< typename Func, typename Rng >
-		struct range_reference<transform_adaptor<Func, Rng, false> const> : range_reference_transform_adaptor<Func, Rng, true> {};
 	}
 
 	namespace replace_if_impl {
@@ -149,9 +129,10 @@ namespace tc {
 				, m_t(std::forward<T>(t))
 			{}
 			template< typename S >
-			auto operator()(S&& s) const& MAYTHROW ->decltype(auto) {
-				return CONDITIONAL(m_func(s),m_t,std::forward<S>(s));
+			decltype(auto) operator()(S&& s) const& MAYTHROW {
+				return CONDITIONAL_RVALUE_AS_REF(m_func(s),m_t,std::forward<S>(s));
 			}
+			friend std::true_type returns_reference_to_argument(replace_if) noexcept; // ADL
 		};
 	}
 
@@ -186,8 +167,16 @@ namespace tc {
 	}
 
 	template<typename Rng, std::enable_if_t<tc::is_instance<sub_range,std::remove_reference_t<Rng>>::value>* =nullptr >
-	decltype(auto) untransform(Rng&& rng) noexcept {
+	auto untransform(Rng&& rng) noexcept {
 		return tc::slice(untransform(std::forward<Rng>(rng).base_range()), rng.begin_index(), rng.end_index());
+	}
+
+	namespace no_adl {
+		template<typename Func, typename Rng>
+		struct is_index_valid_for_move_constructed_range<tc::transform_adaptor<Func, Rng, true>, std::enable_if_t<std::is_lvalue_reference<Rng>::value>>: std::true_type {};
+		
+		template<typename Func, typename Rng>
+		struct is_index_valid_for_move_constructed_range<tc::transform_adaptor<Func, Rng, true>, std::enable_if_t<!std::is_reference<Rng>::value>>: tc::is_index_valid_for_move_constructed_range<Rng> {};
 	}
 }
 

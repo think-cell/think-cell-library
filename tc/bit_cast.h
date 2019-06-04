@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -29,7 +29,7 @@ namespace tc {
 		template<typename T, std::enable_if_t<
 			std::is_pointer<T>::value || std::is_member_pointer<T>::value
 		>* = nullptr> operator T() const& noexcept {
-			static_assert(sizeof(T)==sizeof(void*));
+			STATICASSERTEQUAL(sizeof(T), sizeof(void*));
 			T t;
 			std::memcpy( std::addressof(t), std::addressof(m_pv), sizeof(t) ); // bit_cast to allow cast to member function pointers
 			return t;
@@ -173,8 +173,8 @@ namespace tc {
 		std::is_pointer<Src>::value && std::is_pointer<Dst>::value
 	)>* = nullptr>
 	Dst bit_cast( Src const& src ) noexcept {
-		static_assert( std::is_same< tc::remove_cvref_t<Dst>, Dst >::value );
-		static_assert(sizeof(Dst)==sizeof(Src),"bit_cast source and destination must be same size");
+		STATICASSERTSAME(  tc::remove_cvref_t<Dst>, Dst  );
+		STATICASSERTEQUAL(sizeof(Dst), sizeof(Src),"bit_cast source and destination must be same size");
 		static_assert(
 			(std::is_trivially_copyable<Dst>::value && std::is_trivially_copyable<Src>::value) ||
 			(std::is_member_function_pointer<Dst>::value && std::is_same<Src,void const*>::value) ||
@@ -190,7 +190,7 @@ namespace tc {
 		std::is_pointer<Src>::value && std::is_pointer<Dst>::value
 	>* = nullptr>
 	typename aliasing_ptr< std::remove_pointer_t<Dst> >::type bit_cast( Src const& src ) noexcept {
-		static_assert( std::is_same< tc::remove_cvref_t<Dst>, Dst >::value );
+		STATICASSERTSAME( tc::remove_cvref_t<Dst>, Dst );
 		return typename aliasing_ptr< std::remove_pointer_t<Dst> >::type(reinterpret_cast<Dst>(src));
 	}
 }

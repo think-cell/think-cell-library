@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -41,7 +41,7 @@ namespace tc {
 				typename EqualsRef
 			>
 			explicit unique_adaptor(RngRef&& rng, EqualsRef&& equals) noexcept
-				: m_baserng(reference_or_value< Rng >(aggregate_tag(), std::forward<RngRef>(rng)))
+				: m_baserng(reference_or_value< Rng >(aggregate_tag, std::forward<RngRef>(rng)))
 				, m_equals(std::forward<EqualsRef>(equals))
 			{}
 
@@ -84,10 +84,10 @@ namespace tc {
 				auto idx1=idx0;
 				tc::increment_index(*m_baserng,idx0);
 				if (!tc::at_end_index(*m_baserng,idx0)) {
-					RefType ref1(aggregate_tag(), this->dereference_index(idx1));
+					RefType ref1(aggregate_tag, this->dereference_index(idx1));
 
 					for (;;) {
-						RefType ref0(aggregate_tag(), this->dereference_index(idx0));
+						RefType ref0(aggregate_tag, this->dereference_index(idx0));
 						if (!this->m_equals(*ref1, *ref0)) {
 							break;
 						}
@@ -98,7 +98,7 @@ namespace tc {
 							idx0 = tc_move(idx1);
 							break;
 						}
-						ref1 = RefType(aggregate_tag(), this->dereference_index(idx1));
+						ref1 = RefType(aggregate_tag, this->dereference_index(idx1));
 						if (!this->m_equals(*ref0, *ref1)) {
 							idx0 = tc_move(idx1);
 							break;
@@ -120,12 +120,12 @@ namespace tc {
 
 				tc::decrement_index(*m_baserng,idx0);
 				if (!this->equal_index(this->begin_index(),idx0)) {
-					RefType ref0(aggregate_tag(), this->dereference_index(idx0));
+					RefType ref0(aggregate_tag, this->dereference_index(idx0));
 
 					for (;;) {
 						auto idx1=idx0;
 						tc::decrement_index(*m_baserng,idx1);
-						RefType ref1(aggregate_tag(), this->dereference_index(idx1));
+						RefType ref1(aggregate_tag, this->dereference_index(idx1));
 						if (!this->m_equals(*ref1, *ref0)) {
 							break;
 						}
@@ -136,7 +136,7 @@ namespace tc {
 
 						idx0 = idx1;
 						tc::decrement_index(*m_baserng,idx0);
-						ref0 = RefType(aggregate_tag(), this->dereference_index(idx0));
+						ref0 = RefType(aggregate_tag, this->dereference_index(idx0));
 						if (!this->m_equals(*ref0, *ref1)) {
 							idx0 = tc_move(idx1);
 							break;
@@ -205,7 +205,7 @@ namespace tc {
 				typename EqualsRef
 			>
 			explicit unique_range_adaptor(RngRef&& rng, EqualsRef&& equals) noexcept
-				: m_baserng(reference_or_value< Rng >(aggregate_tag(), std::forward<RngRef>(rng)))
+				: m_baserng(reference_or_value< Rng >(aggregate_tag, std::forward<RngRef>(rng)))
 				, m_equals(std::forward<EqualsRef>(equals))
 			{}
 

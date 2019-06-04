@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -30,7 +30,11 @@ namespace tc {
 
 			operator bool() noexcept = delete;
 
-			operator Char*() /* no & */ noexcept {
+			operator Char const*() const /*no &*/ noexcept {
+				return tc::as_c_str(m_str);
+			}
+
+			operator Char*() /*no &*/ noexcept {
 				return tc::as_c_str(m_str);
 			}
 		private:
@@ -65,7 +69,7 @@ namespace tc {
 
 	template< typename Rng0, typename ... Rng >
 	auto make_c_str(Rng0&& rng0, Rng&& ... rng) MAYTHROW {
-		return tc::make_c_str<typename tc::joint_value_type<Rng0, Rng...>::type>(std::forward<Rng0>(rng0), std::forward<Rng>(rng)...);
+		return tc::make_c_str<tc::common_range_value_t<Rng0, Rng...>>(std::forward<Rng0>(rng0), std::forward<Rng>(rng)...);
 	}
 
 	template< typename Char, typename Rng0, std::enable_if_t<tc::no_adl::has_convertible_as_c_str<Char, Rng0>::value>* = nullptr >
@@ -87,7 +91,7 @@ namespace tc {
 
 	template< typename Rng0, typename ... Rng >
 	auto make_mutable_c_str(Rng0&& rng0, Rng&& ... rng) MAYTHROW {
-		return tc::make_mutable_c_str<typename tc::joint_value_type<Rng0, Rng...>::type>(std::forward<Rng0>(rng0), std::forward<Rng>(rng)...);
+		return tc::make_mutable_c_str<tc::common_range_value_t<Rng0, Rng...>>(std::forward<Rng0>(rng0), std::forward<Rng>(rng)...);
 	}
 }
 

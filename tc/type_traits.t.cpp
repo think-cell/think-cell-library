@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -10,18 +10,18 @@
 #include "type_traits.h"
 
 
-static_assert(std::is_same< tc::remove_rvalue_reference_t<int>, int >::value);
-static_assert(std::is_same< tc::remove_rvalue_reference_t<int const>, int const >::value);
-static_assert(std::is_same< tc::remove_rvalue_reference_t<int&>, int& >::value);
-static_assert(std::is_same< tc::remove_rvalue_reference_t<int const&>, int const& >::value);
-static_assert(std::is_same< tc::remove_rvalue_reference_t<int&&>, int >::value);
-static_assert(std::is_same< tc::remove_rvalue_reference_t<int const&&>, int const >::value);
-static_assert(std::is_same< tc::remove_rvalue_reference_t<std::vector<int>>, std::vector<int> >::value);
-static_assert(std::is_same< tc::remove_rvalue_reference_t<std::vector<int> const>, std::vector<int> const >::value);
-static_assert(std::is_same< tc::remove_rvalue_reference_t<std::vector<int>&>, std::vector<int>& >::value);
-static_assert(std::is_same< tc::remove_rvalue_reference_t<std::vector<int> const&>, std::vector<int> const& >::value);
-static_assert(std::is_same< tc::remove_rvalue_reference_t<std::vector<int>&&>, std::vector<int> >::value);
-static_assert(std::is_same< tc::remove_rvalue_reference_t<std::vector<int> const&&>, std::vector<int> const >::value);
+STATICASSERTSAME(tc::remove_rvalue_reference_t<int>, int);
+STATICASSERTSAME(tc::remove_rvalue_reference_t<int const>, int const);
+STATICASSERTSAME(tc::remove_rvalue_reference_t<int&>, int&);
+STATICASSERTSAME(tc::remove_rvalue_reference_t<int const&>, int const&);
+STATICASSERTSAME(tc::remove_rvalue_reference_t<int&&>, int);
+STATICASSERTSAME(tc::remove_rvalue_reference_t<int const&&>, int const);
+STATICASSERTSAME(tc::remove_rvalue_reference_t<std::vector<int>>, std::vector<int>);
+STATICASSERTSAME(tc::remove_rvalue_reference_t<std::vector<int> const>, std::vector<int> const);
+STATICASSERTSAME(tc::remove_rvalue_reference_t<std::vector<int>&>, std::vector<int>&);
+STATICASSERTSAME(tc::remove_rvalue_reference_t<std::vector<int> const&>, std::vector<int> const&);
+STATICASSERTSAME(tc::remove_rvalue_reference_t<std::vector<int>&&>, std::vector<int>);
+STATICASSERTSAME(tc::remove_rvalue_reference_t<std::vector<int> const&&>, std::vector<int> const);
 
 namespace void_t_test {
 	template< typename T, typename=void >
@@ -45,9 +45,9 @@ namespace void_t_test {
 		using type2 = int;
 	};
 
-	static_assert(0==Foo<Bar0>::value);
-	static_assert(1==Foo<Bar1>::value);
-	static_assert(2==Foo<Bar2>::value);
+	STATICASSERTEQUAL(0, Foo<Bar0>::value);
+	STATICASSERTEQUAL(1, Foo<Bar1>::value);
+	STATICASSERTEQUAL(2, Foo<Bar2>::value);
 
 	struct WithFunction {
 		void func();
@@ -97,20 +97,58 @@ enum class TEnumClass { a, b, c };
 enum TEnum { x, y, z };
 static_assert( !tc::is_safely_convertible<int, TEnumClass>::value );
 static_assert( !tc::is_safely_convertible<TEnumClass, int>::value );
+static_assert( !tc::has_common_reference_prvalue_as_val<tc::type::list<TEnumClass, int>>::value);
 
 // unscoped enum (primitive enum)
 enum TPrimitiveEnum { a, b, c };
 static_assert( !tc::is_safely_convertible<int, TPrimitiveEnum>::value );
 static_assert( std::is_convertible<TPrimitiveEnum, std::underlying_type_t<TPrimitiveEnum> >::value );
 static_assert( !tc::is_safely_convertible<TPrimitiveEnum, std::underlying_type_t<TPrimitiveEnum>>::value );
+static_assert( !tc::has_common_reference_prvalue_as_val<tc::type::list<TPrimitiveEnum, int>>::value);
 
 enum TPrimitiveEnum2 { l, m };
 static_assert( !tc::is_safely_convertible<TPrimitiveEnum, TPrimitiveEnum2>::value );
+static_assert( !tc::has_common_reference_prvalue_as_val<tc::type::list<TPrimitiveEnum, TPrimitiveEnum2>>::value);
 
 struct SBase {};
 struct SDerived final : SBase {};
 static_assert(std::is_convertible<SDerived, SBase>::value);
 static_assert(!tc::is_safely_convertible<SDerived, SBase>::value);
+
+static_assert(tc::is_safely_convertible<SDerived&, SDerived>::value);
+static_assert(!tc::is_safely_convertible<SDerived&, SBase>::value);
+static_assert(tc::is_safely_convertible<SDerived&, SBase&>::value);
+static_assert(tc::is_safely_convertible<SDerived&, SBase const&>::value);
+static_assert(!tc::is_safely_convertible<SDerived&, SBase&&>::value);
+static_assert(tc::is_safely_convertible<SDerived&, SBase const&&>::value);
+
+static_assert(tc::is_safely_convertible<SDerived const&, SDerived>::value);
+static_assert(!tc::is_safely_convertible<SDerived const&, SBase>::value);
+static_assert(!tc::is_safely_convertible<SDerived const&, SBase&>::value);
+static_assert(tc::is_safely_convertible<SDerived const&, SBase const&>::value);
+static_assert(!tc::is_safely_convertible<SDerived const&, SBase&&>::value);
+static_assert(tc::is_safely_convertible<SDerived const&, SBase const&&>::value);
+
+static_assert(tc::is_safely_convertible<SDerived, SDerived>::value);
+static_assert(!tc::is_safely_convertible<SDerived, SBase>::value);
+static_assert(!tc::is_safely_convertible<SDerived, SBase const&>::value);
+static_assert(!tc::is_safely_convertible<SDerived, SBase&>::value);
+static_assert(!tc::is_safely_convertible<SDerived, SBase&&>::value);
+static_assert(!tc::is_safely_convertible<SDerived, SBase const&&>::value);
+
+static_assert(tc::is_safely_convertible<SDerived&&, SDerived>::value);
+static_assert(!tc::is_safely_convertible<SDerived&&, SBase>::value);
+static_assert(!tc::is_safely_convertible<SDerived&&, SBase const&>::value);
+static_assert(!tc::is_safely_convertible<SDerived&&, SBase&>::value);
+static_assert(tc::is_safely_convertible<SDerived&&, SBase&&>::value);
+static_assert(tc::is_safely_convertible<SDerived&&, SBase const&&>::value);
+
+static_assert(tc::is_safely_convertible<SDerived const&&, SDerived>::value);
+static_assert(!tc::is_safely_convertible<SDerived const&&, SBase>::value);
+static_assert(!tc::is_safely_convertible<SDerived const&&, SBase const&>::value);
+static_assert(!tc::is_safely_convertible<SDerived const&&, SBase&>::value);
+static_assert(!tc::is_safely_convertible<SDerived const&&, SBase&&>::value);
+static_assert(tc::is_safely_convertible<SDerived const&&, SBase const&&>::value);
 
 struct SToInt final {
 	operator int() const& noexcept;
@@ -123,6 +161,55 @@ static_assert(tc::is_safely_convertible<SToInt, int>::value);
 static_assert(std::is_convertible<SToInt, int const&>::value);
 static_assert(!tc::is_safely_convertible<SToInt, int const&>::value);
 
+static_assert(!tc::is_safely_convertible<SToInt, int&&>::value);
+static_assert(!tc::is_safely_convertible<SToInt, int const&&>::value);
+static_assert(!tc::is_safely_convertible<SToInt&, int&&>::value);
+static_assert(!tc::is_safely_convertible<SToInt&, int const&&>::value);
+static_assert(!tc::is_safely_convertible<SToInt&&, int&&>::value);
+static_assert(!tc::is_safely_convertible<SToInt&&, int const&&>::value);
+
+static_assert(tc::is_safely_convertible<std::string&, tc::ptr_range<char>>::value);
+static_assert(tc::is_safely_convertible<std::string&, tc::ptr_range<char const>>::value);
+static_assert(!tc::is_safely_convertible<std::string, tc::ptr_range<char const>>::value);
+static_assert(!tc::is_safely_convertible<std::string const, tc::ptr_range<char const>>::value);
+static_assert(!tc::is_safely_convertible<std::string&&, tc::ptr_range<char const>>::value);
+static_assert(!tc::is_safely_convertible<std::string const&&, tc::ptr_range<char const>>::value);
+static_assert(tc::is_safely_convertible<std::string const&, tc::ptr_range<char const>>::value);
+static_assert(!tc::is_safely_convertible<char const*, tc::ptr_range<char>>::value);
+static_assert(tc::is_safely_convertible<char const*, tc::ptr_range<char const>>::value);
+static_assert(tc::is_safely_convertible<char const* &, tc::ptr_range<char const>>::value);
+static_assert(tc::is_safely_convertible<char const* &&, tc::ptr_range<char const>>::value);
+static_assert(tc::is_safely_convertible<int(&)[3], tc::ptr_range<int const>>::value);
+static_assert(tc::is_safely_convertible<int(&)[3], tc::ptr_range<int>>::value);
+static_assert(tc::is_safely_convertible<tc::ptr_range<int>, tc::ptr_range<int>>::value);
+static_assert(tc::is_safely_convertible<tc::ptr_range<int>, tc::ptr_range<int const>>::value);
+static_assert(tc::is_safely_convertible<tc::ptr_range<int>&&, tc::ptr_range<int const>>::value);
+static_assert(tc::is_safely_convertible<tc::ptr_range<int>&, tc::ptr_range<int const>>::value);
+static_assert(tc::is_safely_convertible<tc::ptr_range<int> const&, tc::ptr_range<int const>>::value);
+static_assert(!tc::is_safely_convertible<tc::ptr_range<char const>, decltype(tc::concat("abc", "def"))>::value);
+static_assert(!tc::is_safely_convertible<tc::ptr_range<char const>, tc::vector<int>>::value);
+
+static_assert(!tc::is_safely_convertible<std::string&, tc::ptr_range<char>&>::value);
+static_assert(!tc::is_safely_convertible<std::string&, tc::ptr_range<char> const&>::value);
+
+#ifdef TC_MAC
+static_assert(tc::is_safely_constructible<void (^)(), void (^)()>::value);
+static_assert(!tc::is_safely_constructible<void (^)(), int (^)()>::value);
+static_assert(!tc::is_safely_constructible<void (^)(), void (^)(int)>::value);
+static_assert(tc::is_safely_constructible<void (^)(), nullptr_t>::value);
+static_assert(!tc::is_safely_constructible<void (^)(), int*>::value);
+static_assert(!tc::is_safely_constructible<void (^)(), void*>::value);
+
+namespace {
+	using TVoidFunction = void (*)();
+}
+static_assert(!tc::is_safely_constructible<void (^)(), TVoidFunction>::value);
+
+static_assert(tc::no_adl::is_objc_block<void (^)()>::value);
+static_assert(tc::no_adl::is_objc_block<void (^)(int, char, bool)>::value);
+static_assert(!tc::no_adl::is_objc_block<void (*)(int, char, bool)>::value);
+#endif
+
 struct A {};
 struct B : A {
 	operator int(){return 0;}
@@ -130,91 +217,436 @@ struct B : A {
 
 static_assert(
 	std::is_same<
-		tc::common_reference_t<A&&, A>,
-		A
-	>::value
-);
-
-static_assert(
-	std::is_same<
-		tc::common_reference_t<A&&, A&&>,
+		tc::common_reference_xvalue_as_ref_t<A&&>,
 		A&&
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_t<A&, A&>,
+		tc::common_reference_xvalue_as_ref_t<A&>,
 		A&
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_t<A&, A&&>,
+		tc::common_reference_xvalue_as_ref_t<A&&, A&&>,
+		A&&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<A&, A&&>,
 		A const&&
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_t<A const&&, A&&>,
+		tc::common_reference_xvalue_as_ref_t<A&, B&>,
+		A&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<A&&, B&&>,
+		A&&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<A&, B&&>,
 		A const&&
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_t<A const&, A&>,
+		tc::common_reference_xvalue_as_ref_t<A&, A&, A const&>,
 		A const&
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_t<B const&, A volatile&>,
+		tc::common_reference_xvalue_as_ref_t<A&&, A&&, B&&>,
+		A&&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char const>>,
+		tc::ptr_range<char const>
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char const> const>,
+		tc::ptr_range<char const> const
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char const> const&>,
+		tc::ptr_range<char const> const&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char const>&, tc::ptr_range<char const> const&>,
+		tc::ptr_range<char const> const&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char>, tc::ptr_range<char const> const&>,
+		tc::ptr_range<char const>
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char const>, tc::ptr_range<char const> const&>,
+		tc::ptr_range<char const>
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char const>, std::string&>,
+		tc::ptr_range<char const>
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char>, std::string const&>,
+		tc::ptr_range<char const>
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char>, tc::ptr_range<char>>,
+		tc::ptr_range<char>
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char>, tc::ptr_range<char const>>,
+		tc::ptr_range<char const>
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<tc::vector<char>&, tc::vector<char> const&>,
+		tc::vector<char> const&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<int(&)[17], int(&)[17]>,
+		int(&)[17]
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<int const(&)[17], int(&)[17]>,
+		int const(&)[17]
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<int(&)[17], int(&)[18]>,
+		tc::ptr_range<int>
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<int const(&)[17], int(&)[18]>,
+		tc::ptr_range<int const>
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<int>, int(&)[19]>,
+		tc::ptr_range<int>
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<int> const, int(&)[19]>,
+		tc::ptr_range<int>
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<int(&)[17], int(&)[18], int(&)[19]>,
+		tc::ptr_range<int>
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<int&, short&>,
+		int
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<tc::vector<char>&, std::basic_string<char>&>,
+		tc::ptr_range<char>
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<tc::vector<char>&, std::basic_string<char> const&>,
+		tc::ptr_range<char const>
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<const wchar_t (&)[6], tc::ptr_range<wchar_t>&&>,
+		tc::ptr_range<wchar_t const>
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<tc::vector<char>&&, tc::vector<char>&>,
+		tc::vector<char> const&&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<int>&&>,
+		tc::ptr_range<int>&&
+	>::value
+);
+
+static_assert(
+	!tc::has_common_reference_xvalue_as_ref<tc::type::list<tc::ptr_range<char>, std::string&&>>::value
+);
+
+static_assert(
+	!tc::has_common_reference_xvalue_as_ref<tc::type::list<tc::vector<char>&, std::basic_string<char>&&>>::value
+);
+
+static_assert(
+	!tc::has_common_reference_xvalue_as_ref<tc::type::list<char const*, tc::ptr_range<char>, std::string const&&>>::value
+);
+
+static_assert(
+	!tc::has_common_reference_xvalue_as_ref<tc::type::list<tc::vector<char>&&, std::basic_string<char>&>>::value
+);
+
+static_assert(
+	!tc::has_common_reference_xvalue_as_ref<tc::type::list<A, A&&>>::value
+);
+
+static_assert(
+	!tc::has_common_reference_xvalue_as_ref<tc::type::list<tc::ptr_range<char const>, std::string>>::value
+);
+
+static_assert(
+	!tc::has_common_reference_xvalue_as_ref<tc::type::list<A, A>>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_prvalue_as_val_t<A&&, A&&>,
+		A&&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_prvalue_as_val_t<A&, A&>,
+		A&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_prvalue_as_val_t<A&, A&&>,
+		A const&&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_prvalue_as_val_t<A const&&, A&&>,
+		A const&&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_prvalue_as_val_t<A const&, A&>,
+		A const&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_prvalue_as_val_t<B const&, A volatile&>,
 		A const volatile&
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_t<B&, A volatile&&>,
+		tc::common_reference_prvalue_as_val_t<B&, A volatile&&>,
 		A const volatile&&
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_t<B const&&, A volatile&>,
+		tc::common_reference_prvalue_as_val_t<B const&&, A volatile&>,
 		A const volatile&&
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_t<B const&&, B volatile&>,
+		tc::common_reference_prvalue_as_val_t<B const&&, B volatile&>,
 		B const volatile &&
 	>::value
 );
 
-/*
-	must not compile (slicing)
 static_assert(
 	std::is_same<
-		tc::common_reference_t<B&, A>,
-		A
+		tc::common_reference_prvalue_as_val_t<tc::vector<char>&, tc::vector<char> const&>,
+		tc::vector<char> const&
 	>::value
 );
-*/
-/*
+
 static_assert(
 	std::is_same<
-		tc::common_reference_t<SToInt,int>,
+		tc::common_reference_prvalue_as_val_t<int(&)[17], int(&)[17]>,
+		int(&)[17]
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_prvalue_as_val_t<int const(&)[17], int(&)[17]>,
+		int const(&)[17]
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_prvalue_as_val_t<int&, short&>,
 		int
 	>::value
 );
-*/
+
+static_assert(
+	std::is_same<
+		tc::common_reference_prvalue_as_val_t<tc::vector<char>&&, tc::vector<char>&>,
+		tc::vector<char> const&&
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_prvalue_as_val_t<tc::ptr_range<char const>>,
+		tc::ptr_range<char const>
+	>::value
+);
+
+static_assert(
+	!tc::has_common_reference_prvalue_as_val<tc::type::list<tc::vector<char>&&, std::string&>>::value
+);
+
+static_assert(
+	!tc::has_common_reference_prvalue_as_val<tc::type::list<tc::vector<char>&&, std::string&, tc::ptr_range<char const>>>::value
+);
+
+static_assert(
+	!tc::has_common_reference_prvalue_as_val<tc::type::list<tc::vector<char>, std::string&>>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<tc::vector<int>&, tc::sub_range<tc::vector<int>&>>,
+		tc::sub_range<tc::vector<int>&>
+	>::value
+);
+
+static_assert(
+	std::is_same <
+		tc::common_reference_xvalue_as_ref_t<tc::vector<int>&, tc::sub_range<tc::vector<int>>&>,
+		tc::sub_range<tc::vector<int>&>
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<tc::sub_range<tc::vector<int>&>, tc::sub_range<tc::vector<int>>&>,
+		tc::sub_range<tc::vector<int>&>
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_prvalue_as_val_t<tc::vector<int>&, tc::sub_range<tc::vector<int>&>>,
+		tc::sub_range<tc::vector<int>&>
+	>::value
+);
+
+static_assert(
+	std::is_same <
+		tc::common_reference_prvalue_as_val_t<tc::vector<int>&, tc::sub_range<tc::vector<int>>&>,
+		tc::sub_range<tc::vector<int>&>
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_prvalue_as_val_t<tc::sub_range<tc::vector<int>&>, tc::sub_range<tc::vector<int>>&>,
+		tc::sub_range<tc::vector<int>&>
+	>::value
+);
+
+static_assert(
+	!tc::has_common_reference_xvalue_as_ref<tc::type::list<tc::vector<int>&, tc::sub_range<tc::vector<int>>>>::value
+);
+
+static_assert(
+	!tc::has_common_reference_xvalue_as_ref<tc::type::list<tc::vector<int>, tc::sub_range<tc::vector<int>&>>>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_prvalue_as_val_t<tc::vector<char>&, std::string&>,
+		tc::ptr_range<char>
+	>::value
+);
 
 namespace {
 struct S;
@@ -351,25 +783,25 @@ UNITTESTDEF(minTest) {
 
 	static_assert(
 		std::is_same<
-			tc::common_reference_t<decltype(tc::size(vecn)),short>,
+			tc::common_reference_prvalue_as_val_t<decltype(tc::size(vecn)),short>,
 			short
 		>::value
 	);
 
-	boost::implicit_cast<tc::common_reference_t<decltype(tc::size(vecn)),int>>(tc::size(vecn));
+	boost::implicit_cast<tc::common_reference_prvalue_as_val_t<decltype(tc::size(vecn)),int>>(tc::size(vecn));
 
 	tc::min(tc::size(vecn),2);
 
 	int a = 3;
 	int b = 4;
-	_ASSERT(tc::min(a,b) == 3);
+	_ASSERTEQUAL(tc::min(a,b), 3);
 	tc::min(a,b) = 7;
-	_ASSERT(a==7);
+	_ASSERTEQUAL(a, 7);
 
-	_ASSERT(tc::min(a,2) == 2);
-	_ASSERT(tc::min(5,b) == 4);
+	_ASSERTEQUAL(tc::min(a,2), 2);
+	_ASSERTEQUAL(tc::min(5,b), 4);
 
-	_ASSERT(tc::min(1,a,b) == 1);
+	_ASSERTEQUAL(tc::min(1,a,b), 1);
 
 	static_assert(
 		std::is_same<
@@ -392,7 +824,7 @@ UNITTESTDEF(minTest) {
 			tc::make_range_of_iterators(
 				tc::transform(
 					tc::transform(
-						tc::make_counting_range(0,1),
+						tc::iota(0,1),
 						[&](int n) noexcept -> S&& {
 							return std::move(s2[n]);
 						}
@@ -402,7 +834,7 @@ UNITTESTDEF(minTest) {
 			),
 			[&](auto it) noexcept {
 				auto_cref( elem, *it );
-				elem;
+				boost::ignore_unused(elem);
 			}
 		);
 	}
@@ -465,3 +897,5 @@ UNITTESTDEF(minTest) {
 		>::value
 	);
 }
+
+static_assert(!tc::is_safely_constructible<std::basic_string<wchar_t,std::char_traits<wchar_t>,std::allocator<wchar_t>>, wchar_t const* const&, wchar_t const* const&>::value);

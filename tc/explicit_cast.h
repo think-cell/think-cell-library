@@ -1,19 +1,18 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "is_static_castable.h"
 #include "casts.h"
 
 #include <type_traits>
 #include <string>
-#include <boost/optional.hpp>
+#include <optional>
 
 //////////////////////////////////////////////////////////////////
 // generic initialization and assignment between different types
@@ -35,62 +34,14 @@
 // types are required.
 
 namespace tc {
+	DEFINE_TAG_TYPE(list_initialize_tag)
+
 	namespace no_adl {
 		///////////////////////////////////////////////
 		// default conversions
 
 		template<typename TTarget, typename Enable=void>
-		struct SDefaultConversions;
-
-		// if target is a reference, disallow initializations which involve nontrivial conversions
-		template<typename TTarget>
-		struct SDefaultConversions<TTarget,  std::enable_if_t<std::is_reference<TTarget>::value>> {
-			template<typename TSource>
-			static std::enable_if_t<
-				tc::creates_no_reference_to_temporary<TSource, TTarget>::value
-			, TTarget> constexpr fn (TSource&& src) noexcept {
-				return src; // static_cast if needed?
-			}
-		};
-
-		template<typename TTarget >
-		struct SClassConversions {
-			static_assert( tc::is_decayed< TTarget >::value );
-
-			// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
-			template<typename... TSource>
-			static std::enable_if_t<
-				std::is_class<TTarget>::value &&
-				tc::is_safely_constructible< TTarget, TSource&&... >::value
-			, TTarget > constexpr fn (TSource&&... src) MAYTHROW {
-				return TTarget(std::forward<TSource>(src)...);
-			}
-
-			// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
-			template<typename TSource>
-			static std::enable_if_t<
-				!std::is_class<TTarget>::value &&
-				std::is_class< std::remove_reference_t<TSource> >::value &&
-				tc::is_static_castable< TSource&&, TTarget >::value
-			, TTarget > constexpr fn (TSource&& src) MAYTHROW {
-				return static_cast<TTarget>(std::forward<TSource>(src));
-			}
-		};
-
-		template<typename TTarget>
-		struct SDefaultConversions<TTarget, std::enable_if_t<std::is_class<TTarget>::value || std::is_union<TTarget>::value>> : SClassConversions<TTarget> {};
-
-		template<>
-		struct SDefaultConversions<bool> : SClassConversions<bool> {
-			using SClassConversions<bool>::fn;
-
-			template<typename TSource>
-			static std::enable_if_t<
-				std::is_same<tc::decay_t<TSource>, bool>::value
-			, bool > constexpr fn (TSource&& src) noexcept {
-				return src;
-			}
-		};
+		struct SConversions final {};
 
 		template<typename T>
 		struct char_limits;
@@ -132,9 +83,7 @@ namespace tc {
 		{};
 
 		template<typename TTarget>
-		struct SDefaultConversions<TTarget,  std::enable_if_t<tc::is_char<TTarget>::value>> : SClassConversions<TTarget> {
-			using SClassConversions<TTarget>::fn;
-
+		struct SConversions<TTarget, std::enable_if_t<tc::is_char<TTarget>::value>> {
 			template<typename TSource>
 			static std::enable_if_t<
 				tc::is_char< TSource >::value
@@ -147,9 +96,7 @@ namespace tc {
 		};
 
 		template<typename TTarget>
-		struct SDefaultConversions<TTarget,  std::enable_if_t<tc::is_actual_integer<TTarget>::value>> : SClassConversions<TTarget> {
-			using SClassConversions<TTarget>::fn;
-
+		struct SConversions<TTarget, std::enable_if_t<tc::is_actual_integer<TTarget>::value>> {
 			template<typename TSource, std::enable_if_t<
 				std::is_floating_point<TSource>::value>* = nullptr>
 			static TTarget fn(TSource src) noexcept {
@@ -187,30 +134,6 @@ namespace tc {
 #pragma warning( pop )
 #endif
 		};
-
-		template<typename TTarget>
-		struct SDefaultConversions<TTarget,  std::enable_if_t<std::is_floating_point<TTarget>::value>> : SClassConversions<TTarget> {
-			using SClassConversions<TTarget>::fn;
-
-			template<typename TSource>
-			static std::enable_if_t<
-				tc::is_actual_arithmetic< TSource >::value
-			, TTarget > constexpr fn (TSource src) noexcept {
-				return static_cast<TTarget>(src);
-			}
-		};
-
-		template<typename TTarget>
-		struct SDefaultConversions<TTarget, std::enable_if_t<std::is_enum<TTarget>::value || std::is_pointer<TTarget>::value>> : SClassConversions<TTarget> {
-			using SClassConversions<TTarget>::fn;
-
-			static constexpr TTarget fn (TTarget src) noexcept {
-				return src;
-			}
-		};
-
-		template<typename TTarget, typename Enable=void>
-		struct SConversions final : SDefaultConversions<TTarget> {};
 	}
 
 	namespace explicit_cast_detail {
@@ -219,63 +142,74 @@ namespace tc {
 			return pos;
 		}
 
-		namespace no_adl {
-			// control whether to ConvertToUnderlying first
-			struct SFirstConvertToUnderlying {};
-			struct SDirectConvert final: SFirstConvertToUnderlying {};
+		template <typename TTarget, typename ArgList, typename Enable=void>
+		struct HaveConversions final : std::false_type {};
+		
+		template <typename TTarget, typename... Args>
+		struct HaveConversions<TTarget, tc::type::list<Args...>, tc::void_t<decltype(tc::no_adl::SConversions<TTarget>::fn(std::declval<Args>()...))>> final : std::true_type {};
+		
+		template<typename TTarget, typename... Args>
+		constexpr auto InternalConvert( Args&&... args ) MAYTHROW -> std::enable_if_t<
+			HaveConversions<TTarget,tc::type::list<Args...>>::value,
+		TTarget> {
+			return tc::no_adl::SConversions<TTarget>::fn(std::forward<Args>(args)...); // MAYTHROW
 		}
-		using no_adl::SFirstConvertToUnderlying;
-		using no_adl::SDirectConvert;
 
-		template<typename TTarget, typename... TSource>
-		constexpr auto InternalConvert( SDirectConvert, TSource&&... src ) MAYTHROW
-			return_decltype_rvalue_by_ref( tc::no_adl::SConversions<TTarget>::fn(std::forward<TSource>(src)...) ) // MAYTHROW
-
-		template<typename TTarget, typename... TSource>
-		constexpr TTarget InternalConvert( SFirstConvertToUnderlying, TSource&&... src ) MAYTHROW {
-			return InternalConvert<TTarget>(/*prefer no second ConvertToUnderlying*/ SDirectConvert(), ConvertToUnderlying(std::forward<TSource>(src)... )); // MAYTHROW
+		template<typename TTarget, typename... Args>
+		constexpr auto InternalConvert( Args&&... args ) MAYTHROW -> std::enable_if_t<
+			!HaveConversions<TTarget,tc::type::list<Args...>>::value,
+		decltype(tc::no_adl::SConversions<TTarget>::fn(ConvertToUnderlying(std::forward<Args>(args)...))) > {
+			return tc::no_adl::SConversions<TTarget>::fn(ConvertToUnderlying(std::forward<Args>(args)...)); // MAYTHROW
 		}
 	}
 
-	template<typename TTarget, typename... TSource>
-	constexpr std::remove_cv_t<TTarget> explicit_cast(TSource&&... src) MAYTHROW {
-		return explicit_cast_detail::InternalConvert<std::remove_cv_t<TTarget>>(/*prefer no ConvertToUnderlying*/ explicit_cast_detail::SDirectConvert(), std::forward<TSource>(src)... ); // MAYTHROW
+	template<typename TTarget, typename... Args>
+	constexpr auto explicit_cast(Args&&... args) MAYTHROW -> std::enable_if_t<
+		!tc::is_safely_constructible<std::remove_cv_t<TTarget>, Args&&...>::value,
+	decltype(explicit_cast_detail::InternalConvert<std::remove_cv_t<TTarget>>(std::forward<Args>(args)... )) > {
+		return explicit_cast_detail::InternalConvert<std::remove_cv_t<TTarget>>(std::forward<Args>(args)... );
+	}
+
+	template<typename TTarget, typename... Args>
+	constexpr auto explicit_cast(Args&&... args) MAYTHROW -> std::enable_if_t<
+		tc::is_safely_constructible<std::remove_cv_t<TTarget>, Args&&...>::value,
+	std::remove_cv_t<TTarget> > {
+		return std::remove_cv_t<TTarget>(std::forward<Args>(args)...); // MAYTHROW
+	}
+
+	template<typename TTarget, typename... Args>
+	constexpr auto explicit_cast(tc::list_initialize_tag_t, Args&&... args) MAYTHROW -> std::enable_if_t<
+		std::is_class<TTarget>::value,
+	decltype(std::remove_cv_t<TTarget>{std::declval<Args>()...})> {
+		return std::remove_cv_t<TTarget>{std::forward<Args>(args)...};
 	}
 
 	///////////////////////////////////////////////
 	// special conversions
 	namespace no_adl {
-		// features conversion from basic_string to char const*
-		template<typename Char>
-		struct SConversions<Char const* > final: SDefaultConversions<Char const*> {
-			using SDefaultConversions<Char const*>::fn;
-
-			template<typename Alloc>
-			static Char const* fn(std::basic_string<Char,std::char_traits<Char>,Alloc> const& str) noexcept {
-				return tc::as_c_str(str);
-			}
-		};
-
-
 		template<typename TTargetFirst,typename TTargetSecond>
-		struct SConversions<std::pair<TTargetFirst,TTargetSecond>> final: SDefaultConversions<std::pair<TTargetFirst,TTargetSecond>> {
-			using SDefaultConversions<std::pair<TTargetFirst,TTargetSecond>>::fn;
-
+		struct SConversions<std::pair<TTargetFirst,TTargetSecond>> final {
 			template<typename TSourceFirst,typename TSourceSecond>
 			static constexpr std::pair<TTargetFirst,TTargetSecond> fn(std::pair<TSourceFirst,TSourceSecond> const& pair) MAYTHROW {
-				// std::remove_cv affects only values and leaves const/volatile references untouched, which is what we want.
 				return std::pair<TTargetFirst,TTargetSecond>(
-					tc::explicit_cast<std::remove_cv_t<TTargetFirst>>(pair.first),
-					tc::explicit_cast<std::remove_cv_t<TTargetSecond>>(pair.second)
+					tc::explicit_cast<TTargetFirst>(pair.first),
+					tc::explicit_cast<TTargetSecond>(pair.second)
 				);
 			}
-			
+
+			template<typename TSourceFirst,typename TSourceSecond>
+			static constexpr std::pair<TTargetFirst,TTargetSecond> fn(std::pair<TSourceFirst,TSourceSecond>&& pair) MAYTHROW {
+				return std::pair<TTargetFirst,TTargetSecond>(
+					tc::explicit_cast<TTargetFirst>(tc_move(pair).first),
+					tc::explicit_cast<TTargetSecond>(tc_move(pair).second)
+				);
+			}
+
 			template<typename TSourceFirst,typename TSourceSecond>
 			static constexpr std::pair<TTargetFirst,TTargetSecond> fn(TSourceFirst&& first, TSourceSecond&& second) MAYTHROW {
-				// std::remove_cv affects only values and leaves const/volatile references untouched, which is what we want.
 				return std::pair<TTargetFirst,TTargetSecond>(
-					tc::explicit_cast<std::remove_cv_t<TTargetFirst>>(std::forward<TSourceFirst>(first)),
-					tc::explicit_cast<std::remove_cv_t<TTargetSecond>>(std::forward<TSourceSecond>(second))
+					tc::explicit_cast<TTargetFirst>(std::forward<TSourceFirst>(first)),
+					tc::explicit_cast<TTargetSecond>(std::forward<TSourceSecond>(second))
 				);
 			}
 		};
@@ -284,12 +218,12 @@ namespace tc {
 	DEFINE_FN_TMPL( explicit_cast, (typename) );
 	
 	template<typename TTarget, typename TSource, std::enable_if_t<tc::is_base_of_decayed<TTarget, TSource>::value>* = nullptr>
-	TSource&& reluctant_explicit_cast(TSource&& src) noexcept {
+	constexpr TSource&& reluctant_explicit_cast(TSource&& src) noexcept {
 		return std::forward<TSource>(src);
 	}
 
 	template<typename TTarget, typename TSource, std::enable_if_t<!tc::is_base_of_decayed<TTarget, TSource>::value>* = nullptr>
-	std::remove_cv_t<TTarget> reluctant_explicit_cast(TSource&& src) noexcept {
+	constexpr std::remove_cv_t<TTarget> reluctant_explicit_cast(TSource&& src) noexcept {
 		return explicit_cast<TTarget>(std::forward<TSource>(src));
 	}
 
@@ -319,11 +253,8 @@ namespace tc {
 		template<typename T, typename Tuple>
 		struct lazy_ctor final {
 			Tuple m_tuple;
-			operator T() const& noexcept {
-				return std::make_from_tuple<T>(m_tuple);
-			}
 			operator T() && noexcept {
-				return std::make_from_tuple<T>(std::move(m_tuple));
+				return std::apply(tc::fn_explicit_cast<std::remove_cv_t<T>>(), tc_move_always(m_tuple));
 			}
 		};
 	}
@@ -334,26 +265,13 @@ namespace tc {
 	}
 
 	namespace no_adl {
-		// SConversions cannot implement templated fn(Rng&&) *and* use fn(TSource&&)
-		// from SDefaultConversions. Apparently, despite the std::enable_if constructs, both are considered
-		// to have the same signatures and the using declaration is therefore ignored. Only Clang implements
-		// this standard rule, however:
-		// http://stackoverflow.com/questions/18861514/using-and-overloading-a-template-member-function-of-a-base-class
 		template<typename TTarget>
-		struct SOptionalConversionsHelper {
-			template<typename... TSource, std::enable_if_t<
-				!tc::is_safely_constructible< boost::optional<TTarget>, TSource&&... >::value // disable for trivial conversions to use move semantic / copy on write where possible
-			>* = nullptr>
-			static constexpr boost::optional<TTarget> fn(TSource&&... src) MAYTHROW {
+		struct SConversions<std::optional<TTarget>> final {
+			template<typename... TSource>
+			static constexpr std::optional<TTarget> fn(std::in_place_t, TSource&&... src) MAYTHROW {
 				// std::remove_cv affects only values and leaves const/volatile references untouched, which is what we want.
-				return boost::optional<TTarget>(tc::lazy_ctor<TTarget>(tc::explicit_cast<std::remove_cv_t<TTarget>>(std::forward<TSource>(src)...)));
+				return std::optional<TTarget>(std::in_place, tc::lazy_ctor<TTarget>(std::forward<TSource>(src)...));
 			}
-		};
-
-		template<typename TTarget>
-		struct SConversions<boost::optional<TTarget>> final: SDefaultConversions<boost::optional<TTarget>>, SOptionalConversionsHelper<TTarget> {
-			using SDefaultConversions<boost::optional<TTarget>>::fn;
-			using SOptionalConversionsHelper<TTarget>::fn;
 		};
 	}
 
@@ -361,4 +279,16 @@ namespace tc {
 	void assign_explicit_cast(Lhs& lhs, Rhs&& rhs) noexcept {
 		lhs=tc::explicit_cast<Lhs>(std::forward<Rhs>(rhs));
 	}
+
+	namespace is_explicit_castable_detail {
+		template<typename TTarget, typename ArgList, typename Enable=void>
+		struct is_explicit_castable : std::false_type {};
+
+		template<typename TTarget, typename... Args>
+		struct is_explicit_castable<TTarget, tc::type::list<Args...>, tc::void_t<decltype(
+			tc::explicit_cast<TTarget>(std::declval<Args>()...)
+		)>> : std::true_type {};
+	}
+	template<typename TTarget, typename... Args>
+	using is_explicit_castable=is_explicit_castable_detail::is_explicit_castable<TTarget,tc::type::list<Args...>>;
 }

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -247,7 +247,7 @@ namespace tc {
 	DEFINE_TAG_TYPE(unused_type)
 
 	template<typename Char>
-	constexpr auto char_ = tc::unused_type();
+	constexpr auto char_ = tc::unused_type;
 
 	template<>
 	constexpr auto char_<char> = x3::any_char<typename boost::spirit::traits::char_encoding_from_char<char>::type>();
@@ -271,7 +271,7 @@ namespace tc {
 	namespace no_adl {
 		template<typename Rng>
 		struct char_set final: x3::char_parser<char_set<Rng>> {
-			using attribute_type = tc::range_value_t<std::remove_reference_t<Rng>>;
+			using attribute_type = tc::range_value_t<Rng>;
 			static bool const has_attribute = true;
 
 			constexpr char_set(Rng rng) noexcept
@@ -464,9 +464,7 @@ namespace tc {
 }
 
 namespace boost { namespace spirit { namespace x3 {
-	DEFINE_TAG_TYPE(ascii_no_case_tag)
-
-	constexpr auto ascii_no_case_compare_ = ascii_no_case_tag{};
+	DEFINE_ADL_TAG_TYPE(ascii_no_case_tag)
 
 	template <typename Encoding>
 	struct ascii_no_case_compare
@@ -505,7 +503,7 @@ namespace boost { namespace spirit { namespace x3 {
 	};
 
 	template <typename Encoding>
-	ascii_no_case_compare<Encoding> get_case_compare_impl(ascii_no_case_tag const&)
+	ascii_no_case_compare<Encoding> get_case_compare_impl(ascii_no_case_tag_t const&)
 	{
 		return {};
 	}
@@ -528,7 +526,7 @@ namespace boost { namespace spirit { namespace x3 {
 		{
 			return this->subject.parse(
 				first, last
-			  , make_context<no_case_tag>(ascii_no_case_compare_, context)
+			  , make_context<no_case_tag>(ascii_no_case_tag, context)
 			  , rcontext
 			  , attr);
 		}

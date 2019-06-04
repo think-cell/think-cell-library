@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -66,7 +66,7 @@ namespace tc {
 				return std::addressof(**this);
 			}
 			T const& operator*() const& noexcept {
-				static_assert( sizeof(*this)==sizeof(T) ); // no extra members, important for arrays
+				STATICASSERTEQUAL( sizeof(*this), sizeof(T) ); // no extra members, important for arrays
 				return reinterpret_cast<T const&>(m_buffer);
 			}
 			T& operator*() & noexcept {
@@ -82,6 +82,11 @@ namespace tc {
 
 		template< typename T >
 		struct storage_for : storage_for_without_dtor <T> {
+			template <typename S>
+			static decltype(auto) from_content(S&& t) noexcept {
+				return tc::derived_cast<storage_for>(storage_for_without_dtor<T>::from_content(std::forward<S>(t)));
+			}
+			
 #if defined(_DEBUG) && defined(TC_PRIVATE)
 			storage_for() noexcept {
 				tc::fill_with_dead_pattern(this->m_buffer);
@@ -89,6 +94,7 @@ namespace tc {
 			~storage_for() noexcept {
 				check_pattern();
 			}
+
 			void ctor() & noexcept(noexcept(storage_for_without_dtor <T>::ctor())) {
 				check_pattern();
 				try {
@@ -181,6 +187,43 @@ namespace tc {
 			void dtor() & noexcept {
 				_ASSERTDEBUG(this->m_pt);
 				storage_for_without_dtor <T&>::dtor();
+				this->m_pt=nullptr;
+			}
+#endif
+		};
+
+		template< typename T >
+		struct storage_for_without_dtor<T&&> : tc::nonmovable {
+		protected:
+			static_assert(!std::is_reference<T>::value);
+			T* m_pt;
+		public:
+			void ctor(T&& t) & noexcept {
+				m_pt=std::addressof(t);
+			}
+
+			T&& operator*() && noexcept {
+				return static_cast<T&&>(*m_pt);
+			}
+			void dtor() const& noexcept {}
+		};
+
+		template< typename T >
+		struct storage_for<T&&> : storage_for_without_dtor <T&&> {
+#if defined(_DEBUG) && defined(TC_PRIVATE)
+			storage_for() noexcept {
+				this->m_pt=nullptr;
+			}
+			~storage_for() noexcept {
+				_ASSERTDEBUG(!this->m_pt);
+			}
+			void ctor(T&& t) & noexcept {
+				_ASSERTDEBUG(!this->m_pt);
+				storage_for_without_dtor<T&&>::ctor(tc_move(t));
+			}
+			void dtor() & noexcept {
+				_ASSERTDEBUG(this->m_pt);
+				storage_for_without_dtor<T&&>::dtor();
 				this->m_pt=nullptr;
 			}
 #endif

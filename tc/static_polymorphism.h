@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -19,22 +19,22 @@
 	using Name ## _declaring_type = this_type; \
 	template<typename Derived_=Derived, typename... Args> \
 	Mod \
-	auto Name(Args&& ...args) & MAYTHROW return_decltype_rvalue_by_ref ( \
+	auto Name(Args&& ...args) & MAYTHROW return_decltype_xvalue_by_ref ( \
 		tc::derived_cast<Derived_>(*this). STATIC_VIRTUAL_METHOD_NAME(Name) (std::forward<Args>(args)...) \
 	) \
 	template<typename Derived_=Derived, typename... Args> \
 	Mod \
-	auto Name(Args&& ...args) const& MAYTHROW return_decltype_rvalue_by_ref ( \
+	auto Name(Args&& ...args) const& MAYTHROW return_decltype_xvalue_by_ref ( \
 		tc::derived_cast<Derived_>(this)-> STATIC_VIRTUAL_METHOD_NAME(Name) (std::forward<Args>(args)...) \
 	) \
 	template<typename Derived_=Derived, typename... Args> \
 	Mod \
-	auto Name(Args&& ...args) && MAYTHROW return_decltype_rvalue_by_ref ( \
+	auto Name(Args&& ...args) && MAYTHROW return_decltype_xvalue_by_ref ( \
 		tc_move_always(tc::derived_cast<Derived_>(*this)). STATIC_VIRTUAL_METHOD_NAME(Name) (std::forward<Args>(args)...) \
 	) \
 	template<typename Derived_=Derived, typename... Args> \
 	Mod \
-	auto Name(Args&& ...args) const&& MAYTHROW return_decltype_rvalue_by_ref ( \
+	auto Name(Args&& ...args) const&& MAYTHROW return_decltype_xvalue_by_ref ( \
 		std::move(tc::derived_cast<Derived_>(*this)). STATIC_VIRTUAL_METHOD_NAME(Name) (std::forward<Args>(args)...) \
 	)
 
@@ -49,7 +49,7 @@
 	using Name ## _derived_type = Derived; \
 	using Name ## _declaring_type = this_type; \
 	template<typename Derived_=Derived, typename... Args> \
-	static auto Name(Args&& ...args) MAYTHROW return_decltype_rvalue_by_ref ( \
+	static auto Name(Args&& ...args) MAYTHROW return_decltype_xvalue_by_ref ( \
 		Derived_:: STATIC_VIRTUAL_METHOD_NAME(Name) (std::forward<Args>(args)...) \
 	)
 

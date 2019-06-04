@@ -39,7 +39,7 @@ void basic () {
 namespace {
 	struct generator_range {
 		template< typename Func >
-		void operator()( Func func ) {
+		void operator()( Func func ) const& {
 			for(int i=0;i<50;++i) {
 				func(i);
 			}
@@ -58,7 +58,7 @@ void ex_generator_range () {
 namespace {
 	struct generator_range_break {
 		template< typename Func >
-		tc::break_or_continue operator()( Func func ) {
+		tc::break_or_continue operator()( Func func ) const& {
 			using namespace tc;
 			for(int i=0;i<5000;++i) {
 				if (func(i)==break_) { return break_; }

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -18,7 +18,7 @@ namespace tc {
 		struct MakeReferenceOrValue final {
 			template<typename T>
 			auto operator()(T&& t) const {
-				return tc::reference_or_value<T>(aggregate_tag(), std::forward<T>(t));
+				return tc::reference_or_value<T>(aggregate_tag, std::forward<T>(t));
 			}
 		};
 	}
@@ -45,15 +45,17 @@ namespace tc {
 
 	namespace no_adl {
 		template<typename RngRng, typename Pred>
-		struct merge_many_adaptor {
+		struct [[nodiscard]] merge_many_adaptor {
 		private:
 			tc::reference_or_value<RngRng> m_baserng;
 			Pred m_pred;
 
 		public:
+			using value_type = tc::range_value_t<tc::range_value_t<RngRng>>;
+
 			template<typename Rhs, typename PredRhs>
-			explicit merge_many_adaptor(aggregate_tag, Rhs&& rhs, PredRhs&& pred) noexcept
-				: m_baserng( aggregate_tag(), std::forward<Rhs>(rhs) )
+			explicit merge_many_adaptor(aggregate_tag_t, Rhs&& rhs, PredRhs&& pred) noexcept
+				: m_baserng( aggregate_tag, std::forward<Rhs>(rhs) )
 				, m_pred(std::forward<PredRhs>(pred))
 			{}
 
@@ -90,25 +92,9 @@ namespace tc {
 		template<typename RngRng, typename Pred>
 		auto merge_many_impl(RngRng&& rngrng, Pred&& pred) noexcept return_ctor(
 			tc::no_adl::merge_many_adaptor<RngRng BOOST_PP_COMMA() Pred>,
-			(aggregate_tag(), std::forward<RngRng>(rngrng) BOOST_PP_COMMA() std::forward<Pred>(pred))
+			(aggregate_tag, std::forward<RngRng>(rngrng) BOOST_PP_COMMA() std::forward<Pred>(pred))
 		)
 	}
-
-	namespace no_adl {
-		template< typename RngRng, bool bConst >
-		struct range_reference_merge_many_adaptor {
-			using type = tc::range_reference_t<
-				reference_for_value_or_reference_with_index_range_t<RngRng, bConst>
-			>;
-		};
-
-		template<typename RngRng, typename Pred>
-		struct range_reference<tc::no_adl::merge_many_adaptor<RngRng, Pred>> : range_reference_merge_many_adaptor<RngRng, false> {};
-
-		template<typename RngRng, typename Pred>
-		struct range_reference<tc::no_adl::merge_many_adaptor<RngRng, Pred> const> : range_reference_merge_many_adaptor<RngRng, true> {};
-	}
-
 
 	template<typename RngRng, typename Pred>
 	auto merge_many(RngRng&& rngrng, Pred&& pred) {

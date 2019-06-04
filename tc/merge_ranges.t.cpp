@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -10,7 +10,6 @@
 #include "range.t.h"
 #include "compare.h"
 
-#include <boost/fusion/include/make_fused_function_object.hpp>
 #include "merge_ranges.h"
 
 UNITTESTDEF(merge_ranges_with_simple_usecase) {
@@ -26,7 +25,7 @@ UNITTESTDEF(merge_ranges_with_simple_usecase) {
 			_ASSERTEQUAL(n, ++N);
 		}
 	);
-	_ASSERT(N==5);
+	_ASSERTEQUAL(5, N);
 }
 
 
@@ -37,14 +36,14 @@ UNITTESTDEF(zip_range_adaptor_test) {
 
 		auto rng = tc::zip(vecn,vecn2);
 
-		_ASSERT(std::get<0>(*tc::begin(rng)) == 1);
+		_ASSERTEQUAL(std::get<0>(*tc::begin(rng)), 1);
 		_ASSERTEQUAL(std::addressof(std::get<1>(*tc::begin(rng))),std::addressof(vecn2[0]));
 
 		auto it = tc::begin(vecn);
 		auto it2 = tc::begin(vecn2);
 		tc::for_each(
 			rng,
-			boost::fusion::make_fused_function_object(
+			tc::expand_tuple(
 				[&](int const& n, int const& n2) noexcept {
 					_ASSERTEQUAL(*it, n);
 					_ASSERTEQUAL(*it2, n2);
@@ -54,19 +53,19 @@ UNITTESTDEF(zip_range_adaptor_test) {
 				}
 			)
 		);
-		_ASSERT(tc::end(vecn) == it);
+		_ASSERTEQUAL(tc::end(vecn), it);
 	}
 
 	auto rng = tc::zip(
 		tc::vector<int>{4,2,1},
-		tc::make_counting_range(0,3)
+		tc::iota(0,3)
 	);
 
 	int N=4;
 	int N2=0;
 	tc::for_each(
 		rng,
-		boost::fusion::make_fused_function_object(
+		tc::expand_tuple(
 			[&](int const& n, int const& n2) noexcept {
 				VERIFYEQUAL(N, n) /= 2;
 				++VERIFYEQUAL(N2, n2);
@@ -92,7 +91,7 @@ UNITTESTDEF(merge_ranges_with_unique_range_2) {
 	tc::for_each(
 		tc::merge_many(
 			tc::transform(
-				tc::make_counting_range(0,2),
+				tc::iota(0,2),
 				[&](int n) noexcept {
 					return tc::ordered_unique_range(
 						tc::zip(
@@ -108,7 +107,7 @@ UNITTESTDEF(merge_ranges_with_unique_range_2) {
 		[&](auto rng) noexcept {
 			tc::for_each(
 				rng,
-				boost::fusion::make_fused_function_object(
+				tc::expand_tuple(
 					[&](int const& first, int& second) noexcept {
 						second = n;
 						_ASSERTEQUAL(first, n+1);

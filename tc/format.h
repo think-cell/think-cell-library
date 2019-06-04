@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -15,6 +15,7 @@
 #include "empty.h"
 #include "minmax.h"
 #include "concat_adaptor.h"
+#include "repeat_n.h"
 
 namespace tc {
 	///////////////
@@ -33,12 +34,15 @@ namespace tc {
 			constexpr integral_as_padded_dec_impl( T n ) noexcept : integral_as_padded_dec_impl<T,N-1>(n) {}
 
 			template<typename Sink>
-			void operator()(Sink sink) const& MAYTHROW {
+			auto operator()(Sink sink) const& MAYTHROW -> tc::common_type_t<
+				decltype(tc::continue_if_not_break(std::declval<Sink&>(), std::declval<tc::sink_value_t<Sink>>())),
+				decltype(std::declval<integral_as_padded_dec_impl<T,N-1> const&>()(std::declval<Sink>()))
+			> {
 				static_assert( std::is_unsigned<T>::value );
 				if( this->m_n<integral_as_padded_dec_impl::c_nTenPow ) {
-					sink(tc::explicit_cast<tc::sink_value_t<Sink>>('0'));
+					RETURN_IF_BREAK(tc::continue_if_not_break(sink, tc::explicit_cast<tc::sink_value_t<Sink>>('0')));
 				}
-				tc::base_cast< integral_as_padded_dec_impl<T,N-1> >(*this)(tc_move(sink));
+				return tc::base_cast< integral_as_padded_dec_impl<T,N-1> >(*this)(tc_move(sink));
 			}
 		};
 
@@ -49,9 +53,9 @@ namespace tc {
 			constexpr integral_as_padded_dec_impl( T n ) noexcept : m_n(n) {}
 
 			template<typename Sink>
-			void operator()(Sink&& sink) const& MAYTHROW {
+			auto operator()(Sink&& sink) const& MAYTHROW {
 				using Char = tc::sink_value_t<Sink>;
-				tc::for_each(tc::ptr_begin( boost::lexical_cast< std::array<Char,50> >(m_n+0/*force integral promotion, otherwise unsigned/signed char gets printed as character*/) ), std::forward<Sink>(sink));
+				return tc::for_each(tc::ptr_begin( boost::lexical_cast< std::array<Char,50> >(m_n+0/*force integral promotion, otherwise unsigned/signed char gets printed as character*/) ), std::forward<Sink>(sink));
 			}
 		};
 
@@ -91,7 +95,7 @@ namespace tc {
 			as_hex_impl( T const& n ) noexcept : m_n(tc::bit_cast< typename boost::uint_t< CHAR_BIT*sizeof(T) >::exact >(n)) {} // print the bit pattern of anything we get
 
 			template<typename Sink>
-			void operator()(Sink sink) const& MAYTHROW {
+			auto operator()(Sink sink) const& MAYTHROW -> decltype(tc::continue_if_not_break(std::declval<Sink&>(), std::declval<tc::sink_value_t<Sink>>())) {
 				static_assert( 0<nWidth );
 				static_assert( nWidth<=(sizeof(m_n)*CHAR_BIT+3)/4 );
 
@@ -101,10 +105,12 @@ namespace tc {
 				} while( nWidth*4<=nShift && 0==(m_n>>nShift) );
 				for(;;) {
 					auto const nDigit=(m_n>>nShift)&0xf;
-					sink(tc::explicit_cast<tc::sink_value_t<Sink>>(static_cast<char>(nDigit<10 ? '0'+nDigit : c_chLetterBase+(nDigit-10))));
+					RETURN_IF_BREAK(tc::continue_if_not_break(sink, tc::explicit_cast<tc::sink_value_t<Sink>>(static_cast<char>(nDigit<10 ? '0'+nDigit : c_chLetterBase+(nDigit-10)))));
 					if( 0==nShift ) break;
 					nShift-=4;
 				}
+				// TODO: if continue_if_not_break above returns INTEGRAL_CONSTANT(tc::break_), must exclude this from compilation:
+				return INTEGRAL_CONSTANT(tc::continue_)();
 			}
 		};
 	}
@@ -213,47 +219,18 @@ namespace tc {
 	}
 
 	namespace no_adl {
-		template< typename Rng >
-		struct truncate_with_ellipsis_impl final {
-			using value_type = tc::range_value_t<Rng>;
-			truncate_with_ellipsis_impl(Rng const& rng, typename boost::range_size<Rng>::type n) noexcept: m_rng(rng), m_n(n) {}
-
-			template<typename Sink>
-			void operator()(Sink sink) const& MAYTHROW {
-				if(tc::size(m_rng)<=m_n ) {
-					tc::for_each(m_rng, sink);
-				} else {
-					auto cch=tc::max(3u,m_n)-3;
-					tc::for_each(tc::truncate(m_rng, cch), sink);
-					while(cch<m_n) {
-						sink(tc::explicit_cast<tc::sink_value_t<Sink>>('.'));
-						++cch;
-					}
-				}
-			}
-		private:
-			Rng const& m_rng;
-			typename boost::range_size<Rng>::type m_n;
-		};
-	}
-
-	template< typename Rng >
-	auto truncate_with_ellipsis(Rng const& rng, typename boost::range_size<Rng>::type n) noexcept return_ctor(
-		no_adl::truncate_with_ellipsis_impl<Rng>,
-		(rng,n)
-	)
-
-	namespace no_adl {
 		template<typename Rng>
 		struct size_prefixed_impl {
+			using value_type=unsigned char;
+
 			template<typename Rhs>
-			size_prefixed_impl(aggregate_tag, Rhs&& rhs) noexcept
-				: m_rng(aggregate_tag(), std::forward<Rhs>(rhs))
+			size_prefixed_impl(aggregate_tag_t, Rhs&& rhs) noexcept
+				: m_rng(aggregate_tag, std::forward<Rhs>(rhs))
 			{}
 
 			template<typename Sink>
 			void operator()(Sink&& sink) const& MAYTHROW {
-				static_assert(std::is_same<tc::sink_value_t<Sink>, unsigned char>::value, "size_prefixed should only be used on binary sinks.");
+				STATICASSERTSAME(tc::sink_value_t<Sink>, unsigned char, "size_prefixed should only be used on binary sinks.");
 				tc::for_each(tc::concat(tc::as_blob(boost::implicit_cast<std::uint32_t>(tc::size(*m_rng))), tc::as_blob(*m_rng)), std::forward<Sink>(sink)); // THROW(tc::file_failure)
 			}
 		private:
@@ -264,20 +241,25 @@ namespace tc {
 	template< typename Rng >
 	auto size_prefixed(Rng&& rng) noexcept return_ctor(
 		no_adl::size_prefixed_impl<Rng>,
-		(aggregate_tag(), std::forward<Rng>(rng))
+		(aggregate_tag, std::forward<Rng>(rng))
 	)
+
+	inline auto size_prefixed(tc::empty_range) noexcept {
+		static constexpr std::uint32_t nSize=0;
+		return tc::as_blob(nSize);
+	}
 
 	namespace no_adl {
 		template<typename T>
 		struct bool_prefixed_impl {
 			template<typename Rhs>
-			bool_prefixed_impl(aggregate_tag, Rhs&& rhs) noexcept
-				: m_ot(aggregate_tag(), std::forward<Rhs>(rhs))
+			bool_prefixed_impl(aggregate_tag_t, Rhs&& rhs) noexcept
+				: m_ot(aggregate_tag, std::forward<Rhs>(rhs))
 			{}
 
 			template<typename Sink>
 			void operator()(Sink&& sink) const& MAYTHROW {
-				static_assert(std::is_same<tc::sink_value_t<Sink>, unsigned char>::value, "bool_prefixed should only be used on binary sinks.");
+				STATICASSERTSAME(tc::sink_value_t<Sink>, unsigned char, "bool_prefixed should only be used on binary sinks.");
 				if(*m_ot) {
 					tc::for_each(tc::concat(tc::as_blob(true), tc::as_blob(**m_ot)), std::forward<Sink>(sink)); // THROW(tc::file_failure)
 				} else {
@@ -289,9 +271,9 @@ namespace tc {
 		};
 	}
 
-	template< typename T, std::enable_if_t<tc::is_instance<boost::optional, T>::value>* = nullptr >
+	template< typename T, std::enable_if_t<tc::is_instance<std::optional, T>::value>* = nullptr >
 	auto bool_prefixed(T&& t) noexcept return_ctor(
 		no_adl::bool_prefixed_impl<T>,
-		(aggregate_tag(), std::forward<T>(t))
+		(aggregate_tag, std::forward<T>(t))
 	)
 }

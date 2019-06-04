@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -47,7 +47,7 @@ public:
 	scoped_restorer( T&& data ) noexcept
 	:	m_data(tc_move_if_owned(data)),
 		m_dataSaved(VERIFYINITIALIZED(data)) {}
-	scoped_restorer( T&& data, scoped_assign_tag ) noexcept
+	scoped_restorer( T&& data, scoped_assign_tag_t ) noexcept
 	:	m_data(tc_move_if_owned(data)),
 		m_dataSaved(tc_move_always(VERIFYINITIALIZED(data))) {}
 	~scoped_restorer() {
@@ -69,7 +69,7 @@ struct scoped_assigner
 :	scoped_restorer<T> {
 	template<typename T2>
 	explicit scoped_assigner( T&& data, T2&& dataSet ) noexcept
-	:	scoped_restorer<T>( tc_move_if_owned(data), scoped_assign_tag{} )
+	:	scoped_restorer<T>( tc_move_if_owned(data), scoped_assign_tag )
 	{
 		data=std::forward<T2>(dataSet);
 	}
@@ -100,6 +100,7 @@ struct scoped_assigner_better
 	#error "should be fixed: https://connect.microsoft.com/VisualStudio/Feedback/Details/2117239"
 #endif
 
+// scope_exit must not throw in order to avoid double throws. If exceptions are needed, implement scope_success/scope_failure.
 #define scope_exit_counter( unique, ... ) \
 auto BOOST_PP_CAT(scope_exit_lambda_, unique) = [&]() noexcept { __VA_ARGS__ ; }; \
 tc::scope_exit_impl< decltype( BOOST_PP_CAT(scope_exit_lambda_, unique) ) > \

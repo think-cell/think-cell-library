@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -31,7 +31,7 @@ namespace tc {
 		T n = 0;
 		if (0 < nBound) {
 			auto Enumerate = [&](auto const&) noexcept { return tc::continue_if(nBound!=++n); };
-			static_assert(std::is_same<tc::break_or_continue, decltype(rng(Enumerate))>::value, "size_bounded only works with interruptible generators");
+			STATICASSERTSAME(tc::break_or_continue, decltype(rng(Enumerate)), "size_bounded only works with interruptible generators");
 			tc::for_each(rng, Enumerate);
 		}
 		return n;

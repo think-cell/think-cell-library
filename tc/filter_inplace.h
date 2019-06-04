@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -75,7 +75,7 @@ namespace tc {
 			return m_itOutputEnd;
 		}
 
-		template< typename Cont2=Cont, std::enable_if_t<!has_mem_fn_hash_function<Cont2>::value>* = nullptr>
+		template< ENABLE_SFINAE, std::enable_if_t<!has_mem_fn_hash_function<SFINAE_TYPE(Cont)>::value>* = nullptr>
 		void pop_back() & noexcept {
 			_ASSERT( m_itOutputEnd!=tc::begin(m_cont) );
 			auto const rsize = restrict_size_decrement(m_cont);
@@ -245,7 +245,7 @@ namespace tc {
 		using const_iterator = iterator; // no deep constness (analog to sub_range)
 
 		explicit range_filter(tc::sub_range< Cont& >& rng) noexcept : m_rng(rng)	{
-			_ASSERT(tc::end(m_rng)==tc::end(Container())); // otherwise, we would need to keep [ end(m_rng), end(Container()) ) inside dtor
+			_ASSERTEQUAL(tc::end(m_rng), tc::end(Container())); // otherwise, we would need to keep [ end(m_rng), end(Container()) ) inside dtor
 			m_orngfilter.ctor(Container(), tc::begin(rng));
 		}
 

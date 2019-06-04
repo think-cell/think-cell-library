@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -23,11 +23,6 @@
 #include <limits>
 
 namespace tc {
-#ifdef TC_PRIVATE
-	template< typename ... Rng >
-	void append(tc::SReportStream& rs, Rng&& ... rng) noexcept;
-#endif
-
 	// forward definitions
 	namespace size_proxy_adl {
 		template< typename T > struct size_proxy;
@@ -76,12 +71,6 @@ namespace tc {
 				return *this;
 			}
 
-#ifdef TC_PRIVATE
-			void append_to(tc::SReportStream& rs) const& noexcept {
-				tc::append(rs, m_t);
-			}
-#endif
-
 #pragma push_macro("CONVERT")
 #define CONVERT( S ) \
 			operator S() const& noexcept { \
@@ -100,6 +89,10 @@ namespace tc {
 			CONVERT(long long)
 			CONVERT(unsigned long long)
 #pragma pop_macro("CONVERT")
+			operator double() const& noexcept {
+				_ASSERT(0 <= m_t || static_cast<T>(-1) == m_t);
+				return tc::explicit_cast<double>(m_t);
+			}
 
 			template< typename U >
 			operator size_proxy<U>() const& noexcept {
@@ -236,12 +229,12 @@ namespace tc {
 		//  - a size member function, which is assumed to run in O(1)
 		//  - random_access iterators, which are assumed to be able to calculate size in O(1)
 
-		DEFINE_TAG_TYPE(size_tag);
+		DEFINE_ADL_TAG_TYPE(size_tag);
 
 		template<typename Rng, std::enable_if_t<
 			has_mem_fn_size<Rng const>::value
 		>* = nullptr >
-		constexpr auto size(size_tag, Rng const& rng) noexcept return_decltype(
+		constexpr auto size(size_tag_t, Rng const& rng) noexcept return_decltype(
 			rng.size()
 		)
 
@@ -249,14 +242,14 @@ namespace tc {
 			!has_mem_fn_size<Rng const>::value
 			&& is_random_access_range<Rng>::value
 		>* = nullptr>
-		auto size(size_tag, Rng const& rng) noexcept return_decltype(
+		auto size(size_tag_t, Rng const& rng) noexcept return_decltype(
 			tc::unsigned_cast(tc::end(rng) - tc::begin(rng))
 		) // Do not use boost::size. It always uses std::distance, which is O(n) for
 		  // ranges with boost::iterators::random_access_traversal_tag but not std::random_access_iterator_tag,
 		  // e.g., boost::transform_iterator
 
 		template<typename T, std::size_t N, std::enable_if_t<!tc::is_char< T >::value>* = nullptr>
-		constexpr auto size(size_tag, T (&)[N]) noexcept return_decltype(
+		constexpr auto size(size_tag_t, T (&)[N]) noexcept return_decltype(
 			N
 		)
 	}
@@ -271,30 +264,15 @@ namespace tc {
 	using no_adl::constexpr_size;
 
 	template<typename T>
-	constexpr auto size_raw(T&& t) noexcept return_decltype(
-		size(tc::size_adl::size_tag(), std::forward<T>(t))
+	constexpr auto size_raw(T const& t) noexcept return_decltype(
+		size(tc::size_adl::size_tag, t)
 	)
 
 	template<typename T>
-	constexpr auto size(T&& t) noexcept return_decltype(
-		make_size_proxy(tc::size_raw(std::forward<T>(t)))
+	constexpr auto size(T const& t) noexcept return_decltype(
+		make_size_proxy(tc::size_raw(t))
 	)
 
 	TC_HAS_EXPR(size, (T), size_raw(std::declval<T>()))
-
-	template<typename Rng, std::enable_if_t<!tc::has_size<Rng const>::value>* =nullptr>
-	auto size_linear_raw(Rng const& rng) noexcept return_decltype(
-		boost::distance(rng)
-	)
-
-	template<typename Rng, std::enable_if_t<tc::has_size<Rng const>::value>* =nullptr>
-	constexpr auto size_linear_raw(Rng const& rng) noexcept return_decltype(
-		tc::size_raw(rng)
-	)
-
-	template<typename T>
-	constexpr auto size_linear(T&& t) noexcept return_decltype(
-		make_size_proxy(tc::size_linear_raw(std::forward<T>(t)))
-	)
 }
 

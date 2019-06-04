@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -20,9 +20,9 @@
 namespace tc {
 	namespace adl_barrier {
 		template<typename Rng>
-		struct reverse_adaptor : tc::range_iterator_from_index<
+		struct [[nodiscard]] reverse_adaptor : tc::range_iterator_from_index<
 			reverse_adaptor<Rng>,
-			boost::optional<
+			std::optional<
 				tc::index_t<std::remove_reference_t<
 					Rng
 				>>
@@ -37,40 +37,36 @@ namespace tc {
 			using index = typename reverse_adaptor::index;
 
 			template<typename RngRef>
-			explicit reverse_adaptor(aggregate_tag, RngRef&& rng) :
-				m_baserng(reference_or_value< Rng >(aggregate_tag(), std::forward<RngRef>(rng)))
+			explicit reverse_adaptor(aggregate_tag_t, RngRef&& rng) :
+				m_baserng(reference_or_value< Rng >(aggregate_tag, std::forward<RngRef>(rng)))
 			{}
 
 			template< typename Func >
-			auto operator()(Func func) /* no & */ MAYTHROW {
-				return [&]() MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, *tc::begin(*m_baserng))), INTEGRAL_CONSTANT(tc::continue_)> {
-					auto const itBegin=tc::begin(*m_baserng);
-					auto itEnd=tc::end(*m_baserng);
-					while( itEnd!=itBegin ) {
-						--itEnd;
-						RETURN_IF_BREAK(tc::continue_if_not_break(func, *itEnd));
-					}
-					return INTEGRAL_CONSTANT(tc::continue_)();
-				}();
+			auto operator()(Func func) /* no & */ MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, *tc::begin(*m_baserng))), INTEGRAL_CONSTANT(tc::continue_)> {
+				auto const itBegin=tc::begin(*m_baserng);
+				auto itEnd=tc::end(*m_baserng);
+				while( itEnd!=itBegin ) {
+					--itEnd;
+					RETURN_IF_BREAK(tc::continue_if_not_break(func, *itEnd));
+				}
+				return INTEGRAL_CONSTANT(tc::continue_)();
 			}
 
 			template< typename Func >
-			auto operator()(Func func) const /* no & */ MAYTHROW {
-				return [&]() MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, *tc::begin(*m_baserng))), INTEGRAL_CONSTANT(tc::continue_)> {
-					auto const itBegin=tc::begin(*m_baserng);
-					auto itEnd=tc::end(*m_baserng);
-					while( itEnd!=itBegin ) {
-						--itEnd;
-						RETURN_IF_BREAK(tc::continue_if_not_break(func, *itEnd));
-					}
-					return INTEGRAL_CONSTANT(tc::continue_)();
-				}();
+			auto operator()(Func func) const /* no & */ MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, *tc::begin(*m_baserng))), INTEGRAL_CONSTANT(tc::continue_)> {
+				auto const itBegin=tc::begin(*m_baserng);
+				auto itEnd=tc::end(*m_baserng);
+				while( itEnd!=itBegin ) {
+					--itEnd;
+					RETURN_IF_BREAK(tc::continue_if_not_break(func, *itEnd));
+				}
+				return INTEGRAL_CONSTANT(tc::continue_)();
 			}
 
 			STATIC_FINAL(begin_index)() const& noexcept -> index {
 				auto idx = tc::end_index(m_baserng);
 				if( tc::equal_index(*m_baserng,tc::begin_index(m_baserng),idx) ) {
-					return boost::none;
+					return std::nullopt;
 				} else {
 					tc::decrement_index(*m_baserng,idx);
 					return idx;
@@ -78,7 +74,7 @@ namespace tc {
 			}
 
 			STATIC_FINAL(end_index)() const& noexcept -> index {
-				return boost::none;
+				return std::nullopt;
 			}
 
 			STATIC_FINAL(at_end_index)(index const& idx) const& noexcept -> bool {
@@ -87,7 +83,7 @@ namespace tc {
 
 			STATIC_FINAL(increment_index)(index& idx) const& noexcept -> void {
 				if (tc::equal_index(*m_baserng,tc::begin_index(m_baserng), *idx)) {
-					idx = boost::none;
+					idx = std::nullopt;
 				} else {
 					tc::decrement_index(*m_baserng,*idx);
 				}
@@ -121,7 +117,7 @@ namespace tc {
 				if (idx) {
 					tc::advance_index(*m_baserng,*idx, -(d-1));
 					if (tc::equal_index(*m_baserng,tc::begin_index(m_baserng), *idx)) {
-						idx = boost::none;
+						idx = std::nullopt;
 					} else {
 						tc::decrement_index(*m_baserng,*idx);
 					}
@@ -173,7 +169,7 @@ namespace tc {
 	template<typename Rng>
 	auto reverse(Rng&& rng) noexcept return_ctor(
 		reverse_adaptor< Rng >,
-		(aggregate_tag(), std::forward<Rng>(rng))
+		(aggregate_tag, std::forward<Rng>(rng))
 	)
 
 

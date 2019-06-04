@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -125,6 +125,25 @@ namespace tc {
 		}
 	} const roundNEAREST{};
 
+	struct SRoundAwayFromZero final {
+		template< typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
+		T operator()( T t ) const& noexcept {
+			return t;
+		}
+		template< typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
+		T operator()( T t ) const& noexcept {
+			return std::round(t);
+		}
+		template< typename T >
+		static T PositiveOffset( T t ) noexcept {
+			return t/2;
+		}
+		template< typename T >
+		static T NegativeOffset( T t ) noexcept {
+			return t/2;
+		}
+	} const roundAWAYFROMZERO{};
+
 	struct SRoundCeil final {
 		template< typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
 		T operator()( T t ) const& noexcept {
@@ -154,7 +173,7 @@ namespace tc {
 		Num idiv( Num num, Denom denom, Round round ) noexcept {
 			static_assert( tc::is_actual_integer_like<Num>::value );
 			static_assert( tc::is_actual_integer_like< Denom >::value );
-			static_assert( std::numeric_limits<Num>::is_signed==std::numeric_limits<Denom>::is_signed );
+			STATICASSERTEQUAL( std::numeric_limits<Num>::is_signed, std::numeric_limits<Denom>::is_signed );
 			_ASSERT( 0<denom );
 			return tc::explicit_cast<Num>( ( num<0 ? num-Round::NegativeOffset(denom) : num+Round::PositiveOffset(denom) )/denom );
 		}
@@ -163,7 +182,7 @@ namespace tc {
 		Num idiv( Num num, Denom denom, SRoundBanker ) noexcept {
 			static_assert( tc::is_actual_integer_like<Num>::value );
 			static_assert( tc::is_actual_integer_like< Denom >::value );
-			static_assert( std::numeric_limits<Num>::is_signed==std::numeric_limits<Denom>::is_signed );
+			STATICASSERTEQUAL( std::numeric_limits<Num>::is_signed, std::numeric_limits<Denom>::is_signed );
 			_ASSERT( 0<denom );
 			auto result = num / denom;
 			auto remainder = num - result * denom;

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -46,7 +46,7 @@ namespace {
 			if(!m_copyed_or_moved_from && !(m_index == tc::min(m_expect.size(), (m_expect_break) ? m_break_at + 1 : m_expect.size()))) {
 				TEST_OUTPUT( << "unexpectedly terminated before index " << m_index
 							 << " went to the expected index " << tc::min(m_expect.size(), m_break_at + 1) << '\n');
-				_ASSERT(m_index == tc::min(m_expect.size(), m_break_at + 1));
+				_ASSERTEQUAL(m_index, tc::min(m_expect.size(), m_break_at + 1));
 			}
 			m_index = 0;
 			m_expect = v;
@@ -55,7 +55,7 @@ namespace {
 			m_copyed_or_moved_from = false;
 		}
 
-		tc::break_or_continue operator()(int val) & noexcept {
+		tc::break_or_continue operator()(int val) const& noexcept {
 			if (m_copyed_or_moved_from) {
 				TEST_OUTPUT(<< "used copyed or moved consumer for real work!\n");
 			}
@@ -67,7 +67,7 @@ namespace {
 			if (val != m_expect[m_index]) {
 				TEST_OUTPUT( << "unexpected value " << val << " at index " << m_index
 							 << ", should be " << m_expect[m_index] << '\n');
-				_ASSERT(val == m_expect[m_index]);
+				_ASSERTEQUAL(val, m_expect[m_index]);
 			}
 			++m_index;
 			return tc::continue_if(m_index <= m_break_at);
@@ -75,7 +75,7 @@ namespace {
 
 		private:
 			tc::vector<int> m_expect;
-			std::size_t m_index;
+			mutable std::size_t m_index;
 			std::size_t m_break_at;
 			bool m_expect_break;
 			mutable bool m_copyed_or_moved_from; // so that the copy ctor can mark the copyied from instance
@@ -158,22 +158,19 @@ UNITTESTDEF( for_each ) {
 	struct consumer_break /*final*/ {
 		consumer_break(tc::vector<int> const& v, std::size_t break_at = 0, bool expect_break = true) noexcept : m_mock(v, break_at, expect_break) {}
 
-		tc::break_or_continue operator()(int i) /* no & */ noexcept { return m_mock(i); }
+		tc::break_or_continue operator()(int i) const& noexcept { return m_mock(i); }
 		private:
 			all_called_mock m_mock;
 	};
 
 	struct consumer_nobreak /*final*/ {
-		consumer_nobreak(tc::vector<int> const& v, std::size_t break_at = 0, bool expect_break = true) noexcept : m_mock(v, break_at, expect_break), m_accu(0) {}
+		consumer_nobreak(tc::vector<int> const& v, std::size_t break_at = 0, bool expect_break = true) noexcept : m_mock(v, break_at, expect_break) {}
 		~consumer_nobreak() {}
 
-		void operator()(int i) /* no & */ noexcept { m_mock(i); m_accu += i; }
-
-		operator int() & noexcept { return m_accu; }
+		void operator()(int i) const& noexcept { m_mock(i); }
 
 		private:
 			all_called_mock m_mock;
-			int m_accu;
 	};
 
 //-----------------------------------------------------------------------------------------------------------------------------

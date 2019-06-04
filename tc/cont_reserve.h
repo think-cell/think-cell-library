@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -32,12 +32,6 @@ namespace tc {
 		if( cont.capacity()<n ) {
 			NOEXCEPT( cont.reserve(cont_extended_memory(cont,n) ));
 		}
-	}
-
-	template< typename Cont, typename... Args >
-	void cont_extend_or_truncate( Cont& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type n, Args &&... args) noexcept {
-		tc::cont_reserve(cont, n);
-		NOBADALLOC(cont.resize(n, std::forward<Args>(args)...));
 	}
 
 	template< typename Cont >
@@ -87,7 +81,8 @@ namespace tc {
 	template< typename Cont, typename... Args >
 	void cont_extend( Cont& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type n, Args &&... args) noexcept {
 		_ASSERT( cont.size()<=n );
-		cont_extend_or_truncate( cont, n, std::forward<Args>(args)...);
+		tc::cont_reserve(cont, n);
+		NOBADALLOC(cont.resize(n, std::forward<Args>(args)...));
 	}
 
 	template< typename Cont, typename... Args >

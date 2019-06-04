@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -13,6 +13,7 @@
 #include "sub_range.h"
 #include "storage_for.h"
 #include "for_each_xxx.h"
+#include "array.h"
 
 #include <boost/next_prior.hpp>
 
@@ -101,7 +102,7 @@ namespace tc {
 		return find_last_if_detail::find_last_if<RangeReturn>(
 			std::forward<Rng>(rng),
 			tc_move(pred),
-			typename boost::range_traversal<std::remove_reference_t<Rng>>::type()
+			typename boost::range_traversal<Rng>::type()
 		);
 	}
 
@@ -109,8 +110,8 @@ namespace tc {
 	auto for_each_iterator_pair_outwards(Rng&& rng, It itOrigin, bool bSkipSelf, Func func) noexcept
 		-> tc::common_type_t<decltype(tc::continue_if_not_break(func, std::declval<tc::ptr_range<It> const&>())), INTEGRAL_CONSTANT(tc::continue_)>
 	{
-		tc::array<It, 2> const aitLimit(tc::aggregate_tag(), tc::begin(rng), tc::end(rng));
-		tc::array<It, 2> ait(tc::fill_tag(), tc_move(itOrigin));
+		tc::array<It, 2> const aitLimit(tc::aggregate_tag, tc::begin(rng), tc::end(rng));
+		tc::array<It, 2> ait(tc::fill_tag, tc_move(itOrigin));
 
 		if (!bSkipSelf) {
 			_ASSERT(tc_back(aitLimit) != tc_back(ait));

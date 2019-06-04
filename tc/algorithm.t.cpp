@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -144,7 +144,7 @@ UNITTESTDEF( make_vector_on_r_vector_is_identity ) {
 	auto pvecdata = v.data();
 
 	auto vNew = tc::make_vector(tc_move(v));
-	_ASSERT( vNew.data() == pvecdata );
+	_ASSERTEQUAL(vNew.data(), pvecdata);
 }
 
 UNITTESTDEF(find_closest_if) {
@@ -183,8 +183,8 @@ UNITTESTDEF(rangefilter_on_subrange) {
 		tc::sort_unique_inplace(rngn); // uses range_filter<tc::sub_range<tc::vector<int>&> > internally
 		int const anExpected[]={2,3,3,0, /*rngn starts here*/ 3,4,5,6,7};
 		_ASSERT(tc::equal(vecn, anExpected));
-		_ASSERT(tc::begin(rngn)==tc::begin_next(vecn,4));
-		_ASSERT(tc::end(rngn)==tc::end(vecn));
+		_ASSERTEQUAL(tc::begin(rngn), tc::begin_next(vecn,4));
+		_ASSERTEQUAL(tc::end(rngn), tc::end(vecn));
 	}
 
 	{
@@ -203,8 +203,8 @@ UNITTESTDEF(rangefilter_on_subrange) {
 		}
 		int const anExpected[]={2,3,3,0, /*rngn starts here*/};
 		_ASSERT(tc::equal(vecn, anExpected));
-		_ASSERT(tc::begin(rngn)==tc::begin_next(vecn,4));
-		_ASSERT(tc::end(rngn)==tc::end(vecn));
+		_ASSERTEQUAL(tc::begin(rngn), tc::begin_next(vecn,4));
+		_ASSERTEQUAL(tc::end(rngn), tc::end(vecn));
 	}
 }
 

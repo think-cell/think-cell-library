@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -134,52 +134,6 @@ namespace tc {
 
 	BOOST_MPL_HAS_XXX_TRAIT_DEF(index)
 
-	////////////////////////////////////
-	// adding index to legacy ranges
-
-	namespace range_generator_from_index_impl {
-		struct empty_chain {};
-
-		template<
-			typename Derived,
-			typename Chain=empty_chain
-		>
-		struct range_generator_from_index : Chain {
-		private:
-			using this_type = range_generator_from_index;
-		public:
-			STATIC_VIRTUAL_CONSTEXPR(begin_index)
-			STATIC_VIRTUAL_CONSTEXPR(at_end_index)
-
-			template< typename Func >
-			auto operator()(Func func) /* no & */ MAYTHROW {
-				return [&]() MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, this->dereference_index(begin_index()))), INTEGRAL_CONSTANT(tc::continue_)> {
-					for( auto idx=begin_index();
-						!at_end_index(idx);
-						this->increment_index(idx)
-					) {
-						RETURN_IF_BREAK( tc::continue_if_not_break( func, this->dereference_index(idx) ) );
-					}
-					return INTEGRAL_CONSTANT(tc::continue_)();
-				}();
-			}
-
-			template< typename Func >
-			auto operator()(Func func) const /* no & */ MAYTHROW {
-				return [&]() MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, this->dereference_index(begin_index()))), INTEGRAL_CONSTANT(tc::continue_)> {
-					for( auto idx=begin_index();
-						!at_end_index(idx);
-						this->increment_index(idx)
-					) {
-						RETURN_IF_BREAK( tc::continue_if_not_break( func, this->dereference_index(idx) ) );
-					}
-					return INTEGRAL_CONSTANT(tc::continue_)();
-				}();
-			}
-		};
-	}
-	using range_generator_from_index_impl::range_generator_from_index;
-
 	namespace no_adl {
 		template<typename Func, typename Rng, typename Enable=void>
 		struct has_mem_fn_chunk final: std::false_type {};
@@ -189,15 +143,17 @@ namespace tc {
 	}
 	using no_adl::has_mem_fn_chunk;
 
+	DEFINE_MEM_FN(chunk);
+
 	namespace void_generator_type_check_impl {
 		template<typename Func>
-		struct ensure_non_breaking_functor final: tc::decay_t<Func> {
+		struct ensure_non_breaking_functor /*final*/: tc::decay_t<Func> {
 			using base_ = tc::decay_t<Func>;
 			
 			constexpr explicit ensure_non_breaking_functor(Func&& func) noexcept: base_(std::forward<Func>(func)) {}
 
-			template<typename... Args>
-			constexpr decltype(auto) operator()(Args&&... args) & MAYTHROW {
+			template<typename... Args, typename=decltype(std::declval<base_ const&>()(std::declval<Args>()...))>
+			constexpr decltype(auto) operator()(Args&&... args) const& MAYTHROW {
 				static_assert(
 					!std::is_same<
 						decltype(tc::base_cast<base_>(*this)(std::forward<Args>(args)...)),
@@ -212,8 +168,8 @@ namespace tc {
 				return tc::base_cast<base_>(*this)(std::forward<Args>(args)...); // MAYTHROW
 			}
 
-			template<typename Rng, std::enable_if_t<tc::has_mem_fn_chunk<base_&, Rng>::value>* = nullptr>
-			constexpr decltype(auto) chunk(Rng&& rng) & MAYTHROW {
+			template<typename Rng, std::enable_if_t<tc::has_mem_fn_chunk<base_ const&, Rng>::value>* = nullptr>
+			constexpr decltype(auto) chunk(Rng&& rng) const& MAYTHROW {
 				static_assert(
 					!std::is_same<
 						decltype(tc::base_cast<base_>(*this).chunk(std::forward<Rng>(rng))),
@@ -229,13 +185,13 @@ namespace tc {
 			}
 		};
 		template<typename Func>
-		struct ensure_always_breaking_functor final: tc::decay_t<Func> {
+		struct ensure_always_breaking_functor /*final*/: tc::decay_t<Func> {
 			using base_ = tc::decay_t<Func>;
 
 			constexpr explicit ensure_always_breaking_functor(Func&& func) noexcept: base_(std::forward<Func>(func)) {}
 
-			template<typename... Args>
-			constexpr decltype(auto) operator()(Args&&... args) & MAYTHROW {
+			template<typename... Args, typename=decltype(std::declval<base_ const&>()(std::declval<Args>()...))>
+			constexpr decltype(auto) operator()(Args&&... args) const& MAYTHROW {
 				static_assert(
 					std::is_same<
 						decltype(tc::base_cast<base_>(*this)(std::forward<Args>(args)...)),
@@ -245,8 +201,8 @@ namespace tc {
 				return tc::base_cast<base_>(*this)(std::forward<Args>(args)...); // MAYTHROW
 			}
 			
-			template<typename Rng, std::enable_if_t<tc::has_mem_fn_chunk<base_&, Rng>::value>* = nullptr>
-			constexpr decltype(auto) chunk(Rng&& rng) & MAYTHROW {
+			template<typename Rng, std::enable_if_t<tc::has_mem_fn_chunk<base_ const&, Rng>::value>* = nullptr>
+			constexpr decltype(auto) chunk(Rng&& rng) const& MAYTHROW {
 				static_assert(
 					std::is_same<
 						decltype(tc::base_cast<base_>(*this).chunk(std::forward<Rng>(rng))),
@@ -350,7 +306,7 @@ namespace tc {
 		rng.equal_index(idxLhs, idxRhs)
 	)
 
-	TC_HAS_EXPR(equal_index, (Rng), tc::equal_index(std::declval<Rng const&>(),tc::begin_index_impl::begin_index(std::declval<Rng const&>()),tc::begin_index_impl::begin_index(std::declval<Rng const&>())))
+	TC_HAS_EXPR(equal_index, (Rng), tc::equal_index(std::declval<Rng>(),tc::begin_index_impl::begin_index(std::declval<std::remove_reference_t<Rng> const&>()),tc::begin_index_impl::begin_index(std::declval<std::remove_reference_t<Rng> const&>())))
 
 	template<typename Rng, typename It, std::enable_if_t< !has_index< std::remove_reference_t<Rng> >::value >* =nullptr >
 	constexpr auto dereference_index(Rng&& rng, It&& it) MAYTHROW -> decltype(*tc::begin(std::forward<Rng>(rng))) {
@@ -422,4 +378,20 @@ namespace tc {
 	constexpr decltype(auto) make_iterator(Rng&& rng, Index&& idx) MAYTHROW {
 		return std::forward<Rng>(rng).make_iterator(std::forward<Index>(idx));
 	}
+
+	namespace no_adl {
+		template<typename Rng, typename Enable=void>
+		struct is_index_valid_for_move_constructed_range : std::false_type {
+		};
+
+		template<typename It, typename ConstIt>
+		struct is_index_valid_for_move_constructed_range<tc::iterator_base<It, ConstIt>, void> : std::true_type {};
+
+		template<typename Char>
+		struct is_index_valid_for_move_constructed_range<Char*, std::enable_if_t<tc::is_char<Char>::value>> : std::true_type {};
+
+		template<typename T, typename Alloc>
+		struct is_index_valid_for_move_constructed_range<std::vector<T, Alloc>, void> : std::true_type {}; // end iterator is not guaranteed by the standard but we assume it's still valid
+	}
+	using no_adl::is_index_valid_for_move_constructed_range;
 }

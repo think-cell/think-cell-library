@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -26,13 +26,13 @@ namespace tc {
 		template<typename ...Args> void operator()(Args const&...) const {_ASSERTFALSE; }
 	};
 
-	template<typename T, T tValue>
+	template<auto val>
 	struct constexpr_function {
-		template< typename ...Args > T operator()( Args const&... ) const& noexcept { return tValue; }
+		template< typename ...Args > constexpr auto operator()( Args const&... ) const& noexcept { return val; }
 	};
 
 	#define MAKE_CONSTEXPR_FUNCTION(val) \
-		[](auto&&...) noexcept { static constexpr auto ret = val; return ret; }
+		[](auto&&...) constexpr noexcept { auto ret = val; static_assert(sizeof(ret)<=sizeof(void*)); return ret; }
 
 	struct identity {
 		template< typename T >

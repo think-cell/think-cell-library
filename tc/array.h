@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -22,6 +22,7 @@
 #include "transform.h"
 #include "equal.h"
 #include "cont_assign.h"
+#include "construction_restrictiveness.h"
 
 #include <cstdint>
 #include <boost/iterator/indirect_iterator.hpp>
@@ -67,13 +68,13 @@ namespace tc {
 
 		private:
 			template<typename Func, std::size_t ...IndexPack>
-			constexpr array(func_tag, Func func, std::index_sequence<IndexPack...>) MAYTHROW
+			constexpr array(func_tag_t, Func func, std::index_sequence<IndexPack...>) MAYTHROW
 				: m_a{func(IndexPack)...}
 			{}
 		public:
 			template<typename Func>
-			array(func_tag, Func func) MAYTHROW
-				: array(tc::func_tag(), func, std::make_index_sequence<N>())
+			array(func_tag_t, Func func) MAYTHROW
+				: array(tc::func_tag, func, std::make_index_sequence<N>())
 			{}
 
 		private:
@@ -86,32 +87,32 @@ namespace tc {
 				typename... Args,
 				std::size_t ...IndexPack
 #if defined(_MSC_FULL_VER) && 191326128<=_MSC_FULL_VER // Copy-elision is required to initialize the array from function return value
-				, typename T_ = T,
+				, ENABLE_SFINAE,
 				std::enable_if_t<
-					std::is_move_constructible<T_>::value
+					std::is_move_constructible<SFINAE_TYPE(T)>::value
 				>* = nullptr
 #endif
 			>
-			explicit constexpr array(fill_tag, std::index_sequence<IndexPack...>, Args&&... args) MAYTHROW
+			constexpr explicit array(fill_tag_t, std::index_sequence<IndexPack...>, Args&&... args) MAYTHROW
 				: m_a{
 					explicit_cast_index<IndexPack>(tc::const_forward<Args>(args)...)...,
 					tc::explicit_cast<T>(std::forward<Args>(args)...)
 				}
 			{
-				static_assert(N == sizeof...(IndexPack)+1);
+				STATICASSERTEQUAL(N, sizeof...(IndexPack)+1);
 			}
 		public:
 			template<
 				typename... Args
 #if defined(_MSC_FULL_VER) && 191326128<=_MSC_FULL_VER
-				, typename T_ = T,
+				, ENABLE_SFINAE,
 				std::enable_if_t<
-					std::is_move_constructible<T_>::value
+					std::is_move_constructible<SFINAE_TYPE(T)>::value
 				>* = nullptr
 #endif
 			>
-			explicit constexpr array(fill_tag, Args&&... args) MAYTHROW
-				: array(fill_tag{}, std::make_index_sequence<N-1>(), std::forward<Args>(args)...)
+			constexpr explicit array(fill_tag_t, Args&&... args) MAYTHROW
+				: array(fill_tag, std::make_index_sequence<N-1>(), std::forward<Args>(args)...)
 			{}
 #if defined(_MSC_FULL_VER) && 191326128<=_MSC_FULL_VER
 		private:
@@ -124,18 +125,18 @@ namespace tc {
 				typename Arg,
 				typename... Args,
 				std::size_t ...IndexPack,
-				typename T_ = T,
+				ENABLE_SFINAE,
 				std::enable_if_t<
-					!std::is_move_constructible<T_>::value
+					!std::is_move_constructible<SFINAE_TYPE(T)>::value
 				>* = nullptr
 			>
-			constexpr array(fill_tag, std::index_sequence<IndexPack...>, Arg&& arg, Args&&... args) MAYTHROW
+			constexpr explicit array(fill_tag_t, std::index_sequence<IndexPack...>, Arg&& arg, Args&&... args) MAYTHROW
 				: m_a{
-					{identity_index<IndexPack>(tc::const_forward<Arg>(arg)), const_forward<Args>(args)...}...,
-					{std::forward<Arg>(arg), std::forward<Args>(args)...}
+					T(identity_index<IndexPack>(tc::const_forward<Arg>(arg)), const_forward<Args>(args)...)...,
+					T(std::forward<Arg>(arg), std::forward<Args>(args)...)
 				}
 			{
-				static_assert(N == sizeof...(IndexPack)+1);
+				STATICASSERTEQUAL(N, sizeof...(IndexPack)+1);
 			}
 		public:
 			template<
@@ -145,53 +146,54 @@ namespace tc {
 					&& !std::is_move_constructible<T>::value
 				>* = nullptr
 			>
-			constexpr array(fill_tag, Params&&... params) MAYTHROW
-				: array(fill_tag{}, std::make_index_sequence<N-1>(), std::forward<Params>(params)...)
+			constexpr explicit array(fill_tag_t, Params&&... params) MAYTHROW
+				: array(fill_tag, std::make_index_sequence<N-1>(), std::forward<Params>(params)...)
 			{}
 #endif
 
 			template <typename... Args,
 				std::enable_if_t<
-					elementwise_construction_restrictiveness<T, Args...>::value == implicit_construction
+					tc::econstructionIMPLICIT==tc::elementwise_construction_restrictiveness<T, Args...>::value
 				>* = nullptr
 			>
-			constexpr array(tc::aggregate_tag, Args&& ... args) MAYTHROW
+			constexpr array(tc::aggregate_tag_t, Args&& ... args) MAYTHROW
 				: m_a{static_cast<T>(std::forward<Args>(args))...}
 			{
-				static_assert(sizeof...(Args)==N, "array initializer list does not match number of elements");
+				STATICASSERTEQUAL(sizeof...(Args), N, "array initializer list does not match number of elements");
 			}
 
 			template <typename... Args,
 				std::enable_if_t<
-					elementwise_construction_restrictiveness<T, Args...>::value == explicit_construction
+					tc::econstructionEXPLICIT==tc::elementwise_construction_restrictiveness<T, Args...>::value
 				>* = nullptr
 			>
-			constexpr explicit array(tc::aggregate_tag, Args&& ... args) MAYTHROW
-				: m_a{static_cast<T>(std::forward<Args>(args))...}
+			constexpr explicit array(tc::aggregate_tag_t, Args&& ... args) MAYTHROW
+				: m_a{tc::explicit_cast<T>(std::forward<Args>(args))...}
 			{
-				static_assert(sizeof...(Args)==N, "array initializer list does not match number of elements");
+				STATICASSERTEQUAL(sizeof...(Args), N, "array initializer list does not match number of elements");
 			}
 
 		private:
 			template<typename Iterator, std::size_t ...IndexPack>
-			array(range_tag, Iterator it, Iterator itEnd, std::index_sequence<IndexPack...>) MAYTHROW
-				: m_a{*it, (static_cast<void>(IndexPack), *++it)...}
+			constexpr array(range_tag_t, Iterator it, Iterator itEnd, std::index_sequence<IndexPack...>) MAYTHROW
+				: m_a{static_cast<T>((_ASSERTE(itEnd!=it), *it)), static_cast<T>((static_cast<void>(IndexPack), ++it, _ASSERTE(itEnd!=it), *it))...} // static_cast because int to double considered narrowing, forbidden in list initialization
 			{
-				_ASSERT(itEnd==++it);
+				STATICASSERTEQUAL(N, sizeof...(IndexPack)+1);
+				_ASSERTE(itEnd==++it);
 			}
 		public:
 			template< typename Rng,
 				std::enable_if_t< 0!=N
-					&& construction_restrictiveness<T, decltype(tc_front(std::declval<Rng&>()))>::value == implicit_construction
+					&& tc::econstructionIMPLICIT==tc::construction_restrictiveness<T, decltype(tc_front(std::declval<Rng&>()))>::value
 				>* = nullptr
 			>
-			explicit array(Rng&& rng) MAYTHROW
-				: array(range_tag(), tc::begin(rng), tc::end(rng), std::make_index_sequence<N-1>())
+			constexpr explicit array(Rng&& rng) MAYTHROW
+				: array(range_tag, tc::begin(rng), tc::end(rng), std::make_index_sequence<N-1>())
 			{}
 
 			template< typename Rng,
 				std::enable_if_t< 0!=N 
-					&& construction_restrictiveness<T, decltype(tc_front(std::declval<Rng&>()))>::value == explicit_construction
+					&& tc::econstructionEXPLICIT==tc::construction_restrictiveness<T, decltype(tc_front(std::declval<Rng&>()))>::value
 				>* = nullptr 
 			>
 			explicit array(Rng&& rng) MAYTHROW
@@ -307,47 +309,48 @@ namespace tc {
 
 		private:
 			template<typename Func, std::size_t ...IndexPack>
-			constexpr array(func_tag, Func func, std::index_sequence<IndexPack...>) MAYTHROW 
+			constexpr array(func_tag_t, Func func, std::index_sequence<IndexPack...>) MAYTHROW 
 				: m_a{std::addressof(func(IndexPack))...} 
 			{
-				static_assert(tc::creates_no_reference_to_temporary<decltype(func(0)), T&>::value, "func must return a reference to T or derived type");
+				static_assert(tc::is_safely_constructible<T&, decltype(func(0))>::value);
 			}
 		public:
 			template<typename Func>
-			array(func_tag, Func func) MAYTHROW 
-				: array(tc::func_tag(), func, std::make_index_sequence<N>())
+			array(func_tag_t, Func func) MAYTHROW 
+				: array(tc::func_tag, func, std::make_index_sequence<N>())
 			{}
 
 			// make sure forwarding ctor has at least two parameters, so no ambiguity with copy/move ctors
 			template <typename... Args,
 				std::enable_if_t<
-					elementwise_construction_restrictiveness<T&, Args&...>::value == implicit_construction
+					tc::econstructionIMPLICIT==tc::elementwise_construction_restrictiveness<T&, Args&...>::value
 				>* =nullptr
 			>
-			constexpr array(tc::aggregate_tag, Args& ... args) MAYTHROW
+			constexpr array(tc::aggregate_tag_t, Args& ... args) MAYTHROW
 				: m_a{std::addressof(args)...}
 			{
-				static_assert(sizeof...(Args)==N, "array initializer list does not match number of elements");
+				STATICASSERTEQUAL(sizeof...(Args), N, "array initializer list does not match number of elements");
 			}
 
 		private:
-			DEFINE_TAG_TYPE(range_tag)
+			DEFINE_NESTED_TAG_TYPE(range_tag)
 
 			template<typename Iterator, std::size_t ...IndexPack>
-			array(range_tag, Iterator it, Iterator itEnd, std::index_sequence<IndexPack...>) MAYTHROW
-				: m_a{std::addressof(*it), (static_cast<void>(IndexPack), std::addressof(*++it))...}
+			constexpr array(range_tag_t, Iterator it, Iterator itEnd, std::index_sequence<IndexPack...>) MAYTHROW
+				: m_a{(_ASSERTE(itEnd!=it), std::addressof(*it)), (static_cast<void>(IndexPack), ++it, _ASSERTE(itEnd!=it), std::addressof(*it))...}
 			{
-				static_assert(tc::creates_no_reference_to_temporary<decltype(*it), T&>::value, "*it must return a reference to T or derived type");
-				_ASSERT(itEnd==++it);
+				static_assert(tc::is_safely_constructible<T&, decltype(*it)>::value);
+				STATICASSERTEQUAL(N, sizeof...(IndexPack)+1);
+				_ASSERTE(itEnd==++it);
 			}
 		public:
 			template< typename Rng,
 				std::enable_if_t< 0!=N
-					&& construction_restrictiveness<T&, decltype(tc_front(std::declval<Rng&>()))>::value == implicit_construction
+					&& tc::econstructionIMPLICIT==tc::construction_restrictiveness<T&, decltype(tc_front(std::declval<Rng&>()))>::value
 				>* = nullptr
 			>
-			explicit array(Rng&& rng) MAYTHROW
-				: array(range_tag(), tc::begin(rng), tc::end(rng), std::make_index_sequence<N-1>())
+			constexpr explicit array(Rng&& rng) MAYTHROW
+				: array(range_tag, tc::begin(rng), tc::end(rng), std::make_index_sequence<N-1>())
 			{}
 
 			array const& operator=(array const& rhs) const& noexcept(std::is_nothrow_copy_assignable<T>::value) {
@@ -410,23 +413,6 @@ namespace tc {
 
 		static_assert(!std::is_convertible<array<int,10>, array<int, 9>>::value);
 		static_assert(!std::is_convertible<array<int,9>, array<int, 10>>::value);
-
-#ifdef TC_PRIVATE
-		// error reporting
-		template< typename T, std::size_t N, std::enable_if_t<!tc::is_char<std::remove_reference_t<T>>::value>* = nullptr >
-		void append_to(tc::SReportStream& rs, array< T, N > const& arr) noexcept {
-			tc::append(rs, "tc::array(");
-			if constexpr( 0<N ) {
-				for(std::size_t i=0;;){
-					tc::append(rs, arr[i]);
-					++i;
-					if(i==N) break;
-					tc::append(rs, ",");
-				}
-			}
-			tc::append(rs, ")");
-		}
-#endif
 	} // namespace array_adl
 	using array_adl::array;
 
@@ -453,9 +439,9 @@ namespace tc {
 	}
 
 	template <typename T = no_adl::deduce_tag, typename... Ts, std::enable_if_t<!std::is_reference<T>::value>* = nullptr>
-	constexpr auto make_array(tc::aggregate_tag, Ts&&... ts) noexcept {
+	constexpr auto make_array(tc::aggregate_tag_t, Ts&&... ts) noexcept {
 		static_assert(!std::is_reference<typename no_adl::delayed_deduce<T, Ts...>::type>::value);
-		return tc::array<typename no_adl::delayed_deduce<T, Ts...>::type, sizeof...(Ts)>(tc::aggregate_tag(), std::forward<Ts>(ts)...);
+		return tc::array<typename no_adl::delayed_deduce<T, Ts...>::type, sizeof...(Ts)>(tc::aggregate_tag, std::forward<Ts>(ts)...);
 	}
 
 	// If T is a reference, force argument type T for all given arguments. That way, conversions
@@ -469,18 +455,18 @@ namespace tc {
 	// Unfortunately, there seems to be no way to make this work in C++ without using macros
 #define MAKE_ARRAY_LVALUE_REF(z, n, d) \
 	template <typename T,std::enable_if_t<std::is_lvalue_reference<T>::value>* = nullptr> \
-	auto make_array(tc::aggregate_tag, BOOST_PP_ENUM_PARAMS(n, T t)) noexcept { \
-		return tc::array<T, n>(tc::aggregate_tag(), BOOST_PP_ENUM_PARAMS(n, t)); \
+	auto make_array(tc::aggregate_tag_t, BOOST_PP_ENUM_PARAMS(n, T t)) noexcept { \
+		return tc::array<T, n>(tc::aggregate_tag, BOOST_PP_ENUM_PARAMS(n, t)); \
 	}
 
 	BOOST_PP_REPEAT_FROM_TO(1, 20, MAKE_ARRAY_LVALUE_REF, _)
 #undef MAKE_ARRAY_LVALUE_REF
 
 	template< typename T, std::enable_if_t<!std::is_reference<T>::value>* =nullptr >
-	decltype(auto) single(T&& t) noexcept {
+	constexpr auto single(T&& t) noexcept {
 		// not tc::decay_t, we want to keep reference-like proxy objects as proxy objects
 		// just like the reference overload tc::single preserves lvalue references.
-		return tc::make_array<std::remove_cv_t<T> >(tc::aggregate_tag(),std::forward<T>(t));
+		return tc::make_array<std::remove_cv_t<T> >(tc::aggregate_tag,std::forward<T>(t));
 	}
 
 	template <typename T, std::size_t N>
@@ -497,7 +483,7 @@ namespace tc {
 
 #define MAKE_TYPED_CONSTEXPR_ARRAY(type, ...) \
 	[]() noexcept -> tc::array<type, tc::count_args(__VA_ARGS__)> const& { \
-		static constexpr tc::array<type, tc::count_args(__VA_ARGS__)> c_at(tc::aggregate_tag(), __VA_ARGS__); \
+		static constexpr tc::array<type, tc::count_args(__VA_ARGS__)> c_at(tc::aggregate_tag, __VA_ARGS__); \
 		return c_at; \
 	}()
 

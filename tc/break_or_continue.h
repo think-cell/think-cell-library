@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -15,6 +15,7 @@
 #include "enum.h"
 #include "utility.h"
 #include "noncopyable.h"
+#include "derivable.h"
 
 #include <boost/mpl/has_xxx.hpp>
 #include <boost/preprocessor.hpp>
@@ -69,22 +70,22 @@ namespace tc {
 	// Func returns break_or_continue
 	template <typename Func, typename ...Args, 
 		std::enable_if_t<
-			std::is_same<tc::decayed_result_of_t<Func(Args...)>, break_or_continue>::value ||
-			std::is_same<tc::decayed_result_of_t<Func(Args...)>, INTEGRAL_CONSTANT(tc::break_)>::value ||
-			std::is_same<tc::decayed_result_of_t<Func(Args...)>, INTEGRAL_CONSTANT(tc::continue_)>::value
+			std::is_same<tc::decayed_invoke_result_t<Func,Args...>, break_or_continue>::value ||
+			std::is_same<tc::decayed_invoke_result_t<Func,Args...>, INTEGRAL_CONSTANT(tc::break_)>::value ||
+			std::is_same<tc::decayed_invoke_result_t<Func,Args...>, INTEGRAL_CONSTANT(tc::continue_)>::value
 		>* = nullptr
 	>
 	constexpr auto continue_if_not_break(Func&& func, Args&& ... args) MAYTHROW {
-		static_assert(tc::is_decayed<std::result_of_t<Func(Args...)>>::value);
+		static_assert(tc::is_decayed<std::invoke_result_t<Func,Args...>>::value);
 		return std::forward<Func>(func)(std::forward<Args>(args)...);
 	}
 
 	// Func does not return break_or_continue
 	template <typename Func, typename ...Args, 
 		std::enable_if_t<
-			!(std::is_same<tc::decayed_result_of_t<Func(Args...)>, break_or_continue>::value ||
-			std::is_same<tc::decayed_result_of_t<Func(Args...)>, INTEGRAL_CONSTANT(tc::break_)>::value ||
-			std::is_same<tc::decayed_result_of_t<Func(Args...)>, INTEGRAL_CONSTANT(tc::continue_)>::value)
+			!(std::is_same<tc::decayed_invoke_result_t<Func,Args...>, break_or_continue>::value ||
+			std::is_same<tc::decayed_invoke_result_t<Func,Args...>, INTEGRAL_CONSTANT(tc::break_)>::value ||
+			std::is_same<tc::decayed_invoke_result_t<Func,Args...>, INTEGRAL_CONSTANT(tc::continue_)>::value)
 		>* = nullptr
 	>
 	INTEGRAL_CONSTANT(tc::continue_) constexpr continue_if_not_break(Func&& func, Args&& ... args) MAYTHROW {

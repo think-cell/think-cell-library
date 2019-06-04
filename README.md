@@ -24,16 +24,15 @@ Does hacking our library give you a kick, and do you think you can contribute mo
 ------------------
 Usage instructions
 ------------------
-You need to apply boost_patches/has_range_iterator.patch to your boost library.
-This is equivalent to https://github.com/boostorg/range/pull/40 (accepted, but not merged into release yet).
-
-And you need the following compiler settings:
+You need to have at least boost 1.68.0 installed and the following compiler settings:
 
 ##### Visual C++ 19.15 (Visual Studio 2017 15.8)
 * `/std:c++latest`
-* `/permissive` (we are working on `/permissive-` a.k.a. *Conformance Mode*)
+* `/permissive` 
 
-##### clang Apple LLVM 9.1.0 (Xcode 9.4)
+Unfortuately this is the only supported Visual C++ version, all later ones have too many code generation bugs...
+
+##### clang Apple LLVM 10.0.0 (Xcode 10.0) or later
 * `-std=c++17`
 
 `range.example.cpp` provides a good entry point to get started quickly. If you want to see more examples, there are some unit tests in `tc/*.t.cpp`.

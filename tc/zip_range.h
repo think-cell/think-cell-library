@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -23,7 +23,7 @@ namespace tc {
 	namespace no_adl {
 
 		template<typename... Ranges>
-		struct zip_adaptor
+		struct [[nodiscard]] zip_adaptor
 			: range_iterator_generator_from_index<
 				zip_adaptor<Ranges...>,
 				std::tuple<
@@ -39,8 +39,8 @@ namespace tc {
 		public:
 
 			template<typename... Rhs>
-			zip_adaptor(aggregate_tag, Rhs&& ...rhs) noexcept :
-				m_baserng(tc::reference_or_value<Ranges>(aggregate_tag(), std::forward<Rhs>(rhs))...)
+			zip_adaptor(aggregate_tag_t, Rhs&& ...rhs) noexcept :
+				m_baserng(tc::reference_or_value<Ranges>(aggregate_tag, std::forward<Rhs>(rhs))...)
 			{}
 
 			using index = typename this_type::index;
@@ -141,6 +141,6 @@ namespace tc {
 	template<typename... Ranges>
 	auto zip(Ranges&& ...ranges) noexcept return_ctor(
 		no_adl::zip_adaptor<Ranges...>,
-		(aggregate_tag() BOOST_PP_COMMA() std::forward<Ranges>(ranges)...)
+		(aggregate_tag BOOST_PP_COMMA() std::forward<Ranges>(ranges)...)
 	)
 }

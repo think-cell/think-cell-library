@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -21,7 +21,7 @@ UNITTESTDEF(tc_reverse_random_access) {
 	_ASSERTEQUAL(*it++, 3);
 	_ASSERTEQUAL(*it++, 2);
 	_ASSERTEQUAL(*it++, 1);
-	_ASSERT(tc::end(revrng) == it);
+	_ASSERTEQUAL(tc::end(revrng), it);
 
 	--it;
 	_ASSERTEQUAL(*it,1);
@@ -31,7 +31,7 @@ UNITTESTDEF(tc_reverse_random_access) {
 	_ASSERTEQUAL(*it,3);
 
 	it += 3;
-	_ASSERT(tc::end(revrng) == it);
+	_ASSERTEQUAL(tc::end(revrng), it);
 }
 
 #include <numeric>
@@ -62,7 +62,7 @@ UNITTESTDEF(tc_reverse_bidirectional) {
 	_ASSERTEQUAL(*it++, 3);
 	_ASSERTEQUAL(*it++, 2);
 	_ASSERTEQUAL(*it++, 1);
-	_ASSERT(tc::end(rngrev) == it);
+	_ASSERTEQUAL(tc::end(rngrev), it);
 
 	TEST_RANGE_EQUAL(tc::reverse(rng), MAKE_CONSTEXPR_ARRAY(3,2,1));
 	TEST_RANGE_EQUAL(tc::reverse(tc::reverse(rng)), rng);

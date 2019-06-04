@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -265,7 +265,7 @@ namespace tc {
 
 			// sub_range from iterator pair
 			template<typename IndexRange_, typename Traversal_, bool bConst_>
-			friend typename tc::make_sub_range_result< conditional_const_t<IndexRange_,bConst_> & >::type make_iterator_range_impl( index_iterator<IndexRange_, Traversal_, bConst_> itBegin, index_iterator<IndexRange_, Traversal_, bConst_> itEnd ) noexcept;
+			friend tc::make_sub_range_result_t< conditional_const_t<IndexRange_,bConst_> & > make_iterator_range_impl( index_iterator<IndexRange_, Traversal_, bConst_> itBegin, index_iterator<IndexRange_, Traversal_, bConst_> itEnd ) noexcept;
 
 			explicit operator bool() const& noexcept {
 				return tc::bool_cast(m_pidxrng);
@@ -286,16 +286,16 @@ namespace tc {
 		};
 
 		template<typename IndexRange, typename Traversal, bool bConst>
-		typename tc::make_sub_range_result< conditional_const_t<IndexRange,bConst> & >::type make_iterator_range_impl( index_iterator<IndexRange, Traversal, bConst> itBegin, index_iterator<IndexRange, Traversal, bConst> itEnd ) noexcept {
-			return typename tc::make_sub_range_result< conditional_const_t<IndexRange,bConst> & >::type( *VERIFYEQUAL(VERIFY(itBegin.m_pidxrng),itEnd.m_pidxrng), tc_move(itBegin).m_idx, tc_move(itEnd).m_idx );
+		tc::make_sub_range_result_t< conditional_const_t<IndexRange,bConst> & > make_iterator_range_impl( index_iterator<IndexRange, Traversal, bConst> itBegin, index_iterator<IndexRange, Traversal, bConst> itEnd ) noexcept {
+			return tc::make_sub_range_result_t< conditional_const_t<IndexRange,bConst> & >( *VERIFYEQUAL(VERIFY(itBegin.m_pidxrng),itEnd.m_pidxrng), tc_move(itBegin).m_idx, tc_move(itEnd).m_idx );
 		}
 	}
 	using index_iterator_impl::index_iterator;
 
 	template<typename It, std::enable_if_t<tc::is_instance2<index_iterator,std::remove_reference_t<It>>::value>* =nullptr >
-	constexpr decltype(auto) iterator2index(It&& it) noexcept {
-		return std::forward<It>(it).m_idx;
-	}
+	constexpr auto iterator2index(It&& it) noexcept return_decltype_xvalue_by_ref(
+		std::forward<It>(it).m_idx
+	)
 
 	template<typename It, std::enable_if_t<!tc::is_instance2<index_iterator,std::remove_reference_t<It>>::value>* =nullptr >
 	constexpr decltype(auto) iterator2index(It&& it) noexcept {

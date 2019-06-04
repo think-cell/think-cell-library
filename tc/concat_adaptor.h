@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -17,52 +17,50 @@
 #include "size.h"
 #include "utility.h"
 #include "invoke_with_constant.h"
-#include "indexed_variant.h"
 #include "accumulate.h"
 #include "transform.h"
 #include "counting_range.h"
+#include "variant.h"
 
 namespace tc {
 	namespace no_adl {
-		template<typename T, typename Enable=void>
-		struct has_common_reference final: std::false_type {};
-
-		template<typename ... T>
-		struct has_common_reference<tc::type_list<T...>, tc::void_t<tc::common_reference_t<T...>>> final: std::true_type {};
-
-		template<typename T, typename Enable=void>
+		template<typename TypeListRng, typename Enable=void>
 		struct has_concat_iterator final: std::false_type {};
 
-		template<typename ... Rng>
-		struct has_concat_iterator<tc::type_list<Rng...>, std::enable_if_t<std::conjunction<tc::is_range_with_iterators<Rng>...>::value>> final: std::integral_constant<bool,
-			has_common_reference<tc::type_list<tc::range_reference_t<Rng>...>>::value
+		template<typename TypeListRng>
+		struct has_concat_iterator<TypeListRng, std::enable_if_t<tc::type::all_of<TypeListRng, tc::is_range_with_iterators>::value>> final : std::integral_constant<bool,
+			tc::has_common_reference_prvalue_as_val<tc::type::transform_t<TypeListRng, tc::range_reference_t>>::value
 		> {};
+	}
 
+	namespace concat_adaptor_adl {
 		template<
 			bool HasIterator,
 			typename... Rng
 		>
 		struct concat_adaptor_impl;
+	}
 
-		template<typename... Rng>
-		using concat_adaptor = concat_adaptor_impl< has_concat_iterator<tc::type_list<Rng...>>::value, Rng... >;
+	template<typename... Rng>
+	using concat_adaptor = concat_adaptor_adl::concat_adaptor_impl< no_adl::has_concat_iterator<tc::type::list<Rng...>>::value, Rng... >;
 
+	namespace concat_adaptor_adl {
 		template<
 			typename... Rng
 		>
-		struct concat_adaptor_impl<false, Rng...> {
+		struct [[nodiscard]] concat_adaptor_impl<false, Rng...>: tc::value_type_base<tc::concat_adaptor<Rng...>> {
 			std::tuple<
 				tc::reference_or_value< Rng >...
 			> m_baserng;
 
 			template<typename... Rhs>
-			constexpr explicit concat_adaptor_impl(Rhs&&... rhs) noexcept
+			constexpr concat_adaptor_impl(tc::aggregate_tag_t, Rhs&&... rhs) noexcept
 				: m_baserng(
-					tc::reference_or_value< Rng >(tc::aggregate_tag(), std::forward<Rhs>(rhs))...
+					tc::reference_or_value< Rng >(tc::aggregate_tag, std::forward<Rhs>(rhs))...
 				)
 			{}
 
-			template< typename Func >
+			template< typename Func, typename Enable=tc::type::list<decltype(tc::for_each(*std::declval<tc::reference_or_value<Rng>&>(), std::declval<Func>()))...> >
 			auto operator()(Func func) & MAYTHROW {
 				return 
 					tc::for_each(
@@ -73,7 +71,7 @@ namespace tc {
 					);
 			}
 
-			template< typename Func >
+			template< typename Func, typename Enable=tc::type::list<decltype(tc::for_each(*std::declval<tc::reference_or_value<Rng> const&>(), std::declval<Func>()))...> >
 			auto operator()(Func func) const& MAYTHROW {
 				return 
 					tc::for_each(
@@ -84,7 +82,7 @@ namespace tc {
 					);
 			}
 
-			template< typename Func >
+			template< typename Func, typename Enable=tc::type::list<decltype(tc::for_each(*std::declval<tc::reference_or_value<Rng>&&>(), std::declval<Func>()))...> >
 			auto operator()(Func func) && MAYTHROW {
 				return 
 					tc::for_each(
@@ -95,24 +93,12 @@ namespace tc {
 					);
 			}
 		protected:
-			template<
-				template<typename> typename has_trait,
-				typename... Rng2
-			>
-			constexpr static std::conjunction<has_trait<Rng2>...> each_range(tc::type_list<Rng2...>);
-
-			template<
-				template<typename> typename has_trait,
-				typename TypeListRng
-			>
-			using each_range_t = decltype(each_range<has_trait>(TypeListRng()));
-
 			template<typename IntConstant>
 			auto BaseRangeSize(IntConstant nconstIndex) const& noexcept {
 				return tc::size_raw(*std::get<nconstIndex()>(this->m_baserng));
 			}
 		public:
-			template<typename TypeListRng = tc::type_list<std::remove_reference_t<Rng>...>, std::enable_if_t<each_range_t<tc::has_size, TypeListRng>::value>* = nullptr>
+			template< ENABLE_SFINAE, std::enable_if_t<std::conjunction<tc::has_size<SFINAE_TYPE(Rng)>...>::value>* = nullptr >
 			auto size() const& noexcept {
 				return 
 					tc::accumulate(
@@ -120,7 +106,7 @@ namespace tc {
 							std::index_sequence_for<Rng...>(),
 							[&](auto nconstIndex) noexcept { return BaseRangeSize(nconstIndex); }
 						),
-						tc::common_type_decayed_t<decltype(tc::size_raw(std::declval<Rng const&>()))...>(0),
+						boost::implicit_cast<tc::common_type_t<decltype(tc::size_raw(std::declval<Rng>()))...>>(0),
 						fn_assign_plus()
 					);
 			}
@@ -131,11 +117,11 @@ namespace tc {
 		template<
 			typename... Rng
 		>
-		struct concat_adaptor_impl<true, Rng...> :
+		struct [[nodiscard]] concat_adaptor_impl<true, Rng...> :
 			concat_adaptor_impl<false, Rng...>,
 			tc::range_iterator_from_index<
 				concat_adaptor_impl<true, Rng...>,
-				tc::indexed_variant<
+				std::variant<
 					tc::index_t<std::remove_reference_t<
 						Rng
 					>>...,
@@ -152,8 +138,8 @@ namespace tc {
 			using concat_adaptor_impl<false, Rng...>::m_baserng;
 
 			template<typename... Rhs>
-			constexpr explicit concat_adaptor_impl(Rhs&&... rhs) noexcept
-				: concat_adaptor_impl<false, Rng...>(std::forward<Rhs>(rhs)...)
+			constexpr concat_adaptor_impl(tc::aggregate_tag_t, Rhs&&... rhs) noexcept
+				: concat_adaptor_impl<false, Rng...>(tc::aggregate_tag, std::forward<Rhs>(rhs)...)
 			{}
 
 		private:
@@ -161,9 +147,9 @@ namespace tc {
 			index create_begin_index(std::integral_constant<std::size_t, Index>) const& noexcept {
 				static_assert(0 <= Index && Index <= sizeof...(Rng));
 				if constexpr (sizeof...(Rng) == Index) {
-					return index(tc::in_place_index<Index>, concat_end_index());
+					return index(std::in_place_index<Index>, concat_end_index());
 				} else {
-					return index(tc::in_place_index<Index>, tc::begin_index(std::get<Index>(m_baserng)));
+					return index(std::in_place_index<Index>, tc::begin_index(std::get<Index>(m_baserng)));
 				}
 			}
 
@@ -171,7 +157,7 @@ namespace tc {
 			index create_end_index(std::integral_constant<int, Index>) const& noexcept {
 				static_assert(0 <= Index);
 				static_assert(Index < sizeof...(Rng));
-				return index(tc::in_place_index<Index>, tc::end_index(std::get<Index>(m_baserng)));
+				return index(std::in_place_index<Index>, tc::end_index(std::get<Index>(m_baserng)));
 			}
 
 			template<int IndexFrom>
@@ -266,8 +252,8 @@ namespace tc {
 
 			STATIC_FINAL_MOD(
 				template<
-					typename TypeListRng = tc::type_list<std::remove_reference_t<Rng>...> BOOST_PP_COMMA()
-					std::enable_if_t<concat_adaptor_impl<false BOOST_PP_COMMA() Rng...>::template each_range_t<tc::has_equal_index BOOST_PP_COMMA() TypeListRng>::value>* = nullptr
+					ENABLE_SFINAE BOOST_PP_COMMA()
+					std::enable_if_t<std::conjunction<tc::has_equal_index<SFINAE_TYPE(Rng)>...>::value>* = nullptr
 				>,
 				equal_index
 			)(index const& idxLhs, index const& idxRhs) const& noexcept -> bool {
@@ -367,7 +353,7 @@ namespace tc {
 					auto positive_distance = [&](index const& lhs, index const& rhs) noexcept {
 						return tc::accumulate(
 							tc::transform(
-								tc::make_counting_range(lhs.index() + 1, rhs.index()),
+								tc::iota(lhs.index() + 1, rhs.index()),
 								[&](auto nIndex) noexcept {
 									return tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
 										[&](auto nconstIndex) noexcept { return tc::explicit_cast<difference_type>(this->BaseRangeSize(nconstIndex)); },
@@ -405,35 +391,24 @@ namespace tc {
 		};
 	}
 
-	using no_adl::concat_adaptor;
-
 	namespace no_adl {
-		template<bool bConst, typename... Rng>
-		struct range_reference_concat_adaptor {
-			using type = tc::common_reference_t<
-				reference_for_value_or_reference_with_index_range_t<Rng, bConst>...
-			>;
+		template<typename... Rng>
+		struct value_type_base<tc::concat_adaptor_adl::concat_adaptor_impl<false, Rng...>, tc::void_t<tc::common_range_value_t<Rng...>>> {
+			using value_type = tc::common_range_value_t<Rng...>;
 		};
-
-		template<typename... Rng>
-		struct range_reference<concat_adaptor_impl<false, Rng...>> : range_reference_concat_adaptor<false, Rng...> {};
-
-		template<typename... Rng>
-		struct range_reference<concat_adaptor_impl<false, Rng...> const> : range_reference_concat_adaptor<true, Rng...> {};
 	}
 
-	template<typename... Rng>
+	template<typename... Rng, std::enable_if_t<1<sizeof...(Rng)>* = nullptr>
 	constexpr auto concat(Rng&&... rng) noexcept {
-		static_assert(1 < sizeof...(Rng), "tc::concat can only be used with two or more ranges");
-		return tc::concat_adaptor< Rng...>(std::forward<Rng>(rng)...);
+		return tc::concat_adaptor< std::remove_cv_t<Rng>...>(tc::aggregate_tag, std::forward<Rng>(rng)...);
 	}
 
 	namespace no_adl {
-		template< typename Rng >
+		template<typename Rng>
 		struct is_concat_range final: std::false_type {};
 
-		template<bool b, typename ... Rng>
-		struct is_concat_range<tc::no_adl::concat_adaptor_impl<b, Rng ...>> final: std::true_type {};
+		template<typename ... Rng>
+		struct is_concat_range<tc::concat_adaptor<Rng ...>> final: std::true_type {};
 	}
 	using no_adl::is_concat_range;
 }

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -10,6 +10,7 @@
 
 #include "inherit_ctors.h"
 #include "type_traits.h"
+#include "range_defines.h"
 
 #include <utility>
 
@@ -39,11 +40,11 @@ namespace tc {
 	using make_reverse_integer_sequence = typename offset_integer_sequence_impl::offset_integer_sequence<TIndex, IdxFrom, IdxTo, /* bIncreasing */ false>::type;
 
 	namespace make_integer_sequence_test {
-		static_assert(std::is_same<tc::make_integer_sequence<int, -1, 3>, std::integer_sequence<int, -1, 0, 1, 2>>::value);
-		static_assert(std::is_same<tc::make_integer_sequence<int, 2, 2>, std::integer_sequence<int>>::value);
+		STATICASSERTSAME((tc::make_integer_sequence<int, -1, 3>),( std::integer_sequence<int, -1, 0, 1, 2>));
+		STATICASSERTSAME((tc::make_integer_sequence<int, 2, 2>), std::integer_sequence<int>);
 
-		static_assert(std::is_same<tc::make_reverse_integer_sequence<int, -1, 3>, std::integer_sequence<int, 2, 1, 0, -1>>::value);
-		static_assert(std::is_same<tc::make_reverse_integer_sequence<int, 2, 2>, std::integer_sequence<int>>::value);
+		STATICASSERTSAME((tc::make_reverse_integer_sequence<int, -1, 3>), (std::integer_sequence<int, 2, 1, 0, -1>));
+		STATICASSERTSAME((tc::make_reverse_integer_sequence<int, 2, 2>), std::integer_sequence<int>);
 	}
 
 	//////////////////////////////////////////////////////////////////////////
@@ -78,22 +79,6 @@ namespace tc {
 
 		static_assert(!is_contiguous_integer_sequence<int>::value);
 	}
-
-	//////////////////////////////////////////////////////////////////////////
-	// type_by_index
-
-	template<std::size_t N, typename T0, typename... Ts>
-	struct type_by_index final {
-		using type = typename type_by_index<N - 1, Ts...>::type;
-	};
-
-	template<typename T0, typename... Ts>
-	struct type_by_index<0, T0, Ts...> final {
-		using type = T0;
-	};
-
-	template<std::size_t N, typename... Ts>
-	using type_by_index_t = typename type_by_index<N, Ts...>::type;
 
 	//////////////////////////////////////////////////////////////////////////
 	// tagged_type

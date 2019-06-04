@@ -1,48 +1,25 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-//#include "generic_macros.h"
+#include "type_list.h"
+
 #include <boost/mpl/identity.hpp>
 #include <type_traits>
 #include <limits>
+#include <vector>
 
 // Use as type of constructor arguments that are required for enabling / disabling constructor through SFINAE.
 // To be replaced by template parameter default when Visual C++ supports template parameter defaults for functions.
 struct unused_arg final {};
 
 namespace tc {
-	//////////////////////////
-	// void_t
-
-#ifdef __clang__
-	// If {template< typename... Args > using void_t = void;} is used, the test fails to compile with:
-	// error: redefinition of 'Foo<type-parameter-0-0, void>'
-	//	struct Foo<T, void_t<typename T::type2>> {
-	//         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-	// note: previous definition is here
-	//	struct Foo<T, void_t<typename T::type1>> {
-	//         ^
-	//------------------------------
-	// see also https://bugs.llvm.org/show_bug.cgi?id=26086
-	// The implementation at http://en.cppreference.com/w/cpp/types/void_t solves the problem
-	template<typename... Args>
-	struct make_void {
-		using type = void;
-	};
-
-	template< typename... Args >
-	using void_t = typename tc::make_void<Args...>::type;
-#else
-	using std::void_t;
-#endif
-
 	//////////////////////////
 	// remove_cvref
 
@@ -189,41 +166,76 @@ namespace tc {
 	//////////////////////////
 	// is_safely_convertible/assignable/constructible
 
-	// For references that may bind to temporaries, i.e.,
-	// - TTarget const&
-	// - TTarget &&
-	// - TTarget const&&
-	// prevent initialization by
-	//  - TSource {&&}, since this would bind a temporary,
-	//  - TSource {{const}&}, if an implicit conversion to a temporary TTarget takes place.
-	//    As this cannot be tested, disallow initialization unless TTarget is base or same
-	//    as TSource.
-	template<typename TSource, typename TTarget>
-	struct creates_no_reference_to_temporary : std::integral_constant<
-		bool,
-		(!std::is_rvalue_reference<TTarget>::value
-			&& (!std::is_lvalue_reference<TTarget>::value || !std::is_const<std::remove_reference_t<TTarget>>::value) // a mutable lvalue reference does not bind to temporary objects, so it is safe to allow it
-		)
-		|| (std::is_lvalue_reference<TSource>::value && tc::is_base_of<
-			std::remove_reference_t<TTarget>,
-			std::remove_reference_t<TSource>
-		>::value)
-	> {
-	};
-
 	namespace no_adl {
+		template <typename TTarget, typename ArgList, typename=void>
+		struct is_class_safely_constructible final : std::true_type {};
+
+		// allow only copy construction from other classes, everything else we do ourselves
+		template <typename T, typename A, typename Arg0, typename... Args>
+		struct is_class_safely_constructible<std::vector<T,A>, tc::type::list<Arg0, Args...>> final
+			: std::integral_constant<
+				bool,
+				0==sizeof...(Args) &&
+				std::is_class<std::remove_reference_t<Arg0>>::value
+			>
+		{
+		};
+
+		// allow only copy construction from other classes, everything else we do ourselves
+		template <typename C, typename T, typename A, typename Arg0, typename... Args>
+		struct is_class_safely_constructible<std::basic_string<C,T,A>, tc::type::list<Arg0, Args...>> final
+			: std::integral_constant<
+				bool,
+				0==sizeof...(Args) &&
+				( std::is_class<std::remove_reference_t<Arg0>>::value || std::is_convertible<Arg0, C const*>::value )
+			>
+		{
+		};
+
+		template <typename TTarget, typename ArgList, typename=void>
+		struct is_value_safely_constructible : std::false_type {};
+
+		template <typename TTarget, typename Arg0, typename... Args>
+		struct is_value_safely_constructible<TTarget, tc::type::list<Arg0, Args...>, std::enable_if_t<std::is_class<TTarget>::value>> final
+			// prevent slicing
+			: std::integral_constant<
+				bool,
+				( 0<sizeof...(Args) || std::is_same<TTarget, tc::remove_cvref_t<Arg0>>::value || !tc::is_base_of<TTarget, std::remove_reference_t<Arg0>>::value ) &&
+				is_class_safely_constructible<TTarget, tc::type::list<Arg0, Args...>>::value
+			>
+		{
+			static_assert(!std::is_reference<TTarget>::value);
+		};
+
+		// default construction of classes is ok
+		template <typename TTarget>
+		struct is_value_safely_constructible<TTarget, tc::type::list<>, std::enable_if_t<std::is_class<TTarget>::value>> final : std::true_type {
+			static_assert(!std::is_reference<TTarget>::value);
+		};
+
+		template <typename TTarget, typename TSource>
+		struct is_value_safely_constructible<TTarget, tc::type::list<TSource>, std::enable_if_t<std::is_union<TTarget>::value>> final
+			// allow classes to control their convertibility to unions, we have conversion to CURRENCY somewhere
+			: std::integral_constant<
+				bool,
+				std::is_same<TTarget, tc::remove_cvref_t<TSource>>::value || std::is_class<std::remove_reference_t<TSource>>::value
+			>
+		{
+			static_assert(!std::is_reference<TTarget>::value);
+		};
+
 		// If TTarget is arithmetic
 		//   - Character types must not be mixed with other arithmetic types.
 		//   - Any arithmetic type (except character types) can be assigned to floating point.
 		//   - Unsigned integral types can be assigned to any integral type if the upper bound is large enough.
 		//   - Signed integral types can be assigned to signed integral types if upper and lower bounds are large enough.
 		template<typename TSource, typename TTarget, typename=void>
-		struct is_safely_convertible_to_arithmetic_value
+		struct is_safely_convertible_to_arithmetic_value final
 			: std::false_type
 		{};
 
 		template<typename TSource, typename TTarget>
-		struct is_safely_convertible_to_arithmetic_value<TSource, TTarget, std::enable_if_t<std::is_class<std::remove_reference_t<TSource>>::value>>
+		struct is_safely_convertible_to_arithmetic_value<TSource, TTarget, std::enable_if_t<std::is_class<std::remove_reference_t<TSource>>::value>> final
 			: std::true_type
 		{
 			static_assert(std::is_arithmetic<TTarget>::value);
@@ -236,23 +248,21 @@ namespace tc {
 		template<typename TSource, typename TTarget>
 		struct is_safely_convertible_between_arithmetic_values
 			: std::integral_constant<bool,
-				std::is_same<std::remove_cv_t<TSource>, std::remove_cv_t<TTarget>>::value // covers bool and various char types, which are only convertible within their own type
-				|| (
-					tc::is_actual_arithmetic<TSource>::value
-					&& (
-						std::is_floating_point<TTarget>::value // TODO: disable subranged conversions (such as int to float, or double to float) ?
-						|| (
-							tc::is_actual_integer<TTarget>::value
-							&& (	std::is_signed<TSource>::value
-								?	std::is_signed<TTarget>::value
-									&& std::numeric_limits<TSource>::max() <= std::numeric_limits<TTarget>::max()
-									&& std::numeric_limits<TTarget>::lowest() <= std::numeric_limits<TSource>::lowest()
-								:	// conversion to unsigned (Warning 4018) is ok here:
-									std::numeric_limits<TSource>::max() <= std::numeric_limits<TTarget>::max()
-							)
-						)
+				std::is_same<tc::decay_t<TSource>, TTarget>::value // covers bool and various char types, which are only convertible within their own type
+				||
+					(
+						std::is_floating_point<TSource>::value && std::is_floating_point<TSource>::value
+						||
+						tc::is_actual_integer<TSource>::value && tc::is_actual_arithmetic<TTarget>::value
 					)
-				)
+					&& (
+						std::is_signed<TSource>::value
+						?	std::is_signed<TTarget>::value
+							&& std::numeric_limits<TSource>::max() <= std::numeric_limits<TTarget>::max()
+							&& std::numeric_limits<TTarget>::lowest() <= std::numeric_limits<TSource>::lowest()
+						:	// conversion to unsigned (Warning 4018) is ok here:
+							std::numeric_limits<TSource>::max() <= std::numeric_limits<TTarget>::max()
+					)
 			>
 		{
 			static_assert(std::is_convertible<TSource, TTarget>::value);
@@ -261,31 +271,14 @@ namespace tc {
 #pragma warning(pop)
 
 		template<typename TSource, typename TTarget>
-		struct is_safely_convertible_to_arithmetic_value<TSource, TTarget, std::enable_if_t<std::is_arithmetic<std::remove_reference_t<TSource>>::value>>
+		struct is_safely_convertible_to_arithmetic_value<TSource, TTarget, std::enable_if_t<std::is_arithmetic<std::remove_reference_t<TSource>>::value>> final
 			: is_safely_convertible_between_arithmetic_values<std::remove_reference_t<TSource>, TTarget>
 		{
 			static_assert(std::is_arithmetic<TTarget>::value);
 		};
 	
-		// dispatch requried because logical operators are not lazy during template instantiation
-		template <typename TSource, typename TTarget, typename=void>
-		struct is_safely_convertible_to_value : std::false_type {};
-
-		template <typename TSource, typename TTarget>
-		struct is_safely_convertible_to_value<TSource, TTarget, std::enable_if_t<std::is_class<TTarget>::value>>
-			// std::is_convertible already checks for existing conversion operator/ctor
-			// in addition, prevent accidental slicing
-			: std::integral_constant<
-				bool,
-				std::is_same<std::remove_cv_t<TTarget>, tc::remove_cvref_t<TSource>>::value || !tc::is_base_of<TTarget, std::remove_reference_t<TSource>>::value
-			>
-		{
-			static_assert(!std::is_reference<TTarget>::value);
-		};
-
-
-		template <typename TSource, typename TTarget>
-		struct is_safely_convertible_to_value<TSource, TTarget, std::enable_if_t<std::is_arithmetic<TTarget>::value>>
+		template <typename TTarget, typename TSource>
+		struct is_value_safely_constructible<TTarget, tc::type::list<TSource>, std::enable_if_t<std::is_arithmetic<TTarget>::value>> final
 			// disable unwanted arithmetic conversions
 			: std::integral_constant<
 				bool,
@@ -295,10 +288,21 @@ namespace tc {
 			static_assert(!std::is_reference<TTarget>::value);
 		};
 
+#ifdef TC_MAC
+		template<typename T>
+		struct is_objc_block : std::false_type {};
 
-		template <typename TSource, typename TTarget>
-		struct is_safely_convertible_to_value<TSource, TTarget, std::enable_if_t<std::is_enum<TTarget>::value || std::is_pointer<TTarget>::value || std::is_same<std::remove_cv_t<TTarget>,std::nullptr_t>::value >>
-			// std::is_convertible does the right thing for enums, pointers, and std::nullptr_t
+		template<typename R, typename ... Args>
+		struct is_objc_block<R (^)(Args...)> : std::true_type {};
+#endif
+
+		template <typename TTarget, typename TSource>
+		struct is_value_safely_constructible<TTarget, tc::type::list<TSource>, std::enable_if_t<std::is_enum<TTarget>::value || std::is_pointer<TTarget>::value || std::is_same<TTarget,std::nullptr_t>::value
+#ifdef TC_MAC
+			|| is_objc_block<TTarget>::value
+#endif
+		>> final
+			// std::is_constructible does the right thing for enums, pointers, and std::nullptr_t
 			: std::true_type
 		{
 			static_assert(!std::is_reference<TTarget>::value);
@@ -310,12 +314,95 @@ namespace tc {
 	template<typename TSource, typename TTarget>
 	struct is_safely_convertible : 
 		std::integral_constant<
-			bool,	
-			std::is_convertible<TSource, TTarget>::value
+			bool,
+			// std::is_convertible or, if TTarget is const&&, consider std::is_convertible to const& also is_convertible to const&&. static_cast is needed in this case.
+			// we expand std::is_convertible because
+			(std::is_convertible<TSource, TTarget>::value || std::is_rvalue_reference<TTarget>::value && std::is_const<std::remove_reference_t<TTarget>>::value && std::is_convertible<TSource, std::remove_reference_t<TTarget>&>::value)
 			&& (
 				std::is_reference<TTarget>::value
-				? tc::creates_no_reference_to_temporary<TSource, TTarget>::value
-				: no_adl::is_safely_convertible_to_value<TSource, TTarget>::value
+				? ( // creates no reference to temporary
+					// For target references that may bind to temporaries, i.e., const&, &&, const&&
+					// prevent initialization by
+					//  - value -> (const)&&
+					//  - value or (const)&& -> const&
+					// binding to reference is only allowed to same type or derived to base conversion
+
+					// 1. a mutable lvalue reference does not bind to temporary objects, so it is safe to allow it
+					std::is_lvalue_reference<TTarget>::value && !std::is_const<std::remove_reference_t<TTarget>>::value
+					|| 
+					// 2. same type or derived to base (const)& -> const& does not bind to temporary objects
+					// 3. same type or derived to base (const)& -> const&& does not bind to temporary objects
+					// 4. same type or derived to base && -> (const)&& does not bind to temporary objects
+					// 5. same type or derived to base const&& -> const&& does not bind to temporary objects
+					(std::is_lvalue_reference<TSource>::value || std::is_rvalue_reference<TSource>::value && std::is_rvalue_reference<TTarget>::value) &&
+					tc::is_base_of<
+						std::remove_reference_t<TTarget>,
+						std::remove_reference_t<TSource>
+					>::value
+				)
+				: no_adl::is_value_safely_constructible<std::remove_cv_t<TTarget>, tc::type::list<TSource>>::value
+			)
+		>
+	{};
+
+	template<>
+	struct is_safely_convertible<void, void> : std::true_type {};
+
+	// TODO: similar to std::is_convertible, implicit_uniform_construction_from should check if the function
+	//		T F() { return { Arg1, Arg2, Arg3.... }; }
+	// would compile. Currently, we only check the weaker expression
+	//		G({ Arg1, Arg2, Arg3.... });
+	// where G is a method accepting a value of T.
+	namespace is_implicitly_constructible_detail {
+		template<typename T>
+		std::true_type check_construction(T); // unevaluated
+
+		template<typename T, typename ...Args>
+		decltype(check_construction<T>({ std::declval<Args>()... })) return_implicit_uniform_construction_from(int); // unevaluated overload
+
+		template<typename...>
+		std::false_type return_implicit_uniform_construction_from(...); // unevaluated overload
+	}
+
+	template<typename TTarget, typename ...Args>
+	struct is_implicitly_constructible final :
+		std::integral_constant<
+			bool,
+			decltype(is_implicitly_constructible_detail::return_implicit_uniform_construction_from<TTarget, Args...>(0))::value &&
+			std::is_class<TTarget>::value &&
+			no_adl::is_value_safely_constructible<std::remove_cv_t<TTarget>, tc::type::list<Args...>>::value
+		>
+	{
+		static_assert(1 != sizeof...(Args));
+	};
+
+	template<typename TTarget, typename Arg0>
+	struct is_implicitly_constructible<TTarget,Arg0> final : tc::is_safely_convertible<Arg0,TTarget> {};
+
+	template<typename TTarget, typename... Args>
+	struct is_safely_constructible final :
+		std::integral_constant<
+			bool,
+			// Require std::is_class<TTarget>:
+			// - class types and const references to class types are std::is_constructible from two or more aguments. Initializing
+			//	 a const reference using uniform initialization with multiple arguments would bind the reference to a temporary,
+			//   which we do not allow,
+			// - non-reference types may be std::is_constructible from zero arguments. We do not want this for native types like int.
+			std::is_class<TTarget>::value && std::is_constructible<TTarget, Args...>::value && no_adl::is_value_safely_constructible<std::remove_cv_t<TTarget>, tc::type::list<Args...>>::value
+		>
+	{
+		static_assert(1 != sizeof...(Args));
+	};
+
+	template<typename TTarget, typename TSource>
+	struct is_safely_constructible<TTarget, TSource> final :
+		std::integral_constant<
+			bool,
+			std::is_reference<TTarget>::value
+			? tc::is_safely_convertible<TSource, TTarget>::value
+			: std::is_constructible<TTarget, TSource>::value && (
+				no_adl::is_value_safely_constructible<std::remove_cv_t<TTarget>, tc::type::list<TSource>>::value ||
+				std::is_floating_point<std::remove_cv_t<TTarget>>::value && std::is_floating_point<tc::remove_cvref_t<TSource>>::value
 			)
 		>
 	{};
@@ -325,181 +412,12 @@ namespace tc {
 		: std::integral_constant<
 			bool,
 			std::is_assignable<TTarget, TSource>::value
-			&& no_adl::is_safely_convertible_to_value<TSource, std::remove_reference_t<TTarget>>::value
-		>
-	{};
-
-	namespace no_adl {
-		template <typename TSource, typename TTarget, typename=void>
-		struct is_value_safely_constructible : std::false_type {};
-
-		template <typename TSource, typename TTarget>
-		struct is_value_safely_constructible<TSource, TTarget, std::enable_if_t<std::is_class<TTarget>::value>>
-			// prevent slicing
-			: std::integral_constant<
-				bool,
-				std::is_same<std::remove_cv_t<TTarget>, tc::remove_cvref_t<TSource>>::value || !tc::is_base_of<TTarget, std::remove_reference_t<TSource>>::value
-			>
-		{
-			static_assert(!std::is_reference<TTarget>::value);
-		};
-
-
-		template <typename TSource, typename TTarget>
-		struct is_value_safely_constructible<TSource, TTarget, std::enable_if_t<std::is_arithmetic<TTarget>::value>>
-			// disable unwanted arithmetic conversions between bool, char, and "real" arithmetic types
-			// TODO: disable subranged conversions, e.g., double -> int
-			: std::integral_constant<
-				bool,
-				std::is_same<tc::remove_cvref_t<TSource>, std::remove_cv_t<TTarget>>::value
-				|| std::is_class<std::remove_reference_t<TSource>>::value
-				|| (tc::is_actual_arithmetic<std::remove_reference_t<TSource>>::value && tc::is_actual_arithmetic<TTarget>::value)
-			>
-		{
-			static_assert(!std::is_reference<TTarget>::value);
-		};
-
-
-		template <typename TSource, typename TTarget>
-		struct is_value_safely_constructible<TSource, TTarget, std::enable_if_t<std::is_enum<TTarget>::value || std::is_pointer<TTarget>::value || std::is_same<std::remove_cv_t<TTarget>,std::nullptr_t>::value >>
-			// std::is_constructible does the right thing for enums, pointers, and std::nullptr_t
-			: std::true_type
-		{
-			static_assert(!std::is_reference<TTarget>::value);
-		};
-	}
-
-	template<typename TTarget, typename ...Args>
-	struct is_safely_constructible :
-		std::integral_constant<
-			bool,
-			// Require std::is_class<TTarget>:
-			// - class types and const references to class types are std::is_constructible from two or more aguments. Initializing
-			//	 a const reference using uniform initialization with multiple arguments would bind the reference to a temporary,
-			//   which we do not allow,
-			// - non-reference types may be std::is_constructible from zero arguments. We do not want this for native types like int.
-			std::is_class<TTarget>::value && std::is_constructible<TTarget, Args...>::value
-		>
-	{
-		static_assert(1 != sizeof...(Args));
-	};
-
-	template<typename TTarget, typename TSource>
-	struct is_safely_constructible<TTarget, TSource> :
-		std::integral_constant<
-			bool,
-			std::is_constructible<TTarget, TSource>::value
-			&& (
-				std::is_reference<TTarget>::value
-				? tc::creates_no_reference_to_temporary<TSource, TTarget>::value
-				: no_adl::is_value_safely_constructible<TSource, TTarget>::value
-			)
+			&& no_adl::is_value_safely_constructible<std::remove_reference_t<TTarget>, tc::type::list<TSource>>::value
 		>
 	{};
 }
 
-
-////////////////////////////////////////////////
-// initialization of TTarget member/element by TSource
-
-constexpr int forbidden_construction = 0; // would initialize a reference to a temporary
-constexpr int explicit_construction = 1;
-constexpr int implicit_construction = 3; // we want to bit-and these values in order to find the minimum
-
-
-// TODO: similar to std::is_convertible, implict_uniform_construction_from should check if the function
-//		T F() { return { Arg1, Arg2, Arg3.... }; }
-// would compile. Currently, we only check the weaker expression
-//		G({ Arg1, Arg2, Arg3.... });
-// where G is a method accepting a value of T.
-namespace construction_resctrictiveness_detail {
-	template<typename T>
-	std::true_type check_construction(T); // unevaluated
-
-	template<typename T, typename ...Args>
-	decltype(check_construction<T>({ std::declval<Args>()... })) return_implict_uniform_construction_from(int); // unevaluated overload
-
-	template<typename...>
-	std::false_type return_implict_uniform_construction_from(...); // unevaluated overload
-}
-
-namespace no_adl {
-	template<typename T, typename ...Args>
-	struct implict_uniform_construction_from : decltype(construction_resctrictiveness_detail::return_implict_uniform_construction_from<T, Args...>(0)) {};
-}
-
-// Construction from 0 or >= 2 arguments. For single argument constructors, see specialization below
-template<typename TTarget, typename ...Args>
-struct construction_restrictiveness : std::integral_constant<
-	int,
-	// Require std::is_class<TTarget>:
-	// - class types and const references to class types are std::is_constructible from two or more aguments. Initializing
-	//	 a const reference using uniform initialization with multiple arguments would bind the reference to a temporary,
-	//   which we do not allow,
-	// - non-reference types may be std::is_constructible from zero arguments. We do not want this for native types like int.
-	std::is_class<TTarget>::value && std::is_constructible<TTarget, Args...>::value
-	? (
-		no_adl::implict_uniform_construction_from<TTarget, Args...>::value
-			? implicit_construction
-			: explicit_construction
-	)
-	: forbidden_construction
-> {
-	static_assert(1!=sizeof...(Args));
-};
-
-// Similar to http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2015/n4387.html :
-// - implicit construction == is_constructible && is_convertible,
-// - explicit construction == is_constructible && !is_convertible.
-// However, we make some unsafe conversions explicit or do not allow them at all.
-// TODO: exlicit construction, if there is a sensible definition for tc::explicit_cast<TTarget>(TSource) 
-template<typename TTarget, typename TSource>
-struct construction_restrictiveness<TTarget, TSource> : std::integral_constant<
-	int,
-	tc::is_safely_constructible<TTarget, TSource>::value
-		? (
-			tc::is_safely_convertible<TSource, TTarget>::value
-				? implicit_construction
-				: explicit_construction
-		)
-		: forbidden_construction
-> {
-	static_assert(!std::is_rvalue_reference<TTarget>::value);
-};
-
-// initialize N elements of TTarget by forwarding one arg per element
-template <typename TTarget, typename ...Args>
-struct elementwise_construction_restrictiveness final {
-private:
-	template< int... nRestrictiveness >
-	static constexpr int internal_value = (implicit_construction & ... & nRestrictiveness);
-public:
-	static constexpr int value = internal_value<construction_restrictiveness<TTarget, Args>::value...>;
-};
-
 namespace tc {
-	/////////////////////////////////////////////////////////////////////////
-	// type_holder
-
-	template<typename... Ts>
-	struct type_list final {};
-}
-
-namespace tc {
-	namespace no_adl {
-		template< template<typename...> class T, typename List, typename=void >
-		struct apply_args { };
-
-		template< template<typename...> class T, typename... Args >
-		struct apply_args<T, tc::type_list<Args...>, tc::void_t<typename Args::type..., T<typename Args::type...>>> {
-			using type = T<typename Args::type...>;
-		};
-
-		template< template<typename...> class T, typename... Args >
-		using template_apply_identity = tc::no_adl::apply_args<T, tc::type_list<Args...>>;
-	}
-	using no_adl::template_apply_identity;
-
 	namespace no_adl {
 		template<typename... Args>
 		struct common_type_decayed;
@@ -518,10 +436,6 @@ namespace tc {
 			using type=T;
 		};
 
-		template<typename T0, typename T1, template<typename> class Condition>
-		struct same_category final: std::integral_constant<bool, !(Condition<T0>::value || Condition<T1>::value) || Condition<std::common_type_t<T0, T1>>::value >
-		{};
-
 		template<typename T0, typename T1, typename=void>
 		struct common_type_decayed_base_conversion {};
 
@@ -530,21 +444,8 @@ namespace tc {
 			T0,
 			T1,
 			std::enable_if_t<
-				same_category<T0, T1, std::is_class>::value && // silent class conversion not allowed
-				( // Object slicing is prevented
-					!std::is_class<std::common_type_t<T0, T1>>::value || (
-				 		(std::is_same<std::common_type_t<T0, T1>,T0>::value || !tc::is_base_of<std::common_type_t<T0, T1>,T0>::value) &&
-				  		(std::is_same<std::common_type_t<T0, T1>,T1>::value || !tc::is_base_of<std::common_type_t<T0, T1>,T1>::value)
-					)
-				) &&
-				same_category<T0, T1, tc::is_actual_arithmetic>::value && // silent integer conversion not allowed
-				same_category<T0, T1, tc::is_bool>::value && // silent bool conversion not allowed
-				same_category<T0, T1, tc::is_char>::value && // silent char conversion not allowed
-				( // silent conversion from signed to unsigned is not allowed
-					!tc::is_actual_integer<std::common_type_t<T0, T1>>::value ||
-					std::is_signed<std::common_type_t<T0, T1>>::value ||
-				 	(!std::is_signed<T0>::value && !std::is_signed<T1>::value)
-				)
+				tc::is_safely_convertible<T0, std::common_type_t<T0, T1>>::value &&
+				tc::is_safely_convertible<T1, std::common_type_t<T0, T1>>::value
 			>
 		> {
 			using type = std::common_type_t<T0, T1>;
@@ -579,30 +480,10 @@ namespace tc {
 #endif
 		};
 
-		// Patch for XCode 8 - std::common_type<void, void> should be void, but fails to compile
-		template<>
-		struct common_type_decayed<void, void> {
-			using type = void;
-		}; 
-
 		template<typename T0, typename T1, typename... Args>
 		struct common_type_decayed<T0, T1, Args...>
-			: tc::template_apply_identity<tc::common_type_t, boost::mpl::identity<T0>, tc::common_type_decayed<T1, Args...>> { };
-
-		template<typename... types>
-		struct common_reference;
-
-		template<typename T>
-		struct common_reference<T> {
-			using type = T;
-		};
+			: tc::type::accumulate<tc::type::list<T0, T1, Args...>, tc::common_type_decayed_t> {};
 	} // namespace no_adl
-	using no_adl::common_reference;
-
-	template<typename... Args>
-	using common_reference_t =
-		typename common_reference<Args...>::type
-	;
 
 	template<bool bCondition, template<typename> class template_, typename T>
 	using apply_if_t = std::conditional_t<
@@ -625,11 +506,17 @@ namespace tc {
 			>
 		>;
 
-		template<bool, typename T0, typename T1, typename Delayed>
-		struct delayed_base_or_common_type;
+		template<typename T0, typename T1, typename Enable=void>
+		struct guaranteed_common_reference final {};
 
-		template<typename T0, typename T1, typename Delayed>
-		struct delayed_base_or_common_type<false, T0, T1, Delayed> {
+		template<typename T0, typename T1>
+		struct guaranteed_common_reference<T0, T1, std::enable_if_t<
+			std::is_reference<T0>::value &&
+			std::is_reference<T1>::value &&
+			!std::is_same<common_reference_base_type<std::remove_reference_t<T0>, std::remove_reference_t<T1>>, void>::value
+		>> final {
+			static_assert(std::is_reference<T0>::value && std::is_reference<T1>::value);
+
 			using T0Value = std::remove_reference_t<T0>;
 			using T1Value = std::remove_reference_t<T1>;
 
@@ -660,24 +547,91 @@ namespace tc {
 					volatileness<common_reference_base_type<T0Value, T1Value>>
 				>
 			>;
+
+			static_assert(tc::is_safely_convertible<T0, type>::value);
+			static_assert(tc::is_safely_convertible<T1, type>::value);
 		};
 
-		template<typename T0, typename T1, typename Delayed>
-		struct delayed_base_or_common_type<true, T0, T1, Delayed>: tc::common_type_decayed<tc::decay_t<T0>, tc::decay_t<T1>> {
-		};
+		template<typename TypeList, typename Enable=void>
+		struct common_reference_xvalue_as_ref_common_type {};
+
+		template<typename... Args>
+		struct common_reference_xvalue_as_ref_common_type<tc::type::list<Args...>, std::enable_if_t<
+			tc::type::all_of<tc::type::list<Args...>, std::is_reference>::value
+		>>: tc::common_type_decayed<tc::decay_t<Args>...> {};
 
 		template<typename T0, typename T1>
-		struct common_reference<T0,T1>: 
-			no_adl::delayed_base_or_common_type<
-				!std::is_reference<T0>::value || !std::is_reference<T1>::value || std::is_same<no_adl::common_reference_base_type<std::remove_reference_t<T0>, std::remove_reference_t<T1>>, void>::value,
-				T0, T1, void
-			> {
+		using guaranteed_common_reference_t = typename guaranteed_common_reference<T0, T1>::type;
+
+		template<typename TypeList, typename Enable=void>
+		struct has_guaranteed_common_reference final: std::false_type {};
+
+		template<typename TypeList>
+		struct has_guaranteed_common_reference<TypeList, tc::void_t<typename tc::type::accumulate<TypeList, guaranteed_common_reference_t>::type>> final: std::true_type {};
+
+		template<typename TypeList, typename Enable=void>
+		struct common_reference_xvalue_as_ref final: common_reference_xvalue_as_ref_common_type<TypeList> {};
+
+		template<typename TypeList>
+		struct common_reference_xvalue_as_ref<TypeList, std::enable_if_t<
+			has_guaranteed_common_reference<TypeList>::value
+		>> final {
+			using type = typename tc::type::accumulate<TypeList, guaranteed_common_reference_t>::type;
+		};
+	}
+
+	// prvalue is not allowed in common_reference_xvalue_as_ref_t
+	template<typename... Args>
+	using common_reference_xvalue_as_ref_t = typename no_adl::common_reference_xvalue_as_ref<tc::type::list<Args...>>::type;
+
+	namespace no_adl {
+		template< typename TypeList, typename Enable = void >
+		struct has_common_reference_xvalue_as_ref /*final*/: std::false_type {};
+
+		template< typename... Args >
+		struct has_common_reference_xvalue_as_ref<tc::type::list<Args...>, tc::void_t<tc::common_reference_xvalue_as_ref_t<Args...>>> /*final*/: std::true_type {};
+	}
+	using no_adl::has_common_reference_xvalue_as_ref;
+
+	namespace no_adl {
+		template<typename TTarget>
+		struct curried_is_safely_convertible /*final*/ {
+			template<typename TSource>
+			using type = tc::is_safely_convertible<TSource, TTarget>;
 		};
 
-		template<typename T0, typename T1, typename... Args>
-		struct common_reference<T0, T1, Args...>
-			: tc::template_apply_identity<tc::common_reference_t, boost::mpl::identity<T0>, tc::common_reference<T1, Args...>> { };
-	} // namespace no_adl
+		template<typename TypeList>
+		struct common_reference_prvalue_as_val_base;
+
+		template<typename... Args>
+		struct common_reference_prvalue_as_val_base<tc::type::list<Args...>>: tc::common_type_decayed<tc::decay_t<Args>...> {};
+
+		template<typename TypeList, typename Enable=void>
+		struct common_reference_prvalue_as_val final: common_reference_prvalue_as_val_base<TypeList> {};
+
+		template<typename... Args>
+		struct common_reference_prvalue_as_val<tc::type::list<Args...>, std::enable_if_t<
+			tc::type::all_of<
+				tc::type::list<Args...>,
+				curried_is_safely_convertible<tc::common_reference_xvalue_as_ref_t<Args&&...>>::template type
+			>::value
+		>> final {
+			using type = tc::common_reference_xvalue_as_ref_t<Args&&...>;
+		};
+	}
+
+	template<typename... Args>
+	using common_reference_prvalue_as_val_t = typename no_adl::common_reference_prvalue_as_val<tc::type::list<Args...>>::type;
+
+	namespace no_adl {
+		template< typename TypeList, typename Enable = void >
+		struct has_common_reference_prvalue_as_val final: std::false_type {};
+
+		template< typename... Args >
+		struct has_common_reference_prvalue_as_val<tc::type::list<Args...>, tc::void_t<tc::common_reference_prvalue_as_val_t<Args...>>> final: std::true_type {};
+	}
+
+	using no_adl::has_common_reference_prvalue_as_val;
 
 	template< typename Func >
 	struct delayed_returns_reference_to_argument {
@@ -705,6 +659,38 @@ namespace tc {
 
 	template <typename...>
 	struct dependent_false : std::false_type {};
+
+	namespace no_adl {
+		struct sfinae_dependency_dummy; /*undefined*/
+
+		template<typename T, typename DummyT, typename Enable=void>
+		struct sfinae_dependent_type;
+		
+		template<typename T, typename DummyT>
+		struct sfinae_dependent_type<T, DummyT, std::enable_if_t<std::is_same<DummyT, sfinae_dependency_dummy>::value>> final {
+			using type = T;
+		};
+
+		template<typename T, typename DummyT>
+		using sfinae_dependent_type_t = typename sfinae_dependent_type<T, DummyT>::type;
+
+		template<auto val, typename DummyT, typename Enable=void>
+		struct sfinae_dependent_value;
+
+		template<auto val, typename DummyT>
+		struct sfinae_dependent_value<val, DummyT, std::enable_if_t<std::is_same<DummyT, sfinae_dependency_dummy>::value>> final {
+			static constexpr auto value = val;
+		};
+	}
+
+#define ENABLE_SFINAE \
+	typename EnableSfinaeDependencyT = tc::no_adl::sfinae_dependency_dummy
+
+#define SFINAE_TYPE(T) \
+	tc::no_adl::sfinae_dependent_type_t<T, EnableSfinaeDependencyT>
+
+#define SFINAE_VALUE(val) \
+	tc::no_adl::sfinae_dependent_value<val, EnableSfinaeDependencyT>::value
 
 	/////////////////////////////////////////////
 	// is_instance

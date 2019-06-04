@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -71,26 +71,36 @@ using unbounded_adl::greatest;
 // This avoids types having to support operator> and operator>=, which we do not want to use in our code.
 
 // overloadable version of operator==
-template<typename Lhs, typename Rhs, std::enable_if_t< !(tc::is_actual_arithmetic<Lhs>::value && tc::is_actual_arithmetic<Rhs>::value) >* =nullptr >
-bool equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
+template<typename Lhs, typename Rhs, std::enable_if_t<
+	std::is_class<Lhs>::value ||
+	std::is_class<Rhs>::value ||
+	std::is_pointer<Lhs>::value ||
+	std::is_pointer<Rhs>::value ||
+	std::is_same<std::remove_volatile_t<Lhs>, std::remove_volatile_t<Rhs>>::value
+>* =nullptr>
+constexpr bool equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
 	return lhs==rhs;
 }
 
-template<typename Lhs, typename Rhs, std::enable_if_t< tc::is_actual_arithmetic<Lhs>::value && tc::is_actual_arithmetic<Rhs>::value >* =nullptr >
-bool equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
+template<typename Lhs, typename Rhs, std::enable_if_t<
+	!std::is_same<std::remove_volatile_t<Lhs>, std::remove_volatile_t<Rhs>>::value &&
+	tc::is_actual_arithmetic<Lhs>::value &&
+	tc::is_actual_arithmetic<Rhs>::value
+>* =nullptr>
+constexpr bool equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
 	return tc::explicit_cast<decltype(lhs+rhs)>(lhs)==tc::explicit_cast<decltype(lhs+rhs)>(rhs);
 }
 
 // overloadable version of operator<
 template<typename Lhs, typename Rhs, std::enable_if_t< !(tc::is_actual_arithmetic<Lhs>::value && tc::is_actual_arithmetic<Rhs>::value) >* =nullptr >
-auto less(Lhs const& lhs, Rhs const& rhs) noexcept {
+constexpr auto less(Lhs const& lhs, Rhs const& rhs) noexcept {
 	auto result = lhs < rhs;
 	static_assert(std::is_same<decltype(result), bool>::value || std::is_same<decltype(result), std::true_type>::value  || std::is_same<decltype(result), std::false_type>::value);
 	return result;
 }
 
 template<typename Lhs, typename Rhs, std::enable_if_t< tc::is_actual_arithmetic<Lhs>::value && tc::is_actual_arithmetic<Rhs>::value >* =nullptr >
-auto less(Lhs const& lhs, Rhs const& rhs) noexcept {
+constexpr auto less(Lhs const& lhs, Rhs const& rhs) noexcept {
 	auto result = tc::explicit_cast<decltype(lhs+rhs)>(lhs)<tc::explicit_cast<decltype(lhs+rhs)>(rhs);
 	static_assert(std::is_same<decltype(result), bool>::value || std::is_same<decltype(result), std::true_type>::value || std::is_same<decltype(result), std::false_type>::value);
 	return result;
@@ -98,7 +108,7 @@ auto less(Lhs const& lhs, Rhs const& rhs) noexcept {
 
 struct fn_equal_to {
 	template<typename Lhs, typename Rhs>
-	bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
+	constexpr bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
 		return tc::equal_to(lhs,rhs);
 	}
 	using is_transparent=void;
@@ -106,7 +116,7 @@ struct fn_equal_to {
 
 struct fn_not_equal_to {
 	template<typename Lhs, typename Rhs>
-	bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
+	constexpr bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
 		return !tc::equal_to(lhs,rhs);
 	}
 	using is_transparent = void;
@@ -114,7 +124,7 @@ struct fn_not_equal_to {
 
 struct fn_less {
 	template<typename Lhs, typename Rhs>
-	auto operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
+	constexpr auto operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
 		return tc::less(lhs,rhs);
 	}
 	using is_transparent = void;
@@ -125,7 +135,7 @@ struct fn_less {
 
 struct fn_greater_equal {
 	template<typename Lhs, typename Rhs>
-	auto operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
+	constexpr auto operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
 		return !tc::less(lhs,rhs);
 	}
 	using is_transparent = void;
@@ -133,7 +143,7 @@ struct fn_greater_equal {
 
 struct fn_greater {
 	template<typename Lhs, typename Rhs>
-	auto operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
+	constexpr auto operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
 		return tc::less(rhs,lhs);
 	}
 	using is_transparent = void;
@@ -144,7 +154,7 @@ struct fn_greater {
 
 struct fn_less_equal {
 	template<typename Lhs, typename Rhs>
-	auto operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
+	constexpr auto operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
 		return !tc::less(rhs,lhs);
 	}
 	using is_transparent = void;
@@ -247,13 +257,13 @@ auto fn_assign_better(Func func) {
 
 template< typename Lhs, typename Rhs >
 bool binary_equal( Lhs const& lhs, Rhs const& rhs ) noexcept {
-	static_assert( sizeof(lhs)==sizeof(rhs) );
+	STATICASSERTEQUAL( sizeof(lhs), sizeof(rhs) );
 	return 0==std::memcmp(std::addressof(lhs),std::addressof(rhs),sizeof(lhs));
 }
 
 template< typename Dst, typename Src >
 bool binary_change( Dst& dst, Src const& src ) noexcept {
-	static_assert( sizeof(Dst)==sizeof(src) );
+	STATICASSERTEQUAL( sizeof(Dst), sizeof(src) );
 	if( !binary_equal(dst,src) ) {
 		std::memcpy(std::addressof(dst),std::addressof(src),sizeof(dst));
 		return true;

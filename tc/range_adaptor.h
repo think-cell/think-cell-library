@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -117,22 +117,53 @@ namespace tc {
 			typename Traversal
 		>
 		struct range_iterator_generator_from_index
-			: tc::range_generator_from_index<Derived,
-				range_iterator_from_index<Derived, Index, Traversal>
-			>
-		{};
+			: range_iterator_from_index<Derived, Index, Traversal>
+		{
+			template< typename Func, typename Derived_=Derived >
+			auto operator()(Func func) /* no & */ MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, std::declval<tc::range_reference_t<Derived_>>())), INTEGRAL_CONSTANT(tc::continue_)> {
+				for( auto idx=this->begin_index();
+					!this->at_end_index(idx);
+					this->increment_index(idx)
+				) {
+					RETURN_IF_BREAK( tc::continue_if_not_break( func, this->dereference_index(idx) ) );
+				}
+				return INTEGRAL_CONSTANT(tc::continue_)();
+			}
+
+			template< typename Func, typename Derived_=Derived >
+			auto operator()(Func func) const/* no & */ MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, std::declval<tc::range_reference_t<Derived_>>())), INTEGRAL_CONSTANT(tc::continue_)> {
+				for( auto idx=this->begin_index();
+					!this->at_end_index(idx);
+					this->increment_index(idx)
+				) {
+					RETURN_IF_BREAK( tc::continue_if_not_break( func, this->dereference_index(idx) ) );
+				}
+				return INTEGRAL_CONSTANT(tc::continue_)();
+			}
+		};
 	}
 	using range_iterator_from_index_impl::range_iterator_from_index;
 	using range_iterator_from_index_impl::range_iterator_generator_from_index;
 
 	namespace no_adl {
-		struct range_adaptor_access final {
-			template< typename Derived, typename... Args>
-			auto operator()(Derived&& derived, Args&& ... args) /* no & */ MAYTHROW return_decltype(
-				std::forward<Derived>(derived).apply(std::forward<Args>(args)...) // MAYTHROW
+		template<typename Derived, typename Func>
+		struct range_adaptor_access {
+			Derived& m_derived;
+			Func& m_func;
+
+			template<typename... Args>
+			auto operator()(Args&& ... args) const& MAYTHROW return_decltype(
+				m_derived.apply(m_func, std::forward<Args>(args)...) // MAYTHROW
 			)
 		};
+	}
+	
+	template<typename Derived, typename Func>
+	auto make_range_adaptor_access(Derived& derived, Func& func) noexcept {
+		return no_adl::range_adaptor_access<Derived, Func>{derived, func};
+	}
 
+	namespace no_adl {
 		template<
 			typename Derived 
 			, typename Rng
@@ -158,7 +189,7 @@ namespace tc {
 			, Rng
 			, Traversal
 			, false
-		> {
+		>: tc::value_type_base<Derived> {
 			static_assert( !std::is_rvalue_reference<Rng>::value );
 			reference_or_value< Rng > m_baserng;
 		
@@ -171,8 +202,8 @@ namespace tc {
 			constexpr range_adaptor()=default;
 
 			template< typename Rhs >
-			constexpr explicit range_adaptor( aggregate_tag, Rhs&& rhs ) noexcept
-			:	m_baserng( aggregate_tag(), std::forward<Rhs>(rhs) )
+			constexpr explicit range_adaptor( aggregate_tag_t, Rhs&& rhs ) noexcept
+			:	m_baserng( aggregate_tag, std::forward<Rhs>(rhs) )
 			{}
 			template< typename Rhs >
 			constexpr range_adaptor( Rhs&& rhs ) noexcept
@@ -193,25 +224,13 @@ namespace tc {
 				return *std::move(m_baserng);
 			}
 
-			template< typename Func >
-			constexpr auto operator()(Func func) /* no & */ MAYTHROW {
-				return tc::for_each(
+			template< typename Func, typename Derived2=Derived >
+			constexpr auto operator()(Func func) const& MAYTHROW return_decltype(
+				tc::for_each(
 					*m_baserng,
-					[&](auto&&... args) mutable MAYTHROW {
-						return range_adaptor_access()(tc::derived_cast<Derived>(*this), func, std::forward<decltype(args)>(args)...);
-					}
-				);
-			}
-
-			template< typename Func >
-			constexpr auto operator()(Func func) const /* no & */ MAYTHROW {
-				return tc::for_each(
-					*m_baserng,
-					[&](auto&&... args) mutable MAYTHROW {
-						return range_adaptor_access()(tc::derived_cast<Derived>(*this), func, std::forward<decltype(args)>(args)...);
-					}
-				);
-			}
+					make_range_adaptor_access(tc::derived_cast<Derived2>(*this), func)
+				)
+			)
 		};
 		//-------------------------------------------------------------------------------------------------------------------------
 		// iterator/index based ranges
@@ -254,8 +273,8 @@ namespace tc {
 			constexpr range_adaptor()=default;
 
 			template< typename Rhs >
-			constexpr explicit range_adaptor( aggregate_tag, Rhs&& rhs ) noexcept
-			:	base_(aggregate_tag(), std::forward<Rhs>(rhs))
+			constexpr explicit range_adaptor( aggregate_tag_t, Rhs&& rhs ) noexcept
+			:	base_(aggregate_tag, std::forward<Rhs>(rhs))
 			{}
 
 			template< typename Rhs >
@@ -312,30 +331,4 @@ namespace tc {
 		};
 	}
 	using no_adl::range_adaptor;
-
-	namespace no_adl {
-		template<typename Rng, bool bConst>
-		struct reference_for_value_or_reference_with_index_range {
-			using type = tc::range_reference_t<
-				decltype(
-					*std::declval<
-						tc::apply_if_t<
-							bConst,
-							std::add_const,
-							reference_or_value< Rng >
-						>
-					&>()
-				)
-			>;
-		};
-
-		template<typename Rng, bool bConst>
-		using reference_for_value_or_reference_with_index_range_t = typename reference_for_value_or_reference_with_index_range<Rng, bConst>::type;
-
-		template< typename Derived, typename Rng, typename Traversal >
-		struct range_reference<range_adaptor<Derived, Rng, Traversal, false> > : reference_for_value_or_reference_with_index_range<Rng, false> {};
-
-		template< typename Derived, typename Rng, typename Traversal >
-		struct range_reference<range_adaptor<Derived, Rng, Traversal, false> const> : reference_for_value_or_reference_with_index_range<Rng, true> {};
-	}
 }

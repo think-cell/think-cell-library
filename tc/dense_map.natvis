@@ -24,7 +24,7 @@
 	</Type>
 
 	<Type Name="tc::geo::rect_adl::rect&lt;*&gt;">
-		<DisplayString>rect ({m_a.m_a[0].m_a.m_a[0]}, {m_a.m_a[1].m_a.m_a[0]})..({m_a.m_a[0].m_a.m_a[1]}, {m_a.m_a[1].m_a.m_a[1]})</DisplayString>
+		<DisplayString>rect ({m_a.m_a[0].m_a.m_a[0]}, {m_a.m_a[1].m_a.m_a[0]})..({m_a.m_a[0].m_a.m_a[1]}, {m_a.m_a[1].m_a.m_a[1]}) [{m_a.m_a[0].m_a.m_a[1] - m_a.m_a[0].m_a.m_a[0]}x{m_a.m_a[1].m_a.m_a[1] - m_a.m_a[1].m_a.m_a[0]}] </DisplayString>
 		<Expand>
 			<Item Name="left"> m_a.m_a[0].m_a.m_a[0] </Item>
 			<Item Name="top"> m_a.m_a[1].m_a.m_a[0] </Item>

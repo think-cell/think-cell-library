@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -158,7 +158,7 @@ namespace tc {
 				}
 			}
 		#ifdef _DEBUG /* we have already found the partition point; compare result */
-			_ASSERT( itBegin == itPartitionPoint );
+			_ASSERTEQUAL(itBegin, itPartitionPoint);
 		#endif
 			return itBegin;
 		}

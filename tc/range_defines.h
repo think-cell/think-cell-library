@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -47,6 +47,13 @@
 	#ifndef _ASSERTPRINT
 		#define _ASSERTPRINT( cond, ... ) assert( cond )
 	#endif
+	#ifndef STATICASSERTEQUAL
+		#define STATICASSERTEQUAL(n1, ...) static_assert(n1 == __VA_ARGS__)
+	#endif
+	#ifndef STATICASSERTSAME
+		#include <boost/preprocessor/punctuation/remove_parens.hpp>
+		#define STATICASSERTSAME(t1, t2, ...) static_assert(std::is_same<BOOST_PP_REMOVE_PARENS(t1), BOOST_PP_REMOVE_PARENS(t2)>::value, "STATICASSERTSAME failed: " __VA_ARGS__)
+	#endif
 	#ifndef VERIFYEQUAL
 		#include <utility>
 		namespace ErrorHandling {
@@ -68,6 +75,17 @@
 			}
 		}
 		#define VERIFY( expr ) ErrorHandling::Verify(expr)
+	#endif
+	#ifndef VERIFYPRED
+		#include <utility>
+		namespace ErrorHandling {
+			template <typename Expr, typename Pred>
+			Expr&& VerifyPred(Expr&& expr, Pred pred) {
+				_ASSERT(pred(expr));
+				return std::forward<Expr>(expr);
+			}
+		}
+		#define VERIFYPRED( expr, ... ) ErrorHandling::VerifyPred(expr, [&](auto const& _) { return (__VA_ARGS__); })
 	#endif
 	#ifndef VERIFYINITIALIZED
 		#define VERIFYINITIALIZED( expr ) (expr)

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -24,12 +24,8 @@ namespace tc {
 
 		template<typename TIndex, TIndex... Is, typename Func, typename... Args>
 		decltype(auto) invoke_with_constant_impl(std::integer_sequence<TIndex, Is...>, Func&& func, TIndex nIndex, Args&&... args) MAYTHROW {
-			using result_type = common_reference_t<
-#ifdef __clang__
-				std::result_of_t<std::decay_t<Func>&(std::integral_constant<TIndex, Is>, Args&&...)>... // C++11, deprecated in C++17
-#else
-				std::invoke_result_t<std::decay_t<Func>&, std::integral_constant<TIndex, Is>, Args&&...>... // C++17
-#endif
+			using result_type = tc::common_reference_prvalue_as_val_t<
+				std::invoke_result_t<std::decay_t<Func>&, std::integral_constant<TIndex, Is>, Args&&...>...
 			>;
 
 			static constexpr std::add_pointer_t<result_type(std::remove_reference_t<Func>, Args&&...)> apfn[] = {

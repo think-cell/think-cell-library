@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -28,56 +28,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 
 namespace tc {
-	/////////////////////////////////////////////
-	// derivable_t
-
-	namespace no_adl {
-		template<typename T>
-		struct derivable_wrapper {
-			static_assert( std::is_same<tc::remove_cvref_t<T>, T>::value );
-			static_assert( !std::is_class<T>::value );
-
-			derivable_wrapper() noexcept
-			{}
-
-			template<typename A1, std::enable_if_t<implicit_construction==construction_restrictiveness<T, A1&&>::value>* = nullptr>
-			derivable_wrapper(A1&& a1) noexcept
-				: m_t(std::forward<A1>(a1))
-			{}
-
-			template<typename A1, std::enable_if_t<explicit_construction==construction_restrictiveness<T, A1&&>::value>* = nullptr>
-			explicit derivable_wrapper(A1&& a1) noexcept
-				: m_t(std::forward<A1>(a1))
-			{}
-
-			operator T const&() const& noexcept {
-				return m_t;
-			}
-
-			operator T&() & noexcept {
-				return m_t;
-			}
-
-			operator T const&&() const&& noexcept {
-				return static_cast<T const&&>(m_t);
-			}
-
-			operator T&&() && noexcept {
-				return static_cast<T&&>(m_t);
-			}
-
-		private:
-			T m_t;
-		};
-
-		template<>
-		struct derivable_wrapper<void> {};
-	}
-	template<typename T>
-	using derivable_t = std::conditional_t<std::is_class<T>::value, T, tc::no_adl::derivable_wrapper<T>>;
-
-	//-----------------------------------------------------------------------------------------------------------------------------
-
 	template< typename T >
 	struct is_plain_type final
 		: std::is_same< T, std::remove_pointer_t< tc::remove_cvref_t<T> > >::type
@@ -125,7 +75,7 @@ namespace tc {
 	#define BASE_CAST_IMPL(cvref) \
 	template<typename Dst, std::enable_if_t<std::is_class<Dst>::value>* = nullptr> \
 	constexpr Dst cvref base_cast(typename boost::mpl::identity<Dst>::type cvref t) noexcept { \
-		static_assert(std::is_same<tc::remove_cvref_t<Dst>, Dst>::value); \
+		STATICASSERTSAME(tc::remove_cvref_t<Dst>, Dst); \
 		return static_cast<Dst cvref>(t); \
 	}
 	BASE_CAST_IMPL(&)
@@ -139,36 +89,6 @@ namespace tc {
 	BASE_CAST_IMPL(volatile*)
 	BASE_CAST_IMPL(volatile const&)
 	BASE_CAST_IMPL(volatile const&&)
-	BASE_CAST_IMPL(volatile const*)
-	#pragma pop_macro("BASE_CAST_IMPL")
-
-	#pragma push_macro("BASE_CAST_IMPL")
-	#define BASE_CAST_IMPL(cvref) \
-	template<typename Dst, std::enable_if_t<!std::is_class<Dst>::value>* = nullptr> \
-	constexpr Dst cvref base_cast(typename boost::mpl::identity<tc::derivable_t<Dst>>::type cvref t) noexcept { \
-		static_assert(std::is_same<tc::remove_cvref_t<Dst>, Dst>::value); \
-		return static_cast<Dst cvref>(t); \
-	}
-	BASE_CAST_IMPL(&)
-	BASE_CAST_IMPL(&&)
-	BASE_CAST_IMPL(const&)
-	BASE_CAST_IMPL(const&&)
-	BASE_CAST_IMPL(volatile&)
-	BASE_CAST_IMPL(volatile&&)
-	BASE_CAST_IMPL(volatile const&)
-	BASE_CAST_IMPL(volatile const&&)
-	#pragma pop_macro("BASE_CAST_IMPL")	
-
-	#pragma push_macro("BASE_CAST_IMPL")
-	#define BASE_CAST_IMPL(cvref) \
-	template<typename Dst, std::enable_if_t<!std::is_class<Dst>::value>* = nullptr> \
-	constexpr Dst cvref base_cast(typename boost::mpl::identity<tc::derivable_t<Dst>>::type cvref p) noexcept { \
-		static_assert(std::is_same<tc::remove_cvref_t<Dst>, Dst>::value); \
-		return std::addressof(tc::base_cast<Dst>(*p)); \
-	}
-	BASE_CAST_IMPL(*)
-	BASE_CAST_IMPL(const*)
-	BASE_CAST_IMPL(volatile*)
 	BASE_CAST_IMPL(volatile const*)
 	#pragma pop_macro("BASE_CAST_IMPL")
 
@@ -267,7 +187,7 @@ namespace tc {
 	template<typename Dst, typename Src>
 	Dst* void_cast(Src* p) noexcept{
 		static_assert(std::is_void<Src>::value,"Src must be possibly qualified void*");
-		static_assert(std::is_same< tc::remove_cvref_t<Dst>, Dst >::value);
+		STATICASSERTSAME(tc::remove_cvref_t<Dst>, Dst);
 		// static_assert(!std::is_void<Dst>::value); // practical for generic code to allow it
 		return static_cast<Dst*>(p);
 	}
@@ -275,7 +195,7 @@ namespace tc {
 	template<typename Dst, typename Src>
 	Dst const* void_cast(Src const* p) noexcept{
 		static_assert(std::is_void<Src>::value,"Src must be possibly qualified void*");
-		static_assert(std::is_same< tc::remove_cvref_t<Dst>, Dst >::value);
+		STATICASSERTSAME(tc::remove_cvref_t<Dst>, Dst);
 		// static_assert(!std::is_void<Dst>::value); // practical for generic code to allow it
 		return static_cast<Dst const*>(p);
 	}
@@ -283,7 +203,7 @@ namespace tc {
 	template<typename Dst, typename Src>
 	Dst volatile* void_cast(Src volatile* p) noexcept{
 		static_assert(std::is_void<Src>::value,"Src must be possibly qualified void*");
-		static_assert(std::is_same< tc::remove_cvref_t<Dst>, Dst >::value);
+		STATICASSERTSAME(tc::remove_cvref_t<Dst>, Dst);
 		// static_assert(!std::is_void<Dst>::value); // practical for generic code to allow it
 		return static_cast<Dst volatile*>(p);
 	}
@@ -291,7 +211,7 @@ namespace tc {
 	template<typename Dst, typename Src>
 	Dst volatile const* void_cast(Src volatile const* p) noexcept{
 		static_assert(std::is_void<Src>::value,"Src must be possibly qualified void*");
-		static_assert(std::is_same< tc::remove_cvref_t<Dst>, Dst >::value);
+		STATICASSERTSAME(tc::remove_cvref_t<Dst>, Dst);
 		// static_assert(!std::is_void<Dst>::value); // practical for generic code to allow it
 		return static_cast<Dst volatile const*>(p);
 	}

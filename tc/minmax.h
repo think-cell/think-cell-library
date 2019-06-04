@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -42,7 +42,7 @@ namespace tc {
 			
 			template<typename T0, typename T1, typename... Args>
 			constexpr auto dispatch(bool b, T0&& t0, T1&& t1, Args&&... args) const& noexcept -> decltype(auto) {
-				return CONDITIONAL(
+				return CONDITIONAL_PRVALUE_AS_VAL(
 					b,
 					operator()(std::forward<T0>(t0), std::forward<Args>(args)...),
 					operator()(std::forward<T1>(t1), std::forward<Args>(args)...)
@@ -66,18 +66,18 @@ namespace tc {
 		typename Better,
 		typename... Args
 	>
-	constexpr auto best(Better&& better, Args&&... args) return_decltype_rvalue_by_ref(
+	constexpr auto best(Better&& better, Args&&... args) return_decltype_xvalue_by_ref(
 		no_adl::best_impl<tc::decay_t<Better>>(std::forward<Better>(better))(std::forward<Args>(args)...)
 	)
 
 	template<typename... Args>
-	constexpr auto min(Args&&... args) return_decltype_rvalue_by_ref(
-		best(tc::fn_less{}, std::forward<Args>(args)...)
+	constexpr auto min(Args&&... args) return_decltype_xvalue_by_ref(
+		best(tc::fn_less(), std::forward<Args>(args)...)
 	)
 
 	template<typename... Args>
-	constexpr auto max(Args&&... args) return_decltype_rvalue_by_ref(
-		best(tc::fn_greater{}, std::forward<Args>(args)...)
+	constexpr auto max(Args&&... args) return_decltype_xvalue_by_ref(
+		best(tc::fn_greater(), std::forward<Args>(args)...)
 	)
 
 	DEFINE_FN(min);

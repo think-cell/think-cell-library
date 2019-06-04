@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -31,7 +31,7 @@ namespace tc {
 			typename RngPairIndexValue,
 			typename TValue
 		>
-		struct sparse_adaptor<RngPairIndexValue, TValue, false> {
+		struct [[nodiscard]] sparse_adaptor<RngPairIndexValue, TValue, false> {
 		protected:
 			reference_or_value< RngPairIndexValue > m_baserng;
 			std::size_t m_nEnd;
@@ -40,9 +40,9 @@ namespace tc {
 		public:
 			template<typename Rhs, typename RHSValue>
 			explicit sparse_adaptor(Rhs&& rngpairIndexValue, std::size_t nEnd, RHSValue&& defaultValue) noexcept
-				: m_baserng(reference_or_value< RngPairIndexValue >(aggregate_tag(), std::forward<Rhs>(rngpairIndexValue)))
+				: m_baserng(reference_or_value< RngPairIndexValue >(aggregate_tag, std::forward<Rhs>(rngpairIndexValue)))
 				, m_nEnd(nEnd)
-				, m_default(aggregate_tag(), std::forward<RHSValue>(defaultValue))
+				, m_default(aggregate_tag, std::forward<RHSValue>(defaultValue))
 			{}
 
 		private:
@@ -94,7 +94,7 @@ namespace tc {
 			typename RngPairIndexValue,
 			typename TValue
 		>
-		struct sparse_adaptor<RngPairIndexValue, TValue, true> :
+		struct [[nodiscard]] sparse_adaptor<RngPairIndexValue, TValue, true> :
 			sparse_adaptor<RngPairIndexValue, TValue, false>,
 			range_iterator_from_index<
 				sparse_adaptor<RngPairIndexValue, TValue>,

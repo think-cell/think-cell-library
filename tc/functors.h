@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -15,6 +15,7 @@
 
 #include "tc_move.h"
 #include "return_decltype.h"
+#include "tag_type.h"
 
 #include <boost/type_traits/has_dereference.hpp>
 #include <boost/preprocessor/seq/for_each_i.hpp>
@@ -33,13 +34,13 @@ struct define_fn_dummy final {};
 	struct name { \
 		template< typename A0, typename ...Args >     /*require at least one argument*/ \
 		auto operator()( A0&& a0, Args&& ... args) const \
-			return_decltype_rvalue_by_ref( func(std::forward<A0>(a0), std::forward<Args>(args)...) ) \
+			return_decltype_xvalue_by_ref( func(std::forward<A0>(a0), std::forward<Args>(args)...) ) \
 	};
 
 #define DEFINE_MEM_FN_BODY_( ... ) \
 	template< typename O, typename ...__A > \
 	auto operator()( O&& o, __A&& ... __a ) const \
-		return_decltype_rvalue_by_ref( std::forward<O>(o) __VA_ARGS__ ( std::forward<__A>(__a)... ) )
+		return_decltype_xvalue_by_ref( std::forward<O>(o) __VA_ARGS__ ( std::forward<__A>(__a)... ) )
 
 // std::mem_fn (C++11 standard 20.8.2) knows the type it can apply its member function pointer to and
 // dereferences via operator* until it reaches that something of that type. We cannot do that because
@@ -52,10 +53,10 @@ struct define_fn_dummy final {};
 #define DEFINE_MEM_FN_AUTO_BODY_( ... ) \
 	template< typename O, typename ...__A, std::enable_if_t<boost::has_dereference<O>::value>* = nullptr > \
 	auto operator()( O&& o, __A&& ... __a ) const \
-		return_decltype_rvalue_by_ref( std::forward<O>(o)-> __VA_ARGS__ ( std::forward<__A>(__a)... ) ) \
+		return_decltype_xvalue_by_ref( std::forward<O>(o)-> __VA_ARGS__ ( std::forward<__A>(__a)... ) ) \
 	template< typename O, typename ...__A, std::enable_if_t<!boost::has_dereference<O>::value>* = nullptr > \
 	auto operator()( O&& o, __A&& ... __a ) const \
-		return_decltype_rvalue_by_ref( std::forward<O>(o). __VA_ARGS__ ( std::forward<__A>(__a)... ) )
+		return_decltype_xvalue_by_ref( std::forward<O>(o). __VA_ARGS__ ( std::forward<__A>(__a)... ) )
 
 // When a functor must be declared in class-scope, e.g., to access a protected member function,
 // you should use DEFINE_MEM_FN instead of DEFINE_FN. 
@@ -63,10 +64,10 @@ struct define_fn_dummy final {};
 // shadow inherited members named func.
 #define DEFINE_MEM_FN( func ) \
 	struct dot_member_ ## func { \
-		template< typename O > auto operator()( O & o ) const return_variable_by_ref( o.func ) \
-		template< typename O > auto operator()( O const& o ) const return_variable_by_ref( o.func ) \
+		template< typename O > auto operator()( O & o ) const return_decltype( o.func ) \
+		template< typename O > auto operator()( O const& o ) const return_decltype( o.func ) \
 		template< typename O, std::enable_if_t<!std::is_reference<O>::value>* = nullptr > \
-		auto operator()( O&& o ) const return_decltype_rvalue_by_ref( (tc_move(o).func) ) \
+		auto operator()( O&& o ) const return_decltype_xvalue_by_ref( tc_move(o).func ) \
 	}; \
 	std::true_type returns_reference_to_argument(dot_member_ ## func); /*mark as returning reference to argument*/ \
 	struct dot_mem_fn_ ## func { \
@@ -129,46 +130,74 @@ DEFINE_CAST_(const_cast)
 
 #pragma pop_macro("DEFINE_CAST_")
 
+// We can use TC_MEM_FN instead of std::mem_fn when the member function has multiple overloads, for example accessors.
+// Note: if you want to capture something in the parameter list, you should not use this macro but write your own lambda and make sure it's safe.
+#ifndef __clang__ // MSVC 15.8.0 sometimes has problem identifying lambda parameter in noexcept(expression). TODO: This is fixed in VS2019.
+#define TC_MEM_FN(...) \
+	[](auto&& _) MAYTHROW -> decltype(auto) { \
+		return std::forward<decltype(_)>(_)__VA_ARGS__; \
+	}
+#else
+#define TC_MEM_FN(...) \
+	[](auto&& _) noexcept(noexcept(std::forward<decltype(_)>(_)__VA_ARGS__)) -> decltype(auto) { \
+		return std::forward<decltype(_)>(_)__VA_ARGS__; \
+	}
+#endif
+
 namespace tc {
 	struct fn_subscript final {
 		template<typename Lhs, typename Rhs>
 		auto operator()( Lhs&& lhs, Rhs&& rhs ) const& noexcept
-			return_decltype_rvalue_by_ref( std::forward<Lhs>(lhs)[std::forward<Rhs>(rhs)] )
+			return_decltype_xvalue_by_ref( std::forward<Lhs>(lhs)[std::forward<Rhs>(rhs)] )
 	};
 
 	/* indirection operator, aka dereference operator */
 	struct fn_indirection final {
 		template<typename Lhs>
 		auto operator()( Lhs&& lhs ) const& noexcept
-			return_decltype_rvalue_by_ref( *std::forward<Lhs>(lhs))
+			return_decltype_xvalue_by_ref( *std::forward<Lhs>(lhs))
 	};
 	std::true_type returns_reference_to_argument(fn_indirection) noexcept; // mark as returning reference to argument
 
 	struct fn_logical_not final {
 		template<typename Lhs>
 		auto operator()( Lhs&& lhs ) const
-			return_decltype_rvalue_by_ref( !std::forward<Lhs>(lhs))
+			return_decltype_xvalue_by_ref( !std::forward<Lhs>(lhs))
 	};
 
 	namespace no_adl {
-		template<typename Result, typename F1, typename... Fs>
-		struct overload : tc::decay_t<F1>, overload<Result, Fs...>
+		template<typename F1, typename... Fs>
+		struct overload : tc::decay_t<F1>, overload<Fs...>
 		{
 			using tc::decay_t<F1>::operator();
-			using overload<Result, Fs...>::operator();
+			using overload<Fs...>::operator();
 
-			overload(F1&& f1, Fs&& ... fs) noexcept : tc::decay_t<F1>(std::forward<F1>(f1)), overload<Result, Fs...>(std::forward<Fs>(fs)...) {}
+			constexpr overload(F1&& f1, Fs&& ... fs) noexcept : tc::decay_t<F1>(std::forward<F1>(f1)), overload<Fs...>(std::forward<Fs>(fs)...) {}
 		};
 
-		template<typename Result, typename F1>
-		struct overload<Result, F1> : tc::decay_t<F1>
+		template<typename F1>
+		struct overload<F1> : tc::decay_t<F1>
 		{
-			// Define result_type instead of deriving from boost::static_visitor<Result> to avoid ADL for boost.
-			using result_type = Result;
-
 			using tc::decay_t<F1>::operator();
 
-			overload(F1&& f1) noexcept : tc::decay_t<F1>(std::forward<F1>(f1)) {}
+			constexpr overload(F1&& f1) noexcept : tc::decay_t<F1>(std::forward<F1>(f1)) {}
+		};
+
+		template<typename Result, typename... Fs>
+		struct result_wrapper {
+		private:
+			overload<Fs...> m_overload;
+		public:
+			constexpr result_wrapper(Fs&&... fs) noexcept: m_overload(std::forward<Fs>(fs)...) {}
+
+			template<typename... T, std::enable_if_t<std::is_same<Result, void>::value || tc::is_safely_convertible<decltype(m_overload(std::declval<T>()...)), Result>::value>* = nullptr>
+			constexpr Result operator()(T&&... t) const& MAYTHROW {
+				if constexpr (std::is_same<Result, void>::value) {
+					m_overload(std::forward<T>(t)...);
+				} else {
+					return m_overload(std::forward<T>(t)...);
+				}
+			}
 		};
 	}
 
@@ -176,9 +205,15 @@ namespace tc {
 	// template<typename Func>
 	// overload(Func&&) noexcept -> overload<Func>;
 
+	DEFINE_TAG_TYPE(use_default_result)
+
 	template <typename Result, typename... F>
-	auto make_overload(F&& ... f) noexcept {
-		return no_adl::overload<Result, F...>(std::forward<F>(f)...) ;
+	constexpr auto make_overload(F&& ... f) noexcept {
+		if constexpr (std::is_same<Result, tc::use_default_result_t>::value) {
+			return no_adl::overload<F...>(std::forward<F>(f)...);
+		} else {
+			return no_adl::result_wrapper<Result, F...>(std::forward<F>(f)...);
+		}
 	}
 }
 
@@ -187,7 +222,7 @@ namespace tc {
 	struct fn_ ## name { \
 		template<typename Lhs, typename Rhs> \
 		auto operator()( Lhs&& lhs, Rhs&& rhs ) const \
-			return_decltype_rvalue_by_ref(std::forward<Lhs>(lhs) op std::forward<Rhs>(rhs)) \
+			return_decltype_xvalue_by_ref(std::forward<Lhs>(lhs) op std::forward<Rhs>(rhs)) \
 	};
 
 INFIX_FN_( bit_or, | )
@@ -196,11 +231,37 @@ INFIX_FN_( assign_bit_or, |= )
 INFIX_FN_( assign_bit_and, &= )
 INFIX_FN_( plus, + )
 INFIX_FN_( minus, - )
+INFIX_FN_( mul, * )
 INFIX_FN_( assign_plus, += )
 INFIX_FN_( assign_minus, -= )
+INFIX_FN_( assign_mul, *= )
 INFIX_FN_( assign, = )
 
 #pragma pop_macro("INFIX_FN_")
 
 #define ALLOW_NOEXCEPT( ... ) \
 	decltype(static_cast<__VA_ARGS__>(nullptr))
+
+namespace tc {
+	namespace no_adl {
+		template<typename Func>
+		struct expand_tuple {
+		private:
+			tc::decay_t<Func> m_func;
+		public:
+			explicit expand_tuple(Func&& func) noexcept
+				: m_func(std::forward<Func>(func))
+			{}
+
+			template<typename Tuple>
+			auto operator()(Tuple&& tuple) const& MAYTHROW {
+				return std::apply(m_func, std::forward<Tuple>(tuple));
+			}
+		};
+
+		template<typename Func>
+		expand_tuple(Func&& func) -> expand_tuple<Func>;
+	}
+
+	using no_adl::expand_tuple;
+}

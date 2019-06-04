@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -66,16 +66,21 @@ namespace tc {
 		if ( tc::order::equal!=order ) return order; \
 	}
 
-	#define COMPARE_EXPR_BASE(lhs, rhs, expr) \
-		tc::compare( \
-			[&](decltype((lhs)) _) return_decltype_rvalue_by_val_variable_by_ref( VERIFYINITIALIZED(expr) )(VERIFYINITIALIZED(lhs)), \
-			[&](decltype((rhs)) _) return_decltype_rvalue_by_val_variable_by_ref( VERIFYINITIALIZED(expr) )(VERIFYINITIALIZED(rhs)) \
+	#define COMPARE_EXPR_BASE(fcompare, lhs, rhs, expr) \
+		(fcompare)( \
+			[&](decltype((lhs)) _) return_decltype_xvalue_by_val( VERIFYINITIALIZED(expr) )(VERIFYINITIALIZED(lhs)), \
+			[&](decltype((rhs)) _) return_decltype_xvalue_by_val( VERIFYINITIALIZED(expr) )(VERIFYINITIALIZED(rhs)) \
 		)
 
-	#define COMPARE_EXPR( expr ) RETURN_IF_NOT_EQUAL( COMPARE_EXPR_BASE(lhs, rhs, expr) )
-	#define COMPARE_EXPR_REVERSE( expr ) RETURN_IF_NOT_EQUAL( COMPARE_EXPR_BASE(rhs, lhs, expr) )
-	#define COMPARE_EXPR_REVERSE_IF( cond, expr ) RETURN_IF_NOT_EQUAL(tc::negate_if(cond, COMPARE_EXPR_BASE(lhs, rhs, expr)))
-	#define COMPARE_EXPR_TIMES_SIGN( expr, sign ) RETURN_IF_NOT_EQUAL( COMPARE_EXPR_BASE(lhs, rhs, expr)*(sign) )
+	#define COMPARE_EXPR( expr ) RETURN_IF_NOT_EQUAL( COMPARE_EXPR_BASE(tc::compare, lhs, rhs, expr) )
+	#define COMPARE_EXPR_REVERSE( expr ) RETURN_IF_NOT_EQUAL( COMPARE_EXPR_BASE(tc::compare, rhs, lhs, expr) )
+	#define COMPARE_EXPR_REVERSE_IF( cond, expr ) RETURN_IF_NOT_EQUAL(tc::negate_if(cond, COMPARE_EXPR_BASE(tc::compare, lhs, rhs, expr)))
+	#define COMPARE_EXPR_TIMES_SIGN( expr, sign ) RETURN_IF_NOT_EQUAL( COMPARE_EXPR_BASE(tc::compare, lhs, rhs, expr)*(sign) )
+
+	#define COMPARE_EXPR_LEX( expr ) RETURN_IF_NOT_EQUAL( COMPARE_EXPR_BASE(tc::lexicographical_compare_3way, lhs, rhs, expr) )
+	#define COMPARE_EXPR_LEX_REVERSE( expr ) RETURN_IF_NOT_EQUAL( COMPARE_EXPR_BASE(tc::lexicographical_compare_3way, rhs, lhs, expr) )
+	#define COMPARE_EXPR_LEX_REVERSE_IF( cond, expr ) RETURN_IF_NOT_EQUAL(tc::negate_if(cond, COMPARE_EXPR_BASE(tc::lexicographical_compare_3way, lhs, rhs, expr)))
+	#define COMPARE_EXPR_LEX_TIMES_SIGN( expr, sign ) RETURN_IF_NOT_EQUAL( COMPARE_EXPR_BASE(tc::lexicographical_compare_3way, lhs, rhs, expr)*(sign) )
 
 	#define COMPARE_BASE( basetype ) \
 		COMPARE_EXPR( tc::base_cast<basetype>(_) );

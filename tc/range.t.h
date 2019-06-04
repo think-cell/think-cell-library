@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -14,8 +14,8 @@ namespace tc {
 
 	// this is for testing only, equivalent to slice(rng, begin(rng), end(rng)), but also works correctly on temporaries
 	template< typename Rng >
-	typename make_sub_range_result< Rng >::type slice(Rng&& rng) noexcept {
-		return typename make_sub_range_result< Rng >::type( std::forward<Rng>(rng), tc::begin(rng), tc::end(rng) );
+	tc::make_sub_range_result_t< Rng > slice(Rng&& rng) noexcept {
+		return tc::make_sub_range_result_t< Rng >( std::forward<Rng>(rng), tc::begin(rng), tc::end(rng) );
 	}
 
 	// Do we want/need something like this as a generic tool?
@@ -65,7 +65,7 @@ namespace tc {
 #include "Library/ErrorReporting/UnitTest.h"
 
 #define TEST_RANGE_EQUAL(EXPECT, IS) _ASSERT(tc::equal(EXPECT, IS))
-#define TEST_EQUAL(EXPECT, IS) _ASSERT(EXPECT == IS);
+#define TEST_EQUAL(EXPECT, IS) _ASSERTEQUAL(IS, EXPECT);
 #define TEST_OUTPUT(...)
 
 #else
@@ -135,7 +135,7 @@ namespace tc {
 												std::cerr << "Fail: Values differ:\n"										\
 															 "Expected: " << EXPECT << "\n"									\
 															 "Is      : " << IS << std::endl;								\
-												_ASSERT(EXPECT == IS);														\
+												_ASSERTEQUAL(IS, EXPECT);														\
 											}}
 #	define TEST_OUTPUT(...) std::cerr __VA_ARGS__
 
@@ -148,7 +148,7 @@ namespace tc {
 
 #define UNUSED_TEST_VARIABLE(v) static_cast<void>(v)
 
-#define TEST_RANGE_LENGTH(RNG, LENGTH) _ASSERT(tc::size(RNG) == LENGTH)
+#define TEST_RANGE_LENGTH(RNG, LENGTH) _ASSERTEQUAL(tc::size(RNG), LENGTH)
 #define TEST_RANGE_NOT_EQUAL(EXPECT, IS) _ASSERT(!tc::equal(EXPECT, IS))
 #define TEST_NOT_EQUAL(EXPECT, IS) _ASSERT(!(EXPECT == IS));
 

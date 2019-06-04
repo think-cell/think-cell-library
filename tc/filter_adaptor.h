@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -16,8 +16,7 @@
 #include "conditional.h"
 
 namespace tc {
-
-	namespace filter_adaptor_impl {
+	namespace no_adl {
 
 		template< typename Pred, typename Rng, bool HasIterator=is_range_with_iterators< Rng >::value >
 		struct filter_adaptor;
@@ -28,7 +27,7 @@ namespace tc {
 		>;
 
 		template< typename Pred, typename Rng >
-		struct filter_adaptor<Pred, Rng, false> : filter_adaptor_base_t<Pred,Rng> {
+		struct [[nodiscard]] filter_adaptor<Pred, Rng, false> : filter_adaptor_base_t<Pred,Rng> {
         private:
 			using base_ = filter_adaptor_base_t<Pred,Rng>;
 
@@ -37,27 +36,28 @@ namespace tc {
 			Pred m_pred;
 
 		private:
+			template<typename, typename>
 			friend struct no_adl::range_adaptor_access;
 
 			template< typename Apply, typename A0>
-			auto apply(Apply&& apply, A0&& a0) const& MAYTHROW return_by_val(
-				CONDITIONAL(
-					m_pred(a0),
-					tc::continue_if_not_break(std::forward<Apply>(apply), std::forward<A0>(a0)),
-					INTEGRAL_CONSTANT(tc::continue_)()
-				)
-			)
+			auto apply(Apply&& apply, A0&& a0) const& MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(std::declval<Apply&&>(), std::declval<A0&&>())), INTEGRAL_CONSTANT(tc::continue_)> {
+				if(m_pred(a0)) {
+					return tc::continue_if_not_break(std::forward<Apply>(apply), std::forward<A0>(a0));
+				} else {
+					return INTEGRAL_CONSTANT(tc::continue_)();
+				}
+			}
 
 		public:
 			template< typename RngRef, typename PredRef >
 			explicit filter_adaptor( RngRef&& rng, PredRef&& pred ) noexcept
-				: base_(aggregate_tag(), std::forward<RngRef>(rng))
+				: base_(aggregate_tag, std::forward<RngRef>(rng))
 				, m_pred(std::forward<PredRef>(pred))
 			{}
 		};
 
 		template< typename Pred, typename Rng >
-		struct filter_adaptor<Pred, Rng, true> : filter_adaptor<Pred, Rng, false> {
+		struct [[nodiscard]] filter_adaptor<Pred, Rng, true> : filter_adaptor<Pred, Rng, false> {
 		private:
 			using this_type = filter_adaptor;
 			using base_ = filter_adaptor<Pred, Rng, false>;
@@ -112,29 +112,23 @@ namespace tc {
 				return idx;
 			}
 		};
-	}
-	using filter_adaptor_impl::filter_adaptor;
 
-	namespace no_adl {
-		template< typename Pred, typename Rng, bool bConst >
-		struct range_reference_filter_adaptor_base {
-			using type=tc::range_reference_t<
-				tc::apply_if_t<
-					bConst,
-					std::add_const,
-					filter_adaptor_impl::filter_adaptor_base_t<Pred, Rng>
-				>
-			>;
+		template< typename Pred, typename Rng >
+		struct value_type_base<filter_adaptor<Pred, Rng, false>, tc::void_t<tc::range_value_t<Rng>>> {
+			using value_type = tc::range_value_t<Rng>;
 		};
-
-		template< typename Pred, typename Rng >
-		struct range_reference<filter_adaptor<Pred, Rng, false> > : range_reference_filter_adaptor_base<Pred, Rng, false> {};
-
-		template< typename Pred, typename Rng >
-		struct range_reference<filter_adaptor<Pred, Rng, false> const> : range_reference_filter_adaptor_base<Pred, Rng, true> {};
 	}
+	using no_adl::filter_adaptor;
 
 	template<typename Rng, typename Pred>
 	auto filter(Rng&& rng, Pred&& pred) noexcept
 		return_ctor( filter_adaptor<tc::decay_t<Pred> BOOST_PP_COMMA() Rng >, (std::forward<Rng>(rng),std::forward<Pred>(pred)) )
+
+	namespace no_adl {
+		template<typename Pred, typename Rng>
+		struct is_index_valid_for_move_constructed_range<tc::filter_adaptor<Pred, Rng, true>, std::enable_if_t<std::is_lvalue_reference<Rng>::value>>: std::true_type {};
+		
+		template<typename Pred, typename Rng>
+		struct is_index_valid_for_move_constructed_range<tc::filter_adaptor<Pred, Rng, true>, std::enable_if_t<!std::is_reference<Rng>::value>>: tc::is_index_valid_for_move_constructed_range<Rng> {};
+	}
 }

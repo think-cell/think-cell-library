@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -43,7 +43,7 @@ UNITTESTDEF(make_c_str_fwd_test) {
 	_ASSERT(!check_make_c_str_fwd<char>(tc::make_c_str(str5), tc::ptr_begin(str5)));
 #ifdef TC_PRIVATE
 	tc::uichar const* str6 = UISTR("ij");
-	_ASSERT(std::is_same<tc::uichar, char>::value == check_make_c_str_fwd<char>(tc::make_c_str<char>(str6), tc::as_c_str(str6)));
+	_ASSERTEQUAL(std::is_same<tc::uichar BOOST_PP_COMMA() char>::value, check_make_c_str_fwd<char>(tc::make_c_str<char>(str6), tc::as_c_str(str6)));
 #endif
 }
 

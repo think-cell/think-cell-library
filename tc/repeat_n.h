@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -31,9 +31,17 @@ namespace tc {
 			using index = typename this_type::index;
 
 			explicit repeat_range(T&& t, std::size_t ct) noexcept
-				: m_t(aggregate_tag(), std::forward<T>(t))
+				: m_t(aggregate_tag, std::forward<T>(t))
 				, m_ct(ct)
 			{}
+
+			template<typename Sink>
+			auto operator()(Sink sink) const& MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(sink, *m_t)), INTEGRAL_CONSTANT(tc::continue_)> {
+				for (auto c = m_ct; 0 < c; --c) {
+					RETURN_IF_BREAK(tc::continue_if_not_break(sink, *m_t)); // MAYTHROW
+				}
+				return INTEGRAL_CONSTANT(tc::continue_)();
+			}
 
 			STATIC_FINAL(begin_index)() const& noexcept -> index {
 				return 0;

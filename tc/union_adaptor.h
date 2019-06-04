@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -30,7 +30,7 @@ namespace tc {
 		struct union_adaptor;
 
 		template<typename Comp, typename Rng0, typename Rng1>
-		struct union_adaptor<Comp, Rng0, Rng1, false>
+		struct [[nodiscard]] union_adaptor<Comp, Rng0, Rng1, false>
 		{
 			std::tuple<
 				reference_or_value< Rng0 >,
@@ -44,8 +44,8 @@ namespace tc {
 			template<typename Rhs0, typename Rhs1, typename Comp2>
 			explicit union_adaptor(Rhs0&& rhs0, Rhs1&& rhs1, Comp2&& comp) noexcept
 				: m_baserng(
-					reference_or_value< Rng0 >(aggregate_tag(), std::forward<Rhs0>(rhs0)),
-					reference_or_value< Rng1 >(aggregate_tag(), std::forward<Rhs1>(rhs1))
+					reference_or_value< Rng0 >(aggregate_tag, std::forward<Rhs0>(rhs0)),
+					reference_or_value< Rng1 >(aggregate_tag, std::forward<Rhs1>(rhs1))
 				),
 				m_comp(std::forward<Comp2>(comp))
 			{}
@@ -119,7 +119,7 @@ namespace tc {
 			typename Rng0,
 			typename Rng1
 		>
-		struct union_adaptor<Comp, Rng0, Rng1, true> :
+		struct [[nodiscard]] union_adaptor<Comp, Rng0, Rng1, true> :
 			union_adaptor<Comp, Rng0, Rng1, false>,
 			range_iterator_from_index<
 				union_adaptor<Comp, Rng0, Rng1, true>,
@@ -213,7 +213,7 @@ namespace tc {
 			}
 
 			STATIC_FINAL(dereference_index)(index const& idx) const& noexcept -> decltype(auto) {
-				return CONDITIONAL( VERIFYINITIALIZED(idx.m_order) < tc::order::greater, dereference_index_fwd<0>(idx), dereference_index_fwd<1>(idx) );
+				return CONDITIONAL_PRVALUE_AS_VAL( VERIFYINITIALIZED(idx.m_order) < tc::order::greater, dereference_index_fwd<0>(idx), dereference_index_fwd<1>(idx) );
 			}
 
 			STATIC_FINAL(end_index)() const& noexcept -> index {

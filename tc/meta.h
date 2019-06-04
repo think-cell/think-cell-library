@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -19,8 +19,8 @@
 
 namespace tc {
 	template<typename T>
-	std::size_t strlen( T const* pt ) noexcept {
-		_ASSERT(pt);
+	constexpr std::size_t strlen( T const* pt ) noexcept {
+		_ASSERTE(pt);
 		return std::char_traits<T>::length(pt);
 	}
 
@@ -69,14 +69,14 @@ namespace tc {
 		template< typename Rng >
 		struct range_value<Rng, std::enable_if_t<is_range_with_iterators<Rng>::value && has_value_type<Rng>::value>> final {
 			using type = tc::decay_t<tc::range_reference_t<Rng>>;
-			static_assert(std::is_same<type, typename std::iterator_traits<typename boost::range_iterator<Rng>::type>::value_type>::value);
-			static_assert(std::is_same<type, typename std::remove_reference_t<Rng>::value_type>::value);
+			STATICASSERTSAME(type, typename std::iterator_traits<typename boost::range_iterator<Rng>::type>::value_type);
+			STATICASSERTSAME(type, typename std::remove_reference_t<Rng>::value_type);
 		};
 
 		template< typename Rng >
 		struct range_value<Rng, std::enable_if_t<is_range_with_iterators<Rng>::value && !has_value_type<Rng>::value>> final {
 			using type = tc::decay_t<tc::range_reference_t<Rng>>;
-			static_assert(std::is_same<type, typename std::iterator_traits<typename boost::range_iterator<Rng>::type>::value_type>::value);
+			STATICASSERTSAME(type, typename std::iterator_traits<typename boost::range_iterator<Rng>::type>::value_type);
 		};
 
 		template< typename Rng >
@@ -95,44 +95,72 @@ namespace tc {
 	using range_value_t = typename range_value<T>::type;
 
 	namespace no_adl {
-		template<typename ConstReferenceType, typename ReferenceType, typename Func>
-		struct FuncWithReference : tc::decay_t<Func> {
-			using reference = ReferenceType;
-			using const_reference = ConstReferenceType;
+		template<typename Rng, typename Enable=void>
+		struct has_range_value final: std::false_type {};
+
+		template<typename Rng>
+		struct has_range_value<Rng, tc::void_t<tc::range_value_t<Rng>>> final: std::true_type {};
+
+		template<typename T, typename Enable=void>
+		struct common_range_value_filtered {};
+
+		template<typename... Rng>
+		struct common_range_value_filtered<tc::type::list<Rng...>, tc::void_t<tc::common_type_decayed_t<tc::range_value_t<Rng>...>>> {
+			using type = tc::common_type_decayed_t<tc::range_value_t<Rng>...>;
+		};
+
+		template<typename... Rng>
+		struct common_range_value final: common_range_value_filtered<tc::type::filter_t<tc::type::list<Rng...>, has_range_value>> {};
+	};
+	using no_adl::has_range_value;
+
+	template<typename... Rng>
+	using common_range_value_t = typename no_adl::common_range_value<Rng...>::type;
+
+	namespace no_adl {
+		template<typename Derived, typename Enable=void>
+		struct value_type_base {};
+	}
+	using no_adl::value_type_base;
+
+	namespace no_adl {
+		template<typename Value, typename Func>
+		struct FuncWithValue : tc::decay_t<Func> {
+			using value_type = Value;
 
 			using tc::decay_t<Func>::operator();
 
-			FuncWithReference(Func&& func) noexcept
+			FuncWithValue(Func&& func) noexcept
 				: tc::decay_t<Func>(std::forward<Func>(func))
 			{}
 		};
 	}
 
-	template<typename ConstReferenceType, typename ReferenceType = ConstReferenceType, typename Func>
-	auto generator_range_reference(Func&& func) noexcept {
-		return no_adl::FuncWithReference<ConstReferenceType, ReferenceType, Func>(std::forward<Func>(func));
+	template<typename Value, typename Func>
+	auto generator_range_value(Func&& func) noexcept {
+		return no_adl::FuncWithValue<Value, Func>(std::forward<Func>(func));
 	}
 }
 
 namespace tc {
 	namespace begin_end_adl {
-		DEFINE_TAG_TYPE(begin_end_tag);
+		DEFINE_ADL_TAG_TYPE(begin_end_tag);
 
 		template<typename T, std::size_t N>
-		T* begin(begin_end_tag, T (&at)[N]) noexcept {
+		constexpr T* begin(begin_end_tag_t, T (&at)[N]) noexcept {
 			return at+0;
 		}
 		template<typename T, std::size_t N>
-		T* end(begin_end_tag, T (&at)[N]) noexcept {
+		constexpr T* end(begin_end_tag_t, T (&at)[N]) noexcept {
 			return at+N;
 		}
 
 		template<typename It>
-		It begin(begin_end_tag, std::pair<It,It> const& pairit) noexcept {
+		constexpr It begin(begin_end_tag_t, std::pair<It,It> const& pairit) noexcept {
 			return pairit.first;
 		}
 		template<typename It>
-		It end(begin_end_tag, std::pair<It,It> const& pairit) noexcept {
+		constexpr It end(begin_end_tag_t, std::pair<It,It> const& pairit) noexcept {
 			return pairit.second;
 		}
 	}
@@ -177,32 +205,32 @@ namespace boost { \
 } \
 namespace tc { \
 	namespace begin_end_adl { \
-		inline xchar* begin(begin_end_tag, xchar* pch) noexcept { \
+		constexpr xchar* begin(begin_end_tag_t, xchar* pch) noexcept { \
 			return pch; \
 		} \
-		inline xchar const* begin(begin_end_tag, xchar const* pch) noexcept { \
+		constexpr xchar const* begin(begin_end_tag_t, xchar const* pch) noexcept { \
 			return pch; \
 		} \
 		template<std::size_t N> \
-		inline xchar* begin(begin_end_tag, xchar (&ach)[N]) noexcept { \
+		constexpr xchar* begin(begin_end_tag_t, xchar (&ach)[N]) noexcept { \
 			return ach; \
 		} \
 		template<std::size_t N> \
-		inline xchar const* begin(begin_end_tag, xchar const (&ach)[N]) noexcept { \
+		constexpr xchar const* begin(begin_end_tag_t, xchar const (&ach)[N]) noexcept { \
 			return ach; \
 		} \
-		inline xchar* end(begin_end_tag, xchar* pch) noexcept { \
+		constexpr xchar* end(begin_end_tag_t, xchar* pch) noexcept { \
 			return pch+tc::strlen(pch); \
 		} \
-		inline xchar const* end(begin_end_tag, xchar const* pch) noexcept { \
+		constexpr xchar const* end(begin_end_tag_t, xchar const* pch) noexcept { \
 			return pch+tc::strlen(pch); \
 		} \
 		template<std::size_t N> \
-		inline xchar* end(begin_end_tag, xchar (&ach)[N]) noexcept { \
+		constexpr xchar* end(begin_end_tag_t, xchar (&ach)[N]) noexcept { \
 			return ach+VERIFYEQUAL(tc::strlen(ach),N-1); \
 		} \
 		template<std::size_t N> \
-		inline xchar const* end(begin_end_tag, xchar const(&ach)[N]) noexcept { \
+		constexpr xchar const* end(begin_end_tag_t, xchar const(&ach)[N]) noexcept { \
 			return ach+VERIFYEQUAL(tc::strlen(ach),N-1); \
 		} \
 	} \
@@ -276,7 +304,7 @@ namespace tc {
 	template< typename Rng >
 	constexpr auto begin(Rng&& rng) MAYTHROW return_decltype(
 		// Rng has free begin found by tag
-		begin( begin_end_adl::begin_end_tag(), std::forward<Rng>(rng) )
+		begin( begin_end_adl::begin_end_tag, std::forward<Rng>(rng) )
 	)
 
 	template< typename Rng >
@@ -294,7 +322,7 @@ namespace tc {
 	template< typename Rng >
 	constexpr auto end(Rng&& rng) MAYTHROW return_decltype(
 		// Rng has free end found by tag
-		end( begin_end_adl::begin_end_tag(), std::forward<Rng>(rng) )
+		end( begin_end_adl::begin_end_tag, std::forward<Rng>(rng) )
 	)
 
 	template< typename Rng >

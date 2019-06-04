@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -39,7 +39,7 @@ namespace tc {
 
 	template< typename Cont, typename Rng, std::enable_if_t<!has_mem_fn_clear<std::remove_reference_t<Cont>>::value>* = nullptr>
 	void cont_assign(Cont&& cont, Rng&& rng) MAYTHROW {
-		VERIFYEQUAL( boost::copy(std::forward<Rng>(rng), tc::begin(cont)), tc::end(cont)); // MAYTHROW
+		VERIFY(boost::copy(std::forward<Rng>(rng), tc::begin(cont))==tc::end(cont)); // MAYTHROW
 	}
 
 	template<typename Cont, typename Rng>
@@ -82,7 +82,7 @@ namespace tc {
 			++it;
 		}
 
-		_ASSERT(it == tc::end(rng));
+		_ASSERTEQUAL(it, tc::end(rng));
 		return bChanged;
 	}
 

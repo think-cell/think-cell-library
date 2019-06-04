@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -37,7 +37,7 @@ namespace tc {
 	struct no_contiguous_enum final {};
 
 	template<typename T>
-	no_contiguous_enum contiguous_enum_impl(T t) noexcept;
+	no_contiguous_enum contiguous_enum_impl(T&& t) noexcept;
 
 	template< typename Impl >
 	struct contiguous_enum_eval : std::true_type {
@@ -49,7 +49,7 @@ namespace tc {
 	struct contiguous_enum_eval<no_contiguous_enum> : std::false_type {};
 
 	template<typename Enum>
-	struct contiguous_enum : contiguous_enum_eval< decltype(contiguous_enum_impl(std::declval<Enum>())) > {};
+	struct contiguous_enum : contiguous_enum_eval< decltype(contiguous_enum_impl(std::declval<tc::decay_t<Enum>>())) > {};
 
 	template< typename Enum, std::enable_if_t< std::is_enum<Enum>::value >* =nullptr >
 	constexpr std::underlying_type_t<Enum> underlying_cast( Enum e ) noexcept {
@@ -57,7 +57,7 @@ namespace tc {
 	}
 
 	constexpr unsigned char underlying_cast(bool b) noexcept {
-		static_assert(sizeof(bool) == sizeof(unsigned char));
+		STATICASSERTEQUAL(sizeof(bool), sizeof(unsigned char));
 		return static_cast<unsigned char>(b);
 	}
 }
@@ -155,6 +155,13 @@ namespace tc {
 	DEFINE_TAG_TYPE(enumset_all_set_tag)
 	DEFINE_TAG_TYPE(enumset_all_set_but_one_tag)
 
+#ifdef TC_PRIVATE
+	namespace no_adl {
+		struct report_appender;
+	}
+	using no_adl::report_appender;
+#endif
+
 	template< typename Enum >
 	struct enumset /*final*/
 		: tc::setlike< tc::equality_comparable<enumset<Enum>> >
@@ -176,9 +183,9 @@ namespace tc {
 		constexpr enumset() noexcept
 		: m_bitset(0)
 		{} // makes all bits 0
-		constexpr enumset( enumset_all_set_tag ) noexcept
+		constexpr enumset( enumset_all_set_tag_t ) noexcept
 		: m_bitset(mask()) {}
-		constexpr enumset( Enum e, enumset_all_set_but_one_tag ) noexcept
+		constexpr enumset( Enum e, enumset_all_set_but_one_tag_t ) noexcept
 		: m_bitset(static_cast<value_type>(static_cast<value_type>(1)<<(e-tc::contiguous_enum<Enum>::begin()))^mask()) {
 			verify_not_end(e);
 		}
@@ -189,7 +196,7 @@ namespace tc {
 		template< typename OtherEnum >
 		enumset( enumset<OtherEnum> const& sete ) noexcept
 		: m_bitset(sete.m_bitset) {
-			static_assert(tc::underlying_cast(tc::contiguous_enum<OtherEnum>::begin()) == tc::underlying_cast(tc::contiguous_enum<Enum>::begin()));
+			STATICASSERTEQUAL(tc::underlying_cast(tc::contiguous_enum<OtherEnum>::begin()), tc::underlying_cast(tc::contiguous_enum<Enum>::begin()));
 			static_assert(tc::underlying_cast(tc::contiguous_enum<OtherEnum>::end()) <= tc::underlying_cast(tc::contiguous_enum<Enum>::end()));
 	#ifdef _DEBUG
 			tc::explicit_cast<Enum>(tc::contiguous_enum<OtherEnum>::begin()); // check convertibility
@@ -249,13 +256,13 @@ namespace tc {
 			return 0!=m_bitset;
 		}
 #ifdef TC_PRIVATE
-		void append_to(tc::SReportStream& rs) const& noexcept;
+		void operator()(tc::report_appender appdr) const& noexcept;
 #endif
 		static constexpr enumset none() noexcept {
 			return enumset<Enum>();
 		}
 		static constexpr enumset all() noexcept {
-			return enumset<Enum>(enumset_all_set_tag());
+			return enumset<Enum>(enumset_all_set_tag);
 		}
 	};
 
@@ -276,7 +283,7 @@ namespace tc {
 		// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 		template< typename Enum >
 		constexpr std::enable_if_t< 2 != enum_count<Enum>::value, tc::enumset<Enum> > binary_not(Enum e) noexcept {
-			return tc::enumset<Enum>(e, tc::enumset_all_set_but_one_tag());
+			return tc::enumset<Enum>(e, tc::enumset_all_set_but_one_tag);
 		}
 	}
 
@@ -302,7 +309,7 @@ namespace tc {
 			static constexpr Enum end = enumEnd; \
 		}; \
 	} \
-	no_adl::Enum ## _helper contiguous_enum_impl(Enum); \
+	no_adl::Enum ## _helper contiguous_enum_impl(Enum&&); \
 	constexpr bool check_initialized_impl(Enum const& e) noexcept { /*reference to avoid error C4701: potentially uninitialized local variable*/ \
 		return IsWellDefinedEnum<Enum>(tc::underlying_cast(e)); \
 	} \

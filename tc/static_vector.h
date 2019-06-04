@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -126,7 +126,7 @@ namespace tc {
 			// Due to C++17 constexpr limitations this special purpose constructor is the only way
 			// we have to initialize static_vector at compile time without generally sacrificing efficiency.
 			template<typename Rng, std::enable_if_t<tc::is_safely_assignable<T&, tc::range_value_t<Rng const>>::value>* = nullptr>
-			explicit constexpr static_vector_base_trivial(constexpr_tag, Rng const& rng) noexcept
+			explicit constexpr static_vector_base_trivial(constexpr_tag_t, Rng const& rng) noexcept
 				: m_at{} // C++17 constexpr requires immediate full initialization of arrays
 			{
 				// - cannot use tc::for_each(...) in Visual C++ because of a bug causing the compiler to claim that the statements
@@ -196,6 +196,11 @@ namespace tc {
 			> {
 		private:
 			using this_type = static_vector;
+			using iterator_generator_base = tc::range_iterator_generator_from_index<
+				static_vector<T, N>,
+				tc::static_vector_size_t,
+				boost::iterators::random_access_traversal_tag
+			>;
 		public:
 			using base = static_vector_base_t<T, N>;
 			using index = typename this_type::index;
@@ -215,7 +220,7 @@ namespace tc {
 					tc::is_safely_assignable<T&, tc::range_value_t<Rng const>>::value
 				>* = nullptr
 			>
-			explicit constexpr static_vector(constexpr_tag tag, Rng const& rng) noexcept
+			explicit constexpr static_vector(constexpr_tag_t tag, Rng const& rng) noexcept
 				: base(tag, rng)
 			{}
 
@@ -269,13 +274,16 @@ namespace tc {
 			}
 
 #ifdef TC_PRIVATE
-			void append_to(tc::SReportStream& rs) const& noexcept {
-				tc::append(rs, "tc::static_vector(", tc::size(*this), ")(");
+			using iterator_generator_base::operator();
+
+			template<ENABLE_SFINAE, std::enable_if_t<!tc::is_char<SFINAE_TYPE(T)>::value>* = nullptr>
+			void operator()(tc::report_appender appdr) const& noexcept {
+				tc::for_each(tc::concat("tc::static_vector(", tc::size(*this), ")("), appdr);
 				for( auto i=0; i<tc::size(*this); ++i ) {
-					if( 0 < i ) tc::append(rs, ", ");
-					tc::append(rs, tc_at(*this, i));
+					if( 0 < i ) tc::for_each(", ", appdr);
+					tc::for_each(tc_at(*this, i), appdr);
 				}
-				tc::append(rs, ")");
+				appdr(')');
 			}
 #endif
 		};

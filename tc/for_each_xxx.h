@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -12,32 +12,31 @@
 #include "array.h"
 #include "size_bounded.h"
 #include "format.h"
+#include "accessors.h"
 
 namespace tc {
 	namespace no_adl {
 		template<typename It>
 		struct iterator_cache final : tc::nonmovable /*m_ref may contain pointer into m_it*/ {
 		private:
-			It m_it;
+			DEFINE_MEMBER_AND_ACCESSORS(It, iterator, m_it)
 			tc::reference_or_value< typename std::iterator_traits<It>::reference > m_ref;
 
 		public:
 			iterator_cache(It it) noexcept
 				: m_it(tc_move(it))
-				, m_ref(aggregate_tag(), *m_it)
+				, m_ref(aggregate_tag, *m_it)
 			{}
 
 			iterator_cache& operator=(It it) & noexcept {
 				m_it=tc_move(it);
-				tc::renew(m_ref, aggregate_tag(), *m_it);
+				tc::renew(m_ref, aggregate_tag, *m_it);
 				return *this;
 			}
 
 			auto operator*() const & noexcept return_decltype( *m_ref )
-			auto operator*() && noexcept return_decltype_rvalue_by_ref( *tc_move(m_ref) )
+			auto operator*() && noexcept return_decltype_xvalue_by_ref( *tc_move(m_ref) )
 			auto operator*() const && noexcept = delete;
-
-			It const& iterator() const& noexcept { return m_it; }
 		};
 	}
 	using no_adl::iterator_cache;
@@ -55,7 +54,7 @@ namespace tc {
 					typename boost::range_iterator<Rng>::type
 				>,
 				N
-			> ait(tc::func_tag(), [&](std::size_t) noexcept { return it++; });
+			> ait(tc::func_tag, [&](std::size_t) noexcept { return it++; });
 
 			for (;;) {
 				for (int n = 0; n<N; ++n) {
@@ -155,7 +154,7 @@ namespace tc {
 	auto for_each_ordered_pair(Rng const& rng, Func func) MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, *tc::begin(rng), *tc::begin(rng))), INTEGRAL_CONSTANT(tc::continue_)> {
 		auto const itEndRng = tc::end(rng);
 		for(auto itEnd = tc::begin(rng); itEnd != itEndRng; ++itEnd) {
-			tc::reference_or_value<tc::range_reference_t<Rng const>> ref(aggregate_tag(), *itEnd);
+			tc::reference_or_value<tc::range_reference_t<Rng const>> ref(aggregate_tag, *itEnd);
 
 			RETURN_IF_BREAK(
 				tc::for_each(
@@ -172,18 +171,18 @@ namespace tc {
 		struct for_each_adjacent_pair_fn final {
 		private:
 			Func& m_func;
-			boost::optional<tc::reference_or_value<T>> m_oparam;
+			std::optional<T> m_oparam;
 		public:
 			for_each_adjacent_pair_fn(Func& func) noexcept
 				: m_func(func)
 			{}
 
 			template<typename U>
-			auto operator()(U&& u) & MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(m_func, **m_oparam, u)), INTEGRAL_CONSTANT(tc::continue_)> {
+			auto operator()(U&& u) & MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(m_func, *m_oparam, u)), INTEGRAL_CONSTANT(tc::continue_)> {
 				if (m_oparam) {
-					RETURN_IF_BREAK(tc::continue_if_not_break(m_func, **m_oparam, u));
+					RETURN_IF_BREAK(tc::continue_if_not_break(m_func, *m_oparam, u));
 				}
-				m_oparam.emplace(tc::aggregate_tag(), std::forward<U>(u));
+				m_oparam.emplace(std::forward<U>(u));
 
 				return INTEGRAL_CONSTANT(tc::continue_)();
 			}
@@ -192,6 +191,23 @@ namespace tc {
 
 	template<typename Rng, typename Func, std::enable_if_t<!is_range_with_iterators<Rng>::value>* = nullptr>
 	auto for_each_adjacent_pair(Rng&& rng, Func func) MAYTHROW {
-		return tc::for_each( std::forward<Rng>(rng), no_adl::for_each_adjacent_pair_fn<tc::range_reference_t<Rng>, Func>(func) );
+		return tc::for_each( std::forward<Rng>(rng), no_adl::for_each_adjacent_pair_fn<tc::range_value_t<Rng>, Func>(func) );
+	}
+
+	template<typename Rng, typename FuncBegin, typename FuncElem, typename FuncSeparator, typename FuncEnd>
+	constexpr auto framed_for_each(Rng&& rng, FuncBegin funcBegin, FuncElem funcElement, FuncSeparator funcSeparator, FuncEnd funcEnd) MAYTHROW {
+		bool bNotEmpty = false;
+		auto const breakorcontinue = tc::for_each(std::forward<Rng>(rng), [&](auto&& t) MAYTHROW {
+			if(tc::change(bNotEmpty, true)) {
+				RETURNS_VOID(funcBegin());
+			} else {
+				RETURNS_VOID(funcSeparator());
+			}
+			return tc::continue_if_not_break(funcElement, std::forward<decltype(t)>(t));
+		});
+		if(bNotEmpty) {
+			RETURNS_VOID(funcEnd());
+		}
+		return breakorcontinue;
 	}
 }

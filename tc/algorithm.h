@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -45,6 +45,8 @@
 #include "concat_adaptor.h"
 #include "insert.h"
 #include "cont_reserve.h"
+#include "size_linear.h"
+#include "filter_adaptor.h"
 
 #include <boost/preprocessor/repetition/enum.hpp>
 #include <boost/utility.hpp>
@@ -121,29 +123,16 @@ namespace tc {
 	// associative containers
 
 	namespace no_adl {
-		// SConversions cannot implement templated operator()(Rng&&) *and* use operator()(TSource&&)
-		// from SDefaultConversions. Apparently, despite the std::enable_if constructs, both are considered
-		// to have the same signatures and the using declaration is therefore ignored. Only Clang implements
-		// this standard rule, however:
-		// http://stackoverflow.com/questions/18861514/using-and-overloading-a-template-member-function-of-a-base-class
 		template<typename TTarget>
-		struct SSetConversionsHelper {
+		struct SConversions<TTarget, std::enable_if_t<has_mem_fn_lower_bound<TTarget>::value || has_mem_fn_hash_function<TTarget>::value>> final {
 			// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 			template<typename Rng>
-			static std::enable_if_t<
-				!tc::is_safely_constructible< TTarget, Rng&& >::value // disable for trivial conversions to use move semantic / copy on write where possible
-			,TTarget > fn(Rng&& rng) noexcept {
+			static TTarget fn(Rng&& rng) noexcept {
 				TTarget cont;
 				// force each element to be inserted
 				tc::cont_must_insert_range(cont, std::forward<Rng>(rng));
 				return cont;
 			}
-		};
-
-		template<typename TTarget>
-		struct SConversions<TTarget, std::enable_if_t<has_mem_fn_lower_bound<TTarget>::value || has_mem_fn_hash_function<TTarget>::value>> final : SDefaultConversions<TTarget>, SSetConversionsHelper<TTarget> {
-			using SDefaultConversions<TTarget>::fn;
-			using SSetConversionsHelper<TTarget>::fn;
 		};
 	}
 
@@ -171,17 +160,17 @@ namespace tc {
 	}
 
 	template<typename Rng>
-	decltype(auto) sorted_iterator_range(Rng&& rng) noexcept {
+	auto sorted_iterator_range(Rng&& rng) noexcept {
 		return tc::sorted_iterator_range(std::forward<Rng>(rng), tc::fn_less());
 	}
 
 	template<typename Rng, typename Less>
-	decltype(auto) sort(Rng&& rng, Less&& less) noexcept {
+	auto sort(Rng&& rng, Less&& less) noexcept {
 		return tc::transform( tc::sorted_iterator_range(std::forward<Rng>(rng), std::forward<Less>(less)), tc::fn_indirection() );
 	}
 
 	template<typename Rng>
-	decltype(auto) sort(Rng&& rng) noexcept {
+	auto sort(Rng&& rng) noexcept {
 		return tc::transform( tc::sorted_iterator_range(std::forward<Rng>(rng)), tc::fn_indirection() );
 	}
 
@@ -202,17 +191,17 @@ namespace tc {
 	}
 
 	template<typename Rng>
-	decltype(auto) stable_sorted_iterator_range(Rng&& rng) noexcept {
+	auto stable_sorted_iterator_range(Rng&& rng) noexcept {
 		return tc::stable_sorted_iterator_range(std::forward<Rng>(rng), tc::fn_compare());
 	}
 
 	template<typename Rng, typename Comp>
-	decltype(auto) stable_sort(Rng&& rng, Comp&& comp) noexcept {
+	auto stable_sort(Rng&& rng, Comp&& comp) noexcept {
 		return tc::transform( tc::stable_sorted_iterator_range(std::forward<Rng>(rng), std::forward<Comp>(comp)), tc::fn_indirection() );
 	}
 
 	template<typename Rng>
-	decltype(auto) stable_sort(Rng&& rng) noexcept {
+	auto stable_sort(Rng&& rng) noexcept {
 		return tc::transform( tc::stable_sorted_iterator_range(std::forward<Rng>(rng)), tc::fn_indirection() );
 	}
 
@@ -220,44 +209,44 @@ namespace tc {
 	// partition ranges into subranges
 
 	template<typename Rng, typename Less>
-	decltype(auto) ordered_unique_range(Rng&& rng, Less less) noexcept {
+	auto ordered_unique_range(Rng&& rng, Less less) noexcept {
 		_ASSERTDEBUG( tc::is_sorted( rng, less ) );
 		return tc::adjacent_unique_range( std::forward<Rng>(rng), tc::not_fn( tc_move(less) ) );
 	}
 
 	template<typename Rng>
-	decltype(auto) ordered_unique_range(Rng&& rng) noexcept {
+	auto ordered_unique_range(Rng&& rng) noexcept {
 		return tc::ordered_unique_range( std::forward<Rng>(rng), tc::fn_less() );
 	}
 
 	template<typename Rng, typename Comp>
-	decltype(auto) stable_sort_unique_range(Rng&& rng, Comp comp) noexcept {
+	auto stable_sort_unique_range(Rng&& rng, Comp comp) noexcept {
 		return tc::ordered_unique_range( tc::stable_sort( std::forward<Rng>(rng), comp ), tc::lessfrom3way(comp) );
 	}
 
 	template<typename Rng>
-	decltype(auto) stable_sort_unique_range(Rng&& rng) noexcept {
+	auto stable_sort_unique_range(Rng&& rng) noexcept {
 		return stable_sort_unique_range( std::forward<Rng>(rng), tc::fn_compare() );
 	}
 
 	template<typename Rng, typename Less>
-	decltype(auto) sort_unique_range(Rng&& rng, Less less) noexcept {
+	auto sort_unique_range(Rng&& rng, Less less) noexcept {
 		return tc::ordered_unique_range( tc::sort( std::forward<Rng>(rng), less ), less );
 	}
 
 	template<typename Rng>
-	decltype(auto) sort_unique_range(Rng&& rng) noexcept {
+	auto sort_unique_range(Rng&& rng) noexcept {
 		return sort_unique_range( std::forward<Rng>(rng), tc::fn_less() );
 	}
 
 	template<typename Rng, typename Less, std::enable_if_t<!std::is_reference<Rng>::value>* =nullptr>
-	decltype(auto) sort_inplace_unique_range(Rng&& rng, Less less) noexcept {
+	auto sort_inplace_unique_range(Rng&& rng, Less less) noexcept {
 		tc::sort_inplace( rng, std::ref(less) );
 		return tc::ordered_unique_range( std::forward<Rng>(rng), tc_move(less) );
 	}
 
 	template<typename Rng, std::enable_if_t<!std::is_reference<Rng>::value>* =nullptr>
-	decltype(auto) sort_inplace_unique_range(Rng&& rng) noexcept {
+	auto sort_inplace_unique_range(Rng&& rng) noexcept {
 		return sort_inplace_unique_range( std::forward<Rng>(rng), tc::fn_less() );
 	}
 
@@ -537,7 +526,7 @@ namespace tc {
 					tc::take_first_inplace(cont, nSize);
 					return
 #if defined _DEBUG && !defined __clang__
-						tc::explicit_cast<Cont>(cont)
+						tc::explicit_cast<Cont>(tc_move(cont))
 #else
 						cont
 #endif
@@ -569,42 +558,6 @@ namespace tc {
 		return tc::get_buffer_detail::get_sized_buffer_may_be_null_terminated<Cont>(std::forward<Func>(func)); // MAYTHROW
 	}
 
-
-	template< typename... MapArgs, typename K, typename... MappedTypeCtorArgs >
-	auto map_try_emplace_with_key(std::map<MapArgs...>& map, K&& key, MappedTypeCtorArgs&& ... mappedtypectorargs) MAYTHROW {
-		// TODO C++17: Use std::map::try_emplace
-		auto it = map.lower_bound(key);
-		if (tc::end(map)==it || map.key_comp()(key, it->first)) {
-			return std::make_pair(
-				tc::cont_must_emplace_before(
-					map,
-					tc_move(it),
-					std::piecewise_construct, std::forward_as_tuple(std::forward<K>(key)), std::forward_as_tuple(std::forward<MappedTypeCtorArgs>(mappedtypectorargs)...) // delay actual construction of mapped type
-				), // MAYTHROW
-				true
-			);
-		} else {
-			return std::make_pair(tc_move(it), false);
-		}
-	}
-
-	template< typename Key, typename T, typename K, typename... MappedTypeCtorArgs >
-	auto unordered_map_try_emplace_with_key(tc::unordered_map<Key, T>& map, K&& key, MappedTypeCtorArgs&& ... mappedtypectorargs) MAYTHROW {
-		// TODO C++17: Use std::unordered_map::try_emplace
-		auto it = map.find(key);
-		if (tc::end(map)==it) {
-			return std::make_pair(
-				tc::cont_must_emplace(
-					map,
-					std::piecewise_construct, std::forward_as_tuple(std::forward<K>(key)), std::forward_as_tuple(std::forward<MappedTypeCtorArgs>(mappedtypectorargs)...) // delay actual construction of mapped type
-				), // MAYTHROW
-				true
-			);
-		} else {
-			return std::make_pair(tc_move(it), false);
-		}
-	}
-
 	template<typename... MultiIndexArgs, typename K, typename... ValueTypeCtorArgs >
 	std::pair< typename boost::range_iterator<boost::multi_index::detail::hashed_index<MultiIndexArgs...>>::type, bool >
 	multi_index_try_emplace_with_key(boost::multi_index::detail::hashed_index<MultiIndexArgs...>& hashed_index, K const& key, ValueTypeCtorArgs&& ... valuetypectorargs) MAYTHROW
@@ -628,6 +581,16 @@ namespace tc {
 			);
 		} else {
 			return std::make_pair(tc_move(it), false);
+		}
+	}
+
+	template<typename... MultiIndexArgs, typename K>
+	std::pair<typename boost::range_iterator<boost::multi_index::detail::hashed_index<MultiIndexArgs...>>::type, bool>
+	map_query_cache(boost::multi_index::detail::hashed_index<MultiIndexArgs...>& hashed_index, K&& key) MAYTHROW {
+		if (auto it = tc::cont_find<tc::return_element_or_null>(hashed_index, tc::as_const(key))) {
+			return std::make_pair(tc_move(it), false);
+		} else {
+			return hashed_index.emplace(std::forward<K>(key)); // MAYTHROW
 		}
 	}
 
@@ -866,20 +829,20 @@ namespace tc {
 				typename PairItIt0,
 				typename... Args
 			>
-				bool HasBetterElement(bool* const itb, PairItItBest const& argBest, PairItIt0 const& pairitit0, Args const&... args) const& noexcept {
+			bool HasBetterElement(bool* const itb, PairItItBest const& argBest, PairItIt0 const& pairitit0, Args const&... args) const& noexcept {
 				if (pairitit0.first != pairitit0.second) {
 					switch_no_default(m_compare(*argBest.first, *pairitit0.first)) {
-			case tc::order::less:
-				*itb = false;
-				return HasBetterElement(boost::next(itb), argBest, args...);
-			case tc::order::equal: {
-				bool b = HasBetterElement(boost::next(itb), argBest, args...);
-				*itb = !b;
-				return b;
-			}
-			case tc::order::greater:
-				*itb = !HasBetterElement(boost::next(itb), pairitit0, args...);
-				return true;
+					case tc::order::less:
+						*itb = false;
+						return HasBetterElement(boost::next(itb), argBest, args...);
+					case tc::order::equal: {
+						bool b = HasBetterElement(boost::next(itb), argBest, args...);
+						*itb = !b;
+						return b;
+					}
+					case tc::order::greater:
+						*itb = !HasBetterElement(boost::next(itb), pairitit0, args...);
+						return true;
 					}
 				} else {
 					*itb = false;
@@ -949,13 +912,28 @@ namespace tc {
 	}
 
 	template <typename RngRng>
-	decltype(auto) common_prefix(RngRng&& rngrng) noexcept {
+	auto common_prefix(RngRng&& rngrng) noexcept {
 		auto&& rngFront = tc_front(rngrng);
 		return tc::accumulate(
 			tc::drop_first(rngrng),
 			tc::take(tc_move_if_owned(rngFront), tc::end(rngFront)),
 			[&](auto& rngResult, auto const& rng) noexcept {
 				tc::take_inplace(rngResult, boost::mismatch(rngResult, rng).first);
+			}
+		);
+	}
+
+	template< typename T, typename Rng >
+	auto make_variant_range_filter(Rng&& rng) noexcept {
+		return tc::transform( 
+			tc::filter( 
+				std::forward<Rng>(rng), 
+				[](auto const& var) noexcept {
+					return std::holds_alternative<T>(var);
+				}
+			),
+			[](auto&& var) noexcept -> decltype(auto) {
+				return tc::get<T>(std::forward<decltype(var)>(var));
 			}
 		);
 	}

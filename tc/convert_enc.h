@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -12,19 +12,23 @@
 #include "casts.h"
 #include "range_adaptor.h"
 
-namespace tc { 
+namespace tc {
+	inline bool is_continuation_unit(char ch) noexcept {
+		return 0x80 == (0xc0 & ch);
+	}
+
+	inline bool is_continuation_unit(tc::char16 ch) noexcept {
+		return 0xdc00 <= ch && ch < 0xe000;
+	}
+
 	namespace convert_enc_impl {
 		inline bool IsLeadingSurrogate( unsigned int n ) noexcept {
 			return 0xd800 <= n && n < 0xdc00;
 		}
 
-		inline bool IsTrailingSurrogate( unsigned int n ) noexcept {
-			return 0xdc00 <= n && n < 0xe000;
-		}
-
-		inline bool AddTrailingSurrogate( unsigned int& n, char16_t ch ) noexcept {
+		inline bool AddTrailingSurrogate( unsigned int& n, tc::char16 ch ) noexcept {
 			if(!IsLeadingSurrogate(n)) return false;
-			if(!IsTrailingSurrogate(ch)) return false;
+			if(!tc::is_continuation_unit(ch)) return false;
 			n <<= 10;
 			n += ch;
 			n += 0x10000u - (0xD800u << 10u) - 0xDC00u;
@@ -50,10 +54,6 @@ namespace tc {
 			}
 		}
 
-		inline bool IsContinuationByte (char ch) noexcept {
-			return 0x80 == (0xc0 & ch);
-		}
-
 		template <typename Dst, typename Rng, typename Src=tc::range_value_t<Rng>>
 		struct SStringConversionRange;
 
@@ -75,9 +75,8 @@ namespace tc {
 			// If the underlying range contains lone surrogates, we will convert them to REPLACEMENT CHARACTER
 			using index = typename SStringConversionRange::index;
 
-			template<typename RngRef>
-			explicit SStringConversionRange(RngRef&& rng) noexcept
-			: m_baserng(reference_or_value< Rng >(aggregate_tag(), std::forward<RngRef>(rng)))
+			explicit SStringConversionRange(aggregate_tag_t, Rng&& rng) noexcept
+			: m_baserng(aggregate_tag, std::forward<Rng>(rng))
 			{}
 		private:
 			using this_type = SStringConversionRange<char32_t, Rng, tc::char16>;
@@ -103,7 +102,7 @@ namespace tc {
 					if (!(VERIFYNOTIFY(!tc::at_end_index(*m_baserng,idx)) && AddTrailingSurrogate(n, tc::dereference_index(*m_baserng,idx)) && n < 0x110000)) {
 						return c_chReplacementCharacter;
 					}
-				} else if (!VERIFYNOTIFY(!IsTrailingSurrogate(n))) {
+				} else if (!VERIFYNOTIFY(!tc::is_continuation_unit(static_cast<tc::char16>(n)))) {
 					return c_chReplacementCharacter;
 				}
 				return static_cast<char32_t>(n);
@@ -117,14 +116,14 @@ namespace tc {
 				_ASSERT(!tc::at_end_index(*m_baserng,idx));
 				bool bLeadingSurrogate = IsLeadingSurrogate(tc::dereference_index(*m_baserng,idx));
 				tc::increment_index(*m_baserng,idx);
-				if (bLeadingSurrogate && VERIFYNOTIFY(!tc::at_end_index(*m_baserng,idx)) && VERIFYNOTIFY(IsTrailingSurrogate(tc::dereference_index(*m_baserng,idx)))) {
+				if (bLeadingSurrogate && VERIFYNOTIFY(!tc::at_end_index(*m_baserng,idx)) && VERIFYNOTIFY(tc::is_continuation_unit(tc::dereference_index(*m_baserng,idx)))) {
 					tc::increment_index(*m_baserng,idx);
 				}
 			}
 
 			STATIC_FINAL(decrement_index)(index& idx) const& noexcept -> void {
 				tc::decrement_index(*m_baserng,idx);
-				if (IsTrailingSurrogate(tc::dereference_index(*m_baserng,idx)) && !tc::equal_index(*m_baserng,idx, tc::begin_index(m_baserng))) {
+				if (tc::is_continuation_unit(tc::dereference_index(*m_baserng,idx)) && !tc::equal_index(*m_baserng,idx, tc::begin_index(m_baserng))) {
 					tc::decrement_index(*m_baserng,idx);
 					if (!VERIFYNOTIFY(IsLeadingSurrogate(tc::dereference_index(*m_baserng,idx)))) {
 						tc::increment_index(*m_baserng,idx);
@@ -168,9 +167,8 @@ namespace tc {
 			// This ensures that each run of illegally encoded characters is converted to at least one REPLACEMENT CHARACTER
 			using index = typename SStringConversionRange::index;
 
-			template<typename RngRef>
-			explicit SStringConversionRange(RngRef&& rng) noexcept
-			: m_baserng(reference_or_value< Rng >(aggregate_tag(), std::forward<RngRef>(rng)))
+			explicit SStringConversionRange(aggregate_tag_t, Rng&& rng) noexcept
+			: m_baserng(aggregate_tag, std::forward<Rng>(rng))
 			{}
 		private:
 			using this_type = SStringConversionRange<char32_t, Rng, char>;
@@ -195,9 +193,9 @@ namespace tc {
 					tc::increment_index(*m_baserng,idx);
 					do {
 						if (!VERIFYNOTIFY(!tc::at_end_index(*m_baserng,idx))) return false;
-						auto const ch = tc::underlying_cast(tc::dereference_index(*m_baserng,idx));
-						if (!VERIFYNOTIFY(IsContinuationByte(ch))) return false;
-						n = (n << 6) | (ch & 0x3fu);
+						auto const ch = tc::dereference_index(*m_baserng,idx);
+						if (!VERIFYNOTIFY(tc::is_continuation_unit(ch))) return false;
+						n = (n << 6) | (tc::underlying_cast(ch) & 0x3fu);
 						tc::increment_index(*m_baserng,idx);
 					} while (--i != 0);
 					return true;
@@ -244,7 +242,7 @@ namespace tc {
 					++i;
 					do {
 						tc::increment_index(*m_baserng,idx);
-					} while (--i != 0 && VERIFYNOTIFY(!tc::at_end_index(*m_baserng,idx)) && VERIFYNOTIFY(IsContinuationByte(tc::dereference_index(*m_baserng,idx))));
+					} while (--i != 0 && VERIFYNOTIFY(!tc::at_end_index(*m_baserng,idx)) && VERIFYNOTIFY(tc::is_continuation_unit(tc::dereference_index(*m_baserng,idx))));
 				};
 				auto ch = tc::underlying_cast(tc::dereference_index(*m_baserng,idx));
 				if (0==(ch & 0x80u)) {
@@ -260,7 +258,7 @@ namespace tc {
 					_ASSERTNOTIFYFALSE;
 					do {
 						tc::increment_index(*m_baserng,idx);
-					} while (!tc::at_end_index(*m_baserng,idx) && IsContinuationByte(tc::dereference_index(*m_baserng,idx)));
+					} while (!tc::at_end_index(*m_baserng,idx) && tc::is_continuation_unit(tc::dereference_index(*m_baserng,idx)));
 				}
 			}
 
@@ -269,7 +267,7 @@ namespace tc {
 				do {
 					tc::decrement_index(*m_baserng,idx);
 					++nContinuationBytes;
-				} while (IsContinuationByte(tc::dereference_index(*m_baserng,idx)) && VERIFYNOTIFY(!tc::equal_index(*m_baserng,idx, tc::begin_index(m_baserng))));
+				} while (tc::is_continuation_unit(tc::dereference_index(*m_baserng,idx)) && VERIFYNOTIFY(!tc::equal_index(*m_baserng,idx, tc::begin_index(m_baserng))));
 
 				auto Continuation = [&](auto n) noexcept {
 					// If we skipped over excess continuation bytes, return index to the first excess continuation byte
@@ -331,9 +329,8 @@ namespace tc {
 		> {
 			using index = typename SStringConversionRange::index;
 
-			template<typename RngRef>
-			explicit SStringConversionRange(RngRef&& rng) noexcept
-			: m_baserng(reference_or_value< Rng >(aggregate_tag(), std::forward<RngRef>(rng)))
+			explicit SStringConversionRange(aggregate_tag_t, Rng&& rng) noexcept
+			: m_baserng(aggregate_tag, std::forward<Rng>(rng))
 			{}
 		private:
 			using this_type = SStringConversionRange<tc::char16, Rng, char32_t>;
@@ -366,7 +363,7 @@ namespace tc {
 					}
 				} else {
 					_ASSERT(!idx.m_bTrailingSurrogate);
-					_ASSERTNOTIFY(n < 0xD800 || 0xE000 < n);
+					_ASSERTNOTIFY(n < 0xD800 || 0xE000 <= n);
 					return tc::explicit_cast<uint16_t>(n);
 				}
 			}
@@ -433,9 +430,8 @@ namespace tc {
 		> {
 			using index = typename SStringConversionRange::index;
 
-			template<typename RngRef>
-			explicit SStringConversionRange(RngRef&& rng) noexcept
-			: m_baserng(reference_or_value< Rng >(aggregate_tag(), std::forward<RngRef>(rng)))
+			explicit SStringConversionRange(aggregate_tag_t, Rng&& rng) noexcept
+			: m_baserng(aggregate_tag, std::forward<Rng>(rng))
 			{}
 		private:
 			using this_type = SStringConversionRange<char, Rng, char32_t>;
@@ -457,10 +453,10 @@ namespace tc {
 			STATIC_FINAL(dereference_index)(index idx) const& noexcept -> char {
 				unsigned int n = tc::underlying_cast(tc::dereference_index(*m_baserng,idx.m_idx));
 				if (n < 0x80) {
-					_ASSERTEQUAL(0, idx.m_nByte);
+					_ASSERTEQUAL(idx.m_nByte, 0);
 					return static_cast<char>(n);
 				} else {
-					if (!VERIFYNOTIFY(n < 0x110000) || !VERIFYNOTIFY(!(0xd800 <= n && n <= 0xe000))) {
+					if (!VERIFYNOTIFY(n < 0x110000) || !VERIFYNOTIFY(!(0xd800 <= n && n < 0xe000))) {
 						n = tc::underlying_cast(c_chReplacementCharacter);
 					}
 
@@ -495,7 +491,7 @@ namespace tc {
 			}
 
 			auto border_base_index(index const& idx) const& noexcept {
-				_ASSERTEQUAL(0, idx.m_nByte);
+				_ASSERTEQUAL(idx.m_nByte, 0);
 				return idx.m_idx;
 			}
 
@@ -519,9 +515,8 @@ namespace tc {
 		private:
 			using base_ = SStringConversionRange<char, SStringConversionRange<char32_t, Rng>>;
 		public:
-			template <typename RngRef>
-			explicit SStringConversionRange(RngRef&& rng) noexcept
-			: base_(SStringConversionRange<char32_t, Rng>(std::forward<RngRef>(rng)))
+			explicit SStringConversionRange(aggregate_tag_t, Rng&& rng) noexcept
+			: base_(aggregate_tag, SStringConversionRange<char32_t, Rng>(aggregate_tag, std::forward<Rng>(rng)))
 			{}
 
 			auto border_base_index(index const& idx) const& noexcept {
@@ -548,9 +543,8 @@ namespace tc {
 		private:
 			using base_ = SStringConversionRange<tc::char16, SStringConversionRange<char32_t, Rng>>;
 		public:
-			template <typename RngRef>
-			explicit SStringConversionRange(RngRef&& rng) noexcept
-			: base_(SStringConversionRange<char32_t, Rng>(std::forward<RngRef>(rng)))
+			explicit SStringConversionRange(aggregate_tag_t, Rng&& rng) noexcept
+			: base_(aggregate_tag, SStringConversionRange<char32_t, Rng>(aggregate_tag, std::forward<Rng>(rng)))
 			{}
 
 			auto border_base_index(index const& idx) const& noexcept {
@@ -561,7 +555,7 @@ namespace tc {
 				base_::base_range().base_range()
 			)
 
-			auto base_range() const & noexcept return_decltype(
+			auto base_range() const& noexcept return_decltype(
 				base_::base_range().base_range()
 			)
 		};
@@ -583,7 +577,7 @@ namespace tc {
 	template< typename Dst, typename Src, std::enable_if_t<tc::is_char<Dst>::value>* = nullptr>
 	auto must_convert_enc(Src&& src) noexcept return_ctor(
 		convert_enc_impl::SStringConversionRange<Dst BOOST_PP_COMMA() Src>,
-		(std::forward<Src>(src))
+		(aggregate_tag, std::forward<Src>(src))
 	)
 
 	//--------------------------------------------------------------------------------------------------------------------------
@@ -592,7 +586,7 @@ namespace tc {
 
 	template< typename Dst, typename Src, std::enable_if_t<!std::is_same<tc::range_value_t<Src>, Dst>::value >* = nullptr>
 	auto may_convert_enc( Src&& src ) noexcept return_decltype(
-		tc::must_convert_enc<Dst>(src)
+		tc::must_convert_enc<Dst>(std::forward<Src>(src))
 	)
 
 	template< typename Dst, typename Src, std::enable_if_t<std::is_same<tc::range_value_t<Src>, Dst>::value >* = nullptr>

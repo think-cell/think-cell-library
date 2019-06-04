@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -16,14 +16,11 @@
 #include <memory>
 
 namespace tc {
-	DEFINE_TAG_TYPE(aggregate_tag) // tag to distinguish constructors that aggregate their single argument from templated copy constructors
-
 	namespace no_adl {
 		template< typename T >
 		struct reference_or_value final {
 			static_assert( !std::is_void<T>::value );
 			static_assert( !std::is_reference<T>::value );
-			static_assert( !std::is_const<T>::value, "T const seems to be strange. Are you sure?" );
 
 			using value_type = std::remove_cv_t<T>;
 			using reference = value_type&;
@@ -33,8 +30,8 @@ namespace tc {
 			constexpr reference_or_value(reference_or_value const&) = default;
 			constexpr reference_or_value(reference_or_value&&) = default;
 			
-			template< typename Rhs >
-			constexpr reference_or_value( aggregate_tag, Rhs&& rhs ) noexcept
+			template< typename Rhs, std::enable_if_t<tc::is_safely_constructible<value_type, Rhs&&>::value>* = nullptr >
+			constexpr reference_or_value( aggregate_tag_t, Rhs&& rhs ) noexcept
 			: m_t( std::forward<Rhs>(rhs) )
 			{}
 
@@ -42,13 +39,13 @@ namespace tc {
 			// operator=() with tc::renew for pointer semantics.
 			reference_or_value& operator=(reference_or_value const& other) & noexcept {
 				_ASSERT(this != std::addressof(other));
-				tc::renew(*this, aggregate_tag(), other.m_t);
+				tc::renew(*this, aggregate_tag, other.m_t);
 				return *this;
 			}
 
 			reference_or_value& operator=(reference_or_value&& other) & noexcept {
 				_ASSERT(this != std::addressof(other));
-				tc::renew(*this, aggregate_tag(), tc_move(other).m_t);
+				tc::renew(*this, aggregate_tag, tc_move(other).m_t);
 				return *this;
 			}
 			
@@ -97,7 +94,7 @@ namespace tc {
 			using reference = T&;
 			using const_reference = reference;
 
-			constexpr reference_or_value(aggregate_tag, T& t) noexcept
+			constexpr reference_or_value(aggregate_tag_t, T& t) noexcept
 			:	m_pt(std::addressof(t))
 			{}
 			constexpr reference best_access() const& noexcept {
@@ -120,7 +117,7 @@ namespace tc {
 			using reference = T&&;
 			using const_reference = reference;
 
-			constexpr reference_or_value(aggregate_tag, T&& t) noexcept
+			constexpr reference_or_value(aggregate_tag_t, T&& t) noexcept
 			:	m_pt(std::addressof(t))
 			{}
 			constexpr reference best_access() const& noexcept {
@@ -135,16 +132,22 @@ namespace tc {
 		};
 	}
 	using no_adl::reference_or_value;
+	
+	template< typename T >
+	auto make_reference_or_value(T&& t) noexcept return_ctor(
+		reference_or_value<T>,
+		(tc::aggregate_tag, std::forward<T>(t))
+	)
 
 	namespace no_adl {
 		template< typename Func, typename Enable, typename... Args >
 		struct stores_result_of final {
 		private:
-			tc::reference_or_value< std::result_of_t< Func(Args...) > > m_t;
+			tc::reference_or_value< std::invoke_result_t< Func, Args... > > m_t;
 
 		public:
 			stores_result_of( Func&& func, Args... args ) MAYTHROW
-				: m_t(aggregate_tag(), std::forward<Func>(func)(static_cast<Args>(args)...))
+				: m_t(aggregate_tag, std::forward<Func>(func)(static_cast<Args>(args)...))
 			{}
 
 			auto get() const& noexcept ->decltype(auto) {
@@ -171,7 +174,7 @@ namespace tc {
 		};
 
 		template< typename Func, typename... Args >
-		struct stores_result_of<Func, std::enable_if_t< std::is_void< std::result_of_t< Func(Args...) > >::value >, Args... > final {
+		struct stores_result_of<Func, std::enable_if_t< std::is_void< std::invoke_result_t< Func, Args... > >::value >, Args... > final {
 			stores_result_of( Func&& func, Args... args ) MAYTHROW {
 				std::forward<Func>(func)(static_cast<Args>(args)...);
 			}

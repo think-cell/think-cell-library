@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -24,13 +24,13 @@
 #include <type_traits>
 
 namespace {
-	static_assert(std::is_same<tc::make_sub_range_result<tc::ptr_range<char const>&>::type, tc::ptr_range<char const>>::value);
+	STATICASSERTSAME(tc::make_sub_range_result_t<tc::ptr_range<char const>&>, tc::ptr_range<char const>);
 
-	using SRVI = tc::make_sub_range_result<tc::vector<int>&>::type;
-	using CSRVI = tc::make_sub_range_result<tc::vector<int> const&>::type;
+	using SRVI = tc::make_sub_range_result_t<tc::vector<int>&>;
+	using CSRVI = tc::make_sub_range_result_t<tc::vector<int> const&>;
 
-	using SSRVI = tc::make_sub_range_result<tc::make_sub_range_result<tc::vector<int>&>::type>::type;
-	using CSSRVI = tc::make_sub_range_result<tc::make_sub_range_result<tc::vector<int> const&>::type>::type;
+	using SSRVI = tc::make_sub_range_result_t<tc::make_sub_range_result_t<tc::vector<int>&>>;
+	using CSSRVI = tc::make_sub_range_result_t<tc::make_sub_range_result_t<tc::vector<int> const&>>;
 
 	UNITTESTDEF( sub_range_array ) {
 
@@ -48,11 +48,11 @@ namespace {
 
 	//-------------------------------------------------------------------------------------------------------------------------
 
-	using SRVI = tc::make_sub_range_result<tc::vector<int>&>::type;
-	using CSRVI = tc::make_sub_range_result<tc::vector<int> const&>::type;
+	using SRVI = tc::make_sub_range_result_t<tc::vector<int>&>;
+	using CSRVI = tc::make_sub_range_result_t<tc::vector<int> const&>;
 
-	using SSRVI = tc::make_sub_range_result<tc::make_sub_range_result<tc::vector<int>&>::type>::type;
-	using CSSRVI = tc::make_sub_range_result<tc::make_sub_range_result<tc::vector<int> const&>::type>::type;
+	using SSRVI = tc::make_sub_range_result_t<tc::make_sub_range_result_t<tc::vector<int>&>>;
+	using CSSRVI = tc::make_sub_range_result_t<tc::make_sub_range_result_t<tc::vector<int> const&>>;
 
 	[[maybe_unused]] void ref_test(SRVI & rng) noexcept {
 		CSRVI const_rng(rng);
@@ -82,8 +82,8 @@ namespace {
 		auto ssrvi = tc::slice(tc::slice(v));
 		auto cssrvi = tc::slice(tc::slice(tc::as_const(v)));
 
-		static_assert(std::is_same<decltype(ssrvi), decltype(srvi)>::value, "Sub-sub-range does not flatten to sub-range (decltype)");
-		static_assert(std::is_same<decltype(cssrvi), decltype(csrvi)>::value, "const sub-sub-range does not flatten to const sub-range (decltype)");
+		STATICASSERTSAME(decltype(ssrvi), decltype(srvi), "Sub-sub-range does not flatten to sub-range (decltype)");
+		STATICASSERTSAME(decltype(cssrvi), decltype(csrvi), "const sub-sub-range does not flatten to const sub-range (decltype)");
 	}
 
 	UNITTESTDEF( sub_sub_range_lvalue ) {
@@ -97,14 +97,14 @@ namespace {
 		auto cssrvi = tc::slice(csrvi);
 
 		// sanity checks
-		static_assert(std::is_same<decltype(srvi), SRVI>::value, "make_sub_range_result gives wrong result");
-		static_assert(std::is_same<decltype(csrvi), CSRVI>::value, "make_sub_range_result gives wrong result");
-		static_assert(std::is_same<decltype(ssrvi), SSRVI>::value, "make_sub_range_result gives wrong result");
-		static_assert(std::is_same<decltype(cssrvi), CSSRVI>::value, "make_sub_range_result gives wrong result");
+		STATICASSERTSAME(decltype(srvi), SRVI, "make_sub_range_result gives wrong result");
+		STATICASSERTSAME(decltype(csrvi), CSRVI, "make_sub_range_result gives wrong result");
+		STATICASSERTSAME(decltype(ssrvi), SSRVI, "make_sub_range_result gives wrong result");
+		STATICASSERTSAME(decltype(cssrvi), CSSRVI, "make_sub_range_result gives wrong result");
 
 		// the actual test
-		static_assert(std::is_same<decltype(ssrvi), decltype(srvi)>::value, "Sub-sub-range does not flatten to sub-range");
-		static_assert(std::is_same<decltype(cssrvi), decltype(csrvi)>::value, "const sub-sub-range does not flatten to const sub-range");
+		STATICASSERTSAME(decltype(ssrvi), decltype(srvi), "Sub-sub-range does not flatten to sub-range");
+		STATICASSERTSAME(decltype(cssrvi), decltype(csrvi), "const sub-sub-range does not flatten to const sub-range");
 	}
 
 	UNITTESTDEF( sub_sub_range_index ) {
@@ -119,8 +119,8 @@ namespace {
 		auto ssr1 = tc::slice_by_interval(sr, tc::make_interval(3, 6));
 		auto cssr1 = tc::slice_by_interval(csr, tc::make_interval(3, 6));
 
-		static_assert(std::is_same<decltype(ssr1), decltype(sr)>::value, "Sub-sub-range does not flatten to sub-range");
-		static_assert(std::is_same<decltype(cssr1), decltype(csr)>::value, "const sub-sub-range does not flatten to const sub-range");
+		STATICASSERTSAME(decltype(ssr1), decltype(sr), "Sub-sub-range does not flatten to sub-range");
+		STATICASSERTSAME(decltype(cssr1), decltype(csr), "const sub-sub-range does not flatten to const sub-range");
 
 	}
 
@@ -155,14 +155,14 @@ namespace {
 		);
 
 		_ASSERTEQUAL(
-			3,
 			*tc::upper_bound<tc::return_border>(
 				tc::union_range(
 					MAKE_CONSTEXPR_ARRAY(1,2,4),
 					MAKE_CONSTEXPR_ARRAY(2,3)
 				),
 				2
-			)
+			),
+			3
 		);
 
 		{
@@ -276,7 +276,7 @@ namespace {
 		);
 
 		TEST_RANGE_EQUAL(
-			tc::single( 2 ),
+			MAKE_CONSTEXPR_ARRAY( 2 ),
 			tc::untransform(tc::equal_range(tc::transform(vecn, [](int n) noexcept {return n*n; }), 4))
 		);
 
@@ -284,7 +284,7 @@ namespace {
 			auto rng = tc::transform(tc::filter(vecn, [](int n) noexcept {return n<3;}), [](int n) noexcept {return n*n; });
 
 			TEST_RANGE_EQUAL(
-				tc::single( 2 ),
+				MAKE_CONSTEXPR_ARRAY( 2 ),
 				tc::untransform(tc::equal_range(rng, 4))
 			);
 		}
@@ -292,8 +292,8 @@ namespace {
 		{
 			// r-value transform with l-value range
 			auto&& rng = tc::untransform(tc::transform(vecn, [](int n) noexcept {return n*n;}));
-			_ASSERT(3 == tc::size(vecn));
-			_ASSERT(std::addressof(*tc::begin(rng)) == std::addressof(*tc::begin(vecn)));
+			_ASSERTEQUAL(tc::size(vecn), 3);
+			_ASSERTEQUAL(std::addressof(*tc::begin(rng)), std::addressof(*tc::begin(vecn)));
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
 			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
@@ -305,8 +305,8 @@ namespace {
 		{
 			// r-value transform with l-value const range
 			auto&& rng = tc::untransform(tc::transform(tc::as_const(vecn), [](int n) noexcept {return n*n;}));
-			_ASSERT(3 == tc::size(vecn));
-			_ASSERT(std::addressof(*tc::begin(rng)) == std::addressof(*tc::begin(vecn)));
+			_ASSERTEQUAL(tc::size(vecn), 3);
+			_ASSERTEQUAL(std::addressof(*tc::begin(rng)), std::addressof(*tc::begin(vecn)));
 			static_assert(std::is_lvalue_reference<decltype((rng))>::value);
 			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
@@ -318,7 +318,7 @@ namespace {
 		{
 			// r-value transform with r-value range
 			auto rng = tc::untransform(tc::transform(tc::vector<int>{1, 2, 3}, [](int n) noexcept {return n*n;}));
-			static_assert(std::is_same<decltype(rng),tc::vector<int>>::value);
+			STATICASSERTSAME(decltype(rng),tc::vector<int>);
 			TEST_RANGE_EQUAL(
 				MAKE_CONSTEXPR_ARRAY(1,2,3),
 				rng
@@ -330,8 +330,8 @@ namespace {
 			auto trnsfrng = tc::transform(vecn, [](int n) noexcept {return n*n;});
 
 			auto&& rng = tc::untransform(trnsfrng);
-			_ASSERT(3 == tc::size(vecn));
-			_ASSERT(std::addressof(*tc::begin(rng)) == std::addressof(*tc::begin(vecn)));
+			_ASSERTEQUAL(tc::size(vecn), 3);
+			_ASSERTEQUAL(std::addressof(*tc::begin(rng)), std::addressof(*tc::begin(vecn)));
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
 			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
@@ -345,8 +345,8 @@ namespace {
 			auto const trnsfrng = tc::transform(tc::as_const(vecn), [](int n) noexcept {return n*n;});
 
 			auto&& rng = tc::untransform(trnsfrng);
-			_ASSERT(3 == tc::size(vecn));
-			_ASSERT(std::addressof(*tc::begin(rng)) == std::addressof(*tc::begin(vecn)));
+			_ASSERTEQUAL(tc::size(vecn), 3);
+			_ASSERTEQUAL(std::addressof(*tc::begin(rng)), std::addressof(*tc::begin(vecn)));
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
 			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
@@ -360,8 +360,8 @@ namespace {
 			auto trnsfrng = tc::transform(tc::as_const(vecn), [](int n) noexcept {return n*n;});
 
 			auto&& rng = tc::untransform(trnsfrng);
-			_ASSERT(3 == tc::size(vecn));
-			_ASSERT(std::addressof(*tc::begin(rng)) == std::addressof(*tc::begin(vecn)));
+			_ASSERTEQUAL(tc::size(vecn), 3);
+			_ASSERTEQUAL(std::addressof(*tc::begin(rng)), std::addressof(*tc::begin(vecn)));
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
 			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
@@ -423,7 +423,7 @@ namespace {
 						++it;
 					}
 				);
-				_ASSERT(tc::end(rngExpected) == it);
+				_ASSERTEQUAL(tc::end(rngExpected), it);
 			}
 
 			{
@@ -435,7 +435,7 @@ namespace {
 						++it;
 					}
 				);
-				_ASSERT(tc::end(rngExpected) == it);
+				_ASSERTEQUAL(tc::end(rngExpected), it);
 			}
 
 			{
@@ -447,7 +447,7 @@ namespace {
 						++it;
 					}
 				);
-				_ASSERT(tc::end(rngExpected) == it);
+				_ASSERTEQUAL(tc::end(rngExpected), it);
 			}
 
 		}
@@ -471,7 +471,7 @@ namespace {
 					++it;
 				}
 			);
-			_ASSERT(tc::end(rngExpected) == it);
+			_ASSERTEQUAL(tc::end(rngExpected), it);
 		}
 
 		{
@@ -488,7 +488,7 @@ namespace {
 					++it;
 				}
 			);
-			_ASSERT(tc::end(rngExpected) == it);
+			_ASSERTEQUAL(tc::end(rngExpected), it);
 		}
 	}
 
@@ -511,7 +511,7 @@ namespace {
 
 		TEST_RANGE_EQUAL(
 			tc::set_difference(setn1, setn2),
-			tc::single(11)
+			MAKE_CONSTEXPR_ARRAY(11)
 		);
 
 		tc::vector<int> vecn;
@@ -542,7 +542,7 @@ namespace {
 		_ASSERT(1 == *it);
 		_ASSERT(2 == *(++it));
 		_ASSERT(1 == *(--it));
-		_ASSERT(tc::begin(rngunique) == it);
+		_ASSERTEQUAL(tc::begin(rngunique), it);
 
 	}
 
@@ -595,15 +595,34 @@ namespace {
 #ifdef TC_PRIVATE
 	UNITTESTDEF(hash_string_range) {
 		std::string strNarrow = "test";
-		_ASSERTEQUAL(tc::hash_range(strNarrow), tc::hash_range(tc::as_pointers(strNarrow)));
-		_ASSERTEQUAL(tc::hash_range(strNarrow), tc::hash_range("test"));
+		_ASSERTEQUAL(tc::hash_range<std::size_t>(strNarrow), tc::hash_range<std::size_t>(tc::as_pointers(strNarrow)));
+		_ASSERTEQUAL(tc::hash_range<std::size_t>(strNarrow), tc::hash_range<std::size_t>("test"));
 		std::basic_string<tc::char16> strWide = UTF16("test");
-		_ASSERTEQUAL(tc::hash_range(strWide), tc::hash_range(tc::as_pointers(strWide)));
-		_ASSERTEQUAL(tc::hash_range(strWide), tc::hash_range(UTF16("test")));
-		_ASSERTEQUAL(tc::hash_range(tc::make_vector(strWide)), tc::hash_range(tc::as_pointers(strWide)));
-		_ASSERTEQUAL(tc::hash_range(strNarrow), tc::hash(strNarrow));
-		_ASSERTEQUAL(tc::hash_range(strWide), tc::hash(strWide));
+		_ASSERTEQUAL(tc::hash_range<std::size_t>(strWide), tc::hash_range<std::size_t>(tc::as_pointers(strWide)));
+		_ASSERTEQUAL(tc::hash_range<std::size_t>(strWide), tc::hash_range<std::size_t>(UTF16("test")));
+		_ASSERTEQUAL(tc::hash_range<std::size_t>(tc::make_vector(strWide)), tc::hash_range<std::size_t>(tc::as_pointers(strWide)));
+		_ASSERTEQUAL(tc::hash_range<std::size_t>(strNarrow), tc::hash<std::size_t>(strNarrow));
+		_ASSERTEQUAL(tc::hash_range<std::size_t>(strWide), tc::hash<std::size_t>(strWide));
 	}
 #endif
+
+	UNITTESTDEF( take_first_sink ) {
+		auto const rngn = [](auto sink) noexcept {
+			for(int i=0;;++i) { RETURN_IF_BREAK(tc::continue_if_not_break(sink, i)); }
+		};
+
+		_ASSERTEQUAL(tc::for_each(tc::take_first(rngn), [](int) noexcept {}), tc::continue_);
+		_ASSERTEQUAL(tc::for_each(tc::take_first(rngn), [](int) noexcept { return tc::break_; }), tc::break_);
+		_ASSERT(tc::equal(MAKE_CONSTEXPR_ARRAY(0,1,2,3), tc::take_first(rngn, 4)));
+
+		auto rngch = tc::concat("123", [](auto&& sink) noexcept { return tc::for_each("456", std::forward<decltype(sink)>(sink)); });
+
+		struct assert_no_single_char_sink /*final*/ {
+			auto operator()(char) const& noexcept { _ASSERTFALSE; return tc::construct_default_or_terminate<tc::break_or_continue>(); }
+			auto chunk(tc::ptr_range<char const> str) const& noexcept { return INTEGRAL_CONSTANT(tc::continue_)(); }
+		};
+		_ASSERTEQUAL(tc::for_each(tc::take_first(rngch, 4), assert_no_single_char_sink()), tc::continue_);
+		_ASSERT(tc::equal("1234", tc::take_first(rngch, 4)));
+	}
 }
 

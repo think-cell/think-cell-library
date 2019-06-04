@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -82,7 +82,7 @@ UNITTESTDEF( basic ) {
 	};
 
 	template<typename Rng>
-	auto void_range(Rng&& rng) return_decltype_rvalue_by_ref (
+	auto void_range(Rng&& rng) return_decltype_xvalue_by_ref (
 		tc::derived_or_base_cast<void_range_struct<Rng&&>>(std::forward<Rng>(rng))
 	)
 
@@ -235,7 +235,7 @@ UNITTESTDEF( ensure_index_range_on_chars ) {
 }
 
 UNITTESTDEF( construct_array_from_range ) {
-	auto rng=tc::make_counting_range(0, 10);
+	auto rng=tc::iota(0, 10);
 	tc::array<int, 10> an(rng);
 	tc::array<int, 10> anCopy=an;
 	tc::array<int&, 10> anRef(an);
@@ -247,8 +247,7 @@ UNITTESTDEF( construct_array_from_range ) {
 }
 
 struct GeneratorInt {
-	using reference = int;
-	using const_reference = int;
+	using value_type = int;
 	template<typename Func>
 	tc::break_or_continue operator()(Func func) const& {
 		RETURN_IF_BREAK( tc::continue_if_not_break(func, 1));
@@ -260,7 +259,7 @@ struct GeneratorInt {
 };
 
 struct GeneratorLong {
-	using reference = long;
+	using value_type = long;
 	template<typename Func>
 	tc::break_or_continue operator()(Func func) const& {
 		RETURN_IF_BREAK( tc::continue_if_not_break(func, 1l));
@@ -273,7 +272,7 @@ struct GeneratorLong {
 };
 
 struct GeneratorGeneratorInt {
-	using reference = GeneratorInt;
+	using value_type = GeneratorInt;
 	template<typename Func>
 	tc::break_or_continue operator()(Func func) const& {
 		RETURN_IF_BREAK( tc::continue_if_not_break(func, GeneratorInt()) );
@@ -322,31 +321,31 @@ struct dummy_pred {
 
 static_assert(
 	std::is_same<
-		tc::range_reference_t<decltype(
+		tc::range_value_t<decltype(
 			tc::filter(
 				std::declval<GeneratorMutableInt>(),
 				dummy_pred()
 			)
 		)>,
-		int&
+		int
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::range_reference_t<std::add_const_t<decltype(
+		tc::range_value_t<std::add_const_t<decltype(
 			tc::filter(
 				std::declval<GeneratorMutableInt>(),
 				dummy_pred()
 			)
 		)>>,
-		int const&
+		int
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::range_reference_t<
+		tc::range_value_t<
 			decltype(
 				tc::filter(
 					std::declval<GeneratorMutableInt&>(),
@@ -354,13 +353,13 @@ static_assert(
 				)
 			)
 		>,
-		int&
+		int
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::range_reference_t<
+		tc::range_value_t<
 			std::add_const_t<decltype(
 				tc::filter(
 					std::declval<GeneratorMutableInt&>(),
@@ -368,13 +367,13 @@ static_assert(
 				)
 			)>
 		>,
-		int&
+		int
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::range_reference_t<
+		tc::range_value_t<
 			decltype(
 				tc::filter(
 					std::declval<GeneratorMutableInt const&>(),
@@ -382,13 +381,13 @@ static_assert(
 				)
 			)
 		>,
-		int const&
+		int
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::range_reference_t<
+		tc::range_value_t<
 			std::add_const_t<decltype(
 				tc::filter(
 					std::declval<GeneratorMutableInt const&>(),
@@ -396,13 +395,13 @@ static_assert(
 				)
 			)>
 		>,
-		int const&
+		int
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::range_reference_t<
+		tc::range_value_t<
 			std::add_const_t<decltype(
 				tc::concat(
 					std::declval<GeneratorMutableInt&>(),
@@ -410,13 +409,13 @@ static_assert(
 				)
 			)>
 		>,
-		int&
+		int
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::range_reference_t<
+		tc::range_value_t<
 			decltype(
 				tc::concat(
 					std::declval<GeneratorInt&>(),
@@ -430,20 +429,20 @@ static_assert(
 
 UNITTESTDEF(filter_with_generator_range) {
 	_ASSERTEQUAL(
-		6,
 		tc::max_element<tc::return_value>(
 			GeneratorInt()
-		)
+		),
+		6
 	);
 	
 	_ASSERTEQUAL(
-		3,
 		tc::max_element<tc::return_value>(
 			tc::filter(
 				GeneratorInt(),
 				[](int n) noexcept {return 1==n%2;}
 			)
-		)
+		),
+		3
 	);
 
 	tc::for_each(
@@ -454,13 +453,13 @@ UNITTESTDEF(filter_with_generator_range) {
 	);
 
 	_ASSERTEQUAL(
-		-1,
 		tc::max_element<tc::return_value>(
 			tc::transform(
 				GeneratorInt(),
 				[](int n) noexcept {return -n;}
 			)
-		)
+		),
+		-1
 	);
 
 	auto const tr1 = tc::transform(
@@ -470,7 +469,7 @@ UNITTESTDEF(filter_with_generator_range) {
 
 	static_assert(
 		std::is_same<
-			tc::range_reference_t<decltype(tr1)>,
+			tc::range_value_t<decltype(tr1)>,
 			int
 		>::value
 	);
@@ -481,7 +480,7 @@ UNITTESTDEF(filter_with_generator_range) {
 	);
 	static_assert(
 		std::is_same<
-			tc::range_reference_t<decltype(filtered)>,
+			tc::range_value_t<decltype(filtered)>,
 			int
 		>::value
 	);
@@ -492,8 +491,8 @@ UNITTESTDEF(filter_with_generator_range) {
 	{
 		auto vecn2 = tc::make_vector(tc::join(GeneratorGeneratorInt()));
 		_ASSERTEQUAL(
-			8,
-			tc::size(vecn2)
+			tc::size(vecn2),
+			8
 		);
 	}
 
@@ -501,25 +500,25 @@ UNITTESTDEF(filter_with_generator_range) {
 	{
 		auto vecn2 = tc::make_vector(tc::join(vecgenint));
 		_ASSERTEQUAL(
-			8,
-			tc::size(vecn2)
+			tc::size(vecn2),
+			8
 		);
 	}
 
 	static_assert(
 		std::is_same<
-			tc::range_reference_t<
+			tc::range_value_t<
 				decltype(tc::join(vecgenint))
 			>,
 			int
 		>::value
 	);
 	auto vecnx = tc::make_vector(tc::concat(GeneratorInt(), GeneratorInt()));
-	_ASSERTEQUAL(8, tc::size(vecnx));
+	_ASSERTEQUAL(tc::size(vecnx), 8);
 
 	static_assert(
 		std::is_same<
-			tc::range_reference_t<
+			tc::range_value_t<
 				decltype(tc::concat(GeneratorInt(), GeneratorLong()))
 			>,
 			long
@@ -528,7 +527,7 @@ UNITTESTDEF(filter_with_generator_range) {
 
 	static_assert(
 		std::is_same<
-			tc::range_reference_t<
+			tc::range_value_t<
 				decltype(tc::concat(GeneratorLong(), GeneratorLong()))
 			>,
 			long

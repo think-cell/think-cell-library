@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -85,14 +85,14 @@ namespace tc {
 	using interval_adl::interval;
 
 	namespace no_adl {
-		struct use_set_impl_tag;
-		struct use_vector_impl_tag;
+		struct use_set_impl_tag_t;
+		struct use_vector_impl_tag_t;
 	}
-	using no_adl::use_set_impl_tag;
-	using no_adl::use_vector_impl_tag;
+	using no_adl::use_set_impl_tag_t;
+	using no_adl::use_vector_impl_tag_t;
 
 	namespace interval_set_adl {
-		template<typename T, typename TInterval=tc::interval<T>, typename SetOrVectorImpl=use_set_impl_tag> struct interval_set;
+		template<typename T, typename TInterval=tc::interval<T>, typename SetOrVectorImpl=use_set_impl_tag_t> struct interval_set;
 	}
 	using interval_set_adl::interval_set;
 
@@ -103,6 +103,17 @@ namespace tc {
 		};
 
 		TC_HAS_EXPR(minus, (T), std::declval<T>()-std::declval<T>())
+	}
+
+	template<typename T, std::enable_if_t<!std::is_floating_point<T>::value>* = nullptr>
+	T nextafter(T const& t) noexcept {
+		_ASSERT(t != std::numeric_limits<T>::max());
+		return boost::next(t);
+	}
+
+	template<typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
+	T nextafter(T const& t) noexcept {
+		return std::nextafter(t, std::numeric_limits<T>::infinity());
 	}
 
 	namespace interval_adl {
@@ -135,13 +146,13 @@ namespace tc {
 			TC_DENSE_MAP_SUPPORT(interval)
 
 			template< typename Func > 
-			interval< tc::decayed_result_of_t< Func&(T) > > transform(Func func) const& MAYTHROW {
+			interval< tc::decayed_invoke_result_t< Func&, T const& > > transform(Func func) const& MAYTHROW {
 				// AssertSameOrder( *this, intvl ); see comments for AssertSameOrder(...) below
 				return {func((*this)[tc::lo]), func((*this)[tc::hi])};
 			}
 
 			template< typename Func > 
-			interval< tc::decayed_result_of_t< Func&(T) > > transform_sort(Func func) const& MAYTHROW {
+			interval< tc::decayed_invoke_result_t< Func&, T const&> > transform_sort(Func func) const& MAYTHROW {
 		//		_ASSERT( !((*this)[tc::hi] < (*this)[tc::lo]) ); // see comments for AssertSameOrder(...) below
 				return make_interval_sort( func((*this)[tc::lo]), func((*this)[tc::hi]) );
 			}
@@ -171,7 +182,7 @@ namespace tc {
 
 			template< bool bGeneralized, typename TPos, typename TExtent >
 			static interval<T> centered_interval_impl(TPos&& pos, TExtent&& extent) noexcept {
-				static_assert(std::is_same<tc::decay_t<TExtent>, difference_type>::value, "Ambiguous interpretation: convert the base position or the provided extent, so that their types match");
+				STATICASSERTSAME(tc::decay_t<TExtent>, difference_type, "Ambiguous interpretation: convert the base position or the provided extent, so that their types match");
 				// make use of the precondition center(a + c, b + c) = c + center(a, b)
 				auto begin = std::forward<TPos>(pos) - tc::internal_lower_half<bGeneralized>(extent);
 				auto end = begin + std::forward<TExtent>(extent);
@@ -266,10 +277,10 @@ namespace tc {
 			}
 
 			template<typename T2>
-			tc::common_reference_t<T2&&, T const&> clamp_inclusive(T2&& t) const& noexcept {
+			tc::common_reference_xvalue_as_ref_t<T2&&, T const&> clamp_inclusive(T2&& t) const& noexcept {
 				_ASSERT( !inclusive_empty() );
 				// static_cast necessary because T& does not implicitly convert to common_reference_t<T&, T&&> == T const&&
-				using result_t=tc::common_reference_t<T2&&, T const&>;
+				using result_t=tc::common_reference_xvalue_as_ref_t<T2&&, T const&>;
 				if( t<(*this)[tc::lo] ) {
 					return static_cast<result_t>( (*this)[tc::lo] );
 				} else if( (*this)[tc::hi]<t ) {
@@ -280,10 +291,10 @@ namespace tc {
 			}
 
 			template<typename T2>
-			tc::common_reference_t<T2&&, T&&> clamp_inclusive(T2&& t) && noexcept {
+			tc::common_reference_xvalue_as_ref_t<T2&&, T&&> clamp_inclusive(T2&& t) && noexcept {
 				_ASSERT( !inclusive_empty() );
 				// static_cast necessary because T& does not implicitly convert to common_reference_t<T&, T&&> == T const&&
-				using result_t=tc::common_reference_t<T2&&, T&&>;
+				using result_t=tc::common_reference_xvalue_as_ref_t<T2&&, T&&>;
 				if( t<(*this)[tc::lo] ) {
 					return static_cast<result_t>( tc_move_always(*this)[tc::lo] );
 				} else if( (*this)[tc::hi]<t ) {
@@ -294,10 +305,10 @@ namespace tc {
 			}
 
 			template<typename T2>
-			tc::common_reference_t<T2&&, T const&&> clamp_inclusive( T2&& t ) const&& noexcept=delete;
+			tc::common_reference_xvalue_as_ref_t<T2&&, T const&&> clamp_inclusive( T2&& t ) const&& noexcept=delete;
 
 			template<typename T2>
-			tc::common_reference_t<tc::decay_t<T>, T2&&> clamp_exclusive(T2&& t) const& noexcept {
+			tc::common_type_t<T, T2&&> clamp_exclusive(T2&& t) const& noexcept {
 #ifdef TC_PRIVATE
 				static_assert(
 					!tc::is_floating_point_or_chrono_like <tc::decay_t<T2>>::value,
@@ -413,6 +424,12 @@ namespace tc {
 				}
 			}
 
+			template<typename S> 
+			bool naive_intersects(interval<S> const& intvl) const& noexcept {
+				// no special treatment for empty or inverse intervals
+				return (*this)[tc::lo] < intvl[tc::hi] && intvl[tc::lo] < (*this)[tc::hi];
+			}
+
 			interval<T>& operator&=(interval<T> const& intvl) & noexcept {
 				tc::assign_max( (*this)[tc::lo], intvl[tc::lo] );
 				tc::assign_min( (*this)[tc::hi], intvl[tc::hi] );
@@ -423,6 +440,12 @@ namespace tc {
 				if (empty()) {
 					*this = EmptyInterval();
 				}
+			}
+
+			void include(newT const& t) & noexcept {
+				_ASSERT( EmptyInterval()==*this || !empty() );
+				tc::assign_min( (*this)[tc::lo], t );
+				tc::assign_max( (*this)[tc::hi], tc::nextafter(t) );
 			}
 
 			void inclusive_include(newT const& t) & noexcept {
@@ -486,7 +509,7 @@ namespace tc {
 			}
 
 			auto range() const& noexcept {
-				return tc::make_counting_range( (*this)[tc::lo], (*this)[tc::hi] );
+				return tc::iota( (*this)[tc::lo], (*this)[tc::hi] );
 			}
 
 			static interval<newT> EmptyInterval() noexcept { // neutral element for operator|
@@ -498,8 +521,9 @@ namespace tc {
 			}
 
 #ifdef TC_PRIVATE
-			void append_to(tc::SReportStream& rs) const& noexcept {
-				tc::append(rs, "interval(", (*this)[tc::lo], ";", (*this)[tc::hi], ")");
+			template<ENABLE_SFINAE, std::enable_if_t<tc::is_appendable<tc::SReportStream&, SFINAE_TYPE(T) const&>::value>* = nullptr>
+			constexpr auto error() const& noexcept {
+				return tc::concat("interval(", (*this)[tc::lo], ";", (*this)[tc::hi], ")");
 			}
 
 			PERSISTSTRUCTDECL(interval, TPersistentBase);
@@ -580,17 +604,6 @@ namespace tc {
 //	/* cannot evaluate order */;
 //}
 
-	template<typename T, std::enable_if_t<!std::is_floating_point<T>::value>* = nullptr>
-	T nextafter(T const& t) noexcept {
-		_ASSERT(t != std::numeric_limits<T>::max());
-		return boost::next(t);
-	}
-
-	template<typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
-	T nextafter(T const& t) noexcept {
-		return std::nextafter(t, std::numeric_limits<T>::infinity());
-	}
-
 	// tc::common_type_t is already decayed
 	template<typename T1, typename T2>
 	constexpr auto make_interval(T1&& begin, T2&& end) noexcept return_ctor(
@@ -645,6 +658,8 @@ namespace tc {
 		return tc::make_interval(*pairit.first, *pairit.second);
 	}
 
+	DEFINE_FN(make_interval);
+
 	template<typename T>
 	bool empty(interval<T> const&) noexcept = delete;
 
@@ -657,15 +672,20 @@ namespace tc {
 	)
 
 	namespace no_adl {
-		template<typename TInterval>
+		template<typename T, typename TInterval>
 		struct less_begin final {
-			bool operator()(TInterval const& _Left, TInterval const& _Right) const& noexcept {
-				return _Left[tc::lo]<_Right[tc::lo];
+			bool operator()(TInterval const& intvlLeft, TInterval const& intvlRight) const& noexcept {
+				return intvlLeft[tc::lo] < intvlRight[tc::lo];
 			}
-		};
 
-		DEFINE_TAG_TYPE(use_set_impl_tag)
-		DEFINE_TAG_TYPE(use_vector_impl_tag)
+			using is_transparent = void;
+			bool operator()(TInterval const& intvlLeft, T const& tRight) const& noexcept {
+				return intvlLeft[tc::lo] < tRight;
+			}
+			bool operator()(T const& tLeft, TInterval const& intvlRight) const& noexcept {
+				return tLeft < intvlRight[tc::lo];
+			}
+		};	
 
 		// deprecated, had disadvantage that you can only sort by one criterion, not different criterions in different parts of the code
 		template<typename T, typename _Pr>
@@ -715,9 +735,9 @@ namespace tc {
 		{
 		private:
 			using Cont=std::conditional_t<
-				std::is_same< SetOrVectorImpl, use_set_impl_tag >::value,
-				std::set< TInterval, tc::no_adl::less_begin< TInterval > >,
-				tc::no_adl::vector_as_set< TInterval, tc::no_adl::less_begin< TInterval > >
+				std::is_same< SetOrVectorImpl, use_set_impl_tag_t >::value,
+				std::set< TInterval, tc::no_adl::less_begin< T, TInterval > >,
+				tc::no_adl::vector_as_set< TInterval, tc::no_adl::less_begin< T, TInterval > >
 			>;
 			Cont m_cont;
 
@@ -840,23 +860,43 @@ namespace tc {
 					return true;
 				}
 
-				auto itinterval = m_cont.upper_bound(interval);
-				if(itinterval==tc::begin(m_cont)) {
+				if (auto_cref(itinterval, upper_bound<tc::return_element_before_or_null>(interval))) {
+					return !((*itinterval)[tc::hi]<interval[tc::hi]);
+				} else {
 					return false;
 				}
-				--itinterval;
-
-				return !((*itinterval)[tc::hi]<interval[tc::hi]);
 			}
 
 			bool contains(T const& t) const& noexcept {
-				if (empty()) {
+				if (auto_cref(itinterval, upper_bound<tc::return_element_before_or_null>(t))) {
+					return t < (*itinterval)[tc::hi];
+				} else {
 					return false;
 				}
-				auto itinterval = m_cont.upper_bound( TInterval(t,t) );
-				if( itinterval == tc::begin(m_cont) ) return false;
-				--itinterval;
-				return t < (*itinterval)[tc::hi];
+			}
+
+			void erase_to(T const& t) & noexcept {
+				auto itinterval = m_cont.lower_bound(t);
+				if( itinterval!=tc::begin(m_cont) ) {
+					auto itintervalPartial=itinterval;
+					--itintervalPartial;
+					if( t < (*itintervalPartial)[tc::hi] ) {
+						itinterval=tc::cont_must_emplace_before( m_cont, itinterval, t, (*itintervalPartial)[tc::hi] );
+					}
+				}
+				m_cont.erase( tc::begin(m_cont), itinterval );
+			}
+
+			void erase_from(T const& t) & noexcept {
+				auto itinterval = m_cont.lower_bound(t);
+				if( itinterval!=tc::begin(m_cont) ) {
+					auto itintervalPartial=itinterval;
+					--itintervalPartial;
+					if( t < (*itintervalPartial)[tc::hi] ) {
+						tc::as_mutable(*itintervalPartial)[tc::hi]=t;
+					}
+				}
+				tc::take_inplace( m_cont, itinterval );
 			}
 
 			interval_set& operator&=(TInterval const& interval) & noexcept {
@@ -866,59 +906,24 @@ namespace tc {
 					return *this;
 				}
 
-				//erase -inf to interval[tc::lo]
-				auto itinterval = m_cont.lower_bound(interval);
-				if( itinterval!=tc::begin(m_cont) ) {
-					auto itintervalPartial=itinterval;
-					--itintervalPartial;
-					if( interval[tc::lo] < (*itintervalPartial)[tc::hi] ) {
-						itinterval=tc::cont_must_emplace_before( m_cont, itinterval, interval[tc::lo], (*itintervalPartial)[tc::hi] );
-					}
-				}
-				m_cont.erase( tc::begin(m_cont), itinterval );
-
-				//erase interval[tc::hi] to inf
-				itinterval = m_cont.lower_bound(TInterval( interval[tc::hi], interval[tc::hi] ) );
-				if( itinterval!=tc::begin(m_cont) ) {
-					auto itintervalPartial=itinterval;
-					--itintervalPartial;
-					if( interval[tc::hi] < (*itintervalPartial)[tc::hi] ) {
-						tc::as_mutable(*itintervalPartial)[tc::hi]=interval[tc::hi];
-					}
-				}
-				tc::take_inplace( m_cont, itinterval );
+				erase_to(interval[tc::lo]);
+				erase_from(interval[tc::hi]);
 				return *this;
 			}
 
 			const_iterator interval_below( T const& t ) const& noexcept {
-				_ASSERT( !tc::empty(m_cont) );
-
-				auto itinterval = m_cont.upper_bound( TInterval(t,t) );
-
-				_ASSERT( itinterval!=tc::begin(m_cont) ); // there must be interval space at or below t
-
-				--itinterval;
-				return itinterval;
+				return upper_bound<tc::return_element_before>(t);
 			}
-
 
 			// closest_below must exist
 			T const& closest_below( T const& t) const& noexcept {
-				_ASSERT( !tc::empty(m_cont) );
-
-				const_iterator itinterval = interval_below(t);
-
-				if( t < (*itinterval)[tc::hi]) {
-					return t;
-				} else {
-					return (*itinterval)[tc::hi];
-				}
+				return tc::min(t, (*interval_below(t))[tc::hi]);
 			}
 
 			const_iterator interval_above( T const& t ) const& noexcept {
 				_ASSERT( !tc::empty(m_cont) );
 
-				auto itintervalSup = m_cont.upper_bound( TInterval(t,t) );
+				auto itintervalSup = m_cont.upper_bound(t);
 		
 				if( itintervalSup==tc::begin(m_cont) ) {
 					return itintervalSup;
@@ -938,7 +943,7 @@ namespace tc {
 			T const& closest_above( T const& t) const& noexcept {
 				_ASSERT( !tc::empty(m_cont) );
 
-				auto itinterval = m_cont.upper_bound( TInterval(t,t) );
+				auto itinterval = m_cont.upper_bound(t);
 
 				if( itinterval != tc::begin(m_cont) && t < (*boost::prior(itinterval))[tc::hi] ) {
 					return t;
@@ -948,40 +953,25 @@ namespace tc {
 			}
 
 			T const& closest_missing_above( T const& t) const& noexcept {
-				auto itinterval = m_cont.upper_bound( TInterval(t,t) );
-
-				if( itinterval != tc::begin(m_cont) ) {
-					--itinterval;
-					if( t < (*itinterval)[tc::hi] ) {
-						return (*itinterval)[tc::hi];
-					}
-				}
-				return t;
+				return closest_missing(t, tc::hi);
 			}
 
 			T const& closest_missing_below( T const& t) const& noexcept {
-				auto itinterval = m_cont.upper_bound( TInterval(t,t) );
-
-				if( itinterval != tc::begin(m_cont) ) {
-					--itinterval;
-					if( t < (*itinterval)[tc::hi] ) {
-						return (*itinterval)[tc::lo];
-					}
-				}
-				return t;
+				return closest_missing(t, tc::lo);
 			}
 
 			T const& closest_missing(T const& t, tc::lohi lohi) const& noexcept {
-				if( tc::lo==lohi ) {
-					return closest_missing_below(t);
-				} else {
-					return closest_missing_above(t);
+				if (auto_cref(itinterval, upper_bound<tc::return_element_before_or_null>(t))) {
+					if( t < (*itinterval)[tc::hi] ) {
+						return (*itinterval)[lohi];
+					}
 				}
+				return t;
 			}
 
 			// returns end() if empty()
 			const_iterator closest_interval( T const& t ) const& noexcept {
-				auto itintervalSup = m_cont.upper_bound( TInterval(t,t) );
+				auto itintervalSup = m_cont.upper_bound(t);
 
 				// below first one or empty
 				if( itintervalSup == tc::begin(m_cont) ) return itintervalSup;
@@ -998,7 +988,7 @@ namespace tc {
 			T const& closest( T const& t) const& noexcept {
 				_ASSERT( !tc::empty(m_cont) );
 
-				auto itintervalSup = m_cont.upper_bound( TInterval(t,t) );
+				auto itintervalSup = m_cont.upper_bound(t);
 
 				// below first one
 				if( itintervalSup == tc::begin(m_cont) ) return (*itintervalSup)[tc::lo];
@@ -1018,7 +1008,7 @@ namespace tc {
 				static_assert(std::is_integral<T>::value);
 				_ASSERT( !tc::empty(m_cont) );
 
-				auto itintervalSup = m_cont.upper_bound( TInterval(t,t) );
+				auto itintervalSup = m_cont.upper_bound(t);
 				if( itintervalSup == tc::begin(m_cont) ) return (*itintervalSup)[tc::lo];
 
 				T const& tInfEnd = (*boost::prior(itintervalSup))[tc::hi];
@@ -1203,8 +1193,9 @@ namespace tc {
 				return m_cont.lower_bound( intvl );
 			}
 
-			const_iterator upper_bound( TInterval const& intvl ) const& noexcept {
-				return m_cont.upper_bound( intvl );
+			template <template<typename> class RangeReturn = tc::return_border, typename K>
+			decltype(auto) upper_bound(K const& k) const& noexcept {
+				return RangeReturn<interval_set const&>::pack_border(m_cont.upper_bound(k), *this);
 			}
 
 			iterator begin() & noexcept {
@@ -1224,16 +1215,16 @@ namespace tc {
 			}
 
 #ifdef TC_PRIVATE
-			void append_to(tc::SReportStream& rs) const& noexcept {
-				tc::append(rs, "interval_set(", interval_count(), ")(");
+			void operator()(tc::report_appender appdr) const& noexcept {
+				tc::for_each(tc::concat("interval_set(", interval_count(), ")("), appdr);
 				int i = 0;
 				for( auto it=tc::begin(*this); i < 10 && it!=tc::end(*this); ++it ) {
-					if( 0 < i ) tc::append(rs, ", ");
-					tc::append(rs, *it);
+					if( 0 < i ) tc::for_each(", ", appdr);
+					tc::for_each(*it, appdr);
 					++i;
 				}
-				if( i < interval_count() ) tc::append(rs, ", ...");
-				tc::append(rs, ")");
+				if( i < interval_count() ) tc::for_each(", ...", appdr);
+				appdr(')');
 			}
 #endif
 		};

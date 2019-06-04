@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -19,16 +19,16 @@
 namespace tc {
 	namespace no_adl {
 		template<
-			typename Rng
+			typename RngRng
 		>
-		struct join_adaptor {
+		struct [[nodiscard]] join_adaptor: tc::value_type_base<join_adaptor<RngRng>> {
 		private:
-			reference_or_value<Rng> m_baserng;
+			reference_or_value<RngRng> m_baserng;
 
 		public:
 			template<typename Rhs>
-			explicit join_adaptor(aggregate_tag, Rhs&& rhs) noexcept
-				: m_baserng( aggregate_tag(), std::forward<Rhs>(rhs) )
+			explicit join_adaptor(aggregate_tag_t, Rhs&& rhs) noexcept
+				: m_baserng( aggregate_tag, std::forward<Rhs>(rhs) )
 			{}
 
 			template< typename Func >
@@ -36,29 +36,17 @@ namespace tc {
 				return tc::for_each(*m_baserng, [&](auto&& _) MAYTHROW { return tc::for_each(std::forward<decltype(_)>(_), func); });
 			}
 		};
-	}
 
+		template<typename RngRng>
+		struct value_type_base<join_adaptor<RngRng>, tc::void_t<tc::range_value_t<tc::range_value_t<RngRng>>>> {
+			using value_type = tc::range_value_t<tc::range_value_t<RngRng>>;
+		};
+	}
 	using no_adl::join_adaptor;
 
-	namespace no_adl {
-		template< typename Rng, bool bConst >
-		struct range_reference_join_adaptor {
-			using type = tc::range_reference_t<
-				reference_for_value_or_reference_with_index_range_t<Rng, bConst>
-			>;
-		};
-
-		template< typename Rng >
-		struct range_reference<join_adaptor<Rng>> : range_reference_join_adaptor<Rng, false> {};
-
-		template< typename Rng >
-		struct range_reference<join_adaptor<Rng> const> : range_reference_join_adaptor<Rng, true> {};
-	}
-
-	template<typename Rng>
-	auto join(Rng&& rng) noexcept return_ctor(
-		join_adaptor< Rng >,
-		(aggregate_tag(), std::forward<Rng>(rng))
+	template<typename RngRng>
+	auto join(RngRng&& rng) noexcept return_ctor(
+		join_adaptor< RngRng >,
+		(aggregate_tag, std::forward<RngRng>(rng))
 	)
-
 }

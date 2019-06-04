@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -67,7 +67,7 @@ namespace tc {
 	#endif
 		auto it = NOBADALLOC(cont.emplace_hint(itHint, std::forward<Args>(args)...)); // MAYTHROW
 		_ASSERTEQUAL( cont.size(), c+1 );
-		_ASSERT( boost::next(it)==itHint );
+		_ASSERTEQUAL(boost::next(it), itHint);
 		return it;
 	}
 
@@ -84,24 +84,23 @@ namespace tc {
 	}
 
 	template <typename Cont, typename... T, std::enable_if_t<
-		has_mem_fn_emplace_back<Cont>::value && !(0==sizeof...(T) || tc::is_safely_constructible<tc::range_value_t<Cont>, T&& ... >::value)
+		has_mem_fn_emplace_back<Cont>::value && !(0==sizeof...(T) || tc::is_safely_constructible<tc::range_value_t<Cont>, T&& ... >::value) &&
+		tc::is_explicit_castable<tc::range_value_t<Cont>, T&&...>::value
 	>* = nullptr>
 	decltype(auto) cont_emplace_back(Cont& cont, T&& ... value) MAYTHROW {
 		return cont_emplace_back(cont, tc::explicit_cast<tc::range_value_t<Cont>>(std::forward<T>(value)...));
 	}
 
 	template <typename Cont, typename... T, std::enable_if_t<
-		has_mem_fn_lower_bound<Cont>::value
+		has_mem_fn_lower_bound<Cont>::value && (0==sizeof...(T) || tc::is_safely_constructible<tc::range_value_t<Cont>, T&& ... >::value)
 	>* = nullptr>
-	auto cont_emplace_back(Cont& cont, T&& ... value) MAYTHROW return_decltype(
-		// return_decltype saves having to duplicate the
-		//	tc::is_safely_constructible<tc::range_value_t<Cont>, T&& ... >::value
-		// which is already in cont_must_emplace_before.
-		*tc::cont_must_emplace_before(cont, tc::end(cont), std::forward<T>(value)...)
-	)
+	decltype(auto) cont_emplace_back(Cont& cont, T&& ... value) MAYTHROW {
+		return *tc::cont_must_emplace_before(cont, tc::end(cont), std::forward<T>(value)...); // tc::cont_must_emplace_before is not SFINAE friendly
+	}
 
 	template <typename Cont, typename T0, typename T1, typename... Ts, std::enable_if_t<
-		!has_mem_fn_emplace_back<Cont>::value && !has_mem_fn_lower_bound<Cont>::value
+		!has_mem_fn_emplace_back<Cont>::value && !has_mem_fn_lower_bound<Cont>::value &&
+		tc::is_explicit_castable<tc::range_value_t<Cont>, T0&&, T1&&, Ts&&...>::value
 	>* = nullptr>
 	decltype(auto) cont_emplace_back(Cont& cont, T0&& v0, T1&& v1, Ts&& ... vs) noexcept {
 		NOBADALLOC( cont.push_back(tc::explicit_cast<tc::range_value_t<Cont>>(std::forward<T0>(v0), std::forward<T1>(v1), std::forward<Ts>(vs)...)) );
@@ -109,7 +108,8 @@ namespace tc {
 	}
 
 	template <typename Cont, typename T0, std::enable_if_t<
-		!has_mem_fn_emplace_back<Cont>::value && !has_mem_fn_lower_bound<Cont>::value
+		!has_mem_fn_emplace_back<Cont>::value && !has_mem_fn_lower_bound<Cont>::value &&
+		tc::is_explicit_castable<tc::range_value_t<Cont>, T0&&>::value
 	>* = nullptr>
 	decltype(auto) cont_emplace_back(Cont& cont, T0&& v0) noexcept {
 		if constexpr (tc::is_safely_constructible<tc::range_value_t<Cont>, T0&& >::value) {

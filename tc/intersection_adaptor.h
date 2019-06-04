@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -22,7 +22,7 @@ namespace tc {
 			typename Rng0,
 			typename Rng1
 		>
-		struct intersection_difference_adaptor final
+		struct [[nodiscard]] intersection_difference_adaptor final
 		{
 		private:
 			std::tuple<
@@ -36,8 +36,8 @@ namespace tc {
 			template<typename Rhs0, typename Rhs1, typename Comp2>
 			explicit intersection_difference_adaptor(Rhs0&& rhs0, Rhs1&& rhs1, Comp2&& comp) noexcept
 				: m_baserng(
-					reference_or_value< Rng0 >(aggregate_tag(), std::forward<Rhs0>(rhs0)),
-					reference_or_value< Rng1 >(aggregate_tag(), std::forward<Rhs1>(rhs1))
+					reference_or_value< Rng0 >(aggregate_tag, std::forward<Rhs0>(rhs0)),
+					reference_or_value< Rng1 >(aggregate_tag, std::forward<Rhs1>(rhs1))
 				),
 				m_comp(std::forward<Comp2>(comp))
 			{}
@@ -91,7 +91,7 @@ namespace tc {
 		static_assert(tc::is_instance<std::unordered_set, std::remove_reference_t<Rng1>>::value);
 		return tc::filter(
 			std::forward<Rng0>(rng0),
-			[rng1_ = reference_or_value< Rng1 >(tc::aggregate_tag(), std::forward<Rng1>(rng1))](auto const& element) noexcept {
+			[rng1_ = reference_or_value< Rng1 >(tc::aggregate_tag, std::forward<Rng1>(rng1))](auto const& element) noexcept {
 				if constexpr(bIntersection) {
 					return tc::cont_find<tc::return_bool>(*rng1_, element);
 				} else {

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -73,7 +73,7 @@ namespace tc {
 	using counting_iterator= typename no_adl::default_counting_iterator<T>::type;
 
 	template<typename TBegin, typename TEnd>
-	auto make_counting_range(TBegin const& tBegin, TEnd const& tEnd) noexcept {
+	auto iota(TBegin const& tBegin, TEnd const& tEnd) noexcept {
 		using T = tc::counting_iterator<tc::common_type_t<TBegin, TEnd> >;
 		return tc::make_iterator_range(static_cast<T>(tBegin), static_cast<T>(tEnd));
 	}
@@ -85,8 +85,8 @@ namespace tc {
 			using iterator=tc::counting_iterator< decltype(tc::begin(*std::declval<tc::reference_or_value<Rng>&>())) >;
 
 			template<typename Rhs>
-			range_of_elements(aggregate_tag, Rhs&& rhs) noexcept
-				: m_rng(aggregate_tag(), std::forward<Rhs>(rhs))
+			range_of_elements(aggregate_tag_t, Rhs&& rhs) noexcept
+				: m_rng(aggregate_tag, std::forward<Rhs>(rhs))
 			{}
 			
 			auto begin() const& noexcept
@@ -107,5 +107,5 @@ namespace tc {
 	}
 	template<typename Rng>
 	auto make_range_of_iterators(Rng&& rng) noexcept
-		return_ctor( no_adl::range_of_elements< Rng >, (aggregate_tag(), std::forward<Rng>(rng)) )
+		return_ctor( no_adl::range_of_elements< Rng >, (aggregate_tag, std::forward<Rng>(rng)) )
 }

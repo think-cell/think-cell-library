@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2018 think-cell Software GmbH
+// Copyright (C) 2016-2019 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -33,14 +33,18 @@ namespace tc {
 	}
 	using sub_range_adl::sub_range;
 
-	namespace transform_adaptor_impl {
+	namespace no_adl {
 		template< typename Func, typename Rng, bool HasIterator=is_range_with_iterators< Rng >::value >
 		struct transform_adaptor;
 	}
-	using transform_adaptor_impl::transform_adaptor;
+	using no_adl::transform_adaptor;
 
-	template< typename Rng, typename Enable=void >
-	struct make_sub_range_result;
+	namespace no_adl {
+		template< typename Rng, typename Enable=void >
+		struct make_sub_range_result;
+	}
+	template<typename Rng>
+	using make_sub_range_result_t = typename no_adl::make_sub_range_result<Rng>::type;
 
 	struct bool_context final {
 		template< typename T >
