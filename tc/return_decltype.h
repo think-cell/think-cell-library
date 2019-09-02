@@ -33,7 +33,7 @@ namespace tc {
 	return (__VA_ARGS__); \
 }
 
-#define return_decltype_xvalue_by_ref(...) -> decltype(auto) { \
+#define return_decltype_xvalue_by_ref(...) -> decltype((__VA_ARGS__)) { \
 	return (__VA_ARGS__); \
 }
 

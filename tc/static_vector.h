@@ -43,7 +43,7 @@ namespace tc {
 			constexpr size_type size() const& noexcept {
 				return m_iEnd;
 			}
-			constexpr static size_type capacity() noexcept {
+			static constexpr size_type capacity() noexcept {
 				return N;
 			}
 		};

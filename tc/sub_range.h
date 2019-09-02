@@ -130,12 +130,12 @@ namespace tc {
 		template< typename Rng >
 		struct whole_range_sub_range_helper final {
 			template<typename Rhs>
-			constexpr static decltype(auto) begin_index(sub_range<Rng>& lhs, Rhs&&) noexcept {
+			static constexpr decltype(auto) begin_index(sub_range<Rng>& lhs, Rhs&&) noexcept {
 				return tc::base_cast<range_adaptor< sub_range<Rng>, Rng >>(lhs).STATIC_VIRTUAL_METHOD_NAME(begin_index)();
 			}
 
 			template<typename Rhs>
-			constexpr static decltype(auto) end_index(sub_range<Rng>& lhs, Rhs&&) noexcept {
+			static constexpr decltype(auto) end_index(sub_range<Rng>& lhs, Rhs&&) noexcept {
 				return tc::base_cast<range_adaptor< sub_range<Rng>, Rng >>(lhs).STATIC_VIRTUAL_METHOD_NAME(end_index)();
 			}
 		};
@@ -143,33 +143,33 @@ namespace tc {
 		template< typename It >
 		struct whole_range_sub_range_helper<iterator_base<It>> final {
 			template<typename Rhs>
-			constexpr static auto begin_index(sub_range<iterator_base<It>>&, Rhs&& rng) noexcept
+			static constexpr auto begin_index(sub_range<iterator_base<It>>&, Rhs&& rng) noexcept
 				return_decltype_xvalue_by_val(tc::iterator2index(tc::begin(rng)))
 
 			template<typename Rhs>
-			constexpr static auto end_index(sub_range<iterator_base<It>>&, Rhs&& rng) noexcept
+			static constexpr auto end_index(sub_range<iterator_base<It>>&, Rhs&& rng) noexcept
 				return_decltype_xvalue_by_val(tc::iterator2index(tc::end(rng)))
 		};
 
 		template< typename T >
 		struct whole_range_sub_range_helper<iterator_base<T*>> final {
 			template<typename Rhs>
-			constexpr static auto begin_index(sub_range<iterator_base<T*>>&, Rhs&& rng) noexcept
+			static constexpr auto begin_index(sub_range<iterator_base<T*>>&, Rhs&& rng) noexcept
 				return_decltype(tc::ptr_begin(rng))
 
 			template<typename Rhs>
-			constexpr static auto end_index(sub_range<iterator_base<T*>>&, Rhs&& rng) noexcept
+			static constexpr auto end_index(sub_range<iterator_base<T*>>&, Rhs&& rng) noexcept
 				return_decltype(tc::ptr_end(rng))
 		};
 
 		template<typename Rng>
 		struct sub_range_base_range_helper final {
 			template<typename Rhs, std::enable_if_t<!tc::is_instance<tc::sub_range, std::remove_reference_t<Rhs>>::value>* = nullptr>
-			constexpr static auto base_range(Rhs&& rhs) noexcept
+			static constexpr auto base_range(Rhs&& rhs) noexcept
 				return_decltype_xvalue_by_ref(std::forward<Rhs>(rhs))
 
 			template<typename Rhs, std::enable_if_t<tc::is_instance<tc::sub_range, std::remove_reference_t<Rhs>>::value>* = nullptr>
-			constexpr static decltype(auto) base_range(Rhs&& rhs) noexcept {
+			static constexpr decltype(auto) base_range(Rhs&& rhs) noexcept {
 				return std::forward<Rhs>(rhs).base_range();
 			}
 		};
@@ -177,7 +177,7 @@ namespace tc {
 		template<typename It>
 		struct sub_range_base_range_helper<iterator_base<It>> final {
 			template<typename Rhs>
-			constexpr static auto base_range(Rhs&&) noexcept
+			static constexpr auto base_range(Rhs&&) noexcept
 				return_decltype(iterator_base<It>())
 		};
 	}
@@ -596,15 +596,6 @@ namespace tc {
 	}
 
 	template< typename Rng >
-	auto begin_not_end(
-		Rng&& rng
-	) noexcept ->decltype(tc::begin(rng)) {
-		auto it=tc::begin(rng);
-		_ASSERT(tc::end(rng) != it);
-		return it;
-	}
-
-	template< typename Rng >
 	auto begin_next_not_end(
 		Rng&& rng,
 		typename boost::range_size< std::remove_reference_t<Rng> >::type n = 1
@@ -623,16 +614,6 @@ namespace tc {
 		_ASSERT(tc::end(rng) != it);
 		return it;
 	}
-
-	// Write as macros to keep temporary iterators alive.
-	// By standard, the lifetime of a reference is limited to the lifetime of the iterator.
-	#define tc_front(rng) (*tc::begin_not_end(rng))
-	#define tc_only(rng) (*tc::only<tc::return_element>(rng))
-	#define tc_back(rng) (*tc::end_prev(rng))
-	#define tc_at(rng, i) (*tc::begin_next_not_end(rng,(i)))
-	#define tc_linear_at(rng, i) (*tc::linear_begin_next_not_end(rng,(i)))
-	#define tc_linear_back(rng) (*tc::linear_end_prev(rng))
-	#define tc_reverse_at(rng, i) (*tc::end_prev((rng),(i)+1))
 
 	////////////////////////////////////////////////////////////////////////////////////
 	// take/drop_*_first/last_n
@@ -920,6 +901,20 @@ namespace tc {
 					return static_cast<type>(boost::prior(it));
 				} else {
 					return type{}; // value initialization to initialize pointers to nullptr
+				}
+			}
+		};
+
+		template< typename Rng >
+		struct return_element_before_or_front final {
+			using type = element_t< typename boost::range_iterator<Rng>::type >;
+			static constexpr bool requires_iterator = true;
+
+			static type pack_border(typename boost::range_iterator<Rng>::type it, Rng&& rng) noexcept {
+				if( it != tc::begin(rng) ) {
+					return static_cast<type>(boost::prior(it));
+				} else {
+					return tc::begin(rng);
 				}
 			}
 		};
@@ -1522,6 +1517,7 @@ namespace tc {
 	using no_adl::return_void;
 	using no_adl::return_element_before;
 	using no_adl::return_element_before_or_null;
+	using no_adl::return_element_before_or_front;
 	using no_adl::return_element_after;
 	using no_adl::return_element_after_or_null;
 	using no_adl::return_border;
@@ -1558,6 +1554,30 @@ namespace tc {
 	using no_adl::return_drop_after_or_all;
 	using no_adl::return_view;
 	using no_adl::return_view_or_empty;
+
+	template <template<typename> class RangeReturn, typename Rng>
+	decltype(auto) begin_element(
+		Rng&& rng
+	) noexcept {
+		auto const itEnd = tc::end(rng);
+		auto const itBegin = tc::begin(rng);
+		if (itBegin==itEnd) {
+			return RangeReturn<Rng>::pack_no_element(std::forward<Rng>(rng));
+		} else {
+			return RangeReturn<Rng>::pack_element(itBegin, std::forward<Rng>(rng), *itBegin);
+		}
+	}
+
+	// Write as macros to keep temporary iterators alive.
+	// By standard, the lifetime of a reference is limited to the lifetime of the iterator.
+	// for ranges without iterators, use tc::linear_at<>
+	#define tc_front(rng) (*tc::begin_element<tc::return_element>(rng))
+	#define tc_only(rng) (*tc::only<tc::return_element>(rng))
+	#define tc_back(rng) (*tc::end_prev(rng))
+	#define tc_at(rng, i) (*tc::begin_next_not_end(rng,(i)))
+	#define tc_linear_at(rng, i) (*tc::linear_begin_next_not_end(rng,(i)))
+	#define tc_linear_back(rng) (*tc::linear_end_prev(rng))
+	#define tc_reverse_at(rng, i) (*tc::end_prev((rng),(i)+1))
 
 	//-------------------------------------------------------------------------------------------------------------------------
 	// with_optional/transform_optional/only/if_non_empty_with_[only/front]
@@ -1868,7 +1888,7 @@ namespace tc {
 	static_assert(!tc::is_range_with_iterators< void const* >::value);
 
 	template<typename Rng, std::enable_if_t<has_ptr_begin<Rng>::value>* = nullptr>
-	auto as_blob(Rng&& rng) noexcept {
+	auto range_as_blob(Rng&& rng) noexcept {
 		static_assert( std::is_trivially_copyable< tc::range_value_t< Rng > >::value, "as_blob only works on std::is_trivially_copyable types" );
 		using cv_value_type = std::remove_pointer_t<decltype(tc::ptr_begin(rng))>;
 		return tc::make_iterator_range( 
@@ -1877,9 +1897,9 @@ namespace tc {
 		);
 	}
 
-	template<typename T, std::enable_if_t<!tc::is_range_with_iterators< T >::value>* = nullptr>
+	template<typename T, std::enable_if_t<std::is_trivially_copyable<std::remove_reference_t<T>>::value>* = nullptr>
 	auto as_blob(T&& t) noexcept {
-		return as_blob( tc::single(/* no std::forward<T> */ t) );
+		return tc::range_as_blob( tc::single(/* no std::forward<T> */ t) );
 	}
 
 	namespace assert_no_overlap_impl {

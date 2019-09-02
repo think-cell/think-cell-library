@@ -32,8 +32,8 @@ namespace tc {
 		DEFINE_CONTIGUOUS_ENUM(lohi,lohi::lo,lohi::end__)
 	}
 	using lohi_adl::lohi;
-	constexpr lohi lo=lohi::lo;
-	constexpr lohi hi=lohi::hi;
+	inline constexpr lohi lo=lohi::lo;
+	inline constexpr lohi hi=lohi::hi;
 
 	constexpr EAlign lohi_to_ealign(lohi lohi_) noexcept {
 		if( lohi::lo == lohi_ ) {

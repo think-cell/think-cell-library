@@ -8,6 +8,7 @@
 
 #include "range.t.h"
 #include "type_traits.h"
+#include "noncopyable.h"
 
 
 STATICASSERTSAME(tc::remove_rvalue_reference_t<int>, int);
@@ -26,15 +27,15 @@ STATICASSERTSAME(tc::remove_rvalue_reference_t<std::vector<int> const&&>, std::v
 namespace void_t_test {
 	template< typename T, typename=void >
 	struct Foo {
-		constexpr static int const value = 0;
+		static constexpr int const value = 0;
 	};
 	template< typename T >
 	struct Foo<T, tc::void_t<typename T::type1>> {
-		constexpr static int const value = 1;
+		static constexpr int const value = 1;
 	};
 	template< typename T >
 	struct Foo<T, tc::void_t<typename T::type2>> {
-		constexpr static int const value = 2;
+		static constexpr int const value = 2;
 	};
 
 	struct Bar0 { };
@@ -899,3 +900,96 @@ UNITTESTDEF(minTest) {
 }
 
 static_assert(!tc::is_safely_constructible<std::basic_string<wchar_t,std::char_traits<wchar_t>,std::allocator<wchar_t>>, wchar_t const* const&, wchar_t const* const&>::value);
+
+namespace is_instance_test {
+	template<typename, typename, typename> struct CTemplate1 : tc::nonmovable {};
+	template<typename, typename, typename> struct CTemplate2 : tc::nonmovable {};
+
+	using CInstantiation1 = CTemplate1<int, bool, void>;
+	using CInstantiation2 = CTemplate2<bool, void, int>;
+
+	static_assert(tc::is_instance<CTemplate1, CInstantiation1>::value);
+	STATICASSERTSAME((tc::type::list<int, bool, void>), (typename tc::is_instance<CTemplate1, CInstantiation1>::arguments));
+
+	static_assert(!tc::is_instance<CTemplate1, CInstantiation2>::value);
+
+	static_assert(!tc::is_instance<CTemplate2, CInstantiation1>::value);
+
+	static_assert(tc::is_instance<CTemplate2, CInstantiation2>::value);
+	STATICASSERTSAME((tc::type::list<bool, void, int>), (typename tc::is_instance<CTemplate2, CInstantiation2>::arguments));
+}
+
+namespace is_instance2_test {
+	template<typename, typename, bool> struct CTemplate1 : tc::nonmovable {};
+	template<typename, typename, bool> struct CTemplate2 : tc::nonmovable {};
+
+	using CInstantiation1 = CTemplate1<int, bool, true>;
+	using CInstantiation2 = CTemplate2<bool, void, false>;
+
+	static_assert(tc::is_instance2<CTemplate1, CInstantiation1>::value);
+	STATICASSERTSAME(int, (typename tc::is_instance2<CTemplate1, CInstantiation1>::first_argument));
+	STATICASSERTSAME(bool, (typename tc::is_instance2<CTemplate1, CInstantiation1>::second_argument));
+	STATICASSERTEQUAL(true, (tc::is_instance2<CTemplate1, CInstantiation1>::third_argument));
+
+	static_assert(!tc::is_instance2<CTemplate1, CInstantiation2>::value);
+
+	static_assert(!tc::is_instance2<CTemplate2, CInstantiation1>::value);
+
+	static_assert(tc::is_instance2<CTemplate2, CInstantiation2>::value);
+	STATICASSERTSAME(bool, (typename tc::is_instance2<CTemplate2, CInstantiation2>::first_argument));
+	STATICASSERTSAME(void, (typename tc::is_instance2<CTemplate2, CInstantiation2>::second_argument));
+	STATICASSERTEQUAL(false, (tc::is_instance2<CTemplate2, CInstantiation2>::third_argument));
+}
+
+namespace is_instance_or_derived_test {
+	template<typename, typename> struct CTemplate1 : tc::nonmovable {};
+	template<typename T> struct CTemplate1Int : CTemplate1<int, T> {};
+	template<typename, typename> struct CTemplate2 : tc::nonmovable {
+		// Catch-all constructor for implicit conversion, should be ignored.
+		template<typename T> CTemplate2(T&&);
+	};
+
+	struct CInstantiation1 : CTemplate1Int<bool> {
+		// Implicit conversions to unrelated type, should be ignored.
+		operator CTemplate2<void, void>();
+		operator CTemplate2<void, void>&();
+		operator CTemplate2<void, void>*();
+	};
+	using CInstantiation2 = CTemplate2<bool, void>;
+
+	static_assert(tc::is_instance_or_derived<CTemplate1, CInstantiation1>::value);
+	STATICASSERTSAME((CTemplate1<int, bool>), (typename tc::is_instance_or_derived<CTemplate1, CInstantiation1>::base_instance));
+	STATICASSERTSAME((tc::type::list<int, bool>), (typename tc::is_instance_or_derived<CTemplate1, CInstantiation1>::arguments));
+
+#if defined(_MSC_VER) && !defined(__clang__)
+	static_assert(tc::is_instance_or_derived<CTemplate1 const volatile, CInstantiation1>::value);
+	STATICASSERTSAME((CTemplate1<int, bool>), (typename tc::is_instance_or_derived<CTemplate1 const volatile, CInstantiation1>::base_instance));
+	STATICASSERTSAME((tc::type::list<int, bool>), (typename tc::is_instance_or_derived<CTemplate1 const volatile, CInstantiation1>::arguments));
+#endif
+
+	static_assert(tc::is_instance_or_derived<CTemplate1, CInstantiation1 const volatile>::value);
+	STATICASSERTSAME((CTemplate1<int, bool>), (typename tc::is_instance_or_derived<CTemplate1, CInstantiation1 const volatile>::base_instance));
+	STATICASSERTSAME((tc::type::list<int, bool>), (typename tc::is_instance_or_derived<CTemplate1, CInstantiation1 const volatile>::arguments));
+
+	static_assert(tc::is_instance_or_derived<CTemplate1Int, CInstantiation1>::value);
+	STATICASSERTSAME((CTemplate1Int<bool>), (typename tc::is_instance_or_derived<CTemplate1Int, CInstantiation1>::base_instance));
+	STATICASSERTSAME((tc::type::list<bool>), (typename tc::is_instance_or_derived<CTemplate1Int, CInstantiation1>::arguments));
+
+	static_assert(!tc::is_instance_or_derived<CTemplate1, CInstantiation2>::value);
+
+	static_assert(!tc::is_instance_or_derived<CTemplate2, CInstantiation1>::value);
+
+	static_assert(tc::is_instance_or_derived<CTemplate2, CInstantiation2>::value);
+	STATICASSERTSAME((CTemplate2<bool, void>), (typename tc::is_instance_or_derived<CTemplate2, CInstantiation2>::base_instance));
+	STATICASSERTSAME((tc::type::list<bool, void>), (typename tc::is_instance_or_derived<CTemplate2, CInstantiation2>::arguments));
+
+	struct CPrivateInsantiation1 : private CTemplate1<int, int> {
+		operator CTemplate1<void, void>();
+		operator CTemplate1<void, void>&();
+		operator CTemplate1<void, void>*();
+	};
+
+	// static_assert(!tc::is_instance_or_derived<CTemplate1, CPrivateInsantiation1>::value);  // Does not compile.
+	static_assert(!tc::is_instance_or_derived<CTemplate1Int, CPrivateInsantiation1>::value);
+	static_assert(!tc::is_instance_or_derived<CTemplate2, CPrivateInsantiation1>::value);
+}

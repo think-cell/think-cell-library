@@ -86,14 +86,14 @@ namespace tc {
 			// their iterators.
 			// TODO: It is probably most sensible to impose the same requirement to this return value as to const_reference,
 			// namely that it is convertible to value_type. A proxy encapsulating const_iterator, which we can create from iterator, would be a fine implementation then.
-			std::conditional_t<
+			constexpr std::conditional_t<
 				std::is_convertible<
 					typename std::iterator_traits<iterator>::reference,
 					typename std::iterator_traits<const_iterator>::reference
 				>::value,
 				typename std::iterator_traits<const_iterator>::reference,
 				typename std::iterator_traits<iterator>::value_type
-			> constexpr dereference_index(index const& idx) const& noexcept {
+			> dereference_index(index const& idx) const& noexcept {
 				return *idx;
 			}
 

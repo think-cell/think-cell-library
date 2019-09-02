@@ -18,11 +18,11 @@ namespace tc {
 	namespace no_adl {
 		template< typename Char, typename Rng, typename Enable = void >
 		struct has_convertible_as_c_str final
-		: std::integral_constant<bool, false> {};
+		: std::false_type {};
 
 		template< typename Char, typename Rng >
-		struct has_convertible_as_c_str< Char, Rng, std::enable_if_t< tc::has_as_c_str<Rng>::value > > final
-		: std::integral_constant<bool, tc::is_safely_convertible<decltype(tc::as_c_str(std::declval<Rng>())), Char*>::value> {};
+		struct has_convertible_as_c_str< Char, Rng, std::enable_if_t<tc::is_safely_convertible<decltype(tc::as_c_str(std::declval<Rng>())), Char*>::value> > final
+		: std::true_type {};
 
 		template< typename Char, typename Str >
 		struct make_c_str_impl final {
@@ -36,6 +36,10 @@ namespace tc {
 
 			operator Char*() /*no &*/ noexcept {
 				return tc::as_c_str(m_str);
+			}
+			
+			operator tc::ptr_range<Char const>() const /*no &*/ noexcept {
+				return m_str;
 			}
 		private:
 			Str m_str;

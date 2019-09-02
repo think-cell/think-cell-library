@@ -354,9 +354,9 @@ namespace tc {
 				if (0x10000 <= n) {
 					if (VERIFYNOTIFY(n < 0x110000)) {
 						if (idx.m_bTrailingSurrogate) {
-							return tc::explicit_cast<uint16_t>((n - 0x10000u & 0x3FFu) + 0xDC00u);
+							return tc::explicit_cast<std::uint16_t>((n - 0x10000u & 0x3FFu) + 0xDC00u);
 						} else {
-							return tc::explicit_cast<uint16_t>(((n - 0x10000u) >> 10u) + 0xD800u);
+							return tc::explicit_cast<std::uint16_t>(((n - 0x10000u) >> 10u) + 0xD800u);
 						}
 					} else {
 						return tc::explicit_cast<tc::char16>(c_chReplacementCharacter);
@@ -364,7 +364,7 @@ namespace tc {
 				} else {
 					_ASSERT(!idx.m_bTrailingSurrogate);
 					_ASSERTNOTIFY(n < 0xD800 || 0xE000 <= n);
-					return tc::explicit_cast<uint16_t>(n);
+					return tc::explicit_cast<std::uint16_t>(n);
 				}
 			}
 

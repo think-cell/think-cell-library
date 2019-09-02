@@ -19,7 +19,7 @@ namespace tc {
 		template<typename It>
 		struct iterator_cache final : tc::nonmovable /*m_ref may contain pointer into m_it*/ {
 		private:
-			DEFINE_MEMBER_AND_ACCESSORS(It, iterator, m_it)
+			DEFINE_MEMBER_AND_ACCESSORS(It, m_it)
 			tc::reference_or_value< typename std::iterator_traits<It>::reference > m_ref;
 
 		public:
@@ -43,7 +43,7 @@ namespace tc {
 
 	template< typename Rng, typename Func, int... i >
 	auto for_each_adjacent_tuple_impl(Rng&& rng, Func func, std::integer_sequence<int, i...>) MAYTHROW -> tc::common_type_t<INTEGRAL_CONSTANT(tc::continue_), decltype(tc::continue_if_not_break(func, *tc::begin(rng), (i, *tc::begin(rng))...))> {
-		constexpr int N= sizeof...(i)+1;
+		static constexpr int N= sizeof...(i)+1;
 		if (tc::size_bounded(rng, N)<N) {
 			return INTEGRAL_CONSTANT(tc::continue_)();
 		} else {
@@ -196,18 +196,107 @@ namespace tc {
 
 	template<typename Rng, typename FuncBegin, typename FuncElem, typename FuncSeparator, typename FuncEnd>
 	constexpr auto framed_for_each(Rng&& rng, FuncBegin funcBegin, FuncElem funcElement, FuncSeparator funcSeparator, FuncEnd funcEnd) MAYTHROW {
-		bool bNotEmpty = false;
-		auto const breakorcontinue = tc::for_each(std::forward<Rng>(rng), [&](auto&& t) MAYTHROW {
-			if(tc::change(bNotEmpty, true)) {
-				RETURNS_VOID(funcBegin());
+		bool bEmpty = true;
+
+		using funcbegin_breakorcontinue_t = decltype(tc::continue_if_not_break(funcBegin));
+
+		// As of c++17, constexpr functions cannot have static variables (even if the variables are constexpr) - Clang correctly complains, but Visual Studio accepts
+		// it. However, as of Visual Studio 19.15.26726, if the variable is not static, and also used inside a lambda, Visual Studio wrongly attempts to capture it,
+		// and forbids the usage of the variable in constant expressions, effectively triggering error C2131: expression did not evaluate to a constant. As a
+		// workaround, a type is used instead.
+		using funcbegin_always_breaks = std::is_same<INTEGRAL_CONSTANT(tc::break_), funcbegin_breakorcontinue_t>;
+
+		// As of Visual Studio compiler 19.15.26726, it's not possible to explicitly specify a common return type (break or continue) for the following lambda. If
+		// provided, the compiler triggers error C2672: 'tc::for_each': no matching overloaded function found. Using auto return type deduction, instead.
+		auto breakorcontinue = tc::for_each(std::forward<Rng>(rng), [&](auto&& t) MAYTHROW {
+			if constexpr(funcbegin_always_breaks::value) {
+				return funcBegin();
 			} else {
-				RETURNS_VOID(funcSeparator());
+				using breakorcontinue_t = tc::common_type_t<
+					funcbegin_breakorcontinue_t,
+					decltype(tc::continue_if_not_break(funcSeparator)),
+					decltype(tc::continue_if_not_break(funcElement, std::forward<decltype(t)>(t)))
+				>;
+
+				if(tc::change(bEmpty, false)) {
+					RETURN_IF_BREAK(boost::implicit_cast<breakorcontinue_t>(tc::continue_if_not_break(funcBegin)));
+				} else {
+					RETURN_IF_BREAK(boost::implicit_cast<breakorcontinue_t>(tc::continue_if_not_break(funcSeparator)));
+				}
+				return boost::implicit_cast<breakorcontinue_t>(tc::continue_if_not_break(funcElement, std::forward<decltype(t)>(t)));
 			}
-			return tc::continue_if_not_break(funcElement, std::forward<decltype(t)>(t));
 		});
-		if(bNotEmpty) {
-			RETURNS_VOID(funcEnd());
+
+		if constexpr(funcbegin_always_breaks::value) {
+			return breakorcontinue;
+		} else {
+			using breakorcontinue_t = tc::common_type_t<decltype(breakorcontinue), decltype(tc::continue_if_not_break(funcEnd))>;
+			if(tc::break_==breakorcontinue || bEmpty) {
+				return boost::implicit_cast<breakorcontinue_t>(breakorcontinue);
+			} else {
+				return boost::implicit_cast<breakorcontinue_t>(tc::continue_if_not_break(funcEnd));
+			}
 		}
-		return breakorcontinue;
 	}
+
+	namespace no_adl {
+		template<typename RngBegin, typename RngRng, typename RngSep, typename RngEnd>
+		struct [[nodiscard]] join_framed_adaptor : tc::value_type_base<join_framed_adaptor<RngBegin, RngRng, RngSep, RngEnd>> {
+			template<typename RngBegin2, typename RngRng2, typename RngSep2, typename RngEnd2>
+			explicit join_framed_adaptor(aggregate_tag_t, RngBegin2&& rngBegin, RngRng2&& baserng, RngSep2&& rngSep, RngEnd2&& rngEnd) noexcept
+				: m_rngBegin(aggregate_tag, std::forward<RngBegin2>(rngBegin))
+				, m_baserng(aggregate_tag, std::forward<RngRng2>(baserng))
+				, m_rngSep(aggregate_tag, std::forward<RngSep2>(rngSep))
+				, m_rngEnd(aggregate_tag, std::forward<RngEnd2>(rngEnd))
+			{}
+
+			template<typename Sink>
+			auto operator()(Sink sink) const& MAYTHROW {
+				return tc::framed_for_each(*m_baserng,
+					[&]() MAYTHROW {
+						return tc::for_each(*m_rngBegin, sink);
+					},
+					[&](auto&& rng) MAYTHROW {
+						return tc::for_each(std::forward<decltype(rng)>(rng), sink);
+					},
+					[&]() MAYTHROW {
+						return tc::for_each(*m_rngSep, sink);
+					},
+					[&]() MAYTHROW {
+						return tc::for_each(*m_rngEnd, tc_move_always(sink));
+					}
+				);
+			}
+
+		private:
+			tc::reference_or_value<RngBegin> m_rngBegin;
+			tc::reference_or_value<RngRng> m_baserng;
+			tc::reference_or_value<RngSep> m_rngSep;
+			tc::reference_or_value<RngEnd> m_rngEnd;
+		};
+
+		template<typename RngBegin, typename RngRng, typename RngSep, typename RngEnd>
+		struct value_type_base<join_framed_adaptor<RngBegin, RngRng, RngSep, RngEnd>, tc::void_t<tc::common_range_value_t<RngBegin, tc::range_value_t<RngRng>, RngSep, RngEnd>>> {
+			using value_type = tc::common_range_value_t<RngBegin, tc::range_value_t<RngRng>, RngSep, RngEnd>;
+		};
+	}
+	using no_adl::join_framed_adaptor;
+
+	template<typename RngBegin, typename RngRng, typename RngSep, typename RngEnd>
+	auto join_framed(RngBegin&& rngBegin, RngRng&& rngrng, RngSep&& rngSep, RngEnd&& rngEnd) noexcept return_ctor(
+		join_framed_adaptor<RngBegin BOOST_PP_COMMA() RngRng BOOST_PP_COMMA() RngSep BOOST_PP_COMMA() RngEnd>,
+		(aggregate_tag, std::forward<RngBegin>(rngBegin), std::forward<RngRng>(rngrng), std::forward<RngSep>(rngSep), std::forward<RngEnd>(rngEnd))
+	)
+
+	template<typename RngBegin, typename RngRng, typename RngEnd>
+	auto join_framed(RngBegin&& rngBegin, RngRng&& rngrng, RngEnd&& rngEnd) noexcept return_ctor(
+		join_framed_adaptor<RngBegin BOOST_PP_COMMA() RngRng BOOST_PP_COMMA() tc::empty_range BOOST_PP_COMMA() RngEnd>,
+		(aggregate_tag, std::forward<RngBegin>(rngBegin), std::forward<RngRng>(rngrng), tc::empty_range(), std::forward<RngEnd>(rngEnd))
+	)
+
+	template<typename RngRng, typename RngSep>
+	auto join_separated(RngRng&& rngrng, RngSep&& rngSep) noexcept return_ctor(
+		join_framed_adaptor<tc::empty_range BOOST_PP_COMMA() RngRng BOOST_PP_COMMA() RngSep BOOST_PP_COMMA() tc::empty_range>,
+		(aggregate_tag, tc::empty_range(), std::forward<RngRng>(rngrng), std::forward<RngSep>(rngSep), tc::empty_range())
+	)
 }

@@ -247,17 +247,17 @@ namespace tc {
 	DEFINE_TAG_TYPE(unused_type)
 
 	template<typename Char>
-	constexpr auto char_ = tc::unused_type;
+	inline constexpr auto char_ = tc::unused_type;
 
 	template<>
-	constexpr auto char_<char> = x3::any_char<typename boost::spirit::traits::char_encoding_from_char<char>::type>();
+	inline constexpr auto char_<char> = x3::any_char<typename boost::spirit::traits::char_encoding_from_char<char>::type>();
 
 	template<>
-	constexpr auto char_<wchar_t> = x3::any_char<typename boost::spirit::traits::char_encoding_from_char<wchar_t>::type>();
+	inline constexpr auto char_<wchar_t> = x3::any_char<typename boost::spirit::traits::char_encoding_from_char<wchar_t>::type>();
 
 #ifdef __clang__
 	template<>
-	constexpr auto char_<char16_t> = x3::any_char<typename boost::spirit::traits::char_encoding_from_char<char16_t>::type>();
+	inline constexpr auto char_<char16_t> = x3::any_char<typename boost::spirit::traits::char_encoding_from_char<char16_t>::type>();
 #endif
 
 	template<typename Char>
@@ -377,7 +377,7 @@ namespace tc {
 	}
 
 	template<typename T>
-	constexpr no_adl::attr_is_type<T> attr_is = {};
+	inline constexpr no_adl::attr_is_type<T> attr_is = {};
 
 	namespace no_adl {
 		template<typename Char>
@@ -406,13 +406,13 @@ namespace tc {
 		return {chFirst, chLast};
 	}
 	template<typename Char>
-	constexpr auto asciidigit = char_range(tc::explicit_cast<Char>('0'), tc::explicit_cast<Char>('9'));
+	inline constexpr auto asciidigit = char_range(tc::explicit_cast<Char>('0'), tc::explicit_cast<Char>('9'));
 
 	template<typename Char>
-	constexpr auto asciilower = char_range(tc::explicit_cast<Char>('a'), tc::explicit_cast<Char>('z'));
+	inline constexpr auto asciilower = char_range(tc::explicit_cast<Char>('a'), tc::explicit_cast<Char>('z'));
 
 	template<typename Char>
-	constexpr auto asciiupper = char_range(tc::explicit_cast<Char>('A'), tc::explicit_cast<Char>('Z'));
+	inline constexpr auto asciiupper = char_range(tc::explicit_cast<Char>('A'), tc::explicit_cast<Char>('Z'));
 
 #ifndef __clang__
 	inline auto UnusedInlineFunctionToWorkaroundCompilerBug() noexcept {
@@ -459,8 +459,8 @@ namespace tc {
 		};
 	}
 
-	constexpr auto blank = no_adl::blank{};
-	constexpr auto space = no_adl::space{};
+	inline constexpr auto blank = no_adl::blank{};
+	inline constexpr auto space = no_adl::space{};
 }
 
 namespace boost { namespace spirit { namespace x3 {
@@ -544,7 +544,7 @@ namespace boost { namespace spirit { namespace x3 {
 }}}
 
 namespace tc {
-    constexpr auto ascii_no_case = x3::ascii_no_case_gen{};
+    inline constexpr auto ascii_no_case = x3::ascii_no_case_gen{};
 
 	template<typename Char, typename T>
 	using symbols = x3::symbols_parser<typename boost::spirit::traits::char_encoding_from_char<tc::decay_t<Char>>::type, T>;
@@ -629,7 +629,7 @@ namespace boost { namespace spirit { namespace x3 {
 	};
 
 	template<typename ID>
-	constexpr auto with_val = with_val_gen<ID>{};
+	inline constexpr auto with_val = with_val_gen<ID>{};
 }}}
 
 ///////////////////////////////
@@ -650,7 +650,7 @@ namespace boost { namespace spirit { namespace x3
 	};
 
 	template <typename context_tag>
-	constexpr auto lazy = lazy_parser<context_tag>{};
+	inline constexpr auto lazy = lazy_parser<context_tag>{};
 }}}
 
 namespace boost { namespace spirit { namespace x3 { namespace traits

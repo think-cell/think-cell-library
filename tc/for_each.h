@@ -21,8 +21,19 @@
 
 namespace tc {
 
-	template<typename Func>
-	using sink_value_t = typename std::remove_reference_t<Func>::sink_value_type;
+	namespace no_adl {
+		template<typename Sink, typename Enable=void>
+		struct sink_value_type_base {};
+
+		template<typename Sink>
+		struct sink_value_type_base<Sink, tc::void_t<typename std::remove_reference_t<Sink>::sink_value_type>> {
+			using sink_value_type = typename std::remove_reference_t<Sink>::sink_value_type;
+		};
+	}
+	using no_adl::sink_value_type_base;
+
+	template<typename Sink>
+	using sink_value_t = typename sink_value_type_base<Sink>::sink_value_type;
 
 	namespace no_adl {
 		template<typename ...T>
@@ -52,31 +63,9 @@ namespace tc {
 			>;
 		};
 	}
-	template<typename ...T>
-	using common_type_break_or_continue_t = typename no_adl::common_type_break_or_continue<tc::decay_t<T>...>::type;
 
 	//-------------------------------------------------------------------------------------------------------------------------
 	// for_each
-
-	namespace detail {
-		template<typename Func, typename... T>
-		constexpr auto ForEarchSpecialRangeParameterPack(tc::decay_t<Func> func) MAYTHROW {
-			using result_type = tc::common_type_break_or_continue_t<decltype(tc::continue_if_not_break(func, T()))...>;
-
-			if constexpr (std::is_same<INTEGRAL_CONSTANT(tc::continue_), result_type>::value) {
-				(func(T()), ...);
-				return INTEGRAL_CONSTANT(tc::continue_)();
-			} else {
-				auto const breakorcontinue = ((tc::continue_ == tc::continue_if_not_break(func, T())) && ...) ? tc::continue_ : tc::break_;
-
-				if constexpr (std::is_same<INTEGRAL_CONSTANT(tc::break_), result_type>::value) {
-					return INTEGRAL_CONSTANT(tc::break_)();
-				} else {
-					return breakorcontinue;
-				}
-			}
-		}
-	}
 
 	namespace no_adl {
 		template< typename Rng, typename Func, typename RngDecayed, typename Enable=void >
@@ -84,7 +73,7 @@ namespace tc {
 
 		template< typename Enumset, typename Func, typename Enum >
 		struct ForEachSpecialRange<Enumset, Func, tc::enumset<Enum>, tc::void_t<tc::common_type_t<decltype(tc::continue_if_not_break(std::declval<tc::decay_t<Func>&>(), std::declval<Enum&>())), INTEGRAL_CONSTANT(tc::continue_)>>> {
-			constexpr static auto fn(Enumset&& enumset, tc::decay_t<Func> func) MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, std::declval<Enum&>())), INTEGRAL_CONSTANT(tc::continue_)> {
+			static constexpr auto fn(Enumset&& enumset, tc::decay_t<Func> func) MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, std::declval<Enum&>())), INTEGRAL_CONSTANT(tc::continue_)> {
 				for (Enum e = tc::contiguous_enum<Enum>::begin(); e != tc::contiguous_enum<Enum>::end(); ++e) {
 					if ((enumset&e)) {
 						RETURN_IF_BREAK(tc::continue_if_not_break(func, e));
@@ -94,18 +83,41 @@ namespace tc {
 			}
 		};
 
+		template< typename Func, typename TypeList, typename Enable=void >
+		struct ForEarchSpecialRangeParameterPack;
+
+		template< typename Func, typename ...T >
+		struct ForEarchSpecialRangeParameterPack<Func, tc::type::list<T...>, tc::void_t<typename common_type_break_or_continue<decltype(tc::continue_if_not_break(std::declval<tc::decay_t<Func>&>(), T()))...>::type>> final {
+			static constexpr auto fn(tc::decay_t<Func> func) MAYTHROW {
+				using result_type = typename common_type_break_or_continue<decltype(tc::continue_if_not_break(func, T()))...>::type;
+
+				if constexpr (std::is_same<INTEGRAL_CONSTANT(tc::continue_), result_type>::value) {
+					(func(T()), ...);
+					return INTEGRAL_CONSTANT(tc::continue_)();
+				} else {
+					auto const breakorcontinue = ((tc::continue_ == tc::continue_if_not_break(func, T())) && ...) ? tc::continue_ : tc::break_;
+
+					if constexpr (std::is_same<INTEGRAL_CONSTANT(tc::break_), result_type>::value) {
+						return INTEGRAL_CONSTANT(tc::break_)();
+					} else {
+						return breakorcontinue;
+					}
+				}
+			}
+		};
+
 		template< typename IntSequence, typename Func, typename TIndex, TIndex... Is >
 		struct ForEachSpecialRange<IntSequence, Func, std::integer_sequence<TIndex, Is...>> {
-			constexpr static auto fn(IntSequence&&, Func&& func) MAYTHROW {
-				return detail::ForEarchSpecialRangeParameterPack<Func, std::integral_constant<TIndex, Is>...>(std::forward<Func>(func));
-			}
+			static constexpr auto fn(IntSequence&&, Func&& func) MAYTHROW return_decltype(
+				ForEarchSpecialRangeParameterPack<Func BOOST_PP_COMMA() tc::type::list<std::integral_constant<TIndex BOOST_PP_COMMA() Is>...>>::fn(std::forward<Func>(func))
+			)
 		};
 
 		template< typename TypeList, typename Func, typename... Ts >
 		struct ForEachSpecialRange<TypeList, Func, tc::type::list<Ts...>> {
-			constexpr static auto fn(TypeList&&, Func&& func) MAYTHROW {
-				return detail::ForEarchSpecialRangeParameterPack<Func, tc::type::identity<Ts>...>(std::forward<Func>(func));
-			}
+			static constexpr auto fn(TypeList&&, Func&& func) MAYTHROW return_decltype(
+				ForEarchSpecialRangeParameterPack<Func BOOST_PP_COMMA() tc::type::list<tc::type::identity<Ts>...>>::fn(std::forward<Func>(func))
+			)
 		};
 
 		template<typename T, T... I>
@@ -119,7 +131,7 @@ namespace tc {
 			std::is_void<decltype(std::declval<Rng>()(std::declval<Func>()))>::value ||
 			std::is_same<decltype(std::declval<Rng>()(std::declval<Func>())), INTEGRAL_CONSTANT(tc::continue_)>::value
 		>> {
-			constexpr static INTEGRAL_CONSTANT(tc::continue_) fn(Rng&& rng, Func&& func) MAYTHROW {
+			static constexpr INTEGRAL_CONSTANT(tc::continue_) fn(Rng&& rng, Func&& func) MAYTHROW {
 				std::forward<Rng>(rng)( tc::make_ensure_non_breaking_functor<Func>(std::forward<Func>(func)) );
 				return {};
 			}
@@ -129,7 +141,7 @@ namespace tc {
 		struct ForEachElement<Rng, Func, RngDecayed, std::enable_if_t<
 			std::is_same<decltype(std::declval<Rng>()(std::declval<Func>())), INTEGRAL_CONSTANT(tc::break_)>::value
 		>> {
-			constexpr static INTEGRAL_CONSTANT(tc::break_) fn(Rng&& rng, Func&& func) MAYTHROW {
+			static constexpr INTEGRAL_CONSTANT(tc::break_) fn(Rng&& rng, Func&& func) MAYTHROW {
 				std::forward<Rng>(rng)( tc::make_ensure_always_breaking_functor<Func>(std::forward<Func>(func)) );
 				return {};
 			}
@@ -139,7 +151,7 @@ namespace tc {
 		struct ForEachElement<Rng, Func, RngDecayed, std::enable_if_t<
 			std::is_same<decltype(std::declval<Rng>()(std::declval<Func>())), tc::break_or_continue>::value
 		>> {
-			constexpr static tc::break_or_continue fn(Rng&& rng, Func&& func) MAYTHROW {
+			static constexpr tc::break_or_continue fn(Rng&& rng, Func&& func) MAYTHROW {
 				return std::forward<Rng>(rng)( std::forward<Func>(func) );
 			}
 		};
@@ -154,7 +166,7 @@ namespace tc {
 
 		template< typename Rng, typename Func, typename RngDecayed >
 		struct ForEachElement<Rng, Func, RngDecayed, std::enable_if_t<is_invocable_on_range_reference<Rng, Func, RngDecayed>::value>> {
-			constexpr static auto fn(Rng&& rng, tc::decay_t<Func> func) MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, *tc::begin(rng))), INTEGRAL_CONSTANT(tc::continue_)> {
+			static constexpr auto fn(Rng&& rng, tc::decay_t<Func> func) MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, *tc::begin(rng))), INTEGRAL_CONSTANT(tc::continue_)> {
 				auto const itEnd=tc::end(rng);
 				for(auto it = tc::begin(rng); it!= itEnd; ++it) {
 					RETURN_IF_BREAK( tc::continue_if_not_break(func, *it) );
@@ -183,7 +195,7 @@ namespace tc {
 	namespace no_adl {
 		template< typename Tuple, typename Func, typename... Ts >
 		struct ForEachSpecialRange<Tuple, Func, std::tuple<Ts...>> {
-			constexpr static auto fn(Tuple&& tuple, tc::decay_t<Func> func) MAYTHROW {
+			static constexpr auto fn(Tuple&& tuple, tc::decay_t<Func> func) MAYTHROW {
 				return tc::for_each(
 					std::make_index_sequence<std::tuple_size<std::remove_reference_t<Tuple>>::value>(),
 					[&](auto nconstIndex) MAYTHROW {

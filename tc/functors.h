@@ -134,13 +134,13 @@ DEFINE_CAST_(const_cast)
 // Note: if you want to capture something in the parameter list, you should not use this macro but write your own lambda and make sure it's safe.
 #ifndef __clang__ // MSVC 15.8.0 sometimes has problem identifying lambda parameter in noexcept(expression). TODO: This is fixed in VS2019.
 #define TC_MEM_FN(...) \
-	[](auto&& _) MAYTHROW -> decltype(auto) { \
-		return std::forward<decltype(_)>(_)__VA_ARGS__; \
+	[](auto&& _, auto&&... args) MAYTHROW -> decltype(auto) { \
+		return std::forward<decltype(_)>(_)__VA_ARGS__(std::forward<decltype(args)>(args)...); \
 	}
 #else
 #define TC_MEM_FN(...) \
-	[](auto&& _) noexcept(noexcept(std::forward<decltype(_)>(_)__VA_ARGS__)) -> decltype(auto) { \
-		return std::forward<decltype(_)>(_)__VA_ARGS__; \
+	[](auto&& _, auto&&... args) noexcept(noexcept(std::forward<decltype(_)>(_)__VA_ARGS__(std::declval<decltype(args)>()...))) -> decltype(auto) { \
+		return std::forward<decltype(_)>(_)__VA_ARGS__(std::forward<decltype(args)>(args)...); \
 	}
 #endif
 

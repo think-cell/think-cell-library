@@ -168,30 +168,41 @@ namespace tc {
 		using type = unsigned char const*;
 	};
 
-	// no danger of aliasing because Src is not a pointer:
-	template< typename Dst, typename Src, std::enable_if_t<!(
-		std::is_pointer<Src>::value && std::is_pointer<Dst>::value
-	)>* = nullptr>
-	Dst bit_cast( Src const& src ) noexcept {
-		STATICASSERTSAME(  tc::remove_cvref_t<Dst>, Dst  );
-		STATICASSERTEQUAL(sizeof(Dst), sizeof(Src),"bit_cast source and destination must be same size");
-		static_assert(
-			(std::is_trivially_copyable<Dst>::value && std::is_trivially_copyable<Src>::value) ||
-			(std::is_member_function_pointer<Dst>::value && std::is_same<Src,void const*>::value) ||
-			(std::is_same<Dst,void const*>::value && std::is_member_function_pointer<Src>::value)
-		);
+	template<typename Dst>
+	Dst bit_cast_range(tc::ptr_range<unsigned char const> src) noexcept {
+		STATICASSERTSAME(tc::remove_cvref_t<Dst>, Dst);
+		_ASSERTEQUAL(tc::size(src), sizeof(Dst));
+		static_assert(std::is_trivially_copyable< Dst >::value);
 		Dst dst;
-		std::memcpy(std::addressof(dst), std::addressof(src), sizeof(dst));
+		std::memcpy(std::addressof(dst), tc::ptr_begin(src), sizeof(dst));
 		return dst;
 	}
 
-	// danger of aliasing because Src is a pointer:
-	template< typename Dst, typename Src, std::enable_if_t<
+	template<typename Dst, typename Src, std::enable_if_t<tc::has_ptr_begin<Src>::value>* = nullptr>
+	Dst bit_cast_range(Src const& src) noexcept {
+		return tc::bit_cast_range<Dst>(tc::range_as_blob(src));
+	}
+
+	// no danger of aliasing
+	template<typename Dst, typename Src, std::enable_if_t<!(
+		std::is_pointer<Src>::value && std::is_pointer<Dst>::value
+	)>* = nullptr>
+	Dst bit_cast(Src const& src) noexcept {
+		STATICASSERTSAME(tc::remove_cvref_t<Dst>, Dst );
+		STATICASSERTEQUAL(sizeof(Dst), sizeof(Src), "bit_cast source and destination must be same size");
+		static_assert(std::is_trivially_copyable<Dst>::value && std::is_trivially_copyable<Src>::value);
+		static_assert(!std::is_member_function_pointer<Dst>::value);
+		static_assert(!std::is_member_function_pointer<Src>::value || !std::is_pointer<Dst>::value); // SAssertAdjustor
+		return tc::bit_cast_range<Dst>(tc::as_blob(src));
+	}
+
+	// danger of aliasing
+	template<typename Dst, typename Src, std::enable_if_t<
 		std::is_pointer<Src>::value && std::is_pointer<Dst>::value
 	>* = nullptr>
-	typename aliasing_ptr< std::remove_pointer_t<Dst> >::type bit_cast( Src const& src ) noexcept {
-		STATICASSERTSAME( tc::remove_cvref_t<Dst>, Dst );
-		return typename aliasing_ptr< std::remove_pointer_t<Dst> >::type(reinterpret_cast<Dst>(src));
+	typename aliasing_ptr<std::remove_pointer_t<Dst>>::type bit_cast(Src const& src) noexcept {
+		STATICASSERTSAME(tc::remove_cvref_t<Dst>, Dst);
+		return typename aliasing_ptr<std::remove_pointer_t<Dst>>::type(reinterpret_cast<Dst>(src));
 	}
 }
 

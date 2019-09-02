@@ -433,71 +433,30 @@ namespace tc {
 		tc::assert_no_null_terminator(rng);
 	}
 
-#if defined _DEBUG && !defined __clang__
-	namespace no_adl {
-		template<typename Cont>
-		struct container_with_sentinel final {
-			using type = Cont;
-		};
-
-		template<typename T, tc::static_vector_size_t N>
-		struct container_with_sentinel<tc::static_vector<T, N>> final {
-			using type = tc::static_vector<T, N + 1>;
-		};
-	}
-#endif
-
-	template<typename Cont, typename Func>
-	Cont get_truncating_buffer(Func func) noexcept {
-		static_assert( tc::is_decayed<Cont>::value );
-
-		// sentinel to detect buffer overrun
-		constexpr typename boost::range_size<Cont>::type nSentinel=
-#if defined _DEBUG && !defined __clang__
-			1;
-		typename no_adl::container_with_sentinel<Cont>::type
-#else
-			0;
-		Cont
-#endif				
-			cont;
-		tc::cont_clear(cont, 0<cont.capacity() ? cont.capacity() : tc::explicit_cast<typename Cont::size_type>(8)/*, boost::container::default_init*/);
-
-		for (;;) {
-			auto const nSize =
-#if defined _DEBUG && !defined __clang__
-			 [&]() noexcept {
-				tc::uninitialize(tc_back(cont));
-				scope_exit( _ASSERTDEBUG( !tc::check_initialized(tc_back(cont))) );
-				return 
-#endif
-					func(tc::ptr_begin(cont), tc::size(cont)-nSentinel);
-#if defined _DEBUG && !defined __clang__
-			}();
-#endif
-			if (nSize < tc::size(cont)-nSentinel) {
-				_ASSERT(0 <= nSize);
-				tc::take_first_inplace(cont, nSize);
-				return
-#if defined _DEBUG && !defined __clang__
-					tc::explicit_cast<Cont>(cont)
-#else
-					cont
-#endif
-				;
-			}
-			_ASSERTEQUAL(nSize, tc::size(cont)-nSentinel);
-			tc::cont_clear(cont,tc::cont_extended_memory(cont));
-		}
-	}
-
 	namespace get_buffer_detail {
+#if defined _DEBUG && !defined __clang__
+		namespace no_adl {
+			template<typename Cont>
+			struct container_with_sentinel final {
+				using type = Cont;
+			};
+
+			template<typename T, tc::static_vector_size_t N>
+			struct container_with_sentinel<tc::static_vector<T, N>> final {
+				using type = tc::static_vector<T, N + 1>;
+			};
+		}
+#endif
+
+		/* Calls func(pBuffer, nBufferSize) with buffers of increasing size; func may read into
+		[pBuffer, pBuffer+nBufferSize) and return nSize, which is either the correct size of the
+		buffer (if nSize <= nBufferSize) or an estimate otherwise. */
 		template<typename Cont, typename Func>
-		Cont get_sized_buffer_may_be_null_terminated(Func func) MAYTHROW {
+		Cont get_buffer_allowing_nulls(Func func) MAYTHROW {
 			static_assert( tc::is_decayed<Cont>::value );
 
 			// sentinel to detect buffer overrun
-			constexpr typename boost::range_size<Cont>::type nSentinel=
+			static constexpr typename boost::range_size<Cont>::type nSentinel=
 #if defined _DEBUG && !defined __clang__
 				1;
 			typename no_adl::container_with_sentinel<Cont>::type
@@ -506,57 +465,97 @@ namespace tc {
 			Cont
 #endif
 				cont;
-			static_assert( std::is_trivially_copyable<tc::decay_t<decltype(*tc::ptr_begin(cont))>>::value );
-			tc::cont_clear(cont,tc::max(cont.capacity(),nSentinel)/*, boost::container::default_init*/);
+			if (0 == cont.capacity()) {
+				tc::cont_reserve(cont, 8);
+			}
 
 			for (;;) {
-				auto const nSize = 
+				tc::cont_clear(cont, cont.capacity()/*, boost::container::default_init*/); // Allow func to use the whole allocated buffer
+#if defined _DEBUG && !defined __clang__
+				tc::for_each(tc::drop_last(cont, nSentinel), [](auto& x) noexcept { UNINITIALIZED(x); } );
+#endif
+				auto const nSize =
 #if defined _DEBUG && !defined __clang__
 				 [&]() MAYTHROW {
-					tc::fill_with_dead_pattern(tc_back(cont));
-					scope_exit( tc::assert_dead_pattern(tc_back(cont)) );
+					tc::uninitialize(tc_back(cont));
+					scope_exit( tc::assert_uninitialized(tc_back(cont)) );
 					return 
 #endif
-					func(tc::ptr_begin(cont), tc::size(cont)-nSentinel); // MAYTHROW
+						func(tc::ptr_begin(cont), tc::size(cont)-nSentinel);
 #if defined _DEBUG && !defined __clang__
 				}();
 #endif
 				if (nSize <= tc::size(cont)-nSentinel) {
 					_ASSERT(0 <= nSize);
 					tc::take_first_inplace(cont, nSize);
+					if (!tc::empty(cont)) _ASSERTINITIALIZED(tc_back(cont));
 					return
 #if defined _DEBUG && !defined __clang__
-						tc::explicit_cast<Cont>(tc_move(cont))
+						tc::explicit_cast<Cont>(cont)
 #else
 						cont
 #endif
 					;
 				}
-				tc::cont_clear(cont,nSize+nSentinel);
+				tc::cont_reserve(cont, nSize+nSentinel); // The container must grow bigger, but let cont_reserve decide by how much
 			}
 		}
-	} // namespace get_buffer_detail
+
+		template<typename Cont, typename Func>
+		Cont get_truncating_buffer_allowing_nulls(Func func) noexcept {
+			return tc::get_buffer_detail::get_buffer_allowing_nulls<Cont>([&](auto pBuffer, auto nBufferSize) noexcept {
+				auto nSize = func(pBuffer, nBufferSize);
+				if (nSize == nBufferSize) {
+					return nSize+1; // Any return value larger than nBufferSize causes a retry with a larger buffer
+				} else {
+					_ASSERT(nSize < nBufferSize);
+					return nSize;
+				}
+			});
+		}
+	}
 
 	template<typename Cont, typename Func>
-	Cont get_sized_buffer(Func&& func) MAYTHROW {
-		auto cont=tc::get_buffer_detail::get_sized_buffer_may_be_null_terminated<Cont>(std::forward<Func>(func)); // MAYTHROW
+	Cont get_truncating_buffer(Func&& func) noexcept {
+		auto cont=tc::get_buffer_detail::get_truncating_buffer_allowing_nulls<Cont>(std::forward<Func>(func));
 		tc::assert_no_null_terminator(cont);
 		return cont;
 	}
 
 	template<typename Cont, typename Func>
-	Cont get_sized_null_terminated_buffer(Func&& func) MAYTHROW {
-		static_assert( tc::is_char< tc::range_value_t<Cont> >::value );
-		auto cont=tc::get_buffer_detail::get_sized_buffer_may_be_null_terminated<Cont>(std::forward<Func>(func)); // MAYTHROW
+	Cont get_truncating_null_terminated_buffer(Func&& func) noexcept {
+		auto cont=tc::get_buffer_detail::get_truncating_buffer_allowing_nulls<Cont>(std::forward<Func>(func));
 		tc::remove_null_terminator(cont);
 		return cont;
 	}
 
 	template<typename Cont, typename Func>
-	Cont get_sized_buffer_may_be_null_terminated(Func&& func) MAYTHROW {
-		static_assert(tc::is_char< tc::range_value_t<Cont> >::value);
-		return tc::get_buffer_detail::get_sized_buffer_may_be_null_terminated<Cont>(std::forward<Func>(func)); // MAYTHROW
+	Cont get_buffer(Func&& func) MAYTHROW {
+		auto cont=tc::get_buffer_detail::get_buffer_allowing_nulls<Cont>(std::forward<Func>(func)); // MAYTHROW
+		tc::assert_no_null_terminator(cont);
+		return cont;
 	}
+
+	template<typename Cont, typename Func>
+	Cont get_null_terminated_buffer(Func&& func) MAYTHROW {
+		static_assert( tc::is_char< tc::range_value_t<Cont> >::value );
+		auto cont=tc::get_buffer_detail::get_buffer_allowing_nulls<Cont>(std::forward<Func>(func)); // MAYTHROW
+		tc::remove_null_terminator(cont);
+		return cont;
+	}
+
+	template<typename Cont, typename Func>
+	Cont get_buffer_may_be_null_terminated(Func&& func) MAYTHROW {
+		static_assert(tc::is_char< tc::range_value_t<Cont> >::value);
+		auto cont = tc::get_buffer_detail::get_buffer_allowing_nulls<Cont>(std::forward<Func>(func)); // MAYTHROW
+		if (tc_back(cont) == tc::explicit_cast< tc::range_value_t<Cont> >('\0')) {
+			tc::remove_null_terminator(cont);
+		} else {
+			tc::assert_no_null_terminator(cont);
+		}
+		return cont;
+	}
+
 
 	template<typename... MultiIndexArgs, typename K, typename... ValueTypeCtorArgs >
 	std::pair< typename boost::range_iterator<boost::multi_index::detail::hashed_index<MultiIndexArgs...>>::type, bool >
@@ -936,5 +935,17 @@ namespace tc {
 				return tc::get<T>(std::forward<decltype(var)>(var));
 			}
 		);
+	}
+
+	template< template<typename> class RangeReturn, typename Rng, typename T, std::enable_if_t<!RangeReturn<Rng>::requires_iterator>* = nullptr >
+	typename RangeReturn<Rng>::type linear_at(Rng&& rng, T n) noexcept {
+		return tc::find_first_if<RangeReturn>(std::forward<Rng>(rng), [&](auto const&) noexcept {
+			if(0==n) {
+				return true;
+			} else {
+				--n;
+				return false;
+			}
+		});
 	}
 }

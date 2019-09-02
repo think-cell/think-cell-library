@@ -19,22 +19,22 @@ STATICASSERTSAME((tc::type::list<char const*, tc::char16 const*>), (tc::type::fi
 
 STATICASSERTSAME(char const*, (tc::type::find_unique_if_t<tc::type::list<char, char const*, int, double, std::vector<int>, void>, tc::is_char_range>));
 STATICASSERTEQUAL(0, (tc::type::find_unique_if<tc::type::list<char const*, char, int, double, std::vector<int>, void>, tc::is_char_range>::index));
-static_assert(tc::type::has_unique_if<tc::type::list<char, char const*, int, double, std::vector<int>, void>, tc::is_char_range>::value);
+static_assert(tc::type::find_unique_if<tc::type::list<char, char const*, int, double, std::vector<int>, void>, tc::is_char_range>::found);
 
 static_assert(tc::type::curry<std::is_same, char>::type<char>::value);
 static_assert(!tc::type::curry<std::is_same, char>::type<unsigned char>::value);
 
 STATICASSERTEQUAL(5, (tc::type::find_unique<tc::type::list<char, int, double, char const*, std::vector<int>, void>, void>::index));
 STATICASSERTSAME(tc::type::find_unique_if_result::type_not_found, (tc::type::find_unique<tc::type::list<char, int, double, char const*, std::vector<int>>, void>));
-static_assert(tc::type::has_unique<tc::type::list<char, int, double, char const*, std::vector<int>, void>, void>::value);
+static_assert(tc::type::find_unique<tc::type::list<char, int, double, char const*, std::vector<int>, void>, void>::found);
 
 //STATICASSERTSAME(char const*, tc::type::find_unique_if_t<tc::type::list<char, char const*, int, double, std::vector<int>, std::string, void>, tc::is_char_range>);
 //using type = tc::type::find_unique_if_t<tc::type::list<char, int, double, std::vector<int>, void>, tc::is_char_range>;
-static_assert(!tc::type::has_unique_if<tc::type::list<char, char const*, int, double, std::vector<int>, std::string, void>, tc::is_char_range>::value);
-static_assert(!tc::type::has_unique<tc::type::list<char, char const*, int, double, std::vector<int>, std::string, int>, int>::value);
+//static_assert(!tc::type::find_unique_if<tc::type::list<char, char const*, int, double, std::vector<int>, std::string, void>, tc::is_char_range>::found);
+//static_assert(!tc::type::find_unique<tc::type::list<char, char const*, int, double, std::vector<int>, std::string, int>, int>::found);
 
-static_assert(!tc::type::has_unique_if<tc::type::list<char, int, double, std::vector<int>, void>, tc::is_char_range>::value);
-static_assert(!tc::type::has_unique<tc::type::list<char, char const*, double, std::vector<int>, std::string>, int>::value);
+static_assert(!tc::type::find_unique_if<tc::type::list<char, int, double, std::vector<int>, void>, tc::is_char_range>::found);
+static_assert(!tc::type::find_unique<tc::type::list<char, char const*, double, std::vector<int>, std::string>, int>::found);
 
 STATICASSERTSAME((tc::type::list<int, float, char const*>), (tc::type::transform_t<tc::type::list<int&, float const&, char const*>, tc::decay_t>));
 

@@ -153,7 +153,7 @@ namespace tc {
 			});
 		})) {
 			scope_exit(oitc.dtor());
-			return RangeReturn<Rng>::pack_element(oitc->iterator(), std::forward<Rng>(rng), **tc_move(oitc));
+			return RangeReturn<Rng>::pack_element(oitc->m_it_(), std::forward<Rng>(rng), **tc_move(oitc));
 		} else {
 			return RangeReturn<Rng>::pack_no_element(std::forward<Rng>(rng));
 		}

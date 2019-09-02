@@ -41,9 +41,27 @@ namespace tc {
 
 	namespace no_adl {
 		// initialize N elements of TTarget by forwarding one arg per element
-		template <typename TTarget, typename ...Args>
-		struct elementwise_construction_restrictiveness final {
-			static constexpr auto value = tc::min(tc::econstructionIMPLICIT, tc::construction_restrictiveness<TTarget, Args>::value...);
+		template<typename TTarget, typename ...Args>
+		struct elementwise_construction_restrictiveness;
+
+		template<tc::econstruction_t econstruction, typename TTarget, typename ...Args>
+		struct elementwise_construction_restrictiveness_impl final {
+			static constexpr auto value = tc::min(econstruction, elementwise_construction_restrictiveness<TTarget, Args...>::value);
+		};
+
+		template<typename TTarget, typename ...Args>
+		struct elementwise_construction_restrictiveness_impl<tc::econstructionFORBIDDEN, TTarget, Args...> final {
+			static constexpr auto value = tc::econstructionFORBIDDEN;
+		};
+
+		template<typename TTarget>
+		struct elementwise_construction_restrictiveness<TTarget> final {
+			static constexpr auto value = tc::econstructionIMPLICIT;
+		};
+
+		template<typename TTarget, typename Arg0, typename ...Args>
+		struct elementwise_construction_restrictiveness<TTarget, Arg0, Args...> final {
+			static constexpr auto value = elementwise_construction_restrictiveness_impl<tc::construction_restrictiveness<TTarget, Arg0>::value, TTarget, Args...>::value;
 		};
 	}
 	using no_adl::elementwise_construction_restrictiveness;

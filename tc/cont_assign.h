@@ -37,9 +37,19 @@ namespace tc {
 		tc::cont_must_insert_range(cont, std::forward<Rng>(rng)); // MAYTHROW
 	}
 
-	template< typename Cont, typename Rng, std::enable_if_t<!has_mem_fn_clear<std::remove_reference_t<Cont>>::value>* = nullptr>
+	template< typename Cont, typename Rng, std::enable_if_t<!has_mem_fn_clear<std::remove_reference_t<Cont>>::value && tc::is_range_with_iterators<std::remove_reference_t<Rng>>::value>* = nullptr>
 	void cont_assign(Cont&& cont, Rng&& rng) MAYTHROW {
 		VERIFY(boost::copy(std::forward<Rng>(rng), tc::begin(cont))==tc::end(cont)); // MAYTHROW
+	}
+
+	template< typename Cont, typename Rng, std::enable_if_t<!has_mem_fn_clear<std::remove_reference_t<Cont>>::value && !tc::is_range_with_iterators<std::remove_reference_t<Rng>>::value>* = nullptr>
+	void cont_assign(Cont&& cont, Rng&& rng) MAYTHROW {
+		auto itOut = tc::begin(cont);
+		tc::for_each(rng, [&](auto&& t) noexcept {
+			*itOut = std::forward<decltype(t)>(t);
+			++itOut;
+		}); // MAYTHROW
+		_ASSERT(tc::end(cont)==itOut);
 	}
 
 	template<typename Cont, typename Rng>

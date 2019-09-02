@@ -231,7 +231,7 @@ namespace tc {
 			template<typename Sink>
 			void operator()(Sink&& sink) const& MAYTHROW {
 				STATICASSERTSAME(tc::sink_value_t<Sink>, unsigned char, "size_prefixed should only be used on binary sinks.");
-				tc::for_each(tc::concat(tc::as_blob(boost::implicit_cast<std::uint32_t>(tc::size(*m_rng))), tc::as_blob(*m_rng)), std::forward<Sink>(sink)); // THROW(tc::file_failure)
+				tc::for_each(tc::concat(tc::as_blob(boost::implicit_cast<std::uint32_t>(tc::size(*m_rng))), tc::range_as_blob(*m_rng)), std::forward<Sink>(sink)); // THROW(tc::file_failure)
 			}
 		private:
 			tc::reference_or_value<Rng> m_rng;

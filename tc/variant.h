@@ -136,7 +136,7 @@ namespace tc {
 
 		template<typename... Ts, typename TValue>
 		struct is_variant_equality_comparable_to_value<std::variant<Ts...>, TValue, std::enable_if_t<!tc::is_base_of<std::variant<Ts...>, TValue>::value>> final: std::integral_constant<bool,
-			tc::type::has_unique_if<tc::type::list<Ts const&...>, tc::type::curry<tc::is_equality_comparable, TValue const&>::template type>::value
+			tc::type::find_unique_if<tc::type::list<Ts const&...>, tc::type::curry<tc::is_equality_comparable, TValue const&>::template type>::found
 		> {};
 	}
 	using no_adl::is_variant_equality_comparable_to_value;

@@ -15,6 +15,8 @@
 	#include <cstdlib>
 	#include <cassert>
 
+	#define TC_FWD(...) __VA_ARGS__
+
 	#define _CHECKS
 	#ifndef _ASSERT
 		#include <cassert>

@@ -14,29 +14,36 @@
 #define STATIC_VIRTUAL_METHOD_NAME( Name ) \
 	Name ## _ImplDoNotCallDirectly
 
-#define STATIC_VIRTUAL_MOD( Mod, Name ) \
+#define STATIC_VIRTUAL_DISPATCH_IMPL_NAME( Name ) \
+	Name ## _DispatchDoNotCallDirectly
+
+#define STATIC_VIRTUAL_FALLBACK_NAME( Name ) \
+	Name ## _FallbackDoNotCallDirectly
+
+#define STATIC_VIRTUAL_FORWARD_IMPL( Mod, Name, Decoration ) \
+	template<typename Derived_=Derived, typename... Args> \
+	Mod \
+	auto Name(Args&&... args) Decoration MAYTHROW return_decltype_xvalue_by_ref ( \
+		/* tc::derived_cast<Derived_>(*this) fails on MSVC 15.8 when evaluated as constant. */ \
+		STATIC_VIRTUAL_DISPATCH_IMPL_NAME(Name)(static_cast<Derived_ Decoration>(*tc::derived_cast<Derived_>(this)), std::forward<Args>(args)...) \
+	)
+
+#define STATIC_VIRTUAL_FORWARD_ALL_IMPL( Mod, Name ) \
 	using Name ## _derived_type = Derived; \
 	using Name ## _declaring_type = this_type; \
-	template<typename Derived_=Derived, typename... Args> \
+	STATIC_VIRTUAL_FORWARD_IMPL( Mod, Name, & ) \
+	STATIC_VIRTUAL_FORWARD_IMPL( Mod, Name, const& ) \
+	STATIC_VIRTUAL_FORWARD_IMPL( Mod, Name, && ) \
+	STATIC_VIRTUAL_FORWARD_IMPL( Mod, Name, const&& )
+
+#define STATIC_VIRTUAL_MOD( Mod, Name ) \
+	template<typename Derived_, typename... Args> \
+	static \
 	Mod \
-	auto Name(Args&& ...args) & MAYTHROW return_decltype_xvalue_by_ref ( \
-		tc::derived_cast<Derived_>(*this). STATIC_VIRTUAL_METHOD_NAME(Name) (std::forward<Args>(args)...) \
+	auto STATIC_VIRTUAL_DISPATCH_IMPL_NAME(Name)(Derived_&& derived, Args&&... args) MAYTHROW return_decltype_xvalue_by_ref ( \
+		std::forward<Derived_>(derived).STATIC_VIRTUAL_METHOD_NAME(Name)(std::forward<Args>(args)...) \
 	) \
-	template<typename Derived_=Derived, typename... Args> \
-	Mod \
-	auto Name(Args&& ...args) const& MAYTHROW return_decltype_xvalue_by_ref ( \
-		tc::derived_cast<Derived_>(this)-> STATIC_VIRTUAL_METHOD_NAME(Name) (std::forward<Args>(args)...) \
-	) \
-	template<typename Derived_=Derived, typename... Args> \
-	Mod \
-	auto Name(Args&& ...args) && MAYTHROW return_decltype_xvalue_by_ref ( \
-		tc_move_always(tc::derived_cast<Derived_>(*this)). STATIC_VIRTUAL_METHOD_NAME(Name) (std::forward<Args>(args)...) \
-	) \
-	template<typename Derived_=Derived, typename... Args> \
-	Mod \
-	auto Name(Args&& ...args) const&& MAYTHROW return_decltype_xvalue_by_ref ( \
-		std::move(tc::derived_cast<Derived_>(*this)). STATIC_VIRTUAL_METHOD_NAME(Name) (std::forward<Args>(args)...) \
-	)
+	STATIC_VIRTUAL_FORWARD_ALL_IMPL( Mod, Name )
 
 #define STATIC_VIRTUAL( Name ) \
 	STATIC_VIRTUAL_MOD( BOOST_PP_EMPTY(), Name ) 
@@ -107,3 +114,21 @@
 
 #define STATIC_OVERRIDE( Name ) \
 	STATIC_OVERRIDE_MOD( BOOST_PP_EMPTY(), Name )
+
+#define STATIC_VIRTUAL_WITH_FALLBACK_MOD(Mod, Name) \
+	template<typename U, typename... Args> \
+	struct has_static_virtual_ ## Name ## _override { \
+	private: \
+		template<typename T> static auto test(int) -> decltype(std::declval<T>().STATIC_VIRTUAL_METHOD_NAME(Name)( std::declval<Args>()... ), std::true_type()); \
+		template<typename> static std::false_type test(...); \
+	public: \
+		static constexpr bool value = decltype(test<U>(0))::value; \
+	}; \
+	template<typename Derived_, typename... Args, std::enable_if_t<!has_static_virtual_ ## Name ## _override<Derived_, Args...>::value>* = nullptr> \
+	static \
+	auto STATIC_VIRTUAL_DISPATCH_IMPL_NAME(Name)(Derived_&& derived, Args&&... args) MAYTHROW return_decltype_xvalue_by_ref ( \
+		std::forward<Derived_>(derived).STATIC_VIRTUAL_FALLBACK_NAME(Name)(std::forward<Args>(args)...) \
+	) \
+	STATIC_VIRTUAL( Name ) \
+	Mod \
+	auto STATIC_VIRTUAL_FALLBACK_NAME(Name)

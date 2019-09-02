@@ -12,6 +12,7 @@
 #include "functors.h"
 #include "utility.h"
 #include "quantifier.h"
+#include "range.h"
 
 #include <boost/range/iterator_range.hpp>
 #include <boost/fusion/adapted/std_tuple.hpp>
@@ -143,4 +144,43 @@ namespace tc {
 		no_adl::zip_adaptor<Ranges...>,
 		(aggregate_tag BOOST_PP_COMMA() std::forward<Ranges>(ranges)...)
 	)
+
+	/*
+		TODO: RT#16520
+		It is reasonable that the following use case of zip_ranges should work without copying
+		the R-value range.
+
+		if (auto o = tc::find_last<tc::return_value_or_none>(
+			tc::zip_ranges( CreateRValueRngRng() ),
+			predicate
+		)) {
+			*o; // must still be valid.
+		}
+
+		- Currently, *o is 'tc::transform(*rngrng, [n](auto const& rng) return_decltype(tc_at(rng, n)))'
+		with rngrng beeing then out of scope.
+
+		return_value_or_none.pack_element(It&&, Rng&&, Ref&& ref) is called with R-Value range, so in principle
+		it can call (note && and tc_move)
+		transform_adaptor::dereference_index() && {
+			tc_move(m_func)(...)
+		},
+		and the transform functor of zip_ranges could overload for '&&' and in that case aggregating rngrng.
+
+		This is not possible with find_last using iterators. Todo is then to
+		- Specialize find_last (and similar functions) for index-based ranges
+		- Introduce pack_element for index-based results
+		- Introduce transform_adaptor::dereference_index &&
+	*/
+	template<typename RngRng>
+	auto zip_ranges(RngRng&& rngrng) noexcept { // for random access ranges
+		_ASSERT(tc::all_same(tc::transform(rngrng, tc::fn_size())));
+		auto const n = tc::empty(rngrng) ? 0 : tc::size(tc_front(rngrng)); // Do not inline, function evaluation order undefined
+		return tc::transform(
+			tc::iota(0, n),
+			[rngrng = tc::reference_or_value<RngRng>(tc::aggregate_tag, std::forward<RngRng>(rngrng))](auto const n) noexcept {
+				return tc::transform(*rngrng, [n](auto const& rng) return_decltype(tc_at(rng, n)));
+			}
+		);
+	}
 }

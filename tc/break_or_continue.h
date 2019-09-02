@@ -88,7 +88,7 @@ namespace tc {
 			std::is_same<tc::decayed_invoke_result_t<Func,Args...>, INTEGRAL_CONSTANT(tc::continue_)>::value)
 		>* = nullptr
 	>
-	INTEGRAL_CONSTANT(tc::continue_) constexpr continue_if_not_break(Func&& func, Args&& ... args) MAYTHROW {
+	constexpr INTEGRAL_CONSTANT(tc::continue_) continue_if_not_break(Func&& func, Args&& ... args) MAYTHROW {
 		std::forward<Func>(func)(std::forward<Args>(args)...);
 		return {};
 	}
@@ -227,10 +227,43 @@ namespace tc {
 
 		///////////////////////////////////////////////////
 		// tc::function_ref
-	
+
+		namespace function_detail {
+			union void_function_pointer {
+				// Any pointer to function can be converted to a pointer to a different function type. Calling the
+				// function through a pointer to a different function type is undefined, but converting such pointer
+				// back to pointer to the original function type yields the pointer to the original function.
+				// https://en.cppreference.com/w/cpp/language/reinterpret_cast
+
+				template <typename Func, std::enable_if_t<std::is_class<Func>::value>* = nullptr>
+				explicit void_function_pointer(Func const& func) noexcept
+					: m_pvFunc(std::addressof(func))
+				{}
+
+				template <typename Func, std::enable_if_t<std::is_function<Func>::value>* = nullptr>
+				explicit void_function_pointer(Func const& func) noexcept
+					: m_fpvFunc(reinterpret_cast<void(*)()>(std::addressof(func)))
+				{}
+
+				template <typename Func> // may be const and/or volatile
+				Func& get_func() const& noexcept {
+					static_assert(!std::is_reference<Func>::value); 
+					if constexpr (std::is_function<Func>::value) {
+						return *reinterpret_cast<Func*>(m_fpvFunc);
+					} else {
+						static_assert(std::is_class<Func>::value);
+						return *static_cast<Func*>(tc::make_mutable_ptr(m_pvFunc));
+					}
+				}
+
+				void const* m_pvFunc;
+				void (*m_fpvFunc)();
+			};
+		} // namespace function_detail
+
 #ifndef _MSC_VER
 		template <bool bNoExcept, typename Ret, typename ...Args>
-		using type_erased_function_ptr = Ret(*)(void const*, Args...) noexcept(bNoExcept);
+		using type_erased_function_ptr = Ret(*)(tc::no_adl::function_detail::void_function_pointer, Args...) noexcept(bNoExcept);
 #else
 		// Workaround C1001: An internal error has occurred in the compiler
 		template <bool bNoExcept, typename Ret, typename ...Args>
@@ -238,33 +271,23 @@ namespace tc {
 
 		template <typename Ret, typename ...Args>
 		struct get_type_erased_function_ptr</*bNoExcept*/true, Ret, Args...> {
-			using type=Ret(*)(void const*, Args...) noexcept;
+			using type=Ret(*)(tc::no_adl::function_detail::void_function_pointer, Args...) noexcept;
 		};
 
 		template <typename Ret, typename ...Args>
 		struct get_type_erased_function_ptr</*bNoExcept*/false, Ret, Args...> {
-			using type=Ret(*)(void const*, Args...) noexcept(false);
+			using type=Ret(*)(tc::no_adl::function_detail::void_function_pointer, Args...) noexcept(false);
 		};
 		
 		template <bool bNoExcept, typename Ret, typename ...Args>
 		using type_erased_function_ptr = typename tc::no_adl::get_type_erased_function_ptr<bNoExcept, Ret, Args...>::type;
 #endif
-	} // namespace no_adl
-	
-	namespace function_detail {
-		template <typename Func> // may be const and/or volatile
-		Func& get_func(void const* pvFunc) noexcept {
-			static_assert(!std::is_reference<Func>::value); 
-			return *static_cast<Func*>(tc::make_mutable_ptr(pvFunc));
-		}
-	} // namespace function_detail
 
-	namespace no_adl {
 		template <bool bNoExcept, typename Func, typename Ret, typename ...Args>
 		struct make_type_erased_function_ptr final {
 			tc::no_adl::type_erased_function_ptr<bNoExcept, Ret, Args...> operator()() const& noexcept {
-				return [](void const* pvFunc, Args... args) noexcept(bNoExcept) -> Ret { // implicit cast of stateless lambda to function pointer
-					return tc::function_detail::get_func<Func>(pvFunc)(std::forward<Args>(args)...); // MAYTHROW unless bNoExcept
+				return [](tc::no_adl::function_detail::void_function_pointer voidfunctionpointer, Args... args) noexcept(bNoExcept) -> Ret { // implicit cast of stateless lambda to function pointer
+					return voidfunctionpointer.get_func<Func>()(std::forward<Args>(args)...); // MAYTHROW unless bNoExcept
 				};
 			}
 		};
@@ -272,8 +295,8 @@ namespace tc {
 		template <bool bNoExcept, typename Func, typename ...Args>
 		struct make_type_erased_function_ptr<bNoExcept, Func, void, Args...> final {
 			tc::no_adl::type_erased_function_ptr<bNoExcept, void, Args...> operator()() const& noexcept {
-				return [](void const* pvFunc, Args... args) noexcept(bNoExcept) { // implicit cast of stateless lambda to function pointer
-					tc::function_detail::get_func<Func>(pvFunc)(std::forward<Args>(args)...); // MAYTHROW unless bNoExcept
+				return [](tc::no_adl::function_detail::void_function_pointer voidfunctionpointer, Args... args) noexcept(bNoExcept) { // implicit cast of stateless lambda to function pointer
+					voidfunctionpointer.get_func<Func>()(std::forward<Args>(args)...); // MAYTHROW unless bNoExcept
 				};
 			}
 		};
@@ -281,8 +304,8 @@ namespace tc {
 		template <bool bNoExcept, typename Func, typename ...Args>
 		struct make_type_erased_function_ptr<bNoExcept, Func, tc::break_or_continue, Args...> final {
 			tc::no_adl::type_erased_function_ptr<bNoExcept, tc::break_or_continue, Args...> operator()() const& noexcept {
-				return [](void const* pvFunc, Args... args) noexcept(bNoExcept) -> tc::break_or_continue { // implicit cast of stateless lambda to function pointer
-					return tc::continue_if_not_break(tc::function_detail::get_func<Func>(pvFunc), std::forward<Args>(args)...); // MAYTHROW unless bNoExcept
+				return [](tc::no_adl::function_detail::void_function_pointer voidfunctionpointer, Args... args) noexcept(bNoExcept) -> tc::break_or_continue { // implicit cast of stateless lambda to function pointer
+					return tc::continue_if_not_break(voidfunctionpointer.get_func<Func>(), std::forward<Args>(args)...); // MAYTHROW unless bNoExcept
 				};
 			}
 		};
@@ -292,21 +315,31 @@ namespace tc {
 			function_ref_base(function_ref_base const&) noexcept = default;
 
 			Ret operator()(Args... args) const& noexcept(bNoExcept) {
-				return m_pfuncTypeErased(m_pvFunc, std::forward<Args>(args)...); // MAYTHROW unless bNoExcept
+				return m_pfuncTypeErased(m_voidfunctionpointer, std::forward<Args>(args)...); // MAYTHROW unless bNoExcept
 			}
 				
-			template <typename Func, std::enable_if_t<!tc::is_base_of_decayed< function_ref_base, Func >::value>* =nullptr>
+			template <typename Func, std::enable_if_t<
+				!tc::is_base_of_decayed< function_ref_base, Func >::value
+				&& std::is_invocable<std::remove_reference_t<Func>&, Args...>::value
+				&& (
+					std::is_convertible<std::invoke_result_t<std::remove_reference_t<Func>&, Args...>, Ret>::value
+					|| std::is_same<Ret, tc::break_or_continue>::value
+					|| std::is_same<Ret, void>::value
+				)
+			>* =nullptr>
 			function_ref_base(Func&& func) noexcept
 				: m_pfuncTypeErased(tc::no_adl::make_type_erased_function_ptr<bNoExcept, std::remove_reference_t<Func>, Ret, Args...>{}())
-				, m_pvFunc(std::addressof(func))
+				, m_voidfunctionpointer(std::forward<Func>(func))
 			{
+				static_assert(!std::is_member_function_pointer<Func>::value, "Raw member functions are not supported (how would you call them?).  Pass in a lambda or use std::mem_fn/TC_MEM_FN instead.");
+				static_assert(!std::is_pointer<Func>::value, "Pass in functions rather than function pointers.");
 				// Checking the noexcept value of the function call is commented out because MAYTHROW is widely used in generic code such as for_each, range_adaptor...
 				// static_assert(!bNoExcept || noexcept(std::declval<tc::decay_t<Func>&>()(std::declval<Args>()...)));
 			}
 
 		private:
 			tc::no_adl::type_erased_function_ptr<bNoExcept, Ret, Args...> m_pfuncTypeErased;
-			void const* m_pvFunc;
+			tc::no_adl::function_detail::void_function_pointer m_voidfunctionpointer;
 		};
 
 		template <typename Sig>

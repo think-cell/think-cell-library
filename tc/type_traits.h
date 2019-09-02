@@ -700,14 +700,45 @@ namespace tc {
 		template<template<typename...> class X, typename T> struct is_instance<X, T const> : public is_instance<X, T> {};
 		template<template<typename...> class X, typename T> struct is_instance<X, T volatile> : public is_instance<X, T> {};
 		template<template<typename...> class X, typename T> struct is_instance<X, T const volatile> : public is_instance<X, T> {};
-		template<template<typename...> class X, typename... Y> struct is_instance<X, X<Y...>> : public std::true_type {};
+		template<template<typename...> class X, typename... Y> struct is_instance<X, X<Y...>> : public std::true_type {
+			using arguments = tc::type::list<Y...>;
+		};
 
 		template<template<typename, typename, bool> class X, typename T> struct is_instance2 : public std::false_type {};
 		template<template<typename, typename, bool> class X, typename T> struct is_instance2<X, T const> : public is_instance2<X, T> {};
 		template<template<typename, typename, bool> class X, typename T> struct is_instance2<X, T volatile> : public is_instance2<X, T> {};
 		template<template<typename, typename, bool> class X, typename T> struct is_instance2<X, T const volatile> : public is_instance2<X, T> {};
-		template<template<typename, typename, bool> class X, typename Y1, typename Y2, bool b> struct is_instance2<X, X<Y1,Y2,b>> : public std::true_type {};
+		template<template<typename, typename, bool> class X, typename Y1, typename Y2, bool b> struct is_instance2<X, X<Y1,Y2,b>> : public std::true_type {
+			using first_argument = Y1;
+			using second_argument = Y2;
+			static constexpr auto third_argument = b;
+		};
 	}
 	using no_adl::is_instance;
 	using no_adl::is_instance2;
+
+	namespace is_instance_or_derived_detail {
+		namespace no_adl {
+			template<template<typename...> class Template, typename... Args>
+			struct is_instance_or_derived_found : std::true_type {
+				using base_instance = Template<Args...>;
+				using arguments = tc::type::list<Args...>;
+			};
+
+			template<template<typename...> class Template>
+			struct CDetector {
+				template<typename... Args>
+				static is_instance_or_derived_found<Template, Args...> detector(Template<Args...>*);
+
+				static std::false_type detector(...);
+			};
+		}
+		using no_adl::CDetector;
+	}
+	template<template<typename...> class Template, typename T>
+	using is_instance_or_derived = decltype(
+		tc::is_instance_or_derived_detail::CDetector<Template>::detector(
+			std::declval<tc::remove_cvref_t<T>*>()
+		)
+	);
 }

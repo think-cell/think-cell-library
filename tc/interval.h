@@ -105,6 +105,8 @@ namespace tc {
 		TC_HAS_EXPR(minus, (T), std::declval<T>()-std::declval<T>())
 	}
 
+	// TODO: consider using "nextup" and "nextdown" which are single argument C functions
+	// (but only for floats) standardized in IEEE 754-2008 revision and proposed in C TS 18661-1,2
 	template<typename T, std::enable_if_t<!std::is_floating_point<T>::value>* = nullptr>
 	T nextafter(T const& t) noexcept {
 		_ASSERT(t != std::numeric_limits<T>::max());
@@ -114,6 +116,17 @@ namespace tc {
 	template<typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
 	T nextafter(T const& t) noexcept {
 		return std::nextafter(t, std::numeric_limits<T>::infinity());
+	}
+
+	template<typename T, std::enable_if_t<!std::is_floating_point<T>::value>* = nullptr>
+	T nextbefore(T const& t) noexcept {
+		_ASSERT(t != std::numeric_limits<T>::min());
+		return boost::prior(t);
+	}
+
+	template<typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
+	T nextbefore(T const& t) noexcept {
+		return std::nextafter(t, -std::numeric_limits<T>::infinity());
 	}
 
 	namespace interval_adl {
@@ -354,9 +367,7 @@ namespace tc {
 
 			//returns a value X such that modified(intvl, _.ensure_length(this->length())).contains(*this + X)
 			difference_type OffsetToFit(interval<T> const& intvl) const& noexcept {
-				_ASSERT( !empty() );
-				_ASSERT( !(intvl[tc::hi]<intvl[tc::lo]) ); // intvl.begin==intvl.end is treated like intvl very small
-
+				_ASSERT( !inclusive_empty() ); // intvl.begin==intvl.end is treated like intvl very small
 				if( (*this)[tc::lo] < intvl[tc::lo] ) {
 					auto t=intvl[tc::lo]-(*this)[tc::lo];
 					if( intvl[tc::hi] < (*this)[tc::hi]+t ) {
@@ -654,7 +665,7 @@ namespace tc {
 
 	template<typename Rng>
 	auto minmax_interval(Rng&& rng) noexcept {
-		auto pairit = std::minmax_element(tc::begin(rng), tc::end(rng));
+		auto pairit = tc::minmax_element(rng);
 		return tc::make_interval(*pairit.first, *pairit.second);
 	}
 
@@ -670,6 +681,11 @@ namespace tc {
 			tc::begin_next(rng, tc::explicit_cast<typename boost::range_size<std::remove_reference_t<Rng>>::type>(intvl[tc::hi]))
 		)
 	)
+
+	template<typename Src, typename Dst>
+	Dst scale_from_to(Src const& src, tc::interval<Src> const& intvlsrc, tc::interval<Dst> const& intvldst) noexcept {
+		return intvldst[tc::lo] + tc::scale_muldiv(intvldst.length(), src-intvlsrc[tc::lo], intvlsrc.length());
+	}
 
 	namespace no_adl {
 		template<typename T, typename TInterval>

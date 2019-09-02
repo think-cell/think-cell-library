@@ -246,20 +246,20 @@ namespace tc {
 	/////////////////////////////////////////////
 	// as_c_str
 
-	template< typename Char, typename Traits, typename Allocator >
-	Char const* as_c_str(std::basic_string< Char, Traits, Allocator > const& str) noexcept
+	template< typename Char, typename Traits, typename Alloc >
+	Char const* as_c_str(std::basic_string< Char, Traits, Alloc > const& str) noexcept
 	{
 		return str.data(); // since C++ 11, performs same function as c_str()
 	}
 
-	template< typename Char, typename Traits, typename Allocator >
-	Char* as_c_str(std::basic_string< Char, Traits, Allocator >& str) noexcept
+	template< typename Char, typename Traits, typename Alloc >
+	Char* as_c_str(std::basic_string< Char, Traits, Alloc >& str) noexcept
 	{
 		return str.data(); // since C++ 11, performs same function as c_str()
 	}
 
-	template< typename Char, typename Traits, typename Allocator >
-	Char* as_c_str(std::basic_string< Char, Traits, Allocator >&& str) noexcept
+	template< typename Char, typename Traits, typename Alloc >
+	Char* as_c_str(std::basic_string< Char, Traits, Alloc >&& str) noexcept
 	{
 		return str.data(); // since C++ 11, performs same function as c_str()
 	}

@@ -139,12 +139,17 @@ namespace tc {
 				return *idx;
 			}
 
-			auto base_range() & noexcept {
+			constexpr decltype(auto) base_range() & noexcept {
 				return *m_baserng;
 			}
-
-			auto base_range() const & noexcept {
+			constexpr decltype(auto) base_range() const& noexcept {
 				return *m_baserng;
+			}
+			constexpr decltype(auto) base_range() && noexcept {
+				return *std::move(m_baserng);
+			}
+			constexpr decltype(auto) base_range() const&& noexcept {
+				return *std::move(m_baserng);
 			}
 
 			STATIC_FINAL(middle_point)(index & idx, index const& idxEnd ) const& noexcept -> void {

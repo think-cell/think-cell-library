@@ -85,5 +85,31 @@ namespace tc {
 
 	DEFINE_FN(max);
 	std::true_type returns_reference_to_argument(tc::fn_max) noexcept;
+
+	template <typename Iter>
+	auto treat_as_forward_iterator(Iter&& iter) noexcept {
+		struct forward_iter : Iter {
+			explicit forward_iter(Iter const& iter) : Iter(iter) {}
+			using iterator_category = std::forward_iterator_tag;
+		};
+		return forward_iter{std::forward<Iter>(iter)};
+	}
+
+	template<typename Rng>
+	auto minmax_element(Rng&& rng) noexcept {
+		return std::minmax_element(
+			treat_as_forward_iterator(tc::begin(rng)),
+			treat_as_forward_iterator(tc::end(rng))
+		);
+	}
+
+	template<typename Rng, typename Pred>
+	auto minmax_element(Rng&& rng, Pred&& pred) noexcept {
+		return std::minmax_element(
+			treat_as_forward_iterator(tc::begin(rng)),
+			treat_as_forward_iterator(tc::end(rng)),
+			std::forward<Pred>(pred)
+		);
+	}
 }
 

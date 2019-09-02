@@ -234,12 +234,17 @@ namespace tc {
 			>;
 
 		public:
-			template<typename... T>
+			template<typename... T, std::enable_if_t<tc::is_safely_constructible<TTarget, tc::aggregate_tag_t, T&&...>::value>* = nullptr>
 			static TTarget fn(tc::aggregate_tag_t, T&&... t) MAYTHROW {
 				return TTarget(tc::aggregate_tag, std::forward<T&&>(t)...);
 			}
 
-			template<typename Rng0, typename... RngN, std::enable_if_t<use_ctor<Rng0,RngN...>::value>* =nullptr>
+			template<
+				typename Rng0,
+				typename... RngN,
+				std::enable_if_t<use_ctor<Rng0,RngN...>::value>* = nullptr,
+				std::enable_if_t<tc::is_appendable<TTarget&, RngN&&...>::value>* = nullptr
+			>
 			static TTarget fn(Rng0&& rng0, RngN&&... rngN) MAYTHROW {
 				if constexpr(0<sizeof...(RngN)) {
 					TTarget cont=std::forward<Rng0>(rng0);
@@ -250,7 +255,12 @@ namespace tc {
 				}
 			}
 
-			template<typename Rng0, typename... RngN, std::enable_if_t<!use_ctor<Rng0,RngN...>::value>* =nullptr>
+			template<
+				typename Rng0,
+				typename... RngN,
+				std::enable_if_t<!use_ctor<Rng0,RngN...>::value>* = nullptr,
+				std::enable_if_t<tc::is_appendable<TTarget&, Rng0&&, RngN&&...>::value>* = nullptr
+			>
 			static TTarget fn(Rng0&& rng0, RngN&&... rngN) MAYTHROW {
 				TTarget cont;
  				tc::append(cont, std::forward<Rng0>(rng0), std::forward<RngN>(rngN)...);
@@ -284,5 +294,17 @@ namespace tc {
 	template< typename Char, typename ... Rng >
 	auto make_str(Rng&& ... rng) MAYTHROW {
 		return tc::explicit_cast<std::basic_string<Char>>(std::forward<Rng>(rng)...);
+	}
+
+	template< typename T, typename Rng >
+	auto make_unique_unordered_set(Rng&& rng) MAYTHROW {
+		tc::unordered_set<T> set;
+		tc::cont_try_insert_range(set, std::forward<Rng>(rng));
+		return set;
+	}
+
+	template< typename Rng >
+	auto make_unique_unordered_set(Rng&& rng) MAYTHROW {
+		return make_unique_unordered_set<tc::range_value_t<Rng>>(std::forward<Rng>(rng));
 	}
 }

@@ -58,7 +58,7 @@ namespace tc {
 			T const* data() const& noexcept {
 				return std::addressof(m_a[0]);
 			}
-			constexpr static std::size_t size() noexcept {
+			static constexpr std::size_t size() noexcept {
 				return N;
 			}
 
@@ -79,7 +79,7 @@ namespace tc {
 
 		private:
 			template <std::size_t, typename... Args>
-			constexpr static T explicit_cast_index(Args&&... args) noexcept {
+			static constexpr T explicit_cast_index(Args&&... args) noexcept {
 				return tc::explicit_cast<T>( std::forward<Args>(args)... );
 			}
 
@@ -117,7 +117,7 @@ namespace tc {
 #if defined(_MSC_FULL_VER) && 191326128<=_MSC_FULL_VER
 		private:
 			template <std::size_t, typename Arg>
-			constexpr static Arg&& identity_index(Arg&& args) noexcept {
+			static constexpr Arg&& identity_index(Arg&& args) noexcept {
 				return std::forward<Arg>(args);
 			}
 
@@ -184,7 +184,7 @@ namespace tc {
 		public:
 			template< typename Rng,
 				std::enable_if_t< 0!=N
-					&& tc::econstructionIMPLICIT==tc::construction_restrictiveness<T, decltype(tc_front(std::declval<Rng&>()))>::value
+					&& tc::econstructionIMPLICIT==tc::construction_restrictiveness<T, decltype(*tc::begin(std::declval<Rng&>()))>::value
 				>* = nullptr
 			>
 			constexpr explicit array(Rng&& rng) MAYTHROW
@@ -193,7 +193,7 @@ namespace tc {
 
 			template< typename Rng,
 				std::enable_if_t< 0!=N 
-					&& tc::econstructionEXPLICIT==tc::construction_restrictiveness<T, decltype(tc_front(std::declval<Rng&>()))>::value
+					&& tc::econstructionEXPLICIT==tc::construction_restrictiveness<T, decltype(*tc::begin(std::declval<Rng&>()))>::value
 				>* = nullptr 
 			>
 			explicit array(Rng&& rng) MAYTHROW
@@ -303,7 +303,7 @@ namespace tc {
 			using size_type = std::size_t;
 			using difference_type = std::ptrdiff_t;
 
-			constexpr static std::size_t size() noexcept {
+			static constexpr std::size_t size() noexcept {
 				return N;
 			}
 

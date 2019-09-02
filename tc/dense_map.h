@@ -22,29 +22,32 @@
 namespace tc {
 	DEFINE_TAG_TYPE(transform_tag)
 
-	template< typename Enum >
-	struct all_values {
-		using const_iterator = tc::counting_iterator<Enum>;
-		using iterator = const_iterator;
-		iterator begin() const& noexcept {
-			return iterator( tc::contiguous_enum<Enum>::begin() );
-		}
-		iterator end() const& noexcept {
-			return iterator( tc::contiguous_enum<Enum>::end() );
-		}
-	};
+	namespace no_adl {
+		template<typename Enum>
+		struct all_values {
+			using const_iterator = tc::counting_iterator<Enum>;
+			using iterator = const_iterator;
+			iterator begin() const& noexcept {
+				return iterator( tc::contiguous_enum<Enum>::begin() );
+			}
+			iterator end() const& noexcept {
+				return iterator( tc::contiguous_enum<Enum>::end() );
+			}
+		};
 
-	template<>
-	struct all_values<bool> {
-		using const_iterator = boost::transform_iterator< fn_static_cast<bool>, tc::counting_iterator<unsigned char> >;
-		using iterator = const_iterator;
-		iterator begin() const& noexcept {
-			return iterator( 0 );
-		}
-		iterator end() const& noexcept {
-			return iterator( 2 );
-		}
-	};
+		template<>
+		struct all_values<bool> {
+			using const_iterator = boost::transform_iterator< fn_static_cast<bool>, tc::counting_iterator<unsigned char> >;
+			using iterator = const_iterator;
+			iterator begin() const& noexcept {
+				return iterator( 0 );
+			}
+			iterator end() const& noexcept {
+				return iterator( 2 );
+			}
+		};
+	} // namespace no_adl
+	using no_adl::all_values;
 
 	// all_values are views
 	namespace no_adl {
@@ -376,16 +379,16 @@ namespace tc {
 	};
 
 	template< typename DenseMap >
-	struct return_element_key_or_end final {
-		using type = typename std::remove_reference_t<DenseMap>::dense_map_key_type;
+	struct return_element_key_or_none final {
+		using type = std::optional<typename std::remove_reference_t<DenseMap>::dense_map_key_type>;
 		static constexpr bool requires_iterator = true;
 
 		template<typename Ref>
 		static type pack_element(typename boost::range_iterator<DenseMap>::type it, DenseMap&& rng, Ref&&) noexcept {
-			return tc::contiguous_enum<type>::begin() + (it - tc::begin(rng));
+			return tc::contiguous_enum<typename std::remove_reference_t<DenseMap>::dense_map_key_type>::begin() + (it - tc::begin(rng));
 		}
 		static type pack_no_element(DenseMap&&) noexcept {
-			return tc::contiguous_enum<type>::end();
+			return std::nullopt;
 		}
 	};
 

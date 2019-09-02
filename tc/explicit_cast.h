@@ -37,11 +37,6 @@ namespace tc {
 	DEFINE_TAG_TYPE(list_initialize_tag)
 
 	namespace no_adl {
-		///////////////////////////////////////////////
-		// default conversions
-
-		template<typename TTarget, typename Enable=void>
-		struct SConversions final {};
 
 		template<typename T>
 		struct char_limits;
@@ -49,21 +44,21 @@ namespace tc {
 		template<>
 		struct char_limits<char> {
 			static constexpr bool in_range(unsigned int n) noexcept {
-				return n<=0x7f;
+				return n <= 0x7f;
 			}
 		};
 
 		template<>
 		struct char_limits<char16_t> {
 			static constexpr bool in_range(unsigned int n) noexcept {
-				return n<=0xd7ff || (0xe000<=n && n<=0xffff);
+				return n <= 0xd7ff || (0xe000 <= n && n <= 0xffff);
 			}
 		};
 
 		template<>
 		struct char_limits<char32_t> {
 			static constexpr bool in_range(unsigned int n) noexcept {
-				return n<=0xd7ff || (0xe000<=n && n<=0x10ffff);
+				return n <= 0xd7ff || (0xe000 <= n && n <= 0x10ffff);
 			}
 		};
 
@@ -72,22 +67,30 @@ namespace tc {
 		template<>
 		struct char_limits<wchar_t> :
 			std::conditional_t<
-				2==sizeof(wchar_t),
-				char_limits<char16_t>,
-				std::conditional_t<
-					4==sizeof(wchar_t),
-					char_limits<char32_t>,
-					char_limits_undefined_dummy
-				>
+			2 == sizeof(wchar_t),
+			char_limits<char16_t>,
+			std::conditional_t<
+			4 == sizeof(wchar_t),
+			char_limits<char32_t>,
+			char_limits_undefined_dummy
+			>
 			>
 		{};
 
+	}
+	using no_adl::char_limits;
+
+	namespace no_adl {
+		///////////////////////////////////////////////
+		// default conversions
+
+		template<typename TTarget, typename Enable = void>
+		struct SConversions final {};
+
 		template<typename TTarget>
 		struct SConversions<TTarget, std::enable_if_t<tc::is_char<TTarget>::value>> {
-			template<typename TSource>
-			static std::enable_if_t<
-				tc::is_char< TSource >::value
-			, TTarget > constexpr fn (TSource src) noexcept {
+			template<typename TSource, std::enable_if_t<tc::is_char< TSource >::value>* = nullptr>
+			static constexpr TTarget fn (TSource src) noexcept {
 				static_assert( tc::is_decayed< TTarget >::value );
 				_ASSERTE( char_limits<TSource>::in_range(tc::underlying_cast(src)) );
 				_ASSERTE( char_limits<TTarget>::in_range(tc::underlying_cast(src)) );

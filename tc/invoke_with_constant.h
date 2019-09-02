@@ -20,7 +20,7 @@ namespace tc {
 		}
 
 		template<typename TIndex, TIndex I, TIndex... Is>
-		constexpr TIndex IdxFirst = I;
+		inline constexpr TIndex IdxFirst = I;
 
 		template<typename TIndex, TIndex... Is, typename Func, typename... Args>
 		decltype(auto) invoke_with_constant_impl(std::integer_sequence<TIndex, Is...>, Func&& func, TIndex nIndex, Args&&... args) MAYTHROW {

@@ -46,14 +46,14 @@ namespace tc {
 
 	template<typename T>
 	struct is_actual_integer_like final : tc::is_actual_integer<T> {};
-	template<unsigned MinBits,unsigned MaxBits,boost::multiprecision::cpp_integer_type SignType,boost::multiprecision::cpp_int_check_type Checked,typename Allocator>
+	template<unsigned MinBits,unsigned MaxBits,boost::multiprecision::cpp_integer_type SignType,boost::multiprecision::cpp_int_check_type Checked,typename Alloc>
 	struct is_actual_integer_like<boost::multiprecision::number<
 		boost::multiprecision::cpp_int_backend<
 			MinBits,
 			MaxBits,
 			SignType,
 			Checked,
-			Allocator
+			Alloc
 		>
 	>> final : std::true_type {};
 	template<typename T>

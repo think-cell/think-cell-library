@@ -148,7 +148,7 @@ namespace tc {
 		using conditional_const_t=std::conditional_t< bConst, T const, T >;
 
 		template<typename IndexRange, typename Traversal, bool bConst>
-		struct index_iterator final
+		struct index_iterator
 		: boost::iterators::iterator_facade<
 			index_iterator<IndexRange,Traversal,bConst>
 			, typename range_traits< conditional_const_t<IndexRange,bConst> >::value_type

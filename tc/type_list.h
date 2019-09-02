@@ -115,6 +115,20 @@ namespace tc {
 		using concat_t = typename concat<List...>::type;
 
 		namespace no_adl {
+			template<typename List>
+			struct join;
+
+			template<typename... List>
+			struct join<list<List...>> final {
+				using type = concat_t<List...>;
+			};
+		}
+		using no_adl::join;
+
+		template<typename List>
+		using join_t = typename join<List>::type;
+
+		namespace no_adl {
 			template<typename List, typename T>
 			struct push_front;
 
@@ -169,12 +183,15 @@ namespace tc {
 
 		namespace find_unique_if_result {
 			namespace no_adl {
-				struct type_not_found final {};
+				struct type_not_found final {
+					static constexpr auto found = false;
+				};
 
 				template<typename T, std::size_t I>
 				struct unique_type final {
 					using type = T;
 					static constexpr auto index = I;
+					static constexpr auto found = true;
 				};
 			}
 			using no_adl::type_not_found;
@@ -214,12 +231,6 @@ namespace tc {
 
 		template<typename List, typename T>
 		using find_unique = find_unique_if<List, curry<std::is_same, T>::template type>;
-
-		template<typename List, template<typename...> class Pred>
-		using has_unique_if = std::integral_constant<bool, 1==tc::type::size<tc::type::filter_t<List, Pred>>::value>;
-
-		template<typename List, typename T>
-		using has_unique = has_unique_if<List, curry<std::is_same, T>::template type>;
 
 		namespace no_adl {
 			template<typename List, template<typename...> class Pred>

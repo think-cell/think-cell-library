@@ -96,39 +96,39 @@ namespace tc {
 }
 
 #define BITMASK_OPS(Enum) \
-inline Enum operator&(Enum _Left, Enum _Right) \
+constexpr Enum operator&(Enum _Left, Enum _Right) \
 {	/* return _Left & _Right */ \
 	return tc::enum_cast<Enum>(tc::underlying_cast(_Left) & tc::underlying_cast(_Right)); \
 } \
 \
-inline Enum operator|(Enum _Left, Enum _Right) \
+constexpr Enum operator|(Enum _Left, Enum _Right) \
 {	/* return _Left | _Right */ \
 	return tc::enum_cast<Enum>(tc::underlying_cast(_Left) | tc::underlying_cast(_Right)); \
 } \
 \
-inline Enum operator^(Enum _Left, Enum _Right) \
+constexpr Enum operator^(Enum _Left, Enum _Right) \
 {	/* return _Left ^ _Right */ \
 	return tc::enum_cast<Enum>(tc::underlying_cast(_Left) ^ tc::underlying_cast(_Right)); \
 } \
 \
-inline Enum operator~(Enum _Left) \
+constexpr Enum operator~(Enum _Left) \
 {	/* return ~_Left */ \
 	return tc::enum_cast<Enum>(~tc::underlying_cast(_Left)); \
 } \
 \
-inline Enum& operator&=(Enum& _Left, Enum _Right) \
+constexpr Enum& operator&=(Enum& _Left, Enum _Right) \
 {	/* return _Left &= _Right */ \
 	_Left = _Left & _Right; \
 	return _Left; \
 } \
 \
-inline Enum& operator|=(Enum& _Left, Enum _Right) \
+constexpr Enum& operator|=(Enum& _Left, Enum _Right) \
 {	/* return _Left |= _Right */ \
 	_Left = _Left | _Right; \
 	return _Left; \
 } \
 \
-inline Enum& operator^=(Enum& _Left, Enum _Right) \
+constexpr Enum& operator^=(Enum& _Left, Enum _Right) \
 {	/* return _Left ^= _Right */ \
 	_Left = _Left ^ _Right; \
 	return _Left; \
@@ -144,7 +144,7 @@ inline Enum most_significant_bit(Enum _Left) \
 	return tc::enum_cast<Enum>(tc::most_significant_bit(tc::underlying_cast(_Left))); \
 } \
 \
-inline bool HasAllOf(Enum _Left, Enum _Right) \
+constexpr bool HasAllOf(Enum _Left, Enum _Right) \
 {	/* return _Left HasAllOf _Right */\
 	return !(~_Left & _Right); \
 }\
