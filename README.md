@@ -24,7 +24,7 @@ Does hacking our library give you a kick, and do you think you can contribute mo
 ------------------
 Usage instructions
 ------------------
-You need to have at least boost 1.68.0 installed and the following compiler settings:
+You need to have boost installed (we tested with [1.70.0](https://www.boost.org/users/history/version_1_70_0.html)) and the following compiler settings:
 
 ##### Visual C++ 19.15 (Visual Studio 2017 15.8)
 * `/std:c++latest`
