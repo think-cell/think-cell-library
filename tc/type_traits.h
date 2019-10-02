@@ -251,7 +251,7 @@ namespace tc {
 				std::is_same<tc::decay_t<TSource>, TTarget>::value // covers bool and various char types, which are only convertible within their own type
 				||
 					(
-						std::is_floating_point<TSource>::value && std::is_floating_point<TSource>::value
+						std::is_floating_point<TSource>::value && std::is_floating_point<TTarget>::value
 						||
 						tc::is_actual_integer<TSource>::value && tc::is_actual_arithmetic<TTarget>::value
 					)
