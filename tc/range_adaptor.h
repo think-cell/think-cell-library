@@ -231,6 +231,14 @@ namespace tc {
 					make_range_adaptor_access(tc::derived_cast<Derived2>(*this), func)
 				)
 			)
+
+			template<typename This, typename Func>
+			constexpr static auto enumerate_reversed(This&& rngThis, Func&& func) MAYTHROW return_decltype(
+				tc::for_each(
+					tc::reverse(*std::forward<This>(rngThis).m_baserng),
+					make_range_adaptor_access(rngThis, func)
+				)
+			)
 		};
 		//-------------------------------------------------------------------------------------------------------------------------
 		// iterator/index based ranges

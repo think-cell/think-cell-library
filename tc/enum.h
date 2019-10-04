@@ -224,16 +224,16 @@ namespace tc {
 			return *this;
 		}
 		friend bool operator==( enumset const& lhs, enumset const& rhs ) noexcept {
-			return lhs.m_bitset==rhs.m_bitset;
+			return EQUAL_MEMBERS(m_bitset);
 		}
 		friend bool operator==( enumset const& lhs, Enum rhs ) noexcept {
 			return lhs==enumset(rhs);
 		}
-		friend bool is_subset( enumset const& lhs, Enum rhs ) noexcept {
-			return !(lhs & ~rhs);
+		friend bool is_subset( enumset const& seteSub, Enum eSuper ) noexcept {
+			return !(seteSub & ~eSuper);
 		}
-		friend bool is_subset( enumset const& lhs, enumset const& rhs ) noexcept {
-			return !(lhs & ~rhs);
+		friend bool is_subset( enumset const& seteSub, enumset const& seteSuper ) noexcept {
+			return !(seteSub & ~seteSuper);
 		}
 		Enum min() const& noexcept {
 			static_assert( enum_count<Enum>::value<=std::numeric_limits<unsigned long>::digits );

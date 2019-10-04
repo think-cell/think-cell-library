@@ -289,6 +289,15 @@ namespace tc {
 				}
 				return INTEGRAL_CONSTANT(tc::continue_)();
 			}
+			template<typename This, typename Func>
+			constexpr static auto enumerate_reversed(This&& rngThis, Func&& func) MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, std::declval<tc::range_reference_t<Rng>>())), INTEGRAL_CONSTANT(tc::continue_)> {
+				index idxEnd = rngThis.end_index();
+				while (!rngThis.equal_index(idxEnd, rngThis.begin_index())) {
+					rngThis.decrement_index(idxEnd);
+					RETURN_IF_BREAK(tc::continue_if_not_break(func, std::forward<This>(rngThis).dereference_index(idxEnd)));
+				}
+				return INTEGRAL_CONSTANT(tc::continue_)();
+			}
 
 			STATIC_FINAL_MOD(constexpr, begin_index)() const& noexcept -> index {
 				return m_idxBegin;
@@ -871,6 +880,8 @@ namespace tc {
 			static type pack_element(It&&, Rng&&, Ref&&) noexcept {}
 			template<typename Ref>
 			static type pack_element(Ref&&) noexcept {}
+			template<typename It>
+			static type pack_view(Rng&&, It&&, It&&) noexcept {}
 			static type pack_no_element(Rng&&) noexcept {}
 			static type pack_no_element() noexcept {}
 		};
@@ -1238,6 +1249,24 @@ namespace tc {
 		};
 
 		template< typename Rng >
+		struct return_border_before final {
+			using type = typename boost::range_iterator<Rng>::type;
+			static constexpr bool requires_iterator = true;
+
+			template<typename Ref>
+			static type pack_element(typename boost::range_iterator<Rng>::type it, Rng&&, Ref&&) noexcept {
+				return it;
+			}
+			static type pack_view(Rng&&, typename boost::range_iterator<Rng>::type itBegin, typename boost::range_iterator<Rng>::type) noexcept {
+				return itBegin;
+			}
+			static type pack_no_element(Rng&& rng) noexcept {
+				_ASSERTFALSE;
+				return tc::begin(rng);
+			}
+		};
+
+		template< typename Rng >
 		struct return_border_before_or_begin final {
 			using type = typename boost::range_iterator<Rng>::type;
 			static constexpr bool requires_iterator = true;
@@ -1538,6 +1567,7 @@ namespace tc {
 	using no_adl::return_singleton_range;
 	using no_adl::return_border_after;
 	using no_adl::return_border_after_or_begin;
+	using no_adl::return_border_before;
 	using no_adl::return_border_before_or_begin;
 	using no_adl::return_border_before_or_end;
 	using no_adl::return_take_before;
@@ -1698,6 +1728,11 @@ namespace tc {
 		struct empty_range {
 			template< typename Func >
 			constexpr auto operator()(Func const&) const& noexcept {
+				return INTEGRAL_CONSTANT(tc::continue_)();
+			}
+
+			template< typename Func >
+			static constexpr auto enumerate_reversed(empty_range const&, Func const&) noexcept {
 				return INTEGRAL_CONSTANT(tc::continue_)();
 			}
 

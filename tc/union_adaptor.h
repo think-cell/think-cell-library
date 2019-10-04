@@ -92,6 +92,17 @@ namespace tc {
 				);
 			}
 
+			template<typename This, typename Func>
+			static auto enumerate_reversed(This&& rngThis, Func&& func) MAYTHROW {
+				return tc::interleave_2(
+					tc::reverse(*std::get<0>(std::forward<This>(rngThis).m_baserng)),
+					tc::reverse(*std::get<1>(std::forward<This>(rngThis).m_baserng)),
+					/*comp*/[&](auto const& lhs, auto const& rhs) noexcept { return -rngThis.m_comp(lhs, rhs); },
+					std::ref(func),
+					std::ref(func),
+					FForwardFirstArgOnly<Func>(func)
+				);
+			}
 		};
 
 		template<

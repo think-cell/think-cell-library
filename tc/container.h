@@ -18,6 +18,7 @@
 #include <memory>
 #include <stack>
 #include <set>
+#include <map>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -61,4 +62,48 @@ namespace tc {
 	using std::unordered_set;
 	using std::unordered_map;
 #endif
+
+	namespace less_key_adl {
+		DEFINE_ADL_TAG_TYPE(less_key_tag)
+	}
+
+	namespace no_adl {
+		template<typename Lhs, typename Rhs, typename Enable=void>
+		struct has_adl_less_key_helper final: std::false_type {};
+
+		template<typename Lhs, typename Rhs>
+		struct has_adl_less_key_helper<Lhs, Rhs, decltype(less_key_helper(std::declval<Lhs const&>(), std::declval<Rhs const&>()), void())> final: std::true_type{};
+
+		template<typename Lhs, typename Rhs, typename Enable=void>
+		struct has_adl_tag_less_key_helper final: std::false_type {};
+
+		template<typename Lhs, typename Rhs>
+		struct has_adl_tag_less_key_helper<Lhs, Rhs, decltype(less_key_helper(tc::less_key_adl::less_key_tag, std::declval<Lhs const&>(), std::declval<Rhs const&>()), void())> final: std::true_type{};
+
+		struct less_key final {
+			template<typename Lhs, typename Rhs, std::enable_if_t<!has_adl_less_key_helper<Lhs, Rhs>::value && !has_adl_tag_less_key_helper<Lhs, Rhs>::value>* = nullptr>
+			bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
+				return std::less<>()(lhs, rhs);
+			}
+
+			template<typename Lhs, typename Rhs, std::enable_if_t<has_adl_less_key_helper<Lhs, Rhs>::value>* = nullptr>
+			bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
+				return less_key_helper(lhs, rhs);
+			}
+
+			template<typename Lhs, typename Rhs, std::enable_if_t<has_adl_tag_less_key_helper<Lhs, Rhs>::value>* = nullptr>
+			bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
+				return less_key_helper(tc::less_key_adl::less_key_tag, lhs, rhs);
+			}
+
+			using is_transparent = void;
+		};
+	}
+	using no_adl::less_key;
+
+	template<typename Key, typename Compare=tc::less_key, typename Alloc=std::allocator<Key>>
+	using set=std::set<Key, Compare, Alloc>;
+
+	template<typename Key, typename T, typename Compare=tc::less_key, typename Alloc=std::allocator<std::pair<Key const, T>>>
+	using map=std::map<Key, T, Compare, Alloc>;
 }

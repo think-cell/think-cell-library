@@ -9,7 +9,9 @@
 #pragma once
 
 #include "range_defines.h"
+#include "generic_macros.h"
 #include <type_traits>
+#include <boost/preprocessor/variadic/to_seq.hpp>
 
 namespace tc {
 	////////////////////////////////////////////////////////////////////////////////////
@@ -28,3 +30,5 @@ namespace tc {
 	using equality_comparable_adl::equality_comparable;
 }
 
+#define EQUAL_MEMBER_IMPL(member) (lhs.member == rhs.member)
+#define EQUAL_MEMBERS(...) (PP_DELIMIT_TRANSFORMED_SEQ(EQUAL_MEMBER_IMPL, &&, BOOST_PP_VARIADIC_TO_SEQ(__VA_ARGS__)))

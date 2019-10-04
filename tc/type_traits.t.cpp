@@ -983,13 +983,13 @@ namespace is_instance_or_derived_test {
 	STATICASSERTSAME((CTemplate2<bool, void>), (typename tc::is_instance_or_derived<CTemplate2, CInstantiation2>::base_instance));
 	STATICASSERTSAME((tc::type::list<bool, void>), (typename tc::is_instance_or_derived<CTemplate2, CInstantiation2>::arguments));
 
-	struct CPrivateInsantiation1 : private CTemplate1<int, int> {
+	struct CPrivateInstantiation1 : private CTemplate1<int, int> {
 		operator CTemplate1<void, void>();
 		operator CTemplate1<void, void>&();
 		operator CTemplate1<void, void>*();
 	};
 
-	// static_assert(!tc::is_instance_or_derived<CTemplate1, CPrivateInsantiation1>::value);  // Does not compile.
-	static_assert(!tc::is_instance_or_derived<CTemplate1Int, CPrivateInsantiation1>::value);
-	static_assert(!tc::is_instance_or_derived<CTemplate2, CPrivateInsantiation1>::value);
+	// static_assert(!tc::is_instance_or_derived<CTemplate1, CPrivateInstantiation1>::value);  // Does not compile.
+	static_assert(!tc::is_instance_or_derived<CTemplate1Int, CPrivateInstantiation1>::value);
+	static_assert(!tc::is_instance_or_derived<CTemplate2, CPrivateInstantiation1>::value);
 }

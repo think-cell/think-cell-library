@@ -92,6 +92,18 @@ namespace tc {
 						}
 					);
 			}
+
+			template<typename This, typename Func, std::void_t<decltype(tc::for_each(*std::declval<same_cvref_t<tc::reference_or_value<Rng>, This>>(), std::declval<Func>()))...>* = nullptr>
+			static auto enumerate_reversed(This&& rngThis, Func&& func) MAYTHROW {
+				return
+					tc::for_each(
+						std::index_sequence_for<Rng...>(),
+						[&](auto nconstIndex) MAYTHROW {
+							return tc::for_each(tc::reverse(*std::get<sizeof...(Rng) - 1 - nconstIndex()>(std::forward<This>(rngThis).m_baserng)), func);
+						}
+					);
+			}
+
 		protected:
 			template<typename IntConstant>
 			auto BaseRangeSize(IntConstant nconstIndex) const& noexcept {

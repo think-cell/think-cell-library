@@ -13,6 +13,7 @@
 #include "range_adaptor.h"
 #include "meta.h"
 #include "types.h"
+#include "equality_comparable.h"
 #include <tuple>
 
 
@@ -130,7 +131,7 @@ namespace tc {
 			}
 
 			STATIC_FINAL(equal_index)(index const& lhs, index const& rhs) const& noexcept -> bool {
-				return lhs.m_n == rhs.m_n;
+				return EQUAL_MEMBERS(m_n);
 			}
 
 			STATIC_FINAL(increment_index)(index& idx) const& noexcept -> void {

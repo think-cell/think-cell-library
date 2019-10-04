@@ -346,7 +346,7 @@ namespace tc {
 		struct function_ref;
 
 		template <typename Ret, typename ...Args>
-		struct function_ref<Ret(Args...)> final : private tc::no_adl::function_ref_base</*bNoExcept*/false, Ret, Args...> {
+		struct function_ref<Ret(Args...)> : private tc::no_adl::function_ref_base</*bNoExcept*/false, Ret, Args...> {
 			using base_ = tc::no_adl::function_ref_base</*bNoExcept*/false, Ret, Args...>;
 			using base_::base_;
 #ifndef _MSC_VER
@@ -360,7 +360,7 @@ namespace tc {
 		};
 
 		template <typename Ret, typename ...Args>
-		struct function_ref<Ret(Args...) noexcept> final : private tc::no_adl::function_ref_base</*bNoExcept*/true, Ret, Args...> {
+		struct function_ref<Ret(Args...) noexcept> : private tc::no_adl::function_ref_base</*bNoExcept*/true, Ret, Args...> {
 			using base_ = tc::no_adl::function_ref_base</*bNoExcept*/true, Ret, Args...>;
 			using base_::base_;
 #ifndef _MSC_VER

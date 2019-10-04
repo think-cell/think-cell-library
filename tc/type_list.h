@@ -83,17 +83,29 @@ namespace tc {
 			struct front<list<T0, T...>> final {
 				using type = T0;
 			};
+
+			template<typename List>
+			struct only;
+
+			template<typename T>
+			struct only<list<T>> final {
+				using type = T;
+			};
 		}
 		using no_adl::list;
 		using no_adl::size;
 		using no_adl::at;
 		using no_adl::front;
+		using no_adl::only;
 
 		template<typename List, std::size_t N>
 		using at_t = typename at<List, N>::type;
 
 		template<typename List>
 		using front_t = typename front<List>::type;
+
+		template<typename List>
+		using only_t = typename only<List>::type;
 
 		namespace no_adl {
 			template<typename... List>

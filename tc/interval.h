@@ -347,6 +347,16 @@ namespace tc {
 				return (*this)[tc::not_if(s < center(), tc::lo)];
 			}
 
+			template<typename S>
+			T const& opposite_boundary(S const& s) const& noexcept {
+				if ((*this)[tc::lo] == s) {
+					return (*this)[tc::hi];
+				} else {
+					_ASSERT((*this)[tc::hi] == s);
+					return (*this)[tc::lo];
+				}
+			}
+
 			newT center() const& noexcept {
 				return tc::center((*this)[tc::lo], (*this)[tc::hi]);
 			}
@@ -752,7 +762,7 @@ namespace tc {
 		private:
 			using Cont=std::conditional_t<
 				std::is_same< SetOrVectorImpl, use_set_impl_tag_t >::value,
-				std::set< TInterval, tc::no_adl::less_begin< T, TInterval > >,
+				tc::set< TInterval, tc::no_adl::less_begin< T, TInterval > >,
 				tc::no_adl::vector_as_set< TInterval, tc::no_adl::less_begin< T, TInterval > >
 			>;
 			Cont m_cont;

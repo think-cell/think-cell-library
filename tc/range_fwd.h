@@ -55,4 +55,13 @@ namespace tc {
 	private:
 		bool m_b;
 	};
+
+	namespace no_adl {
+		template<typename Rng, bool HasIterators = is_range_with_iterators<Rng>::value>
+		struct reverse_adaptor;
+	}
+	using no_adl::reverse_adaptor;
+
+	template<typename Rng>
+	reverse_adaptor<Rng> reverse(Rng&& rng) noexcept;
 }

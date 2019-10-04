@@ -77,20 +77,27 @@ namespace tc {
 		template< template<typename> class RangeReturn, typename Rng, typename Pred >
 		decltype(auto) find_last_if(Rng&& rng, Pred pred, boost::iterators::forward_traversal_tag) noexcept {
 			auto const itEnd=tc::end(rng);
-			for( auto itFound=tc::begin(rng); itFound!=itEnd; ++itFound ) {
-				tc::array<tc::storage_for<tc::iterator_cache<decltype(itFound)>>, 2> aic;
+			for( auto it=tc::begin(rng); it!=itEnd; ++it ) {
+				tc::array<tc::storage_for<tc::iterator_cache<decltype(it)>>, 2> aic;
 				int iFound = 0;
-				aic[iFound].ctor(itFound);
+				aic[iFound].ctor(it);
 				scope_exit(aic[iFound].dtor()); //iFound captured by reference
 				if (pred(**aic[iFound])) {
-					for (auto itNext = boost::next(itFound); itNext!=itEnd; ++itNext) {
-						aic[1 - iFound].ctor(itNext);
+					for (;;) {
+						++it;
+						if (itEnd==it) break;
+						aic[1 - iFound].ctor(it);
 						if (pred(**aic[1 - iFound])) {
 							iFound = 1 - iFound;
 						}
 						aic[1 - iFound].dtor();
 					}
-					return RangeReturn<Rng>::pack_element(tc_move(itFound),std::forward<Rng>(rng),*tc_move_always(*aic[iFound]));
+					
+					return RangeReturn<Rng>::pack_element(
+						aic[iFound]->m_it_(), // do not move because the iterator must stay alive for the reference to stay valid
+						std::forward<Rng>(rng),
+						*tc_move_always(*aic[iFound])
+					);
 				}
 			}
 			return RangeReturn<Rng>::pack_no_element(std::forward<Rng>(rng));

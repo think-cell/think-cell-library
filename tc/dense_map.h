@@ -96,7 +96,10 @@ namespace tc {
 			template< typename Func >
 			dense_map(func_tag_t, Func func) MAYTHROW
 				: m_a(tc::func_tag, [&func](std::size_t n) MAYTHROW -> Value { // force return of Value
-					static_assert(tc::is_safely_constructible<Value, decltype(func(tc::contiguous_enum<Key>::begin() + n))>::value);
+					static_assert(
+						std::is_same<Value, decltype(func(tc::contiguous_enum<Key>::begin() + n))>::value || // guaranteed copy elision, Value does not need to be copy/move constructible
+						tc::is_safely_constructible<Value, decltype(func(tc::contiguous_enum<Key>::begin() + n))>::value
+					);
 					return func(tc::contiguous_enum<Key>::begin() + n);
 				})
 			{}
@@ -193,7 +196,7 @@ namespace tc {
 
 			// comparison
 			friend bool operator==( dense_map const& lhs, dense_map const& rhs ) noexcept {
-				return lhs.m_a == rhs.m_a;
+				return EQUAL_MEMBERS(m_a);
 			}
 
 			// iterators
@@ -308,7 +311,7 @@ namespace tc {
 
 			// comparison
 			friend bool operator==( dense_map const& lhs, dense_map const& rhs ) noexcept {
-				return lhs.m_a == rhs.m_a;
+				return EQUAL_MEMBERS(m_a);
 			}
 
 			// iterators
@@ -418,6 +421,19 @@ namespace tc {
 	auto make_dense_map(tc::func_tag_t, Func&& func) return_ctor(
 		tc::dense_map<Enum BOOST_PP_COMMA() tc::decay_t<decltype(tc::as_lvalue(tc::decay_copy(func))(tc::contiguous_enum<Enum>::begin()))>>, ( tc::func_tag, std::forward<Func>(func) )
 	)
+
+	template <typename Enum, typename T = no_adl::deduce_tag, typename... Ts, std::enable_if_t<!std::is_reference<T>::value>* = nullptr>
+	constexpr auto make_dense_map(Ts&&... ts) noexcept {
+		static_assert(!std::is_reference<typename no_adl::delayed_deduce<T, Ts...>::type>::value);
+		return tc::dense_map<Enum, typename no_adl::delayed_deduce<T, Ts...>::type>(std::forward<Ts>(ts)...);
+	}
+
+	namespace less_key_adl {
+		template<typename Key, typename ValueLhs, typename ValueRhs>
+		bool less_key_helper(less_key_tag_t, tc::dense_map<Key, ValueLhs> const& lhs, tc::dense_map<Key, ValueRhs> const& rhs) noexcept {
+			return tc::order::less==tc::lexicographical_compare_3way(lhs, rhs);
+		}
+	}
 }
 
 #define TC_DENSE_MAP_SUPPORT(class_name) \

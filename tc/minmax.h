@@ -25,29 +25,6 @@ namespace tc {
 		private:
 			static_assert( tc::is_decayed<Better>::value );
 			Better m_better;
-			
-			// Allow best(x, y) to work where x and y have no common reference type,
-			// if m_better(x, y) is known statically.
-			// These overloads should be lambdas passed to make_overload in operator(),
-			// but that caused LLDB to crash (mrabkin, 2018-01-26).
-			template<typename T0, typename T1, typename... Args>
-			constexpr auto dispatch(std::true_type, T0&& t0, T1&& t1, Args&&... args) const& noexcept -> decltype(auto) {
-				return operator()(std::forward<T0>(t0), std::forward<Args>(args)...);
-			}
-			
-			template<typename T0, typename T1, typename... Args>
-			constexpr auto dispatch(std::false_type, T0&& t0, T1&& t1, Args&&... args) const& noexcept -> decltype(auto) {
-				return operator()(std::forward<T1>(t1), std::forward<Args>(args)...);
-			}
-			
-			template<typename T0, typename T1, typename... Args>
-			constexpr auto dispatch(bool b, T0&& t0, T1&& t1, Args&&... args) const& noexcept -> decltype(auto) {
-				return CONDITIONAL_PRVALUE_AS_VAL(
-					b,
-					operator()(std::forward<T0>(t0), std::forward<Args>(args)...),
-					operator()(std::forward<T1>(t1), std::forward<Args>(args)...)
-				);
-			}
 
 		public:
 			template<typename T>
@@ -57,7 +34,19 @@ namespace tc {
 			
 			template<typename T0, typename T1, typename... Args>
 			constexpr auto operator()(T0&& t0, T1&& t1, Args&&... args) const& noexcept -> decltype(auto) {
-				return dispatch(m_better(t0, t1), std::forward<T0>(t0), std::forward<T1>(t1), std::forward<Args>(args)...);
+				auto b = m_better(t0, t1);
+				if constexpr (std::is_same<std::true_type, decltype(b)>::value) {
+					return operator()(std::forward<T0>(t0), std::forward<Args>(args)...);
+				} else if constexpr (std::is_same<std::false_type, decltype(b)>::value) {
+					return operator()(std::forward<T1>(t1), std::forward<Args>(args)...);
+				} else {
+					STATICASSERTSAME(decltype(b), bool);
+					return CONDITIONAL_PRVALUE_AS_VAL(
+						b,
+						operator()(std::forward<T0>(t0), std::forward<Args>(args)...),
+						operator()(std::forward<T1>(t1), std::forward<Args>(args)...)
+					);
+				}
 			}
 		};
 	}

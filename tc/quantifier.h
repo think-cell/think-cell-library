@@ -12,6 +12,7 @@
 #include "transform_adaptor.h"
 #include "break_or_continue.h"
 #include "for_each.h"
+#include "find.h"
 #include <utility>
 
 /////////////////////////////////////////////
@@ -21,26 +22,24 @@ namespace tc {
 
 DEFINE_FN(bool_cast)
 
-template< typename Rng >
-bool any_of(Rng&& rng) MAYTHROW {
-	//return !tc::empty( tc::filter( std::forward<Rng>(rng), tc::fn_bool_cast() ) );
-	return tc::break_==tc::for_each(std::forward<Rng>(rng), [](bool_context b) noexcept {return tc::continue_if(!b);});
-}
-
-template< typename Rng >
-bool all_of(Rng&& rng) MAYTHROW {
-	//return tc::empty( tc::filter( std::forward<Rng>(rng), tc::not_fn(tc::fn_bool_cast()) ) );
-	return tc::continue_==tc::for_each(std::forward<Rng>(rng), [](bool_context b) noexcept {return tc::continue_if(b);});
-}
-
 template< typename Rng, typename Pred >
 bool any_of(Rng&& rng, Pred&& pred) MAYTHROW {
-	return any_of( tc::transform( std::forward<Rng>(rng), std::forward<Pred>(pred) ) );
+	return tc::find_first_if<tc::return_bool>(std::forward<Rng>(rng), std::forward<Pred>(pred));
+}
+
+template< typename Rng >
+bool any_of(Rng&& rng) MAYTHROW {
+	return tc::any_of(std::forward<Rng>(rng), tc::fn_bool_cast());
 }
 
 template< typename Rng, typename Pred >
 bool all_of(Rng&& rng, Pred&& pred) MAYTHROW {
-	return all_of( tc::transform( std::forward<Rng>(rng), std::forward<Pred>(pred) ) );
+	return !tc::any_of(std::forward<Rng>(rng), tc::not_fn(std::forward<Pred>(pred)));
+}
+
+template< typename Rng >
+bool all_of(Rng&& rng) MAYTHROW {
+	return tc::all_of(std::forward<Rng>(rng), tc::fn_bool_cast());
 }
 
 // pair is in same order as if minmax_element( ..., operator<( bool, bool ) ) would have been used.

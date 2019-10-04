@@ -15,6 +15,7 @@
 #include "ascii.h"
 #include "append.h"
 #include "tag_type.h"
+#include "quantifier.h"
 #include <boost/version.hpp>
 
 #ifndef __clang__
@@ -279,7 +280,7 @@ namespace tc {
 
 			template <typename CharType, typename Context, std::enable_if_t<std::is_same<CharType, attribute_type>::value>* = nullptr>
 			bool test(CharType const& ch, Context& context) const& noexcept {
-				return tc::find_first_if<tc::return_bool>(m_rng, [&](auto const& chAllowed) noexcept {
+				return tc::any_of(m_rng, [&](auto const& chAllowed) noexcept {
 					return 0==x3::get_case_compare<typename boost::spirit::traits::char_encoding_from_char<CharType>::type>(context)(ch, chAllowed);
 				});
 			}
@@ -545,6 +546,9 @@ namespace boost { namespace spirit { namespace x3 {
 
 namespace tc {
     inline constexpr auto ascii_no_case = x3::ascii_no_case_gen{};
+
+	template<typename Char>
+	const auto asciixdigit = asciidigit<Char> | ascii_no_case[char_range(tc::explicit_cast<Char>('A'), tc::explicit_cast<Char>('F'))];
 
 	template<typename Char, typename T>
 	using symbols = x3::symbols_parser<typename boost::spirit::traits::char_encoding_from_char<tc::decay_t<Char>>::type, T>;

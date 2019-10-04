@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include "quantifier.h"
 #include "for_each.h"
 #include "break_or_continue.h"
 #include "range_defines.h"

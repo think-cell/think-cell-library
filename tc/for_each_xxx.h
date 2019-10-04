@@ -166,32 +166,27 @@ namespace tc {
 		return INTEGRAL_CONSTANT(tc::continue_)();
 	}
 
-	namespace no_adl {
-		template<typename T, typename Func>
-		struct for_each_adjacent_pair_fn final {
-		private:
-			Func& m_func;
-			std::optional<T> m_oparam;
-		public:
-			for_each_adjacent_pair_fn(Func& func) noexcept
-				: m_func(func)
-			{}
-
-			template<typename U>
-			auto operator()(U&& u) & MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(m_func, *m_oparam, u)), INTEGRAL_CONSTANT(tc::continue_)> {
-				if (m_oparam) {
-					RETURN_IF_BREAK(tc::continue_if_not_break(m_func, *m_oparam, u));
-				}
-				m_oparam.emplace(std::forward<U>(u));
-
-				return INTEGRAL_CONSTANT(tc::continue_)();
-			}
-		};
-	}
-
 	template<typename Rng, typename Func, std::enable_if_t<!is_range_with_iterators<Rng>::value>* = nullptr>
 	auto for_each_adjacent_pair(Rng&& rng, Func func) MAYTHROW {
-		return tc::for_each( std::forward<Rng>(rng), no_adl::for_each_adjacent_pair_fn<tc::range_value_t<Rng>, Func>(func) );
+		std::optional<tc::range_value_t<Rng>> oparam;
+		return tc::for_each( std::forward<Rng>(rng), [&](auto&& u) MAYTHROW
+			-> tc::common_type_t<decltype(tc::continue_if_not_break(
+#ifdef __clang__
+				// Apple clang 10: Using func and *oparam in lambda return type leads to ICE.
+				std::declval<Func&>(), std::declval<tc::range_value_t<Rng>>(), u
+#else
+				// MSVC 15.8: Using std::declval<Func>() and std::declval<tc::range_value_t<Rng>&>() in lambda return type leads to compilation failure.
+				func, *tc_move_always(oparam), u
+#endif
+			)), INTEGRAL_CONSTANT(tc::continue_)>
+		{
+			if (oparam) {
+				RETURN_IF_BREAK(tc::continue_if_not_break(func, *tc_move_always(oparam), u));
+			}
+			oparam.emplace(tc_move_if_owned(u));
+
+			return INTEGRAL_CONSTANT(tc::continue_)();
+		} );
 	}
 
 	template<typename Rng, typename FuncBegin, typename FuncElem, typename FuncSeparator, typename FuncEnd>

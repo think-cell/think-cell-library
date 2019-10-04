@@ -14,13 +14,11 @@
 #include "explicit_cast.h"
 #include "for_each.h"
 #include "make_lazy.h"
+#include "container.h"
 
 #include <boost/range/iterator.hpp>
 #include <boost/next_prior.hpp>
 #include <boost/intrusive/set.hpp>
-
-#include <set>
-#include <map>
 
 namespace tc {
 	// std::set/map returns pair with bool=inserted?
@@ -165,11 +163,13 @@ namespace tc {
 
 	template< typename Cont, typename... Args >
 	auto cont_try_emplace(Cont& cont, Args&& ... args) MAYTHROW {
-		return NOBADALLOC(cont.emplace(std::forward<Args>(args)...)); // MAYTHROW
+		auto const pairitb = NOBADALLOC(cont.emplace(std::forward<Args>(args)...)); // MAYTHROW
+		STATICASSERTSAME(decltype(pairitb.second), bool);
+		return pairitb;
 	}
 
-	template<typename... MapArgs, typename K, typename V, typename Better>
-	void map_try_emplace_better(std::map<MapArgs...>& map, K&& key, V&& val, Better&& better) noexcept {
+	template<typename Key, typename Val, typename Compare, typename Alloc, typename K, typename V, typename Better>
+	void map_try_emplace_better(tc::map<Key, Val, Compare, Alloc>& map, K&& key, V&& val, Better&& better) noexcept {
 		auto it = map.lower_bound(key);
 		if (tc::end(map) == it || map.key_comp()(key, it->first)) {
 			NOEXCEPT( tc::cont_must_emplace_before(map, tc_move(it), std::forward<K>(key), std::forward<V>(val)) );

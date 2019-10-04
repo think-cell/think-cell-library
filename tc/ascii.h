@@ -25,6 +25,12 @@ namespace tc {
 	DEFINE_FN( isasciidigit )
 
 	template< typename T >
+	bool isasciixdigit( T ch ) noexcept {
+		return isasciidigit(ch) || tc::explicit_cast<T>('A')<=ch && ch<=tc::explicit_cast<T>('F') || tc::explicit_cast<T>('a')<=ch && ch<=tc::explicit_cast<T>('f');
+	}
+	DEFINE_FN( isasciixdigit )
+
+	template< typename T >
 	bool isasciiupper( T ch ) noexcept {
 		return tc::explicit_cast<T>('A')<=ch && ch<=tc::explicit_cast<T>('Z');
 	}

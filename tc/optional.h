@@ -18,4 +18,9 @@ namespace tc {
 	constexpr decltype(auto) optional_or( Optional&& optional, T&& t ) noexcept {
 		return CONDITIONAL_RVALUE_AS_REF(optional, *std::forward<Optional>(optional), std::forward<T>(t));
 	}
+
+	template<typename Optional, typename Func, std::enable_if_t<tc::is_instance<std::optional, std::remove_reference_t<Optional>>::value>* = nullptr>
+	constexpr decltype(auto) optional_or_eval( Optional&& optional, Func func ) noexcept {
+		return CONDITIONAL_PRVALUE_AS_VAL(optional, *std::forward<Optional>(optional), func());
+	}
 }

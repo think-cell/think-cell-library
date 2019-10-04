@@ -117,7 +117,7 @@ namespace tc {
 
 		std::stringstream os;
 		os << "[";
-		for_each(rng, detail::print_elem<std::stringstream>(os, max_elems) );
+		for_each(rng, std::ref(tc::as_lvalue(detail::print_elem<std::stringstream>(os, max_elems))) );
 		os << "]";
 		return os.str();
 	}

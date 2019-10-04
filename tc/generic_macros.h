@@ -14,7 +14,9 @@
 #include <boost/preprocessor/seq/elem.hpp>
 #include <boost/preprocessor/seq/enum.hpp>
 #include <boost/preprocessor/seq/pop_back.hpp>
-#include <boost/preprocessor/control/iif.hpp>
+#include <boost/preprocessor/seq/seq.hpp>
+#include <boost/preprocessor/control/if.hpp>
+#include <boost/preprocessor/comparison/less.hpp>
 
 #define PP_APPLY_MACRO(state, macro, elem) macro(elem)
 

@@ -884,10 +884,7 @@ namespace tc {
 						std::make_pair(pairitit.first, tc_at(ab, I))...
 					));
 
-					// C++17: ([](auto& it, bool const b) noexcept {if (b) ++it;}(pairitit.first, tc_at(ab,I)), ...);
-					static_cast<void>(std::initializer_list<int> {
-						([](auto& it, bool const b) noexcept {if (b) ++it; }(pairitit.first, tc_at(ab, I)), 0)...
-					});
+					([](auto& it, bool const b) noexcept {if (b) ++it;}(pairitit.first, tc_at(ab,I)), ...);
 				}
 				return tc::continue_;
 			}
