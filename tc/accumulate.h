@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -31,14 +31,14 @@ namespace tc {
 	}
 
 	template< typename Rng, typename T, typename AccuOp >
-	T accumulate(Rng&& rng, T t, AccuOp accuop) MAYTHROW {
+	[[nodiscard]] T accumulate(Rng&& rng, T t, AccuOp accuop) MAYTHROW {
 		tc::for_each(std::forward<Rng>(rng), no_adl::accumulate_fn<T,AccuOp>(t,accuop));
 		return t;
 	}
 
 	namespace no_adl {
 		template< typename T, typename AccuOp >
-		struct accumulator_with_front /*final*/ {
+		struct [[nodiscard]] accumulator_with_front /*final*/ {
 			std::optional<T> & m_t;
 
 			AccuOp m_accuop;
@@ -60,11 +60,11 @@ namespace tc {
 	}
 
 	template<typename Value, typename AccuOp>
-	auto make_accumulator_with_front(std::optional<Value>& value, AccuOp&& accumulate) noexcept
-		return_ctor(no_adl::accumulator_with_front<Value BOOST_PP_COMMA() AccuOp>, (value, std::forward<AccuOp>(accumulate)))
+	auto make_accumulator_with_front(std::optional<Value>& value, AccuOp&& accumulate)
+		return_ctor_noexcept(no_adl::accumulator_with_front<Value BOOST_PP_COMMA() AccuOp>, (value, std::forward<AccuOp>(accumulate)))
 
 	template< typename T, typename Rng, typename AccuOp >
-	std::optional<T> accumulate_with_front2(Rng&& rng, AccuOp&& accuop) MAYTHROW {
+	[[nodiscard]] std::optional<T> accumulate_with_front2(Rng&& rng, AccuOp&& accuop) MAYTHROW {
 		static_assert(tc::is_decayed< T >::value);
 		std::optional<T> t;
 		tc::for_each(std::forward<Rng>(rng), tc::make_accumulator_with_front(t,std::forward<AccuOp>(accuop)));
@@ -72,7 +72,7 @@ namespace tc {
 	}
 
 	template< typename Rng, typename AccuOp >
-	std::optional< tc::range_value_t< std::remove_reference_t<Rng> > > accumulate_with_front(Rng&& rng, AccuOp&& accuop) MAYTHROW {
+	[[nodiscard]] std::optional< tc::range_value_t< std::remove_reference_t<Rng> > > accumulate_with_front(Rng&& rng, AccuOp&& accuop) MAYTHROW {
 		return accumulate_with_front2< tc::range_value_t< std::remove_reference_t<Rng> > >(std::forward<Rng>(rng),std::forward<AccuOp>(accuop));
 	}
 
@@ -105,7 +105,7 @@ namespace tc {
 				});
 			}
 
-			constexpr auto size() const& noexcept return_decltype(
+			constexpr auto size() const& return_decltype_noexcept(
 				tc::size_raw(*m_baserng)
 			)
 		};
@@ -113,7 +113,7 @@ namespace tc {
 	using no_adl::partial_sum_adaptor;
 
 	template <typename Rng, typename T, typename AccuOp>
-	auto partial_sum(Rng&& rng, T&& init, AccuOp&& accuop) noexcept return_ctor(
+	auto partial_sum(Rng&& rng, T&& init, AccuOp&& accuop) return_ctor_noexcept(
 		partial_sum_adaptor<Rng BOOST_PP_COMMA() T BOOST_PP_COMMA() AccuOp >, (std::forward<Rng>(rng), std::forward<T>(init), std::forward<AccuOp>(accuop))
 	)
 }

@@ -1,14 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #include "range.h"
 #include "container.h" // tc::vector
-#include "sub_range.h"
+#include "subrange.h"
 #include "union_adaptor.h"
 #include "range.t.h"
 #include "unique_range_adaptor.h"
@@ -19,47 +19,45 @@
 #include "Library/Utilities/Hash.h"
 #endif
 
-#include <boost/implicit_cast.hpp>
-
 #include <type_traits>
 
 namespace {
-	STATICASSERTSAME(tc::make_sub_range_result_t<tc::ptr_range<char const>&>, tc::ptr_range<char const>);
+	STATICASSERTSAME(tc::make_subrange_result_t<tc::ptr_range<char const>&>, tc::ptr_range<char const>);
 
-	using SRVI = tc::make_sub_range_result_t<tc::vector<int>&>;
-	using CSRVI = tc::make_sub_range_result_t<tc::vector<int> const&>;
+	using SRVI = tc::make_subrange_result_t<tc::vector<int>&>;
+	using CSRVI = tc::make_subrange_result_t<tc::vector<int> const&>;
 
-	using SSRVI = tc::make_sub_range_result_t<tc::make_sub_range_result_t<tc::vector<int>&>>;
-	using CSSRVI = tc::make_sub_range_result_t<tc::make_sub_range_result_t<tc::vector<int> const&>>;
+	using SSRVI = tc::make_subrange_result_t<tc::make_subrange_result_t<tc::vector<int>&>>;
+	using CSSRVI = tc::make_subrange_result_t<tc::make_subrange_result_t<tc::vector<int> const&>>;
 
-	UNITTESTDEF( sub_range_array ) {
+	UNITTESTDEF( subrange_array ) {
 
 		int arr[4] = {1,2,3,4};
 		auto arr_rng = tc::slice_by_interval(arr, tc::make_interval(1, 3));
 
-		boost::implicit_cast<tc::sub_range<tc::iterator_base<int *>>>(arr_rng);
-		boost::implicit_cast<tc::sub_range<tc::iterator_base<int const*>>>(arr_rng);
+		void(tc::implicit_cast<tc::subrange<tc::iterator_base<int *>>>(arr_rng));
+		void(tc::implicit_cast<tc::subrange<tc::iterator_base<int const*>>>(arr_rng));
 	}
 
 
-	UNITTESTDEF( const_sub_range_char_ptr ) {
-		tc::sub_range<tc::iterator_base<char const*>>{"test"};
+	UNITTESTDEF( const_subrange_char_ptr ) {
+		tc::subrange<tc::iterator_base<char const*>>{"test"};
 	}
 
 	//-------------------------------------------------------------------------------------------------------------------------
 
-	using SRVI = tc::make_sub_range_result_t<tc::vector<int>&>;
-	using CSRVI = tc::make_sub_range_result_t<tc::vector<int> const&>;
+	using SRVI = tc::make_subrange_result_t<tc::vector<int>&>;
+	using CSRVI = tc::make_subrange_result_t<tc::vector<int> const&>;
 
-	using SSRVI = tc::make_sub_range_result_t<tc::make_sub_range_result_t<tc::vector<int>&>>;
-	using CSSRVI = tc::make_sub_range_result_t<tc::make_sub_range_result_t<tc::vector<int> const&>>;
+	using SSRVI = tc::make_subrange_result_t<tc::make_subrange_result_t<tc::vector<int>&>>;
+	using CSSRVI = tc::make_subrange_result_t<tc::make_subrange_result_t<tc::vector<int> const&>>;
 
 	[[maybe_unused]] void ref_test(SRVI & rng) noexcept {
 		CSRVI const_rng(rng);
 		SRVI non_const_rng(rng);
 	}
 
-	UNITTESTDEF( const_sub_range ) {
+	UNITTESTDEF( const_subrange ) {
 		tc::vector<int> v;
 		auto srvi = tc::slice(v);
 		auto csrvi = tc::slice(tc::as_const(v));
@@ -72,7 +70,7 @@ namespace {
 		CSRVI const_rng(srvi);
 	}
 
-	UNITTESTDEF( sub_sub_range_rvalue ) {
+	UNITTESTDEF( sub_subrange_rvalue ) {
 
 		tc::vector<int> v;
 
@@ -86,7 +84,7 @@ namespace {
 		STATICASSERTSAME(decltype(cssrvi), decltype(csrvi), "const sub-sub-range does not flatten to const sub-range (decltype)");
 	}
 
-	UNITTESTDEF( sub_sub_range_lvalue ) {
+	UNITTESTDEF( sub_subrange_lvalue ) {
 
 		tc::vector<int> v;
 
@@ -97,17 +95,17 @@ namespace {
 		auto cssrvi = tc::slice(csrvi);
 
 		// sanity checks
-		STATICASSERTSAME(decltype(srvi), SRVI, "make_sub_range_result gives wrong result");
-		STATICASSERTSAME(decltype(csrvi), CSRVI, "make_sub_range_result gives wrong result");
-		STATICASSERTSAME(decltype(ssrvi), SSRVI, "make_sub_range_result gives wrong result");
-		STATICASSERTSAME(decltype(cssrvi), CSSRVI, "make_sub_range_result gives wrong result");
+		STATICASSERTSAME(decltype(srvi), SRVI, "make_subrange_result gives wrong result");
+		STATICASSERTSAME(decltype(csrvi), CSRVI, "make_subrange_result gives wrong result");
+		STATICASSERTSAME(decltype(ssrvi), SSRVI, "make_subrange_result gives wrong result");
+		STATICASSERTSAME(decltype(cssrvi), CSSRVI, "make_subrange_result gives wrong result");
 
 		// the actual test
 		STATICASSERTSAME(decltype(ssrvi), decltype(srvi), "Sub-sub-range does not flatten to sub-range");
 		STATICASSERTSAME(decltype(cssrvi), decltype(csrvi), "const sub-sub-range does not flatten to const sub-range");
 	}
 
-	UNITTESTDEF( sub_sub_range_index ) {
+	UNITTESTDEF( sub_subrange_index ) {
 
 		TEST_init_hack(tc::vector, int, v, {1,2,3,4,5,6,7,8,9});
 		TEST_init_hack(tc::vector, int, exp36, {4,5,6});
@@ -124,16 +122,16 @@ namespace {
 
 	}
 
-	UNITTESTDEF( sub_sub_range_crazy_manual ) {
+	UNITTESTDEF( sub_subrange_crazy_manual ) {
 
 		tc::vector<int> v;
 
-		// don't try that at work! - Seriously: sub_range is build to work correctly in a variety of situations,
-		// but normally it should not be necessary to manually utter the type. Use slice and make_sub_range_result instead.
+		// don't try that at work! - Seriously: subrange is build to work correctly in a variety of situations,
+		// but normally it should not be necessary to manually utter the type. Use slice and make_subrange_result instead.
 		// if you do need to say the type (e.g. when deducting sth.)  ...
 		//_ASSERT(false);
-		tc::sub_range<tc::vector<int>&>{v}; // create a sub range from unrelated range
-		static_cast<void>(tc::sub_range<tc::vector<int>&>(tc::sub_range<tc::vector<int>&>(v))); // copy sub range
+		tc::subrange<tc::vector<int>&>{v}; // create a sub range from unrelated range
+		static_cast<void>(tc::subrange<tc::vector<int>&>(tc::subrange<tc::vector<int>&>(v))); // copy sub range
 	}
 
 	UNITTESTDEF(union_range_tests) {
@@ -180,7 +178,7 @@ namespace {
 				auto it = tc::lower_bound<tc::return_border>(rng,3);
 				_ASSERTEQUAL(*it,3);
 				_ASSERTEQUAL(*boost::prior(it), 2);
-				_ASSERTEQUAL(*boost::next(it), 3);
+				_ASSERTEQUAL(*tc::next(it), 3);
 	}
 			{
 				auto it = tc::upper_bound<tc::return_border>(rng,1);
@@ -260,7 +258,7 @@ namespace {
 
 	}
 
-	UNITTESTDEF(sub_range_with_tranform) {
+	UNITTESTDEF(subrange_with_tranform) {
 
 		tc::vector<int> vecn{1,2,3};
 		auto rgntrnsfn = tc::transform(vecn, [](int n) noexcept {return n*n;});
@@ -623,6 +621,26 @@ namespace {
 		};
 		_ASSERTEQUAL(tc::for_each(tc::take_first(rngch, 4), assert_no_single_char_sink()), tc::continue_);
 		_ASSERT(tc::equal("1234", tc::take_first(rngch, 4)));
+	}
+
+	UNITTESTDEF( drop_first_sink ) {
+		auto const rngn = [](auto sink) noexcept {
+			for(int i=0; i < 7;++i) { RETURN_IF_BREAK(tc::continue_if_not_break(sink, i)); }
+			return tc::continue_;
+		};
+
+		_ASSERTEQUAL(tc::for_each(tc::drop_first(rngn), [](int) noexcept {}), tc::continue_);
+		_ASSERTEQUAL(tc::for_each(tc::drop_first(rngn), [](int) noexcept { return tc::break_; }), tc::break_);
+		_ASSERT(tc::equal(MAKE_CONSTEXPR_ARRAY(4,5,6), tc::drop_first(rngn, 4)));
+
+		auto rngch = tc::drop_first(tc::concat("123", [](auto&& sink) noexcept { return tc::for_each("456", std::forward<decltype(sink)>(sink)); }), 2);
+
+		struct assert_no_single_char_sink /*final*/ {
+			auto operator()(char) const& noexcept { _ASSERTFALSE; return tc::construct_default_or_terminate<tc::break_or_continue>(); }
+			auto chunk(tc::ptr_range<char const> str) const& noexcept { return INTEGRAL_CONSTANT(tc::continue_)(); }
+		};
+		_ASSERTEQUAL(tc::for_each(rngch, assert_no_single_char_sink()), tc::continue_);
+		_ASSERT(tc::equal("3456", rngch));
 	}
 }
 

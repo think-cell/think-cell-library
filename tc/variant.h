@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -15,54 +15,74 @@
 #include <variant>
 
 namespace tc {
+	template<std::size_t I, typename Variant>
+	[[nodiscard]] constexpr auto get_if(Variant* v) return_decltype_noexcept(
+		std::get_if<I>(v)
+	)
+
+	template<std::size_t I, typename Variant>
+	[[nodiscard]] constexpr auto get_if(Variant& v) return_decltype_noexcept(
+		std::get_if<I>(std::addressof(v))
+	)
+
+	template<typename T, typename Variant>
+	[[nodiscard]] constexpr auto get_if(Variant* v) return_decltype_noexcept(
+		std::get_if<T>(v)
+	)
+
+	template<typename T, typename Variant>
+	[[nodiscard]] constexpr auto get_if(Variant& v) return_decltype_noexcept(
+		std::get_if<T>(std::addressof(v))
+	)
+
 	template<std::size_t I, typename... Types>
-	constexpr std::variant_alternative_t<I, std::variant<Types...>>& get(std::variant<Types...>& v) noexcept {
-		return *VERIFY(std::get_if<I>(&v));
+	[[nodiscard]] constexpr std::variant_alternative_t<I, std::variant<Types...>>& get(std::variant<Types...>& v) noexcept {
+		return *VERIFY(tc::get_if<I>(v));
 	}
 
 	template<std::size_t I, typename... Types>
-	constexpr std::variant_alternative_t<I, std::variant<Types...>>&& get(std::variant<Types...>&& v) noexcept {
-		return tc_move_always(*VERIFY(std::get_if<I>(&v)));
+	[[nodiscard]] constexpr std::variant_alternative_t<I, std::variant<Types...>>&& get(std::variant<Types...>&& v) noexcept {
+		return tc_move_always(*VERIFY(tc::get_if<I>(v)));
 	}
 
 	template<std::size_t I, typename... Types>
-	constexpr std::variant_alternative_t<I, std::variant<Types...>> const& get(std::variant<Types...> const& v) noexcept {
-		return *VERIFY(std::get_if<I>(&v));
+	[[nodiscard]] constexpr std::variant_alternative_t<I, std::variant<Types...>> const& get(std::variant<Types...> const& v) noexcept {
+		return *VERIFY(tc::get_if<I>(v));
 	}
 
 	template<std::size_t I, typename... Types>
-	constexpr decltype(auto) get(std::variant<Types...> const&& v) noexcept {
-		return static_cast<std::variant_alternative_t<I, std::variant<Types...>> const&&>(*VERIFY(std::get_if<I>(&v)));
+	[[nodiscard]] constexpr decltype(auto) get(std::variant<Types...> const&& v) noexcept {
+		return static_cast<std::variant_alternative_t<I, std::variant<Types...>> const&&>(*VERIFY(tc::get_if<I>(v)));
 	}
 
 	template<typename T, typename... Types>
-	constexpr T& get(std::variant<Types...>& v) noexcept {
-		return *VERIFY(std::get_if<T>(&v));
+	[[nodiscard]] constexpr T& get(std::variant<Types...>& v) noexcept {
+		return *VERIFY(tc::get_if<T>(v));
 	}
 
 	template<typename T, typename... Types>
-	constexpr T&& get(std::variant<Types...>&& v) noexcept {
-		return tc_move_always(*VERIFY(std::get_if<T>(&v)));
+	[[nodiscard]] constexpr T&& get(std::variant<Types...>&& v) noexcept {
+		return tc_move_always(*VERIFY(tc::get_if<T>(v)));
 	}
 
 	template<typename T, typename... Types>
-	constexpr T const& get(std::variant<Types...> const& v) noexcept {
-		return *VERIFY(std::get_if<T>(&v));
+	[[nodiscard]] constexpr T const& get(std::variant<Types...> const& v) noexcept {
+		return *VERIFY(tc::get_if<T>(v));
 	}
 
 	template<typename T, typename... Types>
-	constexpr decltype(auto) get(std::variant<Types...> const&& v) noexcept {
-		return static_cast<T const&&>(*VERIFY(std::get_if<T>(&v)));
+	[[nodiscard]] constexpr decltype(auto) get(std::variant<Types...> const&& v) noexcept {
+		return static_cast<T const&&>(*VERIFY(tc::get_if<T>(v)));
 	}
 
 	namespace detail {
 		template<typename Variant, std::enable_if_t<tc::is_instance<std::variant, std::remove_reference_t<Variant>>::value>* = nullptr>
-		decltype(auto) get_variant(Variant&& var) noexcept {
+		[[nodiscard]] decltype(auto) get_variant(Variant&& var) noexcept {
 			return std::forward<Variant>(var);
 		}
 
 		template<typename Variant, std::enable_if_t<tc::is_instance<std::variant, typename std::remove_reference_t<Variant>::TVariant>::value>* = nullptr>
-		decltype(auto) get_variant(Variant&& var) noexcept {
+		[[nodiscard]] decltype(auto) get_variant(Variant&& var) noexcept {
 			return tc::base_cast<typename std::remove_reference_t<Variant>::TVariant>(std::forward<Variant>(var));
 		}
 	}
@@ -143,8 +163,8 @@ namespace tc {
 }
 
 template<typename... Ts, typename TRhs, std::enable_if_t<tc::is_variant_equality_comparable_to_value<std::variant<Ts...>, TRhs>::value>* = nullptr>
-bool operator==(std::variant<Ts...> const& lhs, TRhs const& rhs) noexcept {
-	if (auto o = std::get_if<tc::type::find_unique_if<tc::type::list<Ts const&...>, tc::type::curry<tc::is_equality_comparable, TRhs const&>::template type>::index>(std::addressof(lhs))) {
+[[nodiscard]] bool operator==(std::variant<Ts...> const& lhs, TRhs const& rhs) noexcept {
+	if (auto o = tc::get_if<tc::type::find_unique_if<tc::type::list<Ts const&...>, tc::type::curry<tc::is_equality_comparable, TRhs const&>::template type>::index>(lhs)) {
 		return *o==rhs;
 	} else {
 		return false;
@@ -152,17 +172,17 @@ bool operator==(std::variant<Ts...> const& lhs, TRhs const& rhs) noexcept {
 }
 
 template<typename... Ts, typename TRhs, std::enable_if_t<tc::is_variant_equality_comparable_to_value<std::variant<Ts...>, TRhs>::value>* = nullptr>
-bool operator!=(std::variant<Ts...> const& lhs, TRhs const& rhs) noexcept {
+[[nodiscard]] bool operator!=(std::variant<Ts...> const& lhs, TRhs const& rhs) noexcept {
 	return !(lhs==rhs);
 }
 
 template<typename TLhs, typename... Ts, std::enable_if_t<tc::is_variant_equality_comparable_to_value<std::variant<Ts...>, TLhs>::value>* = nullptr>
-bool operator==(TLhs const& lhs, std::variant<Ts...> const& rhs) noexcept {
+[[nodiscard]] bool operator==(TLhs const& lhs, std::variant<Ts...> const& rhs) noexcept {
 	return rhs==lhs;
 }
 
 template<typename TLhs, typename... Ts, std::enable_if_t<tc::is_variant_equality_comparable_to_value<std::variant<Ts...>, TLhs>::value>* = nullptr>
-bool operator!=(TLhs const& lhs, std::variant<Ts...> const& rhs) noexcept {
+[[nodiscard]] bool operator!=(TLhs const& lhs, std::variant<Ts...> const& rhs) noexcept {
 	return !(lhs==rhs);
 }
 
@@ -172,3 +192,10 @@ static_assert( std::is_move_assignable< std::variant<int, double, std::string> >
 #ifdef __clang__
 static_assert( std::is_nothrow_move_constructible< std::variant<int, double, std::string> >::value );
 #endif
+
+#define tc_if_holds_else_value(var, val, type, ...) ([&](auto* p) MAYTHROW -> decltype(auto) { \
+	auto const f=[&](auto& _) MAYTHROW -> decltype(auto) { return (__VA_ARGS__); }; \
+	static_assert( !std::is_rvalue_reference<decltype(f(*p))>::value ); \
+	static_assert( !std::is_rvalue_reference<decltype((val))>::value ); \
+	return CONDITIONAL_PRVALUE_AS_VAL(p, f(*p), TC_FWD(val)); \
+}(tc::get_if<type>(var)))

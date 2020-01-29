@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -19,12 +19,12 @@
 
 namespace tc {
 	template<typename TTarget, typename TSource, std::enable_if_t<tc::is_base_of_decayed<TTarget, TSource>::value>* = nullptr>
-	TSource&& reluctant_numeric_cast(TSource&& src) noexcept {
+	[[nodiscard]] TSource&& reluctant_numeric_cast(TSource&& src) noexcept {
 		return std::forward<TSource>(src);
 	}
 
 	template<typename TTarget, typename TSource, std::enable_if_t<!tc::is_base_of_decayed<TTarget, TSource>::value>* = nullptr>
-	TTarget reluctant_numeric_cast(TSource&& src) noexcept {
+	[[nodiscard]] TTarget reluctant_numeric_cast(TSource&& src) noexcept {
 		return tc::explicit_cast<TTarget>(std::forward<TSource>(src));
 	}
 
@@ -32,7 +32,7 @@ namespace tc {
 	// round
 
 	template< typename T >
-	T round( T t ) noexcept {
+	[[nodiscard]] T round( T t ) noexcept { // We cannot make tc::round constexpr at the moment. tc::round uses std::floor which is not constexpr. We have to use reinterpret_cast if we want to implement our own floor(f).
 		static_assert( std::is_floating_point<T>::value );
 		return std::floor(t+static_cast<T>(.5));
 	}
@@ -73,17 +73,18 @@ namespace tc {
 	};
 
 	template< typename Lhs, typename Rhs >
+	[[nodiscard]]
 	typename TMultiply<Lhs,Rhs>::type
 	mul( Lhs lhs, Rhs rhs ) noexcept {
 		return tc::explicit_cast<typename TMultiply<Lhs,Rhs>::type>(lhs)*tc::explicit_cast<typename TMultiply<Lhs,Rhs>::type>(rhs);
 	}
 
 	template<typename T>
-	auto sqr(T const& x) noexcept
-		return_decltype( mul(x,x) )
+	[[nodiscard]] auto sqr(T const& x)
+		return_decltype_noexcept( mul(x,x) )
 
 	template< typename Num, typename Den >
-	constexpr double fdiv( Num num, Den den) noexcept {
+	[[nodiscard]] constexpr double fdiv( Num num, Den den) noexcept {
 		return static_cast<double>(num)/static_cast<double>(den);
 	}
 
@@ -203,7 +204,7 @@ namespace tc {
 	template< typename Num, typename Denom, typename Round, std::enable_if_t<
 		tc::is_actual_integer_like<Num>::value && tc::is_actual_integer_like< Denom >::value && std::numeric_limits<Num>::is_signed && std::numeric_limits<Denom>::is_signed
 	>* = nullptr>
-		Num idiv(Num num, Denom denom, Round round) noexcept {
+	[[nodiscard]] Num idiv(Num num, Denom denom, Round round) noexcept {
 		if (denom < 0) {
 			-tc::inplace(num);
 			-tc::inplace(denom);
@@ -214,74 +215,81 @@ namespace tc {
 	template< typename Num, typename Denom, typename Round, std::enable_if_t<
 		tc::is_actual_integer_like<Num>::value && tc::is_actual_integer_like< Denom >::value && !std::numeric_limits<Num>::is_signed && !std::numeric_limits<Denom>::is_signed
 	>* = nullptr>
-	Num idiv( Num num, Denom denom, Round round ) noexcept {
+	[[nodiscard]] Num idiv( Num num, Denom denom, Round round ) noexcept {
 		return idiv_impl::idiv( num, denom, round );
 	}
 
 	template< typename Num, typename Denom, typename Round, std::enable_if_t<
 		tc::is_actual_integer_like<Num>::value && tc::is_actual_integer_like< Denom >::value && std::numeric_limits<Num>::is_signed && !std::numeric_limits<Denom>::is_signed
 	>* = nullptr>
-	Num idiv( Num num, Denom denom, Round round ) noexcept {
+	[[nodiscard]] Num idiv( Num num, Denom denom, Round round ) noexcept {
 		return idiv/*not idiv_impl::idiv*/( num, tc::signed_cast(denom), round );
 	}
 
 	template< typename Num, typename Denom, typename Round, std::enable_if_t<
 		tc::is_actual_integer_like<Num>::value && tc::is_actual_integer_like< Denom >::value && !std::numeric_limits<Num>::is_signed && std::numeric_limits<Denom>::is_signed
 	>* = nullptr>
-	Num idiv( Num num, Denom denom, Round round ) noexcept {
+	[[nodiscard]] Num idiv( Num num, Denom denom, Round round ) noexcept {
 		return idiv_impl::idiv( num, tc::unsigned_cast(denom), round );
 	}
 
 	template< typename Num, typename Denom, typename Round, std::enable_if_t<
 		tc::is_actual_integer_like<Num>::value && std::is_floating_point< Denom >::value
 	>* = nullptr>
-	Num idiv( Num num, Denom denom, Round round ) noexcept {
+	[[nodiscard]] Num idiv( Num num, Denom denom, Round round ) noexcept {
 		return tc::explicit_cast<Num>(round(num/denom));
+	}
+
+	template< typename Num, typename Denom, typename Round >
+	[[nodiscard]] std::pair<Num,Denom> idivmod( Num num, Denom denom, Round round ) noexcept {
+		Num div=tc::idiv(num,denom,round);
+		Denom mod=num-div*denom;
+		return std::make_pair(div,mod);
 	}
 
 	/////////////////////////////////
 	// scale_div
 
 	template< typename Num, typename Denom, typename Round, std::enable_if_t<tc::is_actual_integer< Num >::value>* = nullptr >
-	Num scale_div( Num num, Denom denom, Round round ) noexcept {
+	[[nodiscard]] Num scale_div( Num num, Denom denom, Round round ) noexcept {
 		return idiv(num,denom,round);
 	}
 
 	template< typename Num, typename Denom, std::enable_if_t<std::is_floating_point< Num >::value>* = nullptr >
-	Num scale_div( Num num, Denom denom, SRoundNearest ) noexcept {
+	[[nodiscard]] Num scale_div( Num num, Denom denom, SRoundNearest ) noexcept {
 		return tc::explicit_cast<Num>(num/denom);
 	}
 
 	template< typename Num, typename Denom >
-	Num scale_div( Num num, Denom denom ) noexcept {
+	[[nodiscard]] Num scale_div( Num num, Denom denom ) noexcept {
 		return scale_div(num,denom,tc::roundNEAREST);
 	}
 
 	template< bool bGeneralized, typename T, std::enable_if_t<tc::is_actual_integer< T >::value>* = nullptr >
-	T internal_lower_half(T t) noexcept {
+	[[nodiscard]] T internal_lower_half(T t) noexcept {
 		return scale_div(t, 2, tc::roundFLOOR);
 	}
 
 	template< bool bGeneralized, typename T, std::enable_if_t<std::is_floating_point< T >::value>* = nullptr >
-	T internal_lower_half(T t) noexcept {
+	[[nodiscard]] T internal_lower_half(T t) noexcept {
 		return t / 2;
 	}
 
 	template< bool bGeneralized, typename Rep, typename Period, std::enable_if_t<bGeneralized>* = nullptr >
-	std::chrono::duration<Rep, Period> internal_lower_half(std::chrono::duration<Rep, Period> const& dur) noexcept {
+	[[nodiscard]] std::chrono::duration<Rep, Period> internal_lower_half(std::chrono::duration<Rep, Period> const& dur) noexcept {
 		return std::chrono::duration<Rep, Period>(idiv(dur.count(), 2, tc::roundFLOOR));
 	}
 
 	template< typename T >
-	auto lower_half(T&& t) noexcept return_decltype( internal_lower_half</*bGeneralized*/ false>(std::forward<T>(t)) )
+	[[nodiscard]] auto lower_half(T&& t) return_decltype_noexcept( internal_lower_half</*bGeneralized*/ false>(std::forward<T>(t)) )
 
 	template< bool bGeneralized, typename T >
-	auto internal_center(T const& begin, T const& end) noexcept {
+	[[nodiscard]] auto internal_midpoint(T const& begin, T const& end) noexcept {
 		return begin + internal_lower_half<bGeneralized>(end - begin);
 	}
 
 	template< typename T >
-	auto center(T const& begin, T const& end) noexcept return_decltype( internal_center</*bGeneralized*/false>(begin, end) )
+	[[nodiscard]] auto midpoint(T const& begin, T const& end) return_decltype_noexcept( internal_midpoint</*bGeneralized*/false>(begin, end) )
 
 	/////////////////////////////////
 	// scale_mul
@@ -289,26 +297,26 @@ namespace tc {
 	template<typename T, typename Factor, std::enable_if_t<
 		tc::is_actual_integer< T >::value && std::is_integral< Factor >::value
 	>* = nullptr>
-	T scale_mul(T t, Factor factor, SRoundNearest ) noexcept {
+	[[nodiscard]] T scale_mul(T t, Factor factor, SRoundNearest ) noexcept {
 		return tc::explicit_cast<T>(tc::prepare_argument<T,Factor>::prepare(t)*tc::prepare_argument<T,Factor>::prepare(factor));
 	}
 
 	template<typename T, typename Factor, typename TRound, std::enable_if_t<
 		tc::is_actual_integer< T >::value && std::is_floating_point< Factor >::value
 	>* = nullptr>
-	T scale_mul(T t, Factor factor, TRound round) noexcept {
+	[[nodiscard]] T scale_mul(T t, Factor factor, TRound round) noexcept {
 		return tc::explicit_cast<T>(round(t*factor));
 	}
 
 	template<typename T, typename Factor, std::enable_if_t<
 		std::is_floating_point< T >::value
 	>* = nullptr>
-	T scale_mul(T t, Factor factor, SRoundNearest ) noexcept {
+	[[nodiscard]] T scale_mul(T t, Factor factor, SRoundNearest ) noexcept {
 		return tc::explicit_cast<T>(t*factor);
 	}
 
 	template<typename T, typename Factor>
-	T scale_mul(T t, Factor factor) noexcept {
+	[[nodiscard]] T scale_mul(T t, Factor factor) noexcept {
 		return scale_mul(t,factor,tc::roundNEAREST);
 	}
 
@@ -318,33 +326,33 @@ namespace tc {
 	template<typename T, typename Num, typename Den, typename TRound, std::enable_if_t<
 		tc::is_actual_integer< T >::value && tc::is_actual_integer< Num >::value && tc::is_actual_integer< Den >::value
 	>* = nullptr>
-	T scale_muldiv(T t, Num num, Den den, TRound round) noexcept {
+	[[nodiscard]] T scale_muldiv(T t, Num num, Den den, TRound round) noexcept {
 		return tc::reluctant_numeric_cast<T>(idiv(mul(t, num), den, round));
 	}
 
 	template<typename T, typename Num, typename Den, typename TRound, std::enable_if_t<
 		tc::is_actual_integer< T >::value && tc::is_actual_integer< Num >::value && tc::is_floating_point_like< Den >::value
 		>* = nullptr>
-	T scale_muldiv(T t, Num num, Den den, TRound round) noexcept {
+	[[nodiscard]] T scale_muldiv(T t, Num num, Den den, TRound round) noexcept {
 		return tc::reluctant_numeric_cast<T>(round(mul(t, num) / den));
 	}
 
 	template<typename T, typename Num, typename Den, typename TRound, std::enable_if_t<
 		tc::is_actual_integer< T >::value && tc::is_floating_point_like< Num >::value
 		>* = nullptr>
-	T scale_muldiv(T t, Num num, Den den, TRound round) noexcept {
+	[[nodiscard]] T scale_muldiv(T t, Num num, Den den, TRound round) noexcept {
 		return tc::reluctant_numeric_cast<T>(round(t * tc::fdiv(num, den)));
 	}
 
 	template<typename T, typename Num, typename Den, std::enable_if_t<
 		tc::is_floating_point_like< T >::value
 	>* = nullptr>
-	T scale_muldiv(T t, Num num, Den den, SRoundNearest) noexcept {
+	[[nodiscard]] T scale_muldiv(T t, Num num, Den den, SRoundNearest) noexcept {
 		return tc::reluctant_numeric_cast<T>(t * tc::fdiv(num, den));
 	}
 
 	template<typename T, typename Num, typename Den>
-	T scale_muldiv(T const& x, Num const& num, Den const& den) noexcept {
+	[[nodiscard]] T scale_muldiv(T const& x, Num const& num, Den const& den) noexcept {
 		return scale_muldiv(x, num, den, tc::roundNEAREST);
 	}
 
@@ -354,7 +362,7 @@ namespace tc {
 	};
 
 	template<typename T>
-	T scale_muldiv(T const& x, tc::fraction const& fracn) noexcept {
+	[[nodiscard]] T scale_muldiv(T const& x, tc::fraction const& fracn) noexcept {
 		return scale_muldiv(x, fracn.m_nNum, fracn.m_nDen);
 	}
 
@@ -366,19 +374,19 @@ namespace tc {
 			|| (tc::is_floating_point_like<tc::decay_t<Src>>::value && tc::is_floating_point_like<Dst>::value)
 		>* = nullptr
 	>
-	decltype(auto) rounding_cast(Src&& x, TRound) noexcept {
+	[[nodiscard]] decltype(auto) rounding_cast(Src&& x, TRound) noexcept {
 		return tc::reluctant_numeric_cast<Dst>(std::forward<Src>(x));
 	}
 
 	template<typename Dst, typename Src, typename TRound,
 		std::enable_if_t<tc::is_floating_point_like<tc::decay_t<Src>>::value && tc::is_actual_integer<Dst>::value>* = nullptr
 	>
-	decltype(auto) rounding_cast(Src&& x, TRound round) noexcept {
+	[[nodiscard]] decltype(auto) rounding_cast(Src&& x, TRound round) noexcept {
 		return tc::reluctant_numeric_cast<Dst>(round(std::forward<Src>(x)));
 	}
 
 	template<typename Dst, typename Src>
-	decltype(auto) rounding_cast(Src&& x) noexcept {
+	[[nodiscard]] decltype(auto) rounding_cast(Src&& x) noexcept {
 		return rounding_cast<Dst>(std::forward<Src>(x), roundNEAREST);
 	}
 

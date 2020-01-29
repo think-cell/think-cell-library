@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -71,7 +71,7 @@ UNITTESTDEF(tc_reverse_bidirectional) {
 UNITTESTDEF(tc_reverse_base_bound) {
 	std::list<int> rng{1,2,3,4};
 	auto rngreverse = tc::reverse(rng);
-	auto it = boost::next(boost::next(tc::begin(rngreverse)));
+	auto it = tc::next(tc::next(tc::begin(rngreverse)));
 	TEST_RANGE_EQUAL(
 		tc::reverse(tc::take(rngreverse,it)),
 		tc::drop(rng, it.border_base())

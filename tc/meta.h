@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -19,7 +19,7 @@
 
 namespace tc {
 	template<typename T>
-	constexpr std::size_t strlen( T const* pt ) noexcept {
+	[[nodiscard]] constexpr std::size_t strlen( T const* pt ) noexcept {
 		_ASSERTE(pt);
 		return std::char_traits<T>::length(pt);
 	}
@@ -57,35 +57,35 @@ namespace tc {
 	using range_reference_t = typename range_reference<T>::type;
 	
 	namespace no_adl {
-		template< typename Rng, typename Enable = void >
+		template< typename Rng, typename RngDecayed = tc::decay_t<Rng>, typename Enable = void >
 		struct range_value final {};
 
-		template< typename Rng , typename Enable=void >
+		template< typename RngDecayed, typename Enable=void >
 		struct has_value_type final: std::false_type {};
 
-		template< typename Rng >
-		struct has_value_type<Rng, tc::void_t<typename std::remove_reference_t<Rng>::value_type>>: std::true_type {};
+		template< typename RngDecayed >
+		struct has_value_type<RngDecayed, tc::void_t<typename RngDecayed::value_type>>: std::true_type {};
 
-		template< typename Rng >
-		struct range_value<Rng, std::enable_if_t<is_range_with_iterators<Rng>::value && has_value_type<Rng>::value>> final {
+		template< typename Rng, typename RngDecayed >
+		struct range_value<Rng, RngDecayed, std::enable_if_t<is_range_with_iterators<Rng>::value && has_value_type<RngDecayed>::value>> final {
 			using type = tc::decay_t<tc::range_reference_t<Rng>>;
 			STATICASSERTSAME(type, typename std::iterator_traits<typename boost::range_iterator<Rng>::type>::value_type);
-			STATICASSERTSAME(type, typename std::remove_reference_t<Rng>::value_type);
+			STATICASSERTSAME(type, typename RngDecayed::value_type);
 		};
 
-		template< typename Rng >
-		struct range_value<Rng, std::enable_if_t<is_range_with_iterators<Rng>::value && !has_value_type<Rng>::value>> final {
+		template< typename Rng, typename RngDecayed >
+		struct range_value<Rng, RngDecayed, std::enable_if_t<is_range_with_iterators<Rng>::value && !has_value_type<RngDecayed>::value>> final {
 			using type = tc::decay_t<tc::range_reference_t<Rng>>;
 			STATICASSERTSAME(type, typename std::iterator_traits<typename boost::range_iterator<Rng>::type>::value_type);
 		};
 
-		template< typename Rng >
-		struct range_value<Rng, std::enable_if_t<!is_range_with_iterators<Rng>::value && has_value_type<Rng>::value>> final {
-			using type = typename std::remove_reference_t<Rng>::value_type;
+		template< typename Rng, typename RngDecayed >
+		struct range_value<Rng, RngDecayed, std::enable_if_t<!is_range_with_iterators<Rng>::value && has_value_type<RngDecayed>::value>> final {
+			using type = typename RngDecayed::value_type;
 		};
 
-		template< typename Rng >
-		struct range_value<Rng, std::enable_if_t<!is_range_with_iterators<Rng>::value && !has_value_type<Rng>::value, tc::void_t<tc::range_reference_t<Rng>>>> final {
+		template< typename Rng, typename RngDecayed >
+		struct range_value<Rng, RngDecayed, std::enable_if_t<!is_range_with_iterators<Rng>::value && !has_value_type<RngDecayed>::value, tc::void_t<tc::range_reference_t<Rng>>>> final {
 			using type = tc::decay_t<tc::range_reference_t<Rng>>;
 		};
 	}
@@ -118,14 +118,8 @@ namespace tc {
 	using common_range_value_t = typename no_adl::common_range_value<Rng...>::type;
 
 	namespace no_adl {
-		template<typename Derived, typename Enable=void>
-		struct value_type_base {};
-	}
-	using no_adl::value_type_base;
-
-	namespace no_adl {
 		template<typename Value, typename Func>
-		struct FuncWithValue : tc::decay_t<Func> {
+		struct [[nodiscard]] FuncWithValue : tc::decay_t<Func> {
 			using value_type = Value;
 
 			using tc::decay_t<Func>::operator();
@@ -168,6 +162,7 @@ namespace tc {
 
 #pragma push_macro("CHAR_RANGE")
 #define CHAR_RANGE( xchar ) \
+static_assert(tc::is_char<xchar>::value); \
 namespace boost { \
 	template<> \
 	struct range_mutable_iterator<xchar*> { \
@@ -233,6 +228,16 @@ namespace tc { \
 		constexpr xchar const* end(begin_end_tag_t, xchar const(&ach)[N]) noexcept { \
 			return ach+VERIFYEQUAL(tc::strlen(ach),N-1); \
 		} \
+		\
+	} \
+	template<std::size_t N> \
+	[[nodiscard]] constexpr auto size_raw(xchar const (&ach)[N]) noexcept { \
+		return VERIFYEQUAL(tc::strlen(ach),N-1); \
+	} \
+	\
+	namespace no_adl { \
+		template<std::size_t N> \
+		struct constexpr_size_base<xchar[N], void> : std::integral_constant<std::size_t, N - 1> {}; \
 	} \
 }
 
@@ -276,13 +281,13 @@ namespace tc{
 
 namespace tc_begin_end_no_adl {
 	template< typename Rng >
-	auto adl_begin(Rng&& rng) MAYTHROW return_decltype(
+	auto adl_begin(Rng&& rng) return_decltype_MAYTHROW(
 		// Rng has free begin found by ADL
 		begin( std::forward<Rng>(rng) )
 	)
 
 	template< typename Rng >
-	auto adl_end(Rng&& rng) MAYTHROW return_decltype(
+	auto adl_end(Rng&& rng) return_decltype_MAYTHROW(
 		// Rng has free end found by ADL
 		end( std::forward<Rng>(rng) )
 	)
@@ -290,61 +295,61 @@ namespace tc_begin_end_no_adl {
 
 namespace tc {
 	template< typename Rng >
-	constexpr auto begin(Rng&& rng) MAYTHROW return_decltype(
+	[[nodiscard]] constexpr auto begin(Rng&& rng) return_decltype_MAYTHROW(
 		// Rng has member begin
 		std::forward<Rng>(rng).begin()
 	)
 
 /*		template< typename Rng >
-	auto begin(Rng&& rng) MAYTHROW return_decltype(
+	[[nodiscard]] auto begin(Rng&& rng) return_decltype_MAYTHROW(
 		// Rng has free begin found by ADL
 		tc_begin_end_no_adl::adl_begin( std::forward<Rng>(rng) )
 	)*/
 
 	template< typename Rng >
-	constexpr auto begin(Rng&& rng) MAYTHROW return_decltype(
+	[[nodiscard]] constexpr auto begin(Rng&& rng) return_decltype_MAYTHROW(
 		// Rng has free begin found by tag
 		begin( begin_end_adl::begin_end_tag, std::forward<Rng>(rng) )
 	)
 
 	template< typename Rng >
-	constexpr auto end(Rng&& rng) MAYTHROW return_decltype(
+	[[nodiscard]] constexpr auto end(Rng&& rng) return_decltype_MAYTHROW(
 		// Rng has member end
 		std::forward<Rng>(rng).end()
 	)
 
 /*		template< typename Rng >
-	auto end(Rng&& rng) MAYTHROW return_decltype(
+	[[nodiscard]] auto end(Rng&& rng) return_decltype_MAYTHROW(
 		// Rng has free end found by ADL
 		tc_begin_end_no_adl::adl_end( std::forward<Rng>(rng) )
 	)*/
 
 	template< typename Rng >
-	constexpr auto end(Rng&& rng) MAYTHROW return_decltype(
+	[[nodiscard]] constexpr auto end(Rng&& rng) return_decltype_MAYTHROW(
 		// Rng has free end found by tag
 		end( begin_end_adl::begin_end_tag, std::forward<Rng>(rng) )
 	)
 
 	template< typename Rng >
-	auto cbegin(Rng&& rng) MAYTHROW return_decltype(
+	[[nodiscard]] auto cbegin(Rng&& rng) return_decltype_MAYTHROW(
 		// Rng has member begin
 		tc::begin(static_cast<Rng const&&>(rng))
 	)
 
 	template< typename Rng >
-	auto cend(Rng&& rng) MAYTHROW return_decltype(
+	[[nodiscard]] auto cend(Rng&& rng) return_decltype_MAYTHROW(
 		// Rng has member begin
 		tc::end(static_cast<Rng const&&>(rng))
 	)
 
 	template< typename Rng >
-	auto cbegin(Rng& rng) MAYTHROW return_decltype(
+	[[nodiscard]] auto cbegin(Rng& rng) return_decltype_MAYTHROW(
 		// Rng has member begin
 		tc::begin(static_cast<Rng const&>(rng))
 	)
 
 	template< typename Rng >
-	auto cend(Rng& rng) MAYTHROW return_decltype(
+	[[nodiscard]] auto cend(Rng& rng) return_decltype_MAYTHROW(
 		// Rng has member begin
 		tc::end(static_cast<Rng const&>(rng))
 	)
@@ -364,22 +369,22 @@ namespace tc {
 
 namespace boost {
 	template< typename Rng >
-	auto begin(Rng&& rng) MAYTHROW return_decltype(
+	auto begin(Rng&& rng) return_decltype_MAYTHROW(
 		tc::begin( std::forward<Rng>(rng) )
 	)
 
 	template< typename Rng >
-	auto end(Rng&& rng) MAYTHROW return_decltype(
+	auto end(Rng&& rng) return_decltype_MAYTHROW(
 		tc::end( std::forward<Rng>(rng) )
 	)
 
 	template< typename Rng >
-	auto const_begin(Rng&& rng) MAYTHROW return_decltype(
+	auto const_begin(Rng&& rng) return_decltype_MAYTHROW(
 		tc::begin( std::forward<Rng>(rng) )
 	)
 
 	template< typename Rng >
-	auto const_end(Rng&& rng) MAYTHROW return_decltype(
+	auto const_end(Rng&& rng) return_decltype_MAYTHROW(
 		tc::end( std::forward<Rng>(rng) )
 	)
 }

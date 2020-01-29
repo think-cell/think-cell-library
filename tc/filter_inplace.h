@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -11,8 +11,9 @@
 #include "range_defines.h"
 #include "meta.h"
 #include "container_traits.h"
-#include "sub_range.h"
+#include "subrange.h"
 #include "storage_for.h"
+#include "restrict_size_decrement.h"
 
 namespace tc {
 
@@ -22,90 +23,96 @@ namespace tc {
 	> {};
 
 	template<typename Cont, typename Enable=void>
-	struct range_filter;
+	struct range_filter_base;
 
 	template<typename Cont>
-	struct range_filter<Cont, std::enable_if_t< 
+	struct range_filter_base<Cont, std::enable_if_t<
 		has_efficient_erase<Cont>::value
 		|| has_mem_fn_lower_bound<Cont>::value
 		|| has_mem_fn_hash_function<Cont>::value
 	> >: tc::noncopyable {
 		static_assert( tc::is_decayed< Cont >::value );
 		using iterator = typename boost::range_iterator<Cont>::type;
-		using const_iterator = iterator; // no deep constness (analog to sub_range)
+		using const_iterator = iterator; // no deep constness (analog to subrange)
 
 	private:
 		Cont& m_cont;
 		iterator m_itOutputEnd;
 
 	public:
-		explicit range_filter(Cont& cont) noexcept
+		explicit constexpr range_filter_base(Cont& cont) noexcept
 			: m_cont(cont)
 			, m_itOutputEnd(tc::begin(cont))
 		{}
 
-		range_filter(Cont& cont, iterator const& itStart) noexcept
+		constexpr range_filter_base(Cont& cont, iterator const& itStart) noexcept
 			: m_cont(cont)
 			, m_itOutputEnd(itStart)
 		{}
 
-		~range_filter() {
+	protected:
+		constexpr void dtor() {
 			tc::take_inplace( m_cont, m_itOutputEnd );
 		}
 
-		void keep(iterator it) & noexcept {
+	public:
+		constexpr void keep(iterator it) & noexcept {
 #ifdef _CHECKS
-			auto const nDistance = std::distance(m_itOutputEnd,it);
-			_ASSERT( 0<=nDistance );
-			auto const rsize = restrict_size_decrement(m_cont, nDistance, nDistance);
+			auto const nDistance = tc::distance(m_itOutputEnd, it);
+			_ASSERTE( 0<=nDistance );
+			auto const rsize = constexpr_restrict_size_decrement(m_cont, nDistance, nDistance);
 #endif
 			m_itOutputEnd=m_cont.erase(m_itOutputEnd,it);
 			++m_itOutputEnd;
+#ifdef _CHECKS
+			rsize.dtor();
+#endif
 		}
 
 		///////////////////////////////////////////
 		// range interface for output range
-		// no deep constness (analog to sub_range)
+		// no deep constness (analog to subrange)
 
-		iterator begin() const& noexcept {
+		constexpr iterator begin() const& noexcept {
 			return tc::begin(tc::as_mutable(m_cont));
 		}
 
-		iterator end() const& noexcept {
+		constexpr iterator end() const& noexcept {
 			return m_itOutputEnd;
 		}
 
 		template< ENABLE_SFINAE, std::enable_if_t<!has_mem_fn_hash_function<SFINAE_TYPE(Cont)>::value>* = nullptr>
-		void pop_back() & noexcept {
-			_ASSERT( m_itOutputEnd!=tc::begin(m_cont) );
-			auto const rsize = restrict_size_decrement(m_cont);
+		constexpr void pop_back() & noexcept {
+			_ASSERTE( m_itOutputEnd!=tc::begin(m_cont) );
+			auto const rsize = constexpr_restrict_size_decrement(m_cont);
 			--m_itOutputEnd;
 			m_itOutputEnd=m_cont.erase(m_itOutputEnd);
+			rsize.dtor();
 		}
 	};
 
 	template<typename Cont>
-	struct range_filter< Cont, std::enable_if_t<
+	struct range_filter_base< Cont, std::enable_if_t<
 		has_mem_fn_splice_after< Cont >::value
 	> >: Cont, private tc::noncopyable {
 		static_assert(tc::dependent_false<Cont>::value, "Careful: currently unused and without unit test");
 
 		static_assert( tc::is_decayed< Cont >::value );
 		using typename Cont::iterator;
-		using const_iterator = iterator; // no deep constness (analog to sub_range)
+		using const_iterator = iterator; // no deep constness (analog to subrange)
 
 	private:
 		Cont& m_contInput;
 		iterator m_itLastOutput;
 
 	public:
-		explicit range_filter(Cont& cont) noexcept
+		explicit constexpr range_filter_base(Cont& cont) noexcept
 			: m_contInput(cont)
 			, m_itLastOutput(cont.before_begin())
 		{}
 
-		explicit range_filter(Cont& cont, iterator const& itStart) noexcept
-			: range_filter(cont)
+		explicit constexpr range_filter_base(Cont& cont, iterator const& itStart) noexcept
+			: range_filter_base(cont)
 		{
 			for(;;) {
 				auto it=tc::begin(m_contInput);
@@ -115,11 +122,13 @@ namespace tc {
 			}
 		}
 
-		~range_filter() {
+	protected:
+		constexpr void dtor() {
 			m_contInput=tc_move_always( tc::base_cast<Cont>(*this) );
 		}
 
-		void keep(iterator it) & noexcept {
+	public:
+		constexpr void keep(iterator it) & noexcept {
 			while( it!=tc::begin(m_contInput) ) m_contInput.pop_front();
 			this->splice_after(m_itLastOutput,m_contInput.before_begin());
 			m_itLastOutput=it;
@@ -127,30 +136,32 @@ namespace tc {
 	};
 
 	template<typename Cont>
-	struct range_filter< Cont, std::enable_if_t<
+	struct range_filter_base< Cont, std::enable_if_t<
 		has_mem_fn_splice<Cont >::value
 	> >: Cont, private tc::noncopyable {
 		static_assert( tc::is_decayed< Cont >::value );
 		Cont& m_contInput;
 		using typename Cont::iterator;
-		using const_iterator = iterator; // no deep constness (analog to sub_range)
+		using const_iterator = iterator; // no deep constness (analog to subrange)
 
-		explicit range_filter(Cont& cont) noexcept
+		explicit constexpr range_filter_base(Cont& cont) noexcept
 			: m_contInput(cont)
 		{}
 
-		range_filter(Cont& cont, iterator const& itStart) noexcept
+		constexpr range_filter_base(Cont& cont, iterator const& itStart) noexcept
 			: m_contInput(cont)
 		{
 			this->splice( tc::end(*this), m_contInput, tc::begin(m_contInput), itStart );
 		}
 
-		~range_filter() {
+	protected:
+		constexpr void dtor() {
 			m_contInput=tc_move_always( tc::base_cast<Cont>(*this) );
 		}
 
-		void keep(iterator it) & noexcept {
-			_ASSERT( it!=tc::end(m_contInput) );
+	public:
+		constexpr void keep(iterator it) & noexcept {
+			_ASSERTE( it!=tc::end(m_contInput) );
 			this->splice( 
 				tc::end(*this),
 				m_contInput,
@@ -160,13 +171,13 @@ namespace tc {
 	};
 
 	template<typename Cont>
-	struct range_filter<
+	struct range_filter_base<
 		Cont,
 		std::enable_if_t<range_filter_by_move_element<Cont>::value>
 	>: tc::noncopyable {
 		static_assert( tc::is_decayed< Cont >::value );
 		using iterator = typename boost::range_iterator<Cont>::type;
-		using const_iterator = iterator; // no deep constness (analog to sub_range)
+		using const_iterator = iterator; // no deep constness (analog to subrange)
 
 	protected:
 		Cont& m_cont;
@@ -178,7 +189,7 @@ namespace tc {
 #endif
 
 	public:
-		explicit range_filter(Cont& cont) noexcept
+		explicit constexpr range_filter_base(Cont& cont) noexcept
 			: m_cont(cont)
 			, m_itOutput(tc::begin(cont))
 #ifdef _CHECKS
@@ -186,7 +197,7 @@ namespace tc {
 #endif
 		{}
 
-		explicit range_filter(Cont& cont, iterator itStart) noexcept
+		explicit constexpr range_filter_base(Cont& cont, iterator itStart) noexcept
 			: m_cont(cont)
 			, m_itOutput(itStart)
 #ifdef _CHECKS
@@ -194,14 +205,16 @@ namespace tc {
 #endif
 		{}
 
-		~range_filter() {
+	protected:
+		constexpr void dtor() {
 			tc::take_inplace( m_cont, m_itOutput );
 		}
 
-		void keep(iterator it) & noexcept {
+	public:
+		constexpr void keep(iterator it) & noexcept {
 #ifdef _CHECKS
 			// Filter without reordering 
-			_ASSERT( 0<=std::distance(m_itFirstValid,it) );
+			_ASSERTE( 0<=tc::distance(m_itFirstValid, it) );
 			m_itFirstValid=it;
 			++m_itFirstValid;
 #endif
@@ -213,72 +226,90 @@ namespace tc {
 
 		///////////////////////////////////
 		// range interface for output range
-		// no deep constness (analog to sub_range)
+		// no deep constness (analog to subrange)
 
-		iterator begin() const& noexcept {
+		constexpr iterator begin() const& noexcept {
 			return tc::begin(tc::as_mutable(m_cont));
 		}
 
-		iterator end() const& noexcept {
+		constexpr iterator end() const& noexcept {
 			return m_itOutput;
 		}
 
-		void pop_back() & noexcept {
-			_ASSERT( tc::begin(m_cont)!=m_itOutput );
+		constexpr void pop_back() & noexcept {
+			_ASSERTE( tc::begin(m_cont)!=m_itOutput );
 			--m_itOutput;
 		}
 
 		template <typename... Ts>
-		void emplace_back(Ts&&... ts) & noexcept {
-			_ASSERT( tc::end(m_cont)!=m_itOutput );
+		constexpr void emplace_back(Ts&&... ts) & noexcept {
+			_ASSERTE( tc::end(m_cont)!=m_itOutput );
 			tc::renew(*m_itOutput, std::forward<Ts>(ts)...);
 			++m_itOutput;
 		}
 	};
 
 	template<typename Cont>
-	struct range_filter<
-		tc::sub_range< Cont& >,
+	struct range_filter : range_filter_base<Cont> {
+		using range_filter_base<Cont>::range_filter_base;
+		~range_filter() {
+			this->dtor();
+		}
+	};
+
+	// To use range_filter in constexpr context, use constexpr_range_filter, and call dtor() where the destructor would normally be called.
+	template<typename Cont>
+	struct constexpr_range_filter : range_filter_base<Cont> {
+		using range_filter_base<Cont>::range_filter_base;
+		using range_filter_base<Cont>::dtor;
+	};
+
+	template<typename Cont>
+	struct range_filter_base<
+		tc::subrange< Cont& >,
 		std::enable_if_t<range_filter_by_move_element<Cont>::value>
 	> {
 		using iterator = typename boost::range_iterator<Cont>::type;
-		using const_iterator = iterator; // no deep constness (analog to sub_range)
+		using const_iterator = iterator; // no deep constness (analog to subrange)
 
-		explicit range_filter(tc::sub_range< Cont& >& rng) noexcept : m_rng(rng)	{
-			_ASSERTEQUAL(tc::end(m_rng), tc::end(Container())); // otherwise, we would need to keep [ end(m_rng), end(Container()) ) inside dtor
+		explicit constexpr range_filter_base(tc::subrange< Cont& >& rng) noexcept : m_rng(rng) {
+			_ASSERTE(tc::end(m_rng) == tc::end(Container())); // otherwise, we would need to keep [ end(m_rng), end(Container()) ) inside dtor
 			m_orngfilter.ctor(Container(), tc::begin(rng));
 		}
 
-		void keep(iterator it) & noexcept {
+		constexpr void keep(iterator it) & noexcept {
 			m_orngfilter->keep(it);
 		}
 
-		iterator begin() const& noexcept {
+		constexpr iterator begin() const& noexcept {
 			return tc::begin(m_rng);
 		}
 
-		iterator end() const& noexcept {
+		constexpr iterator end() const& noexcept {
 			return tc::end(*m_orngfilter);
 		}
 
-		void pop_back() & noexcept {
-			_ASSERT(tc::end(*this)!=tc::begin(*this));
+		constexpr void pop_back() & noexcept {
+			_ASSERTE(tc::end(*this) != tc::begin(*this));
 			m_orngfilter->pop_back();
 		}
 
-		~range_filter() {
-			auto& cont=Container();
-			auto const nIndexBegin=tc::begin(m_rng)-tc::begin(cont);
-			m_orngfilter.dtor(); // erases cont tail and invalidates iterators in m_rng
-			m_rng=tc::drop_first(cont, nIndexBegin);
-		}
-	private:
-		Cont& Container() const& noexcept {
-			return boost::implicit_cast<Cont&>(m_rng.base_range());
+	protected:
+		constexpr void dtor() {
+			auto& cont = Container();
+			auto const nIndexBegin = tc::begin(m_rng) - tc::begin(cont);
+			m_orngfilter->dtor(); // erases cont tail and invalidates iterators in m_rng
+			m_orngfilter.dtor();
+			m_rng = tc::drop_first(cont, nIndexBegin);
 		}
 
-		tc::sub_range< Cont& >& m_rng;
-		tc::storage_for< tc::range_filter<Cont> > m_orngfilter;
+	private:
+		constexpr Cont& Container() const& noexcept {
+			return tc::implicit_cast<Cont&>(m_rng.base_range());
+		}
+
+		tc::subrange< Cont& >& m_rng;
+		tc::storage_for< tc::constexpr_range_filter<Cont> > m_orngfilter;
 	};
 
 	/////////////////////////////////////////////////////
@@ -287,14 +318,13 @@ namespace tc {
 	template<typename Cont, typename Pred>
 	void filter_inplace(Cont & cont, typename boost::range_iterator<Cont>::type it, Pred pred) noexcept {
 		for (auto const itEnd = tc::end(cont); it != itEnd; ++it) {
-			if (!tc::bool_cast(pred(*it))) {
+			if (!tc::bool_cast(tc::invoke(pred, *it))) {
 				tc::range_filter< tc::decay_t<Cont> > rngfilter(cont, it);
 				++it;
 				while (it != itEnd) {
-					if (pred(*it)) {
+					if (tc::invoke(pred, *it)) { // taking further action to destruct *it when returning false is legitimate use case, so do do not enforce const
 						rngfilter.keep(it++); // may invalidate it, so move away first
-					}
-					else {
+					} else {
 						++it;
 					}
 				}

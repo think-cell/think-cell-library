@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -24,7 +24,7 @@ namespace tc {
 
 	namespace iterator {
 
-		template<typename It> It middle_point(It const&, It const&) noexcept;
+		template<typename It> constexpr It middle_point(It const&, It const&) noexcept;
 
 		namespace adl {
 			// default forward iterator implementation
@@ -121,36 +121,36 @@ namespace tc {
 			}
 
 			template<typename It>
-			It middle_point_dispatch( It const& itBegin, It const& itEnd, boost::iterators::forward_traversal_tag ) noexcept {
+			constexpr It middle_point_dispatch( It const& itBegin, It const& itEnd, boost::iterators::forward_traversal_tag ) noexcept {
 				return middle_point(itBegin,itEnd);
 			}
 
 			// default random-access iterator implementation
 			template<typename It>
-			It middle_point_dispatch( It const& itBegin, It const& itEnd, boost::iterators::random_access_traversal_tag ) noexcept {
+			constexpr It middle_point_dispatch( It const& itBegin, It const& itEnd, boost::iterators::random_access_traversal_tag ) noexcept {
 				return itBegin+(itEnd-itBegin)/2;
 			}
 
 		}
 
 		template<typename It>
-		It middle_point( It const& itBegin, It const& itEnd ) noexcept {
+		[[nodiscard]] constexpr It middle_point( It const& itBegin, It const& itEnd ) noexcept {
 			return adl::middle_point_dispatch( itBegin, itEnd, typename boost::iterator_traversal<It>::type() );
 		}
 
 		template<typename It, typename UnaryPred>
-		It internal_partition_point( It itBegin, It itEnd, UnaryPred pred ) noexcept {
+		[[nodiscard]] It internal_partition_point( It itBegin, It itEnd, UnaryPred pred ) noexcept {
 		#ifdef _DEBUG /* is pred a partitioning? All true must be before all false. */
 			It itPartitionPoint = itBegin;
-			while( itPartitionPoint!=itEnd && pred(itPartitionPoint) ) ++itPartitionPoint;
+			while( itPartitionPoint!=itEnd && pred(tc::as_const(itPartitionPoint)) ) ++itPartitionPoint;
 			for( It itRest=itPartitionPoint; itRest!=itEnd; ++itRest ) {
-				_ASSERT( !tc::bool_cast(pred(itRest)) );
+				_ASSERT( !tc::bool_cast(pred(tc::as_const(itRest))) );
 			}
 		#endif
 			while( itBegin!=itEnd ) {
 				It itMid = iterator::middle_point( itBegin, itEnd ); // may return any itMid in [itBegin,itEnd[
 				_ASSERTDEBUG(itMid != itEnd);
-				if( pred(itMid) ) {
+				if( pred(tc::as_const(itMid)) ) {
 					itBegin=tc_move(itMid);
 					++itBegin;
 				} else {
@@ -164,18 +164,18 @@ namespace tc {
 		}
 
 		template<typename It, typename UnaryPred>
-		It partition_point( It itBegin, It itEnd, UnaryPred pred ) noexcept {
+		[[nodiscard]] It partition_point( It itBegin, It itEnd, UnaryPred pred ) noexcept {
 			return internal_partition_point( tc_move(itBegin), tc_move(itEnd), [&pred](It it) noexcept {
-				return pred(*it);
+				return pred(tc::as_const(*it));
 			} );
 		}
 
 		template<typename It, typename UnaryPred>
-		It partition_pair( It itBegin, It itEnd, UnaryPred pred ) noexcept {
+		[[nodiscard]] It partition_pair( It itBegin, It itEnd, UnaryPred pred ) noexcept {
 			_ASSERT( itBegin!=itEnd );
 			--itEnd;
 			return internal_partition_point( tc_move(itBegin), tc_move(itEnd), [&pred](It it) noexcept {
-				return pred(*it,*boost::next(it));
+				return pred(tc::as_const(*it),tc::as_const(*tc::next(it)));
 			} );
 		}
 
@@ -183,7 +183,7 @@ namespace tc {
 		// Iterator functions forwarding to partition_point
 
 		template< typename It, typename Value, typename UnaryPredicate >
-		It lower_bound(It itBegin,It itEnd,Value const& val,UnaryPredicate pred) noexcept {
+		[[nodiscard]] It lower_bound(It itBegin,It itEnd,Value const& val,UnaryPredicate pred) noexcept {
 			return iterator::partition_point(
 				itBegin,
 				itEnd,
@@ -192,12 +192,12 @@ namespace tc {
 		}
 
 		template< typename It, typename Value, typename UnaryPredicate >
-		It upper_bound(It itBegin,It itEnd,Value const& val,UnaryPredicate&& pred) noexcept {
+		[[nodiscard]] It upper_bound(It itBegin,It itEnd,Value const& val,UnaryPredicate&& pred) noexcept {
 			return iterator::partition_point(itBegin,itEnd,[&](auto const& _) noexcept { return !pred(val, _); });
 		}
 
 		template< typename It, typename Value, typename SortPredicate >
-		std::pair<It,It> equal_range(It itBegin,It itEnd,Value const& val,SortPredicate pred) noexcept {
+		[[nodiscard]] std::pair<It,It> equal_range(It itBegin,It itEnd,Value const& val,SortPredicate pred) noexcept {
 			// Construct std::pair<It,It> initialized so that transform_iterator functor
 			// does have to be neither default-constructible nor assignable. This is non-standard conformant,
 			// but may be practical.
@@ -206,17 +206,17 @@ namespace tc {
 		}
 
 		template< typename It, typename Value >
-		It lower_bound(It itBegin,It itEnd,Value const& val) noexcept {
+		[[nodiscard]] It lower_bound(It itBegin,It itEnd,Value const& val) noexcept {
 			return iterator::lower_bound( itBegin, itEnd, val, std::less<>() );
 		}
 
 		template< typename It, typename Value >
-		It upper_bound(It itBegin,It itEnd,Value const& val) noexcept {
+		[[nodiscard]] It upper_bound(It itBegin,It itEnd,Value const& val) noexcept {
 			return iterator::upper_bound( itBegin, itEnd, val, std::less<>() );
 		}
 
 		template< typename It, typename Value >
-		std::pair<It,It> equal_range(It itBegin,It itEnd,Value const& val) noexcept {
+		[[nodiscard]] std::pair<It,It> equal_range(It itBegin,It itEnd,Value const& val) noexcept {
 			return iterator::equal_range( itBegin, itEnd, val, std::less<>() );
 		}
 	}

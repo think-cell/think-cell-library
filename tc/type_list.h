@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -9,6 +9,9 @@
 #pragma once
 
 #include <utility>
+
+// TODO c++20 consteval
+#define TC_CONSTEVAL constexpr
 
 namespace tc {
 #ifdef __clang__
@@ -44,12 +47,15 @@ namespace tc {
 			};
 
 			template<typename T>
-			struct identity final {
+			struct identity {
 				using type = T;
 			};
 		}
 		using no_adl::curry;
 		using no_adl::identity;
+
+		template<typename T>
+		using deducible_identity_t = T;
 
 		namespace no_adl {
 			template<typename... T>
@@ -110,6 +116,11 @@ namespace tc {
 		namespace no_adl {
 			template<typename... List>
 			struct concat;
+
+			template<>
+			struct concat<> final {
+				using type = list<>;
+			};
 
 			template<typename... T>
 			struct concat<list<T...>> final {

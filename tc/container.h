@@ -1,16 +1,13 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 #include "range_defines.h"
-#ifdef TC_PRIVATE
-#include "Library/Utilities/Hash.h"
-#endif
 #include "assign.h"
 #include "type_traits.h"
 #include "compare.h"
@@ -43,12 +40,18 @@ namespace tc {
 	using set_string=std::set<std::basic_string<Char>, Compare, Alloc>;
 
 #ifdef TC_PRIVATE
+	template<typename Result>
+	struct fn_hash_range;
+
 	template<typename Char, typename Hash=tc::fn_hash_range<std::size_t>, typename KeyEqual=decltype(tc::equalfrom3way(tc::fn_lexicographical_compare_3way())), typename Alloc=std::allocator<std::basic_string<Char>>>
 	using unordered_set_string=boost::multi_index_container<
 		std::basic_string<Char>,
 		boost::multi_index::indexed_by<boost::multi_index::hashed_unique<boost::multi_index::identity<std::basic_string<Char>>, Hash, KeyEqual>>,
 		Alloc
 	>;
+
+	template<typename Result>
+	struct fn_hash;
 
 	template<typename Key, typename Hash=tc::fn_hash<std::size_t>, typename KeyEqual=tc::fn_equal_to, typename Alloc=std::allocator<Key>>
 	using unordered_set=std::unordered_set<Key, Hash, KeyEqual, Alloc>;

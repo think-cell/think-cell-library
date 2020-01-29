@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -15,7 +15,7 @@ namespace tc {
 	#pragma push_macro("GENERIC_OP_BODY")
 	#define GENERIC_OP_BODY(op, operation_body) \
 		template< typename Lhs, typename Rhs> \
-		friend constexpr std::enable_if_t< \
+		[[nodiscard]] friend constexpr std::enable_if_t< \
 			is_operation_available<Lhs&&, Rhs&&>::value \
 			&& !std::is_same<conversion_t<Lhs, Rhs>, Lhs>::value, \
 			conversion_t<Lhs, Rhs> \
@@ -32,7 +32,7 @@ namespace tc {
 			return _; \
 		} \
 		template< typename Lhs, typename Rhs> \
-		friend constexpr std::enable_if_t< \
+		[[nodiscard]] friend constexpr std::enable_if_t< \
 			is_operation_available<Lhs&&, Rhs&&>::value \
 			&& std::is_same<conversion_t<Lhs, Rhs>, Lhs>::value, \
 			Lhs&& \

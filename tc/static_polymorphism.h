@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -23,7 +23,7 @@
 #define STATIC_VIRTUAL_FORWARD_IMPL( Mod, Name, Decoration ) \
 	template<typename Derived_=Derived, typename... Args> \
 	Mod \
-	auto Name(Args&&... args) Decoration MAYTHROW return_decltype_xvalue_by_ref ( \
+	auto Name(Args&&... args) Decoration return_decltype_xvalue_by_ref_MAYTHROW( \
 		/* tc::derived_cast<Derived_>(*this) fails on MSVC 15.8 when evaluated as constant. */ \
 		STATIC_VIRTUAL_DISPATCH_IMPL_NAME(Name)(static_cast<Derived_ Decoration>(*tc::derived_cast<Derived_>(this)), std::forward<Args>(args)...) \
 	)
@@ -40,7 +40,7 @@
 	template<typename Derived_, typename... Args> \
 	static \
 	Mod \
-	auto STATIC_VIRTUAL_DISPATCH_IMPL_NAME(Name)(Derived_&& derived, Args&&... args) MAYTHROW return_decltype_xvalue_by_ref ( \
+	auto STATIC_VIRTUAL_DISPATCH_IMPL_NAME(Name)(Derived_&& derived, Args&&... args) return_decltype_xvalue_by_ref_MAYTHROW( \
 		std::forward<Derived_>(derived).STATIC_VIRTUAL_METHOD_NAME(Name)(std::forward<Args>(args)...) \
 	) \
 	STATIC_VIRTUAL_FORWARD_ALL_IMPL( Mod, Name )
@@ -56,7 +56,7 @@
 	using Name ## _derived_type = Derived; \
 	using Name ## _declaring_type = this_type; \
 	template<typename Derived_=Derived, typename... Args> \
-	static auto Name(Args&& ...args) MAYTHROW return_decltype_xvalue_by_ref ( \
+	static auto Name(Args&& ...args) return_decltype_xvalue_by_ref_MAYTHROW( \
 		Derived_:: STATIC_VIRTUAL_METHOD_NAME(Name) (std::forward<Args>(args)...) \
 	)
 
@@ -77,14 +77,11 @@
 	Mod \
 	auto STATIC_VIRTUAL_METHOD_NAME( Name )
 
-#define STATIC_WRAP(...) \
-    __VA_ARGS__
-
 #define STATIC_FINAL_DECLARING(Declaring, Name) \
-	STATIC_FINAL_MOD_DECLARING(BOOST_PP_EMPTY(), STATIC_WRAP(Declaring), Name)
+	STATIC_FINAL_MOD_DECLARING(BOOST_PP_EMPTY(), TC_FWD(Declaring), Name)
 
 #define STATIC_FINAL_MOD(Mod, Name) \
-	STATIC_FINAL_MOD_DECLARING(STATIC_WRAP(Mod), this_type::Name ## _declaring_type, Name)
+	STATIC_FINAL_MOD_DECLARING(TC_FWD(Mod), this_type::Name ## _declaring_type, Name)
 
 #define STATIC_FINAL(Name) \
 	STATIC_FINAL_MOD(BOOST_PP_EMPTY(), Name)
@@ -95,10 +92,10 @@
 	auto STATIC_VIRTUAL_METHOD_NAME( Name )
 
 #define STATIC_OVERRIDE_MOD_BASE(Name, ...) \
-	STATIC_OVERRIDE_MOD_DECLARING_BASE(this_type::Name ## _declaring_type, Name, STATIC_WRAP(__VA_ARGS__))
+	STATIC_OVERRIDE_MOD_DECLARING_BASE(this_type::Name ## _declaring_type, Name, TC_FWD(__VA_ARGS__))
 
 #define STATIC_OVERRIDE_MOD_DECLARING(Mod, Declaring, Name) \
-	STATIC_OVERRIDE_MOD_DECLARING_BASE(STATIC_WRAP(Declaring), Name, \
+	STATIC_OVERRIDE_MOD_DECLARING_BASE(TC_FWD(Declaring), Name, \
 		static_assert( \
 			std::is_same<typename Declaring::Name ## _derived_type, Derived>::value, \
 			"The Derived type of the class implementing a non-final static virtual method must be the same as the one of the class declaring the method." \
@@ -107,10 +104,10 @@
 	)
 
 #define STATIC_OVERRIDE_DECLARING(Declaring, Name) \
-	STATIC_OVERRIDE_MOD_DECLARING(BOOST_PP_EMPTY(), STATIC_WRAP(Declaring), Name)
+	STATIC_OVERRIDE_MOD_DECLARING(BOOST_PP_EMPTY(), TC_FWD(Declaring), Name)
 
 #define STATIC_OVERRIDE_MOD(Mod, Name) \
-	STATIC_OVERRIDE_MOD_DECLARING(STATIC_WRAP(Mod), this_type::Name ## _declaring_type, Name)
+	STATIC_OVERRIDE_MOD_DECLARING(TC_FWD(Mod), this_type::Name ## _declaring_type, Name)
 
 #define STATIC_OVERRIDE( Name ) \
 	STATIC_OVERRIDE_MOD( BOOST_PP_EMPTY(), Name )
@@ -126,7 +123,7 @@
 	}; \
 	template<typename Derived_, typename... Args, std::enable_if_t<!has_static_virtual_ ## Name ## _override<Derived_, Args...>::value>* = nullptr> \
 	static \
-	auto STATIC_VIRTUAL_DISPATCH_IMPL_NAME(Name)(Derived_&& derived, Args&&... args) MAYTHROW return_decltype_xvalue_by_ref ( \
+	auto STATIC_VIRTUAL_DISPATCH_IMPL_NAME(Name)(Derived_&& derived, Args&&... args) return_decltype_xvalue_by_ref_MAYTHROW( \
 		std::forward<Derived_>(derived).STATIC_VIRTUAL_FALLBACK_NAME(Name)(std::forward<Args>(args)...) \
 	) \
 	STATIC_VIRTUAL( Name ) \

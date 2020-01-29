@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -25,21 +25,36 @@ namespace {
 		auto anTcTrans = tc::make_array(tc::transform(anTc, tc::identity()));
 
 		static_assert(
-			tc::constexpr_size<tc::remove_cvref_t<decltype(anTc)>>::value==
-			tc::constexpr_size<tc::remove_cvref_t<decltype(anNative)>>::value
+			tc::constexpr_size<decltype(anTc)>::value==
+			tc::constexpr_size<decltype(anNative)>::value
 		);
 		static_assert(
-			tc::constexpr_size<tc::remove_cvref_t<decltype(anTc2)>>::value==
-			tc::constexpr_size<tc::remove_cvref_t<decltype(anNative)>>::value
+			tc::constexpr_size<decltype(anTc2)>::value==
+			tc::constexpr_size<decltype(anNative)>::value
 		);
 		static_assert(
-			tc::constexpr_size<tc::remove_cvref_t<decltype(anNativeTrans)>>::value==
-			tc::constexpr_size<tc::remove_cvref_t<decltype(anNative)>>::value
+			tc::constexpr_size<decltype(anNativeTrans)>::value==
+			tc::constexpr_size<decltype(anNative)>::value
 		);
 		static_assert(
-			tc::constexpr_size<tc::remove_cvref_t<decltype(anTcTrans)>>::value==
-			tc::constexpr_size<tc::remove_cvref_t<decltype(anNative)>>::value
+			tc::constexpr_size<decltype(anTcTrans)>::value==
+			tc::constexpr_size<decltype(anNative)>::value
 		);
+
+		auto rngnoncopy = tc::transform(MAKE_CONSTEXPR_ARRAY(1,2), [](int) noexcept {
+			struct NonCopyNonMoveable final {
+				NonCopyNonMoveable(NonCopyNonMoveable const&) = delete;
+				NonCopyNonMoveable(NonCopyNonMoveable&&) = delete;
+
+				NonCopyNonMoveable() {}
+			};
+			return NonCopyNonMoveable();
+		});
+		tc::for_each(
+			rngnoncopy,
+			[](auto&& noncopy) noexcept {}
+		);
+		auto noncopy = tc_front(rngnoncopy);
 	}
 }
 

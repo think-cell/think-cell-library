@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -13,7 +13,6 @@
 #include "range_adaptor.h"
 #include "index_range.h"
 #include "meta.h"
-#include "types.h"
 #include "size.h"
 #include "utility.h"
 #include "invoke_with_constant.h"
@@ -21,6 +20,8 @@
 #include "transform.h"
 #include "counting_range.h"
 #include "variant.h"
+#include "quantifier.h"
+#include "empty.h"
 
 namespace tc {
 	namespace no_adl {
@@ -48,7 +49,7 @@ namespace tc {
 		template<
 			typename... Rng
 		>
-		struct [[nodiscard]] concat_adaptor_impl<false, Rng...>: tc::value_type_base<tc::concat_adaptor<Rng...>> {
+		struct [[nodiscard]] concat_adaptor_impl<false, Rng...> {
 			std::tuple<
 				tc::reference_or_value< Rng >...
 			> m_baserng;
@@ -118,9 +119,13 @@ namespace tc {
 							std::index_sequence_for<Rng...>(),
 							[&](auto nconstIndex) noexcept { return BaseRangeSize(nconstIndex); }
 						),
-						boost::implicit_cast<tc::common_type_t<decltype(tc::size_raw(std::declval<Rng>()))...>>(0),
+						tc::explicit_cast<tc::common_type_t<decltype(tc::size_raw(std::declval<Rng>()))...>>(0),
 						fn_assign_plus()
 					);
+			}
+
+			bool empty() const& noexcept {
+				return tc::all_of(m_baserng, [](auto const& rng) noexcept { return tc::empty(*rng); });
 			}
 		};
 
@@ -138,16 +143,20 @@ namespace tc {
 						Rng
 					>>...,
 					concat_end_index
-				>,
-				tc::demote_iterator_traversal_tag_t<tc::traversal_t<Rng>...>
+				>
 			>
 		{
 		private:
 			using this_type = concat_adaptor_impl;
+
 		public:
 			using index = typename this_type::index;
 
 			using concat_adaptor_impl<false, Rng...>::m_baserng;
+
+			using difference_type = std::ptrdiff_t ; /* TODO :tc::common_type_t<
+				boost::range_difference<Rng>::type ...
+			>;*/
 
 			template<typename... Rhs>
 			constexpr concat_adaptor_impl(tc::aggregate_tag_t, Rhs&&... rhs) noexcept
@@ -187,7 +196,6 @@ namespace tc {
 				);
 			}
 
-		public:
 			STATIC_FINAL(begin_index)() const& noexcept -> index {
 				return modified(
 					create_begin_index(std::integral_constant<std::size_t, 0>()),
@@ -215,7 +223,18 @@ namespace tc {
 				);
 			}
 
-			STATIC_FINAL(decrement_index)(index& idx) const& noexcept -> void {
+
+			STATIC_FINAL_MOD(
+				template<
+					ENABLE_SFINAE BOOST_PP_COMMA()
+					std::enable_if_t<
+						std::conjunction<tc::has_decrement_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>...>::value &&
+						std::conjunction<tc::has_equal_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>...>::value &&
+						std::conjunction<tc::has_end_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>...>::value
+					>* = nullptr
+				>,
+				decrement_index
+			)(index& idx) const& noexcept -> void {
 				tc::invoke_with_constant<std::make_index_sequence<sizeof...(Rng)+1>>(
 					[&](auto nconstIndexStart) noexcept {
 						tc::for_each(
@@ -283,11 +302,16 @@ namespace tc {
 				);
 			}
 
-			using difference_type = std::ptrdiff_t ; /* TODO :tc::common_type_t<
-				boost::range_difference<Rng>::type ...
-			>;*/
-
-			STATIC_FINAL(advance_index)(index& idx, difference_type d) const& noexcept -> void {
+			STATIC_FINAL_MOD(
+				template<
+					ENABLE_SFINAE BOOST_PP_COMMA()
+					std::enable_if_t<
+						std::conjunction<tc::has_distance_to_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>...>::value &&
+						std::conjunction<tc::has_end_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>...>::value &&
+						std::conjunction<tc::has_advance_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>...>::value
+					>* = nullptr
+				>, advance_index
+			)(index& idx, difference_type d) const& noexcept -> void {
 				tc::invoke_with_constant<std::make_index_sequence<sizeof...(Rng)+1>>(
 					[&](auto nconstIndexStart) noexcept {
 						if (d < 0) {
@@ -349,7 +373,16 @@ namespace tc {
 				);
 			}
 
-			STATIC_FINAL(distance_to_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> difference_type {
+			STATIC_FINAL_MOD(
+				template<
+					ENABLE_SFINAE BOOST_PP_COMMA()
+					std::enable_if_t<
+						std::conjunction<tc::has_distance_to_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>...>::value &&
+						std::conjunction<tc::has_end_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>...>::value
+					>* = nullptr
+				>,
+				distance_to_index
+			)(index const& idxLhs, index const& idxRhs) const& noexcept -> difference_type {
 				if (idxLhs.index() == idxRhs.index()) {
 					return tc::invoke_with_constant<std::make_index_sequence<sizeof...(Rng)+1>>(
 						[&](auto nconstIndex) noexcept -> difference_type {
@@ -404,15 +437,25 @@ namespace tc {
 	}
 
 	namespace no_adl {
-		template<typename... Rng>
-		struct value_type_base<tc::concat_adaptor_adl::concat_adaptor_impl<false, Rng...>, tc::void_t<tc::common_range_value_t<Rng...>>> {
-			using value_type = tc::common_range_value_t<Rng...>;
+		template<bool HasIterator, typename... Rng>
+		struct constexpr_size_base<tc::concat_adaptor_adl::concat_adaptor_impl<HasIterator, Rng...>, tc::void_t<typename tc::constexpr_size<Rng>::type...>>
+			: INTEGRAL_CONSTANT((... + tc::constexpr_size<Rng>::value))
+		{};
+
+		template<typename ConcatAdaptor, typename... Rng>
+		struct range_value<ConcatAdaptor, tc::concat_adaptor_adl::concat_adaptor_impl<false, Rng...>, tc::void_t<tc::common_range_value_t<Rng...>>> final {
+			using type = tc::common_range_value_t<Rng...>;
 		};
 	}
 
 	template<typename... Rng, std::enable_if_t<1<sizeof...(Rng)>* = nullptr>
 	constexpr auto concat(Rng&&... rng) noexcept {
 		return tc::concat_adaptor< std::remove_cv_t<Rng>...>(tc::aggregate_tag, std::forward<Rng>(rng)...);
+	}
+
+	template<typename Rng>
+	constexpr Rng&& concat(Rng&& rng) noexcept {
+		return std::forward<Rng>(rng);
 	}
 
 	namespace no_adl {

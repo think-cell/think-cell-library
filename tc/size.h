@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -18,7 +18,6 @@
 #include "tag_type.h"
 
 #include <boost/range/traversal.hpp>
-#include <boost/implicit_cast.hpp>
 
 #include <limits>
 
@@ -31,11 +30,11 @@ namespace tc {
 
 	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template< typename T >
-	constexpr std::enable_if_t<!tc::is_actual_integer<T>::value, T > make_size_proxy(T t) noexcept;
+	[[nodiscard]] constexpr std::enable_if_t<!tc::is_actual_integer<T>::value, T > make_size_proxy(T t) noexcept;
 
 	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template< typename T >
-	constexpr std::enable_if_t< tc::is_actual_integer<T>::value, size_proxy<T> > make_size_proxy(T t) noexcept;
+	[[nodiscard]] constexpr std::enable_if_t< tc::is_actual_integer<T>::value, size_proxy<T> > make_size_proxy(T t) noexcept;
 
 	////////////////////////////////
 	// tc::size_proxy in ADL barrier
@@ -44,7 +43,7 @@ namespace tc {
 		struct size_proxy final {
 			static_assert(tc::is_actual_integer<T>::value);
 		private:
-			void AssertInvariant() & noexcept {
+			constexpr void AssertInvariant() & noexcept {
 				// npos should only be represented by a signed number. Otherwise casts to (larger) unsigned types may not preserve npos as static_cast<T>(-1)
 				_ASSERTE( static_cast<T>(-1)==m_t ? std::is_signed<T>::value : 0<=m_t );
 			}
@@ -58,7 +57,7 @@ namespace tc {
 			}
 
 			template<typename S>
-			explicit size_proxy(size_proxy<S> const& other) noexcept
+			constexpr explicit size_proxy(size_proxy<S> const& other) noexcept
 				: m_t(tc::explicit_cast<T>(other.m_t))
 			{
 				AssertInvariant();
@@ -73,8 +72,8 @@ namespace tc {
 
 #pragma push_macro("CONVERT")
 #define CONVERT( S ) \
-			operator S() const& noexcept { \
-				_ASSERT(  /*good idea to require signed?*/ std::is_signed<S>::value && static_cast<T>(-1)==m_t || tc::unsigned_cast(m_t)<=tc::unsigned_cast(std::numeric_limits<S>::max()) ); \
+			constexpr operator S() const& noexcept { \
+				_ASSERTE(  /*good idea to require signed?*/ std::is_signed<S>::value && static_cast<T>(-1)==m_t || tc::unsigned_cast(m_t)<=tc::unsigned_cast(std::numeric_limits<S>::max()) ); \
 				return static_cast<S>(m_t); \
 			}
 			
@@ -96,18 +95,18 @@ namespace tc {
 
 			template< typename U >
 			operator size_proxy<U>() const& noexcept {
-				return size_proxy<U>(boost::implicit_cast<U>(*this));
+				return size_proxy<U>(tc::implicit_cast<U>(*this));
 			}
 
 #pragma push_macro("operator_bool")
 #define operator_bool( op ) \
-			template< typename S, std::enable_if_t< tc::is_actual_integer<S>::value>* = nullptr> friend bool operator op( size_proxy const& lhs, S const& rhs ) noexcept \
+			template< typename S, std::enable_if_t< tc::is_actual_integer<S>::value>* = nullptr> friend constexpr bool operator op( size_proxy const& lhs, S const& rhs ) noexcept \
 						{ return tc::prepare_argument< T,S >::prepare(lhs.m_t) op tc::prepare_argument< T,S >::prepare(rhs); } \
-			template< typename S, std::enable_if_t< tc::is_actual_integer<S>::value>* = nullptr> friend bool operator op( S const& lhs, size_proxy const& rhs ) noexcept \
+			template< typename S, std::enable_if_t< tc::is_actual_integer<S>::value>* = nullptr> friend constexpr bool operator op( S const& lhs, size_proxy const& rhs ) noexcept \
 						{ return tc::prepare_argument< T,S >::prepare(lhs) op tc::prepare_argument< T,S >::prepare(rhs.m_t); } \
-			friend bool operator op( size_proxy const& lhs, size_proxy const& rhs ) \
+			friend constexpr bool operator op( size_proxy const& lhs, size_proxy const& rhs ) \
 						{ return lhs op rhs.m_t; } \
-			template< typename S > friend bool operator op( size_proxy const& lhs, size_proxy<S> const& rhs ) noexcept \
+			template< typename S > friend constexpr bool operator op( size_proxy const& lhs, size_proxy<S> const& rhs ) noexcept \
 						{ return lhs op rhs.m_t; }
 
 			operator_bool(< )
@@ -127,25 +126,25 @@ namespace tc {
 			typename Lhs, typename Rhs, \
 			std::enable_if_t<tc::is_actual_integer<Rhs>::value >* = nullptr \
 		> auto operator op( size_proxy<Lhs> const& lhs, Rhs const& rhs ) \
-		return_decltype( \
+		return_decltype_MAYTHROW( \
 			make_size_proxy( lhs.m_t op rhs ) \
 		) \
 		template< \
 			typename Lhs, typename Rhs, \
 			std::enable_if_t<tc::is_actual_arithmetic<Lhs>::value >* = nullptr \
 		> auto operator op( Lhs const& lhs, size_proxy<Rhs> const& rhs ) \
-		return_decltype( \
+		return_decltype_MAYTHROW( \
 			tc::explicit_cast<Lhs>(lhs op rhs.m_t) \
 		) \
 		template< \
 			typename Lhs, typename Rhs, \
 			std::enable_if_t<!tc::is_actual_arithmetic<Lhs>::value >* = nullptr \
 		> auto operator op( Lhs const& lhs, size_proxy<Rhs> const& rhs ) \
-		return_decltype( \
+		return_decltype_MAYTHROW( \
 			lhs op rhs.m_t \
 		) \
 		template< typename Lhs, typename Rhs > auto operator op( size_proxy<Lhs> const& lhs, size_proxy<Rhs> const& rhs ) \
-		return_decltype( \
+		return_decltype_MAYTHROW( \
 			make_size_proxy( lhs.m_t op rhs.m_t ) \
 		)
 		
@@ -224,52 +223,50 @@ namespace tc {
 		struct common_type_decayed<T0, tc::size_proxy<T1>> : tc::common_type_decayed<tc::size_proxy<T1>, T0> {};
 	}
 
-	namespace size_adl {
-		// tc::size() requires a range with either:
-		//  - a size member function, which is assumed to run in O(1)
-		//  - random_access iterators, which are assumed to be able to calculate size in O(1)
-
-		DEFINE_ADL_TAG_TYPE(size_tag);
-
-		template<typename Rng, std::enable_if_t<
-			has_mem_fn_size<Rng const>::value
-		>* = nullptr >
-		constexpr auto size(size_tag_t, Rng const& rng) noexcept return_decltype(
-			rng.size()
-		)
-
-		template<typename Rng, std::enable_if_t<
-			!has_mem_fn_size<Rng const>::value
-			&& is_random_access_range<Rng>::value
-		>* = nullptr>
-		auto size(size_tag_t, Rng const& rng) noexcept return_decltype(
-			tc::unsigned_cast(tc::end(rng) - tc::begin(rng))
-		) // Do not use boost::size. It always uses std::distance, which is O(n) for
-		  // ranges with boost::iterators::random_access_traversal_tag but not std::random_access_iterator_tag,
-		  // e.g., boost::transform_iterator
-
-		template<typename T, std::size_t N, std::enable_if_t<!tc::is_char< T >::value>* = nullptr>
-		constexpr auto size(size_tag_t, T (&)[N]) noexcept return_decltype(
-			N
-		)
-	}
-
 	namespace no_adl {
-		template<typename Rng>
-		struct constexpr_size {};
+		template<typename Rng, typename>
+		struct constexpr_size_base {};
 
 		template<typename T, std::size_t N>
-		struct constexpr_size<T[N]> : std::integral_constant<std::size_t, N> {};
+		struct constexpr_size_base<T[N], void> : std::integral_constant<std::size_t, N> {
+			static_assert(!tc::is_char<T>::value);
+		};
 	}
-	using no_adl::constexpr_size;
+
+	template<typename Rng>
+	using constexpr_size = no_adl::constexpr_size_base<tc::remove_cvref_t<Rng>>;
+
+	namespace no_adl {
+		template<typename Rng, typename = void>
+		struct has_constexpr_size : std::false_type {};
+
+		template<typename Rng>
+		struct has_constexpr_size<Rng, std::void_t<typename tc::constexpr_size<Rng>::type>> : std::true_type {};
+	}
+	using no_adl::has_constexpr_size;
+
+	// tc::size() requires a range with either:
+	//  - a constexpr_size_base specialization which provide size as a compile time constant
+	//  - a size member function, which is assumed to run in O(1)
+	//  - random_access iterators, which are assumed to be able to calculate size in O(1)
+	template<typename Rng, std::enable_if_t<
+		has_constexpr_size<Rng>::value || has_mem_fn_size<Rng const>::value || is_random_access_range<Rng>::value
+	>* = nullptr >
+	[[nodiscard]] constexpr auto size_raw(Rng const& rng) noexcept {
+		if constexpr( has_constexpr_size<Rng>::value ) {
+			return constexpr_size<Rng>::value;
+		} else if constexpr( has_mem_fn_size<Rng const>::value ) {
+			return rng.size();
+		} else {
+			// Do not use boost::size. It always uses std::distance, which is O(n) for
+			// ranges with boost::iterators::random_access_traversal_tag but not std::random_access_iterator_tag,
+			// e.g., boost::transform_iterator
+			return tc::unsigned_cast(tc::end(rng) - tc::begin(rng));
+		}
+	}
 
 	template<typename T>
-	constexpr auto size_raw(T const& t) noexcept return_decltype(
-		size(tc::size_adl::size_tag, t)
-	)
-
-	template<typename T>
-	constexpr auto size(T const& t) noexcept return_decltype(
+	[[nodiscard]] constexpr auto size(T const& t) return_decltype_noexcept(
 		make_size_proxy(tc::size_raw(t))
 	)
 

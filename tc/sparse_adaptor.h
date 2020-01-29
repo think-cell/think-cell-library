@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -12,7 +12,6 @@
 #include "range_fwd.h"
 #include "range_adaptor.h"
 #include "meta.h"
-#include "types.h"
 #include "equality_comparable.h"
 #include <tuple>
 
@@ -26,7 +25,7 @@ namespace tc {
 			typename TValue,
 			bool HasIterator = is_range_with_iterators< RngPairIndexValue >::value
 		>
-		struct sparse_adaptor;
+		struct [[nodiscard]] sparse_adaptor;
 
 		template<
 			typename RngPairIndexValue,
@@ -99,11 +98,7 @@ namespace tc {
 			sparse_adaptor<RngPairIndexValue, TValue, false>,
 			range_iterator_from_index<
 				sparse_adaptor<RngPairIndexValue, TValue>,
-				sparse_adaptor_index<RngPairIndexValue>,
-				typename boost::range_detail::demote_iterator_traversal_tag<
-					boost::iterators::forward_traversal_tag, // could be bidirectional, no use-case yet
-					traversal_t<RngPairIndexValue>
-				>::type
+				sparse_adaptor_index<RngPairIndexValue>
 			>
 		{
 			using index=typename sparse_adaptor::index;
@@ -121,7 +116,6 @@ namespace tc {
 					idx.m_n != tc::unsigned_cast(std::get<0>(tc::dereference_index(*this->m_baserng,idx.m_idxBase)));
 			}
 
-		public:
 			STATIC_FINAL(begin_index)() const& noexcept -> index {
 				return {0, tc::begin_index(this->m_baserng)};
 			}
@@ -145,7 +139,7 @@ namespace tc {
 				return idx.m_n == this->m_nEnd;
 			}
 
-			STATIC_FINAL(dereference_index)(index const& idx) const& noexcept return_decltype(
+			STATIC_FINAL(dereference_index)(index const& idx) const& return_decltype_MAYTHROW(
 				IndexIsDefault(idx)
 					? *(this->m_default)
 					: std::get<1>(tc::dereference_index(*this->m_baserng,idx.m_idxBase))
@@ -158,7 +152,7 @@ namespace tc {
 		typename RngPairIndexValue,
 		typename TValue = typename std::tuple_element<1, tc::range_value_t<RngPairIndexValue>>::type
 	>
-	auto sparse_range(RngPairIndexValue&& rngpairindexvalue, std::size_t nsizerng, TValue&& valueDefault = TValue()) noexcept return_ctor(
+	auto sparse_range(RngPairIndexValue&& rngpairindexvalue, std::size_t nsizerng, TValue&& valueDefault = TValue()) return_ctor_noexcept(
 		no_adl::sparse_adaptor< RngPairIndexValue BOOST_PP_COMMA() TValue >,
 		(std::forward<RngPairIndexValue>(rngpairindexvalue), nsizerng, std::forward<TValue>(valueDefault))
 	)

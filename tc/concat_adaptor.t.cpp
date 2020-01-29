@@ -1,12 +1,11 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
-#include "range.h"
 #include "range.t.h"
 #include "compare.h"
 
@@ -157,7 +156,7 @@ UNITTESTDEF(concat_deep_const_test) {
 UNITTESTDEF(ConcatAdvanceToEndIterator) {
 	{
 		tc::vector<int> vecn(1, 0);
-		tc::begin_next(tc::concat(vecn, vecn), tc::size(vecn) * 2);
+		void(tc::begin_next(tc::concat(vecn, vecn), tc::size(vecn) * 2));
 
 		auto rng = tc::concat(vecn,vecn);
 		auto it = tc::begin(rng);
@@ -178,6 +177,65 @@ UNITTESTDEF(ConcatAdvanceToEndIterator) {
 	_ASSERTEQUAL(it, it2);
 	_ASSERTEQUAL(tc::end(rng), it);
 	it += 0;
+}
+
+namespace
+{
+	TC_HAS_EXPR(decrement_operator, (T), --std::declval<T&>());
+
+	template<class Derived>
+	struct forward_range_base : tc::range_iterator_generator_from_index<Derived, int> {
+		using this_type = forward_range_base;
+		int values[3] = { 0, 1, 2 };
+		STATIC_OVERRIDE(begin_index)() const -> int { return 0; }
+		STATIC_OVERRIDE(end_index)() const -> int { return 3; }
+		STATIC_OVERRIDE(increment_index)(int& i) const -> void { ++i; }
+		STATIC_OVERRIDE(dereference_index)(int i) -> int& { return values[i]; }
+		STATIC_OVERRIDE(dereference_index)(int i) const -> int const& { return values[i]; }
+		STATIC_OVERRIDE(equal_index)(int lhs, int rhs) const noexcept -> bool { return lhs == rhs; }
+	};
+
+	struct forward_range : forward_range_base<forward_range> {};
+
+	struct bidir_range : forward_range_base<bidir_range> {
+		using Derived = bidir_range;
+		using this_type = bidir_range;
+		STATIC_FINAL(decrement_index)(int& i) const -> void { --i; }
+	};
+
+	void concat_iterator_auto_traversal_static_tests() {
+		// Any concatenation which includes a forward-traversal range should be forward-traversal
+		{
+			auto rng = tc::concat(forward_range(), forward_range());
+			auto it = tc::begin(rng);
+			static_assert(!tc::has_decrement_index<decltype(rng)>::value);
+			static_assert(!has_decrement_operator<decltype(it)>::value);
+			static_assert(std::is_same<typename boost::iterator_traversal<decltype(it)>::type, boost::iterators::forward_traversal_tag>::value);
+		}
+		{
+			auto rng = tc::concat(forward_range(), bidir_range());
+			auto it = tc::begin(rng);
+			static_assert(!tc::has_decrement_index<decltype(rng)>::value);
+			static_assert(!has_decrement_operator<decltype(it)>::value);
+			static_assert(std::is_same<typename boost::iterator_traversal<decltype(it)>::type, boost::iterators::forward_traversal_tag>::value);
+		}
+		{
+			auto rng = tc::concat(bidir_range(), forward_range());
+			auto it = tc::begin(rng);
+			static_assert(!tc::has_decrement_index<decltype(rng)>::value);
+			static_assert(!has_decrement_operator<decltype(it)>::value);
+			static_assert(std::is_same<typename boost::iterator_traversal<decltype(it)>::type, boost::iterators::forward_traversal_tag>::value);
+		}
+
+		// A concatenation of bidirectional ranges should be bidirectional
+		{
+			auto rng = tc::concat(bidir_range(), bidir_range());
+			auto it = tc::begin(rng);
+			static_assert(tc::has_decrement_index<decltype(rng)>::value);
+			static_assert(has_decrement_operator<decltype(it)>::value);
+			static_assert(std::is_same<typename boost::iterator_traversal<decltype(it)>::type, boost::iterators::bidirectional_traversal_tag>::value);
+		}
+	}
 }
 
 STATICASSERTSAME(char, tc::range_value_t<decltype(tc::concat("abc", "def"))>);

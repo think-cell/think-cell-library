@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -10,7 +10,7 @@
 #include "range_defines.h"
 #include "explicit_cast.h"
 #include "for_each.h"
-#include "sub_range.h"
+#include "subrange.h"
 #include "bit_cast.h"
 #include "empty.h"
 #include "minmax.h"
@@ -29,7 +29,7 @@ namespace tc {
 		struct integral_as_padded_dec_impl<T,1>;
 
 		template< typename T, std::size_t N>
-		struct integral_as_padded_dec_impl : protected integral_as_padded_dec_impl<T,N-1> {
+		struct [[nodiscard]] integral_as_padded_dec_impl : protected integral_as_padded_dec_impl<T,N-1> {
 			static constexpr unsigned long long c_nTenPow=integral_as_padded_dec_impl<T,N-1>::c_nTenPow*10;
 			constexpr integral_as_padded_dec_impl( T n ) noexcept : integral_as_padded_dec_impl<T,N-1>(n) {}
 
@@ -44,10 +44,12 @@ namespace tc {
 				}
 				return tc::base_cast< integral_as_padded_dec_impl<T,N-1> >(*this)(tc_move(sink));
 			}
+
+			constexpr bool empty() const& noexcept { return false; }
 		};
 
 		template< typename T>
-		struct integral_as_padded_dec_impl<T,1> {
+		struct [[nodiscard]] integral_as_padded_dec_impl<T,1> {
 			T m_n;
 			static constexpr unsigned long long c_nTenPow=1;
 			constexpr integral_as_padded_dec_impl( T n ) noexcept : m_n(n) {}
@@ -57,30 +59,30 @@ namespace tc {
 				using Char = tc::sink_value_t<Sink>;
 				return tc::for_each(tc::ptr_begin( boost::lexical_cast< std::array<Char,50> >(m_n+0/*force integral promotion, otherwise unsigned/signed char gets printed as character*/) ), std::forward<Sink>(sink));
 			}
-		};
 
-		
+			constexpr bool empty() const& noexcept { return false; }
+		};
 	}
 
 	template< typename T, std::enable_if_t<tc::is_actual_integer<T>::value>* = nullptr >
-	constexpr auto as_dec(T t) noexcept return_ctor(
+	constexpr auto as_dec(T t) return_ctor_noexcept(
 		no_adl::integral_as_padded_dec_impl<T BOOST_PP_COMMA() 1>,
 		(t)
 	)
 
 	template< typename T , std::enable_if_t<std::is_class<T>::value>* = nullptr>
-	constexpr auto as_dec(T const& t) noexcept return_decltype(
+	constexpr auto as_dec(T const& t) return_decltype_noexcept(
 		tc::as_dec(ConvertToUnderlying(t) )
 	)
 
 	template< std::size_t N, typename T, std::enable_if_t<tc::is_actual_integer<T>::value>* = nullptr >
-	constexpr auto as_padded_dec(T t) noexcept return_ctor(
+	constexpr auto as_padded_dec(T t) return_ctor_noexcept(
 		no_adl::integral_as_padded_dec_impl<std::make_unsigned_t<T> BOOST_PP_COMMA() N>,
 		(tc::unsigned_cast(t))
 	)
 
 	template< std::size_t N, typename T, std::enable_if_t<std::is_class<T>::value>* = nullptr >
-	constexpr auto as_padded_dec(T const& t) noexcept return_decltype(
+	constexpr auto as_padded_dec(T const& t) return_decltype_noexcept(
 		tc::as_padded_dec<N>(ConvertToUnderlying(t) )
 	)
 
@@ -88,7 +90,7 @@ namespace tc {
 		///////////////
 		// Wrapper to print integers as hex
 		template< typename T, unsigned int nWidth, char c_chLetterBase>
-		struct as_hex_impl final {
+		struct [[nodiscard]] as_hex_impl final {
 		private:
 			typename boost::uint_t< CHAR_BIT*sizeof(T) >::exact m_n;
 		public:
@@ -117,39 +119,39 @@ namespace tc {
 	using no_adl::as_hex_impl;
 
 	template< unsigned int nWidth, typename T >
-	auto as_uc_hex(T const& t) noexcept return_ctor(
+	auto as_uc_hex(T const& t) return_ctor_noexcept(
 		as_hex_impl<T BOOST_PP_COMMA() nWidth BOOST_PP_COMMA() 'A'>,
 		(t)
 	)
 
 	template< typename T >
-	auto as_padded_uc_hex(T const& t) noexcept return_ctor(
+	auto as_padded_uc_hex(T const& t) return_ctor_noexcept(
 		as_hex_impl<T BOOST_PP_COMMA() (sizeof(T)*CHAR_BIT+3)/4 BOOST_PP_COMMA() 'A'>,
 		(t)
 	)
 
 	//Do not use in XML, because the standard wants hexBinary to be padded to an even length
 	template< typename T >
-	auto as_unpadded_uc_hex(T const& t) noexcept return_ctor(
+	auto as_unpadded_uc_hex(T const& t) return_ctor_noexcept(
 		as_hex_impl<T BOOST_PP_COMMA() 1 BOOST_PP_COMMA() 'A'>,
 		(t)
 	)
 
 	template< unsigned int nWidth, typename T >
-	auto as_lc_hex(T const& t) noexcept return_ctor(
+	auto as_lc_hex(T const& t) return_ctor_noexcept(
 		as_hex_impl<T BOOST_PP_COMMA() nWidth BOOST_PP_COMMA() 'a'>,
 		(t)
 	)
 
 	template< typename T >
-	auto as_padded_lc_hex(T const& t) noexcept return_ctor(
+	auto as_padded_lc_hex(T const& t) return_ctor_noexcept(
 		as_hex_impl<T BOOST_PP_COMMA() (sizeof(T)*CHAR_BIT+3)/4 BOOST_PP_COMMA() 'a'>,
 		(t)
 	)
 
 	//Do not use in XML, because the standard wants hexBinary to be padded to an even length
 	template< typename T >
-	auto as_unpadded_lc_hex(T const& t) noexcept return_ctor(
+	auto as_unpadded_lc_hex(T const& t) return_ctor_noexcept(
 		as_hex_impl<T BOOST_PP_COMMA() 1 BOOST_PP_COMMA() 'a'>,
 		(t)
 	)
@@ -220,7 +222,7 @@ namespace tc {
 
 	namespace no_adl {
 		template<typename Rng>
-		struct size_prefixed_impl {
+		struct [[nodiscard]] size_prefixed_impl {
 			using value_type=unsigned char;
 
 			template<typename Rhs>
@@ -231,7 +233,7 @@ namespace tc {
 			template<typename Sink>
 			void operator()(Sink&& sink) const& MAYTHROW {
 				STATICASSERTSAME(tc::sink_value_t<Sink>, unsigned char, "size_prefixed should only be used on binary sinks.");
-				tc::for_each(tc::concat(tc::as_blob(boost::implicit_cast<std::uint32_t>(tc::size(*m_rng))), tc::range_as_blob(*m_rng)), std::forward<Sink>(sink)); // THROW(tc::file_failure)
+				tc::for_each(tc::concat(tc::as_blob(tc::implicit_cast<std::uint32_t>(tc::size(*m_rng))), tc::range_as_blob(*m_rng)), std::forward<Sink>(sink)); // THROW(tc::file_failure)
 			}
 		private:
 			tc::reference_or_value<Rng> m_rng;
@@ -239,7 +241,7 @@ namespace tc {
 	}
 
 	template< typename Rng >
-	auto size_prefixed(Rng&& rng) noexcept return_ctor(
+	auto size_prefixed(Rng&& rng) return_ctor_noexcept(
 		no_adl::size_prefixed_impl<Rng>,
 		(aggregate_tag, std::forward<Rng>(rng))
 	)
@@ -251,7 +253,7 @@ namespace tc {
 
 	namespace no_adl {
 		template<typename T>
-		struct bool_prefixed_impl {
+		struct [[nodiscard]] bool_prefixed_impl {
 			template<typename Rhs>
 			bool_prefixed_impl(aggregate_tag_t, Rhs&& rhs) noexcept
 				: m_ot(aggregate_tag, std::forward<Rhs>(rhs))
@@ -272,7 +274,7 @@ namespace tc {
 	}
 
 	template< typename T, std::enable_if_t<tc::is_instance<std::optional, T>::value>* = nullptr >
-	auto bool_prefixed(T&& t) noexcept return_ctor(
+	auto bool_prefixed(T&& t) return_ctor_noexcept(
 		no_adl::bool_prefixed_impl<T>,
 		(aggregate_tag, std::forward<T>(t))
 	)

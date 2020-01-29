@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -49,4 +49,10 @@ UNITTESTDEF(dense_map_with_non_moveable_type) {
 
 	static_cast<void>(myenumONE);
 	static_cast<void>(myenumTWO);
+
+#ifndef _MSC_VER // MSVC support for guaranteed copy elision seems to be incomplete.
+	auto anoncopyFromTransform = tc::make_dense_map<MyEnum>(47, 11).transform([](int n) {
+		return NonCopyNonMoveable(n);
+	});
+#endif
 }

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -35,7 +35,7 @@ namespace tc {
 	}
 
 	template< typename Cont >
-	void cont_clear( Cont& cont ) noexcept {
+	constexpr void cont_clear( Cont& cont ) noexcept {
 		cont.clear();
 	}
 
@@ -73,12 +73,6 @@ namespace tc {
 	}
 
 	template< typename Cont, typename... Args >
-	void cont_clear( Cont& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type n,  Args &&... args) noexcept {
-		cont_clear( cont );
-		cont_extend( cont, n, std::forward<Args>(args)...);
-	}
-
-	template< typename Cont, typename... Args >
 	void cont_extend( Cont& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type n, Args &&... args) noexcept {
 		_ASSERT( cont.size()<=n );
 		tc::cont_reserve(cont, n);
@@ -86,7 +80,13 @@ namespace tc {
 	}
 
 	template< typename Cont, typename... Args >
-	tc::range_reference_t< Cont > cont_extend_at(Cont& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type n, Args &&... args) noexcept {
+	void cont_clear( Cont& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type n,  Args &&... args) noexcept {
+		cont_clear( cont );
+		cont_extend( cont, n, std::forward<Args>(args)...);
+	}
+
+	template< typename Cont, typename... Args >
+	[[nodiscard]] tc::range_reference_t< Cont > cont_extend_at(Cont& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type n, Args &&... args) noexcept {
 		if( cont.size()<=n ) {
 			cont_extend( cont, n+1, std::forward<Args>(args)...);
 		}

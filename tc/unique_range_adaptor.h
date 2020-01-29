@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -12,9 +12,8 @@
 #include "range_fwd.h"
 #include "range_adaptor.h"
 #include "meta.h"
-#include "types.h"
 #include "static_polymorphism.h"
-#include "sub_range.h"
+#include "subrange.h"
 
 namespace tc {
 
@@ -24,62 +23,69 @@ namespace tc {
 			typename Rng,
 			typename Equals
 		>
-		struct unique_adaptor
+		struct [[nodiscard]] unique_adaptor
+#ifndef TC_RANGE_ITERATOR_HELPER_BASE_CLASS_WORKAROUND
 			: range_iterator_generator_from_index<
 				unique_adaptor<Rng, Equals>,
-				tc::index_t<std::remove_reference_t<Rng>>,
-				typename boost::range_detail::demote_iterator_traversal_tag<
-					boost::iterators::bidirectional_traversal_tag,
-					traversal_t<Rng>
-				>::type
+				tc::index_t<std::remove_reference_t<Rng>>
 			>
+#endif
 		{
+		private:
+			using this_type = unique_adaptor;
+#ifdef TC_RANGE_ITERATOR_HELPER_BASE_CLASS_WORKAROUND
+			using Derived = this_type;
+#endif
+		public:
+
+#ifdef TC_RANGE_ITERATOR_HELPER_BASE_CLASS_WORKAROUND
+			using index = tc::index_t<std::remove_reference_t<Rng>>;
+			DEFINE_RANGE_ITERATOR_GENERATOR_FROM_INDEX
+#else
 			using index = typename unique_adaptor::index;
+#endif
 
 			template<
 				typename RngRef,
 				typename EqualsRef
 			>
-			explicit unique_adaptor(RngRef&& rng, EqualsRef&& equals) noexcept
+			explicit constexpr unique_adaptor(RngRef&& rng, EqualsRef&& equals) noexcept
 				: m_baserng(reference_or_value< Rng >(aggregate_tag, std::forward<RngRef>(rng)))
 				, m_equals(std::forward<EqualsRef>(equals))
 			{}
 
 		private:
-			using this_type = unique_adaptor;
 			reference_or_value< Rng > m_baserng;
 			Equals m_equals;
 
-		public:
-
-			STATIC_FINAL(begin_index)() const& noexcept -> index {
+			STATIC_FINAL_MOD(constexpr, begin_index)() const& noexcept -> index {
 				return tc::begin_index(m_baserng);
 			}
 
-			STATIC_FINAL(end_index)() const& noexcept -> index {
+			STATIC_FINAL_MOD(constexpr, end_index)() const& noexcept -> index {
 				return tc::end_index(m_baserng);
 			}
 
-			STATIC_FINAL(at_end_index)(index const& idx) const& noexcept -> bool {
+			STATIC_FINAL_MOD(constexpr, at_end_index)(index const& idx) const& noexcept -> bool {
 				return tc::at_end_index(*m_baserng,idx);
 			}
 
-			STATIC_FINAL(dereference_index)(index const& idx) const& noexcept return_decltype(
+			STATIC_FINAL_MOD(constexpr, dereference_index)(index const& idx) const& return_decltype_MAYTHROW(
 				tc::dereference_index(*m_baserng,idx)
 			)
 
-			STATIC_FINAL(dereference_index)(index const& idx) & noexcept return_decltype(
+			STATIC_FINAL_MOD(constexpr, dereference_index)(index const& idx) & return_decltype_MAYTHROW(
 				tc::dereference_index(*m_baserng,idx)
 			)
 
-			STATIC_FINAL(equal_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> bool {
+			STATIC_FINAL_MOD(constexpr, equal_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> bool {
 				return tc::equal_index(*m_baserng,idxLhs, idxRhs);
 			}
 
-			STATIC_FINAL(increment_index)(index& idx0) const& noexcept -> void {
+			STATIC_FINAL_MOD(constexpr, increment_index)(index& idx0) const& noexcept -> void {
 				using RefType = tc::reference_or_value<decltype(this->dereference_index(idx0))>;
 
-				_ASSERT(!this->at_end_index(idx0));
+				_ASSERTE(!this->at_end_index(idx0));
 
 				auto idx1=idx0;
 				tc::increment_index(*m_baserng,idx0);
@@ -88,7 +94,7 @@ namespace tc {
 
 					for (;;) {
 						RefType ref0(aggregate_tag, this->dereference_index(idx0));
-						if (!this->m_equals(*ref1, *ref0)) {
+						if (!this->m_equals(tc::as_const(*ref1), tc::as_const(*ref0))) {
 							break;
 						}
 
@@ -99,7 +105,7 @@ namespace tc {
 							break;
 						}
 						ref1 = RefType(aggregate_tag, this->dereference_index(idx1));
-						if (!this->m_equals(*ref0, *ref1)) {
+						if (!this->m_equals(tc::as_const(*ref0), tc::as_const(*ref1))) {
 							idx0 = tc_move(idx1);
 							break;
 						}
@@ -113,10 +119,10 @@ namespace tc {
 				}
 			}
 
-			STATIC_FINAL(decrement_index)(index& idx0) const& noexcept -> void {
+			STATIC_FINAL_MOD(constexpr, decrement_index)(index& idx0) const& noexcept -> void {
 				using RefType = tc::reference_or_value<decltype(this->dereference_index(idx0))>;
 
-				_ASSERT(!this->equal_index(this->begin_index(),idx0));
+				_ASSERTE(!this->equal_index(this->begin_index(),idx0));
 
 				tc::decrement_index(*m_baserng,idx0);
 				if (!this->equal_index(this->begin_index(),idx0)) {
@@ -126,7 +132,7 @@ namespace tc {
 						auto idx1=idx0;
 						tc::decrement_index(*m_baserng,idx1);
 						RefType ref1(aggregate_tag, this->dereference_index(idx1));
-						if (!this->m_equals(*ref1, *ref0)) {
+						if (!this->m_equals(tc::as_const(*ref1), tc::as_const(*ref0))) {
 							break;
 						}
 						if (this->equal_index(this->begin_index(),idx1)) {
@@ -137,7 +143,7 @@ namespace tc {
 						idx0 = idx1;
 						tc::decrement_index(*m_baserng,idx0);
 						ref0 = RefType(aggregate_tag, this->dereference_index(idx0));
-						if (!this->m_equals(*ref0, *ref1)) {
+						if (!this->m_equals(tc::as_const(*ref0), tc::as_const(*ref1))) {
 							idx0 = tc_move(idx1);
 							break;
 						}
@@ -147,8 +153,8 @@ namespace tc {
 					}
 				}
 			}
-
-			auto element_base_index(index const& idx) const& noexcept {
+		public:
+			constexpr auto element_base_index(index const& idx) const& noexcept {
 				return idx;
 			}
 
@@ -183,11 +189,7 @@ namespace tc {
 				Derived,
 				unique_range_index<
 					tc::index_t<std::remove_reference_t<Rng>>
-				>,
-				typename boost::range_detail::demote_iterator_traversal_tag<
-					boost::iterators::forward_traversal_tag,
-					traversal_t<Rng>
-				>::type
+				>
 			>
 		{
 			using index = typename unique_range_adaptor::index;
@@ -210,7 +212,7 @@ namespace tc {
 			{}
 
 			STATIC_VIRTUAL(FindSubRangeEnd)
-
+		private:
 			STATIC_OVERRIDE(begin_index)() const& noexcept -> index {
 				auto idxBegin = tc::begin_index(m_baserng);
 				return {idxBegin, FindSubRangeEnd(idxBegin) };
@@ -229,11 +231,11 @@ namespace tc {
 				return tc::at_end_index(*m_baserng,idx.m_idxBegin);
 			}
 
-			STATIC_OVERRIDE(dereference_index)(index const& idx) const& noexcept return_decltype(
+			STATIC_OVERRIDE(dereference_index)(index const& idx) const& return_decltype_noexcept(
 				tc::slice(*m_baserng, idx.m_idxBegin, idx.m_idxEnd)
 			)
 
-			STATIC_OVERRIDE(dereference_index)(index const& idx) & noexcept return_decltype(
+			STATIC_OVERRIDE(dereference_index)(index const& idx) & return_decltype_noexcept(
 				tc::slice(*m_baserng, idx.m_idxBegin, idx.m_idxEnd)
 			)
 
@@ -247,7 +249,7 @@ namespace tc {
 			typename Rng,
 			typename Equals
 		>
-		struct unique_range_front_adaptor
+		struct [[nodiscard]] unique_range_front_adaptor
 			: unique_range_adaptor<unique_range_front_adaptor<Rng, Equals>, Rng, Equals>
 		{
 		private:
@@ -267,10 +269,10 @@ namespace tc {
 				if (tc::at_end_index(*this->m_baserng,idx)) return idx;
 
 				auto idxEnd = idx;
-				auto&& front = tc::dereference_index(*this->m_baserng,idx);
+				auto const& front = tc::dereference_index(*this->m_baserng,idx);
 				do {
 					tc::increment_index(*this->m_baserng,idxEnd);
-				} while (!tc::at_end_index(*this->m_baserng,idxEnd) && this->m_equals(front, tc::dereference_index(*this->m_baserng,idxEnd)));
+				} while (!tc::at_end_index(*this->m_baserng,idxEnd) && this->m_equals(front, tc::as_const(tc::dereference_index(*this->m_baserng,idxEnd))));
 
 				return idxEnd;
 			}
@@ -280,7 +282,7 @@ namespace tc {
 			typename Rng,
 			typename Equals
 		>
-		struct unique_range_adjacent_adaptor
+		struct [[nodiscard]] unique_range_adjacent_adaptor
 			: unique_range_adaptor<unique_range_adjacent_adaptor<Rng, Equals>, Rng, Equals>
 		{
 		private:
@@ -305,7 +307,7 @@ namespace tc {
 					tc::increment_index(*this->m_baserng,idxEnd);
 					if (
 						tc::at_end_index(*this->m_baserng,idxEnd) ||
-						!this->m_equals(tc::dereference_index(*this->m_baserng,idxPrev), tc::dereference_index(*this->m_baserng,idxEnd))
+						!this->m_equals(tc::as_const(tc::dereference_index(*this->m_baserng,idxPrev)), tc::as_const(tc::dereference_index(*this->m_baserng,idxEnd)))
 					) return idxEnd;
 				}
 			}
@@ -320,13 +322,13 @@ namespace tc {
 		typename Rng,
 		typename Equals
 	>
-	auto front_unique_range(Rng&& rng, Equals&& equals) noexcept return_ctor(
+	auto front_unique_range(Rng&& rng, Equals&& equals) return_ctor_noexcept(
 		unique_range_front_adaptor< Rng BOOST_PP_COMMA() tc::decay_t<Equals> >,
 		(std::forward<Rng>(rng), std::forward<Equals>(equals))
 	)
 
 	template< typename Rng >
-	auto front_unique_range(Rng&& rng) noexcept return_decltype(
+	auto front_unique_range(Rng&& rng) return_decltype_noexcept(
 		front_unique_range(std::forward<Rng>(rng),tc::fn_equal_to())
 	)
 
@@ -334,13 +336,13 @@ namespace tc {
 		typename Rng,
 		typename Equals
 	>
-	auto adjacent_unique_range(Rng&& rng, Equals&& equals) noexcept return_ctor(
+	auto adjacent_unique_range(Rng&& rng, Equals&& equals) return_ctor_noexcept(
 		unique_range_adjacent_adaptor< Rng BOOST_PP_COMMA() tc::decay_t<Equals> >,
 		(std::forward<Rng>(rng), std::forward<Equals>(equals))
 	)
 
 	template< typename Rng >
-	auto adjacent_unique_range(Rng&& rng) noexcept return_decltype(
+	auto adjacent_unique_range(Rng&& rng) return_decltype_noexcept(
 		adjacent_unique_range(std::forward<Rng>(rng), tc::fn_equal_to())
 	)
 
@@ -352,13 +354,13 @@ namespace tc {
 		typename Rng,
 		typename Equals
 	>
-	auto adjacent_unique(Rng&& rng, Equals&& equals) noexcept return_ctor(
+	constexpr auto adjacent_unique(Rng&& rng, Equals&& equals) return_ctor_noexcept(
 		unique_adaptor< Rng BOOST_PP_COMMA() tc::decay_t<Equals> >,
 		(std::forward<Rng>(rng), std::forward<Equals>(equals))
 	)
 
 	template< typename Rng >
-	auto adjacent_unique(Rng&& rng) noexcept return_decltype(
+	constexpr auto adjacent_unique(Rng&& rng) return_decltype_noexcept(
 		adjacent_unique(std::forward<Rng>(rng),tc::fn_equal_to())
 	)
 

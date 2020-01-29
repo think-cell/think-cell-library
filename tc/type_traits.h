@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -37,7 +37,7 @@ namespace tc {
 	template<typename T>
 	struct do_not_decay_arrays {
 	private:
-		char dummy; // make non-empty, empty structs are preferred in make_sub_range_result
+		char dummy; // make non-empty, empty structs are preferred in make_subrange_result
 	};
 
 #pragma push_macro("DECAY_ARRAY_IMPL")
@@ -297,7 +297,7 @@ namespace tc {
 #endif
 
 		template <typename TTarget, typename TSource>
-		struct is_value_safely_constructible<TTarget, tc::type::list<TSource>, std::enable_if_t<std::is_enum<TTarget>::value || std::is_pointer<TTarget>::value || std::is_same<TTarget,std::nullptr_t>::value
+		struct is_value_safely_constructible<TTarget, tc::type::list<TSource>, std::enable_if_t<std::is_enum<TTarget>::value || std::is_pointer<TTarget>::value || std::is_member_pointer<TTarget>::value || std::is_same<TTarget,std::nullptr_t>::value
 #ifdef TC_MAC
 			|| is_objc_block<TTarget>::value
 #endif
@@ -427,6 +427,11 @@ namespace tc {
 	template<typename... Args>
 	using common_type_decayed_t = typename tc::common_type_decayed<Args...>::type;
 
+	// 1. tc::common_type_t:
+	//		a) input: any
+	//		b) result: std::common_type_t of the decayed input types if the decayed types are tc::is_safely_convertible to the result type.
+	//		c) customization: Yes (many)
+	//		d) SFINAE friendly: Yes
 	template<typename... Args>
 	using common_type_t = typename tc::common_type_decayed<tc::decay_t<Args>...>::type;
 
@@ -580,7 +585,13 @@ namespace tc {
 		};
 	}
 
-	// prvalue is not allowed in common_reference_xvalue_as_ref_t
+	// 2. tc::common_reference_xvalue_as_ref_t:
+	//		a) input: reference types, prvalue is not allowed
+	//		b) result:
+	//			i) all types are same/base/derived types: base type with correct cv ref (guaranteed_common_reference)
+	//			ii) else: tc::common_type_t
+	//		c) customization: Yes (tc::ptr_range, tc::sub_range)
+	//		d) SFINAE friendly: Yes
 	template<typename... Args>
 	using common_reference_xvalue_as_ref_t = typename no_adl::common_reference_xvalue_as_ref<tc::type::list<Args...>>::type;
 
@@ -620,6 +631,14 @@ namespace tc {
 		};
 	}
 
+	// 3. tc::common_reference_prvalue_as_val_t:
+	//		a) input: any
+	//		b) result:
+	//			i) tc::common_reference_xvalue_as_ref_t<Args&&...> if all Input types are tc::is_safely_convertible to the result type.
+	//			ii) else: tc::common_type_t
+	//			iii) Note: if input has at least 1 prvalue, the result will be a prvalue or none. Because prvalues are not tc::is_safely_convertible to reference.
+	//		c) customization: No
+	//		d) SFINAE friendly: Yes
 	template<typename... Args>
 	using common_reference_prvalue_as_val_t = typename no_adl::common_reference_prvalue_as_val<tc::type::list<Args...>>::type;
 
@@ -632,6 +651,14 @@ namespace tc {
 	}
 
 	using no_adl::has_common_reference_prvalue_as_val;
+
+	namespace no_adl {
+		template <typename T, typename = void>
+		struct has_operator_arrow final : std::false_type {};
+		template <typename T>
+		struct has_operator_arrow<T, tc::void_t<decltype(std::declval<T>().operator->())>> final : std::true_type {};
+	}
+	using no_adl::has_operator_arrow;
 
 	template< typename Func >
 	struct delayed_returns_reference_to_argument {
@@ -713,9 +740,19 @@ namespace tc {
 			using second_argument = Y2;
 			static constexpr auto third_argument = b;
 		};
+
+		template<template<typename, bool> class X, typename T> struct is_instance3 : public std::false_type {};
+		template<template<typename, bool> class X, typename T> struct is_instance3<X, T const> : public is_instance3<X, T> {};
+		template<template<typename, bool> class X, typename T> struct is_instance3<X, T volatile> : public is_instance3<X, T> {};
+		template<template<typename, bool> class X, typename T> struct is_instance3<X, T const volatile> : public is_instance3<X, T> {};
+		template<template<typename, bool> class X, typename Y, bool b> struct is_instance3<X, X<Y, b>> : public std::true_type {
+			using first_argument = Y;
+			static constexpr auto second_argument = b;
+		};
 	}
 	using no_adl::is_instance;
 	using no_adl::is_instance2;
+	using no_adl::is_instance3;
 
 	namespace is_instance_or_derived_detail {
 		namespace no_adl {
@@ -741,4 +778,37 @@ namespace tc {
 			std::declval<tc::remove_cvref_t<T>*>()
 		)
 	);
+
+	/////////////////////////////////////////////
+	// apply_cvref
+
+	template<typename Dst, typename Src>
+	struct apply_cvref {
+		static_assert( std::is_same< Src, tc::remove_cvref_t<Src> >::value && !std::is_reference_v<Src>, "Src must not be cv-qualified. Check if a template specialization of apply_cvref is missing." );
+		using type = Dst;
+	};
+
+	#pragma push_macro("APPLY_CVREF_IMPL")
+	#define APPLY_CVREF_IMPL(cvref) \
+	template<typename Dst, typename Src> \
+	struct apply_cvref<Dst, Src cvref> { \
+		using type = Dst cvref; \
+	};
+
+	APPLY_CVREF_IMPL(&)
+	APPLY_CVREF_IMPL(&&)
+	APPLY_CVREF_IMPL(const&)
+	APPLY_CVREF_IMPL(const&&)
+	APPLY_CVREF_IMPL(const)
+	APPLY_CVREF_IMPL(volatile&)
+	APPLY_CVREF_IMPL(volatile&&)
+	APPLY_CVREF_IMPL(volatile)
+	APPLY_CVREF_IMPL(volatile const&)
+	APPLY_CVREF_IMPL(volatile const&&)
+	APPLY_CVREF_IMPL(volatile const)
+
+	#pragma pop_macro("APPLY_CVREF_IMPL")
+
+	template< typename Dst, typename Src >
+	using apply_cvref_t = typename apply_cvref<Dst, Src>::type;
 }

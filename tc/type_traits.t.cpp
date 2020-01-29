@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -477,6 +477,27 @@ static_assert(
 
 static_assert(
 	std::is_same<
+		tc::common_reference_prvalue_as_val_t<A&, A>,
+		A
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_prvalue_as_val_t<A&&, A>,
+		A
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_prvalue_as_val_t<A, A>,
+		A
+	>::value
+);
+
+static_assert(
+	std::is_same<
 		tc::common_reference_prvalue_as_val_t<A&&, A&&>,
 		A&&
 	>::value
@@ -581,6 +602,10 @@ static_assert(
 );
 
 static_assert(
+	!tc::has_common_reference_prvalue_as_val<tc::type::list<A, B>>::value
+);
+
+static_assert(
 	!tc::has_common_reference_prvalue_as_val<tc::type::list<tc::vector<char>&&, std::string&>>::value
 );
 
@@ -594,52 +619,52 @@ static_assert(
 
 static_assert(
 	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::vector<int>&, tc::sub_range<tc::vector<int>&>>,
-		tc::sub_range<tc::vector<int>&>
+		tc::common_reference_xvalue_as_ref_t<tc::vector<int>&, tc::subrange<tc::vector<int>&>>,
+		tc::subrange<tc::vector<int>&>
 	>::value
 );
 
 static_assert(
 	std::is_same <
-		tc::common_reference_xvalue_as_ref_t<tc::vector<int>&, tc::sub_range<tc::vector<int>>&>,
-		tc::sub_range<tc::vector<int>&>
+		tc::common_reference_xvalue_as_ref_t<tc::vector<int>&, tc::subrange<tc::vector<int>>&>,
+		tc::subrange<tc::vector<int>&>
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::sub_range<tc::vector<int>&>, tc::sub_range<tc::vector<int>>&>,
-		tc::sub_range<tc::vector<int>&>
+		tc::common_reference_xvalue_as_ref_t<tc::subrange<tc::vector<int>&>, tc::subrange<tc::vector<int>>&>,
+		tc::subrange<tc::vector<int>&>
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_prvalue_as_val_t<tc::vector<int>&, tc::sub_range<tc::vector<int>&>>,
-		tc::sub_range<tc::vector<int>&>
+		tc::common_reference_prvalue_as_val_t<tc::vector<int>&, tc::subrange<tc::vector<int>&>>,
+		tc::subrange<tc::vector<int>&>
 	>::value
 );
 
 static_assert(
 	std::is_same <
-		tc::common_reference_prvalue_as_val_t<tc::vector<int>&, tc::sub_range<tc::vector<int>>&>,
-		tc::sub_range<tc::vector<int>&>
+		tc::common_reference_prvalue_as_val_t<tc::vector<int>&, tc::subrange<tc::vector<int>>&>,
+		tc::subrange<tc::vector<int>&>
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_prvalue_as_val_t<tc::sub_range<tc::vector<int>&>, tc::sub_range<tc::vector<int>>&>,
-		tc::sub_range<tc::vector<int>&>
+		tc::common_reference_prvalue_as_val_t<tc::subrange<tc::vector<int>&>, tc::subrange<tc::vector<int>>&>,
+		tc::subrange<tc::vector<int>&>
 	>::value
 );
 
 static_assert(
-	!tc::has_common_reference_xvalue_as_ref<tc::type::list<tc::vector<int>&, tc::sub_range<tc::vector<int>>>>::value
+	!tc::has_common_reference_xvalue_as_ref<tc::type::list<tc::vector<int>&, tc::subrange<tc::vector<int>>>>::value
 );
 
 static_assert(
-	!tc::has_common_reference_xvalue_as_ref<tc::type::list<tc::vector<int>, tc::sub_range<tc::vector<int>&>>>::value
+	!tc::has_common_reference_xvalue_as_ref<tc::type::list<tc::vector<int>, tc::subrange<tc::vector<int>&>>>::value
 );
 
 static_assert(
@@ -789,9 +814,9 @@ UNITTESTDEF(minTest) {
 		>::value
 	);
 
-	boost::implicit_cast<tc::common_reference_prvalue_as_val_t<decltype(tc::size(vecn)),int>>(tc::size(vecn));
+	void(tc::implicit_cast<tc::common_reference_prvalue_as_val_t<decltype(tc::size(vecn)),int>>(tc::size(vecn)));
 
-	tc::min(tc::size(vecn),2);
+	void(tc::min(tc::size(vecn),2));
 
 	int a = 3;
 	int b = 4;
@@ -846,7 +871,7 @@ UNITTESTDEF(minTest) {
 	}
 
 
-	tc::projected(tc::fn_min(), &createS)(0,1).foo();
+	tc::projected(tc::fn_min(), TC_FN(createS))(0,1).foo();
 
 
 	{

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -14,13 +14,11 @@
 #include "range_adaptor.h"
 #include "meta.h"
 #include "conditional.h"
+#include "range_fwd.h"
+#include "invoke.h"
 
 namespace tc {
 	namespace no_adl {
-
-		template< typename Pred, typename Rng, bool HasIterator=is_range_with_iterators< Rng >::value >
-		struct filter_adaptor;
-
 		template<typename Pred, typename Rng>
 		using filter_adaptor_base_t = range_adaptor<filter_adaptor<Pred,Rng>, Rng
 			, boost::iterators::bidirectional_traversal_tag // filter_adaptor is bidirectional at best
@@ -40,8 +38,8 @@ namespace tc {
 			friend struct no_adl::range_adaptor_access;
 
 			template< typename Apply, typename A0>
-			auto apply(Apply&& apply, A0&& a0) const& MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(std::declval<Apply&&>(), std::declval<A0&&>())), INTEGRAL_CONSTANT(tc::continue_)> {
-				if(m_pred(a0)) {
+			auto apply(Apply&& apply, A0&& a0) const& MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(std::declval<Apply>(), std::declval<A0>())), INTEGRAL_CONSTANT(tc::continue_)> {
+				if(tc::invoke(m_pred, tc::as_const(a0))) {
 					return tc::continue_if_not_break(std::forward<Apply>(apply), std::forward<A0>(a0));
 				} else {
 					return INTEGRAL_CONSTANT(tc::continue_)();
@@ -68,8 +66,8 @@ namespace tc {
 		private:
 			void increment_until_kept(index& idx) const& MAYTHROW {
 				// always call operator() const, which is assumed to be thread-safe
-				while(!base_::STATIC_VIRTUAL_METHOD_NAME(at_end_index)(idx) && !tc::bool_cast(this->m_pred(base_::STATIC_VIRTUAL_METHOD_NAME(dereference_index)(idx)))) {
-					base_::STATIC_VIRTUAL_METHOD_NAME(increment_index)(idx);
+				while(!this->template at_end_index<base_>(idx) && !tc::bool_cast(tc::invoke(this->m_pred, tc::as_const(this->template dereference_index<base_>(idx))))) {
+					this->template increment_index<base_>(idx);
 				}
 			}
 
@@ -79,50 +77,49 @@ namespace tc {
 			:	base_( std::forward<RngRef>(rng)
 			,	std::forward<PredRef>(pred))
 			{}
-
+		private:
 			STATIC_FINAL(begin_index)() const& MAYTHROW -> index {
-				index idx=base_::STATIC_VIRTUAL_METHOD_NAME(begin_index)();
+				index idx=this->template begin_index<base_>();
 				increment_until_kept(idx);
 				return idx;
 			}
 
 			STATIC_FINAL(increment_index)(index& idx) const& MAYTHROW -> void {
-				base_::STATIC_VIRTUAL_METHOD_NAME(increment_index)(idx);
+				this->template increment_index<base_>(idx);
 				increment_until_kept(idx);
 			}
 
 			STATIC_FINAL(decrement_index)(index& idx) const& MAYTHROW -> void {
 				do {
-					base_::STATIC_VIRTUAL_METHOD_NAME(decrement_index)(idx);
+					this->template decrement_index<base_>(idx);
 					// always call operator() const, which is assumed to be thread-safe
-				} while(!tc::bool_cast(this->m_pred(base_::STATIC_VIRTUAL_METHOD_NAME(dereference_index)(idx))));
+				} while(!tc::bool_cast(tc::invoke(this->m_pred, tc::as_const(this->template dereference_index<base_>(idx)))));
 			}
 
 			STATIC_FINAL(middle_point)( index & idx, index const& idxEnd ) const& MAYTHROW -> void {
 				index const idxBegin = idx;
-				base_::STATIC_VIRTUAL_METHOD_NAME(middle_point)(idx,idxEnd);
+				this->template middle_point<base_>(idx,idxEnd);
 			
 				// always call operator() const, which is assumed to be thread-safe
-				while(!base_::STATIC_VIRTUAL_METHOD_NAME(equal_index)(idxBegin, idx) && !tc::bool_cast(this->m_pred(base_::STATIC_VIRTUAL_METHOD_NAME(dereference_index)(idx)))) {
-					base_::STATIC_VIRTUAL_METHOD_NAME(decrement_index)(idx);
+				while(!this->template equal_index<base_>(idxBegin, idx) && !tc::bool_cast(tc::invoke(this->m_pred, tc::as_const(this->template dereference_index<base_>(idx))))) {
+					this->template decrement_index<base_>(idx);
 				}
 			}
-
+		public:
 			auto element_base_index(index const& idx) const& noexcept {
 				return idx;
 			}
 		};
 
-		template< typename Pred, typename Rng >
-		struct value_type_base<filter_adaptor<Pred, Rng, false>, tc::void_t<tc::range_value_t<Rng>>> {
-			using value_type = tc::range_value_t<Rng>;
+		template<typename FilterAdaptor, typename Pred, typename Rng>
+		struct range_value<FilterAdaptor, filter_adaptor<Pred, Rng, false>, tc::void_t<tc::range_value_t<Rng>>> final {
+			using type = tc::range_value_t<Rng>;
 		};
 	}
-	using no_adl::filter_adaptor;
 
 	template<typename Rng, typename Pred>
-	auto filter(Rng&& rng, Pred&& pred) noexcept
-		return_ctor( filter_adaptor<tc::decay_t<Pred> BOOST_PP_COMMA() Rng >, (std::forward<Rng>(rng),std::forward<Pred>(pred)) )
+	auto filter(Rng&& rng, Pred&& pred)
+		return_ctor_noexcept( filter_adaptor<tc::decay_t<Pred> BOOST_PP_COMMA() Rng >, (std::forward<Rng>(rng),std::forward<Pred>(pred)) )
 
 	namespace no_adl {
 		template<typename Pred, typename Rng>

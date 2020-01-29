@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -27,11 +27,11 @@ namespace tc {
 	}
 	using no_adl::iterator_base;
 
-	namespace sub_range_adl {
+	namespace subrange_adl {
 		template< typename Rng >
-		struct sub_range;
+		struct subrange;
 	}
-	using sub_range_adl::sub_range;
+	using subrange_adl::subrange;
 
 	namespace no_adl {
 		template< typename Func, typename Rng, bool HasIterator=is_range_with_iterators< Rng >::value >
@@ -40,18 +40,27 @@ namespace tc {
 	using no_adl::transform_adaptor;
 
 	namespace no_adl {
+		template< typename Pred, typename Rng, bool HasIterator=is_range_with_iterators< Rng >::value >
+		struct filter_adaptor;
+	}
+	using no_adl::filter_adaptor;
+
+	template<typename Rng, typename Pred>
+	filter_adaptor<tc::decay_t<Pred>, Rng> filter(Rng&& rng, Pred&& pred) noexcept;
+
+	namespace no_adl {
 		template< typename Rng, typename Enable=void >
-		struct make_sub_range_result;
+		struct make_subrange_result;
 	}
 	template<typename Rng>
-	using make_sub_range_result_t = typename no_adl::make_sub_range_result<Rng>::type;
+	using make_subrange_result_t = typename no_adl::make_subrange_result<Rng>::type;
 
 	struct bool_context final {
 		template< typename T >
-		bool_context(T const& t) noexcept
+		constexpr bool_context(T const& t) noexcept
 			: m_b(tc::bool_cast(t))
 		{}
-		operator bool() const& noexcept { return m_b; }
+		constexpr operator bool() const& noexcept { return m_b; }
 	private:
 		bool m_b;
 	};
@@ -64,4 +73,9 @@ namespace tc {
 
 	template<typename Rng>
 	reverse_adaptor<Rng> reverse(Rng&& rng) noexcept;
+
+	namespace no_adl {
+		template<typename Rng, typename Enable=void>
+		struct constexpr_size_base;
+	}
 }

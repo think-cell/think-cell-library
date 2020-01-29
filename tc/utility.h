@@ -1,16 +1,18 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
+#include "range_defines.h"
+
 #include "inherit_ctors.h"
 #include "type_traits.h"
-#include "range_defines.h"
+#include "return_decltype.h"
 
 #include <utility>
 
@@ -96,6 +98,16 @@ namespace tc {
 	};
 
 	//////////////////////////////////////////////////////////////////////////
+	// next
+
+	template<class T>
+	constexpr auto next(T&& x) noexcept(noexcept(++std::declval<std::decay_t<T&&>&>()) && std::is_nothrow_copy_constructible<T>::value) {
+		auto t = std::forward<T>(x);
+		++t;
+		return t;
+	}
+
+	//////////////////////////////////////////////////////////////////////////
 	// INTEGRAL_CONSTANT
 
 	// TODO c++17
@@ -107,4 +119,93 @@ namespace tc {
 	// USAGE:
 	// tc::integral_constant<tc::break_> etc.
 	#define INTEGRAL_CONSTANT(val) std::integral_constant<tc::decay_t<decltype(val)>, val>
+
+	//////////////////////////////////////////////////////////////////////////
+	// select_nth
+
+	template<std::size_t n, typename Arg, typename... Args>
+	[[nodiscard]] constexpr decltype(auto) select_nth(Arg&& arg, Args&&... args) noexcept {
+		if constexpr( 0 == n ) {
+			return std::forward<Arg>(arg);
+		} else {
+			return tc::select_nth<n - 1>(std::forward<Args>(args)...);
+		}
+	}
+
+	//////////////////////////////////////////////////////////////////////////
+	// distance
+
+	namespace distance_impl
+	{
+		template<typename It, typename Enable = void>
+		struct is_subtractible : std::false_type {};
+
+		template<typename It>
+		struct is_subtractible<It, std::void_t<decltype(std::declval<It>() - std::declval<It>())>> : std::true_type {};
+
+		template<typename It, bool CanSubtract = is_subtractible<It>::value>
+		struct distance_impl {
+			static constexpr auto distance(It const& from, It const& to)
+				return_decltype_NOEXCEPT(to - from) // std:: iterators might not have noexcept operator-, even if they can't throw
+		};
+
+		template<typename It>
+		struct distance_impl<It, false> {
+			using Difference = typename std::iterator_traits<It>::difference_type;
+			static constexpr Difference distance(It from, It const& to) noexcept(noexcept(++from) && noexcept(!(from == to)))
+			{
+				static_assert(std::is_nothrow_constructible<Difference, int>::value);
+				static_assert(noexcept(++std::declval<Difference&>()));
+				Difference distance = 0;
+				while (!(from == to)) {
+					++from; // MAYTHROW
+					++distance;
+				}
+				return distance;
+			}
+		};
+	}
+
+	// TODO C++20: Since std::distance is constexpr in C++20, use std::distance instead of tc::distance, and delete tc::distance.
+	template<typename It>
+	constexpr auto distance(It const& from, It const& to)
+		return_decltype_MAYTHROW(distance_impl::distance_impl<It>::distance(from, to))
+}
+
+//////////////////////////////////////////////////////////////////////////
+// swap
+//
+// Must be outside the tc namespace, so that it won't call tc::swap recursively.
+// tc::swap could still be called via ADL, if a type is missing an ADL barrier namespace.
+namespace tc_swap_impl
+{
+	using std::swap;
+
+	template<typename T>
+	constexpr void swap_impl(T& a, T& b) noexcept(noexcept(swap(a, b))) {
+		if constexpr (std::is_fundamental<T>::value || std::is_pointer<T>::value) {
+			T temp = a;
+			a = b;
+			b = temp;
+		} else {
+			swap(a, b);
+		}
+	}
+
+	namespace named_swap
+	{
+		// Note: Using two template arguments here ensures that if this function and std::swap are both visible (via "using namespace") then
+		// std::swap is chosen because it is more specialized.
+		// T1 and T2 still have to be the same type because swap_impl takes two parameters with the same type.
+		template<typename T1, typename T2>
+		constexpr void swap(T1& a, T2& b) noexcept(noexcept(swap_impl(a, b))) {
+			swap_impl(a, b);
+		}
+	}
+}
+
+namespace tc
+{
+	// Introduces a tc::swap name in a way that is invisible to ADL.
+	using tc_swap_impl::named_swap::swap;
 }

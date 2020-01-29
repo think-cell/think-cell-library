@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -25,7 +25,7 @@ namespace tc {
 		: std::true_type {};
 
 		template< typename Char, typename Str >
-		struct make_c_str_impl final {
+		struct [[nodiscard]] make_c_str_impl final {
 			explicit make_c_str_impl(Str&& str) noexcept: m_str(std::forward<Str>(str)) {}
 
 			operator bool() noexcept = delete;

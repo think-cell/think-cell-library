@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -10,12 +10,12 @@
 
 #include "range_defines.h"
 #include "range_fwd.h"
-#include "result_of.h"
 #include "accumulator.h"
 #include "enum.h"
 #include "utility.h"
 #include "noncopyable.h"
 #include "derivable.h"
+#include "invoke.h"
 
 #include <boost/mpl/has_xxx.hpp>
 #include <boost/preprocessor.hpp>
@@ -27,7 +27,7 @@ namespace tc {
 
 	DEFINE_ENUM(break_or_continue, BOOST_PP_EMPTY(), (break_)(continue_))
 
-	inline tc::break_or_continue continue_if(tc::bool_context bCondition) noexcept {
+	[[nodiscard]] inline constexpr tc::break_or_continue continue_if(tc::bool_context bCondition) noexcept {
 		if( bCondition ) {
 			return tc::continue_;
 		} else {
@@ -35,61 +35,51 @@ namespace tc {
 		}
 	}
 
-#ifdef __clang__
 	#define RETURN_IF_BREAK(...) \
 	{ \
 		auto breakorcontinue__ = (__VA_ARGS__); \
-		if constexpr (std::is_same<decltype(breakorcontinue__), INTEGRAL_CONSTANT(tc::break_)>::value) { \
+		/* Inline constexpr bools as soon as "constexpr if" works properly in MSVC */ \
+		constexpr bool bAlwaysBreaks = std::is_same<decltype(breakorcontinue__), INTEGRAL_CONSTANT(tc::break_)>::value; \
+		constexpr bool bNeverBreaks = std::is_same<decltype(breakorcontinue__), INTEGRAL_CONSTANT(tc::continue_)>::value; \
+		if constexpr (bAlwaysBreaks) { \
 			return INTEGRAL_CONSTANT(tc::break_)(); \
 		} \
-		else if constexpr (!std::is_same<decltype(breakorcontinue__), INTEGRAL_CONSTANT(tc::continue_)>::value) { \
+		else if constexpr (!bNeverBreaks) { \
 			if( tc::break_ == breakorcontinue__ ) { \
 				return tc::break_; \
 			} \
 		} \
 	}
-#else
-	// Use clang version as soon as "constexpr if" works properly in VC++
-	namespace make_break_impl {
-		#pragma warning (push)
-		#pragma warning (disable : 4297) // function assumed not to throw an exception but does
-		template<typename T, std::enable_if_t<std::is_same<T, INTEGRAL_CONSTANT(tc::continue_)>::value>* = nullptr>
-		[[noreturn]] INTEGRAL_CONSTANT(tc::continue_) make_break() noexcept { throw 0; }
-		#pragma warning (pop)
-
-		template<typename T, std::enable_if_t<std::is_same<T, break_or_continue>::value || std::is_same<T, INTEGRAL_CONSTANT(tc::break_)>::value>* = nullptr>
-		constexpr T make_break() noexcept { return INTEGRAL_CONSTANT(tc::break_){}; }
-	}
-
-	#define RETURN_IF_BREAK(...) { auto breakorcontinue__ = (__VA_ARGS__); if( tc::break_ == breakorcontinue__ ) { return tc::make_break_impl::make_break<decltype(breakorcontinue__)>(); } }
-#endif
 
 	//////////////////////////////////////////////////////////////////////////
 
 	//// continue_if_not_break ///////////////////////////////////////////////////////////////////////////
 	// Func returns break_or_continue
-	template <typename Func, typename ...Args, 
+
+	template <typename Func, typename ...Args,
+		typename R = decltype(tc::invoke(std::declval<Func>(), std::declval<Args>()...)),
 		std::enable_if_t<
-			std::is_same<tc::decayed_invoke_result_t<Func,Args...>, break_or_continue>::value ||
-			std::is_same<tc::decayed_invoke_result_t<Func,Args...>, INTEGRAL_CONSTANT(tc::break_)>::value ||
-			std::is_same<tc::decayed_invoke_result_t<Func,Args...>, INTEGRAL_CONSTANT(tc::continue_)>::value
+			tc::type::find_unique<tc::type::list<tc::break_or_continue, INTEGRAL_CONSTANT(tc::break_), INTEGRAL_CONSTANT(tc::continue_)>, tc::decay_t<R>>::found
 		>* = nullptr
 	>
-	constexpr auto continue_if_not_break(Func&& func, Args&& ... args) MAYTHROW {
-		static_assert(tc::is_decayed<std::invoke_result_t<Func,Args...>>::value);
-		return std::forward<Func>(func)(std::forward<Args>(args)...);
+	constexpr R continue_if_not_break(Func&& func, Args&& ... args) noexcept(noexcept(
+		tc::invoke(std::forward<Func>(func), std::forward<Args>(args)...)
+	)) {
+		static_assert(tc::is_decayed<R>::value);
+		return tc::invoke(std::forward<Func>(func), std::forward<Args>(args)...);
 	}
 
 	// Func does not return break_or_continue
-	template <typename Func, typename ...Args, 
+	template <typename Func, typename ...Args,
+		typename R = decltype(tc::invoke(std::declval<Func>(), std::declval<Args>()...)),
 		std::enable_if_t<
-			!(std::is_same<tc::decayed_invoke_result_t<Func,Args...>, break_or_continue>::value ||
-			std::is_same<tc::decayed_invoke_result_t<Func,Args...>, INTEGRAL_CONSTANT(tc::break_)>::value ||
-			std::is_same<tc::decayed_invoke_result_t<Func,Args...>, INTEGRAL_CONSTANT(tc::continue_)>::value)
+			!tc::type::find_unique<tc::type::list<tc::break_or_continue, INTEGRAL_CONSTANT(tc::break_), INTEGRAL_CONSTANT(tc::continue_)>, tc::decay_t<R>>::found
 		>* = nullptr
 	>
-	constexpr INTEGRAL_CONSTANT(tc::continue_) continue_if_not_break(Func&& func, Args&& ... args) MAYTHROW {
-		std::forward<Func>(func)(std::forward<Args>(args)...);
+	constexpr INTEGRAL_CONSTANT(tc::continue_) continue_if_not_break(Func&& func, Args&& ... args) noexcept(noexcept(
+		tc::invoke(std::forward<Func>(func), std::forward<Args>(args)...)
+	)) {
+		tc::invoke(std::forward<Func>(func), std::forward<Args>(args)...);
 		return {};
 	}
 
@@ -192,7 +182,7 @@ namespace tc {
 		struct function;
 	
 		template< typename Ret, typename ...Args >
-		struct function< Ret(Args...) > final:	tc::no_adl::function_base</*bNoExcept*/false, Ret, Args...>
+		struct function< Ret(Args...) > : tc::no_adl::function_base</*bNoExcept*/false, Ret, Args...>
 		{
 			using base_ = tc::no_adl::function_base</*bNoExcept*/false, Ret, Args...>;
 			using base_::base_;
@@ -209,7 +199,7 @@ namespace tc {
 		};
 
 		template< typename Ret, typename ...Args >
-		struct function< Ret(Args...) noexcept > final:	tc::no_adl::function_base</*bNoExcept*/true, Ret, Args...>
+		struct function< Ret(Args...) noexcept > : tc::no_adl::function_base</*bNoExcept*/true, Ret, Args...>
 		{
 			using base_ = tc::no_adl::function_base</*bNoExcept*/true, Ret, Args...>;
 			using base_::base_;
@@ -322,7 +312,7 @@ namespace tc {
 				!tc::is_base_of_decayed< function_ref_base, Func >::value
 				&& std::is_invocable<std::remove_reference_t<Func>&, Args...>::value
 				&& (
-					std::is_convertible<std::invoke_result_t<std::remove_reference_t<Func>&, Args...>, Ret>::value
+					std::is_convertible<decltype(std::declval<std::remove_reference_t<Func>&>()(std::declval<Args>()...)), Ret>::value
 					|| std::is_same<Ret, tc::break_or_continue>::value
 					|| std::is_same<Ret, void>::value
 				)

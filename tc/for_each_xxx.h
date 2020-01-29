@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -12,38 +12,14 @@
 #include "array.h"
 #include "size_bounded.h"
 #include "format.h"
-#include "accessors.h"
+#include "iterator_cache.h"
+#include "restrict_size_decrement.h"
+#include "try_finally.h"
 
 namespace tc {
-	namespace no_adl {
-		template<typename It>
-		struct iterator_cache final : tc::nonmovable /*m_ref may contain pointer into m_it*/ {
-		private:
-			DEFINE_MEMBER_AND_ACCESSORS(It, m_it)
-			tc::reference_or_value< typename std::iterator_traits<It>::reference > m_ref;
-
-		public:
-			iterator_cache(It it) noexcept
-				: m_it(tc_move(it))
-				, m_ref(aggregate_tag, *m_it)
-			{}
-
-			iterator_cache& operator=(It it) & noexcept {
-				m_it=tc_move(it);
-				tc::renew(m_ref, aggregate_tag, *m_it);
-				return *this;
-			}
-
-			auto operator*() const & noexcept return_decltype( *m_ref )
-			auto operator*() && noexcept return_decltype_xvalue_by_ref( *tc_move(m_ref) )
-			auto operator*() const && noexcept = delete;
-		};
-	}
-	using no_adl::iterator_cache;
-
 	template< typename Rng, typename Func, int... i >
-	auto for_each_adjacent_tuple_impl(Rng&& rng, Func func, std::integer_sequence<int, i...>) MAYTHROW -> tc::common_type_t<INTEGRAL_CONSTANT(tc::continue_), decltype(tc::continue_if_not_break(func, *tc::begin(rng), (i, *tc::begin(rng))...))> {
-		static constexpr int N= sizeof...(i)+1;
+	constexpr auto for_each_adjacent_tuple_impl(Rng&& rng, Func func, std::integer_sequence<int, i...>) MAYTHROW -> tc::common_type_t<INTEGRAL_CONSTANT(tc::continue_), decltype(tc::continue_if_not_break(func, *tc::begin(rng), (i, *tc::begin(rng))...))> {
+		constexpr int N= sizeof...(i)+1;
 		if (tc::size_bounded(rng, N)<N) {
 			return INTEGRAL_CONSTANT(tc::continue_)();
 		} else {
@@ -70,77 +46,32 @@ namespace tc {
 	}
 
 	template< int N, typename Rng, typename Func, std::enable_if_t< is_range_with_iterators<Rng>::value >* =nullptr >
-	auto for_each_adjacent_tuple(Rng&& rng, Func func) MAYTHROW {
+	constexpr auto for_each_adjacent_tuple(Rng&& rng, Func func) MAYTHROW {
 		return for_each_adjacent_tuple_impl(std::forward<Rng>(rng), std::forward<Func>(func), std::make_integer_sequence<int,N-1>());
 	}
-
-	namespace restrict_size_impl {
-		struct [[maybe_unused]] SRestrictSizeDummy final { };
-
-#ifdef _CHECKS
-		template<typename Rng>
-		struct [[maybe_unused]] SRestrictSize final {
-			explicit SRestrictSize(Rng const& rng, typename boost::range_size<Rng>::type nSizeMin, typename boost::range_size<Rng>::type nSizeMax) noexcept
-				: m_rng(rng)
-				, m_nSizeMin(tc_move(nSizeMin))
-				, m_nSizeMax(tc_move(nSizeMax))
-			{}
-
-			~SRestrictSize() noexcept{
-				auto const nSize = tc::size(m_rng);
-				_ASSERTPRINT(m_nSizeMin <= nSize, "nSize=", tc::as_dec(nSize), "; m_nSizeMin=", tc::as_dec(m_nSizeMin));
-				_ASSERTPRINT(nSize <= m_nSizeMax, "nSize=", tc::as_dec(nSize), "; m_nSizeMax=", tc::as_dec(m_nSizeMax));
-			}
-
-		private:
-			Rng const& m_rng;
-			typename boost::range_size<Rng>::type m_nSizeMin;
-			typename boost::range_size<Rng>::type m_nSizeMax;
-		};
-
-		template< typename Rng >
-		SRestrictSize<Rng> RestrictSizeDecrementImpl(Rng const& rng, typename boost::range_size<Rng>::type nDecrementMin, typename boost::range_size<Rng>::type nDecrementMax) noexcept {
-			auto const nSize = tc::size(rng);
-			return SRestrictSize<Rng>(
-				rng,
-				nDecrementMax < nSize ? nSize - nDecrementMax : tc::explicit_cast<typename boost::range_size<Rng>::type>(0),
-				nDecrementMin < nSize ? nSize - nDecrementMin : tc::explicit_cast<typename boost::range_size<Rng>::type>(0)
-			);
-		}
-#endif
-
-		template< typename Rng >
-		auto restrict_size_decrement(Rng const& rng, typename boost::range_size<Rng>::type nDecrementMin, typename boost::range_size<Rng>::type nDecrementMax) {
-#ifdef _CHECKS
-			if constexpr(tc::has_size<Rng const&>::value) {
-				return RestrictSizeDecrementImpl(rng, nDecrementMin, nDecrementMax);
-			} else
-#endif
-			{
-				return SRestrictSizeDummy{};
-			}
-		}
-
-		template< typename Rng >
-		auto restrict_size_decrement(Rng const& rng) {
-			return restrict_size_decrement(rng, 1, 1);
-		}
-	}
-	using restrict_size_impl::restrict_size_decrement;
-
 
 	/////////////////////////////////////////////////////
 	// for_each_may_remove_current
 
+
 	// enable_if to ensure that removal preserves iterators would be nice, but is difficult for adapted ranges.
 	template< typename Rng, typename Func >
-	auto for_each_may_remove_current(Rng&& rng, Func func) MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, *tc::begin(rng))), INTEGRAL_CONSTANT(tc::continue_)> {
+	constexpr auto for_each_may_remove_current(Rng&& rng, Func func) MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, *tc::begin(rng))), INTEGRAL_CONSTANT(tc::continue_)> {
 		static_assert( !tc::range_filter_by_move_element< std::remove_reference_t<Rng> >::value );
 		auto it=tc::begin(rng);
 		auto const itEnd=tc::end(rng);
 		while( it!=itEnd ) {
-			auto const rsize = restrict_size_decrement(rng, 0, 1);
-			RETURN_IF_BREAK(tc::continue_if_not_break(func, *it++));
+			auto const rsize = constexpr_restrict_size_decrement(rng, 0, 1);
+
+			auto bc = try_finally([&]() return_decltype_MAYTHROW(tc::continue_if_not_break(func, *it++)), [&]() noexcept {rsize.dtor();});
+
+			if constexpr (std::is_same<decltype(bc), INTEGRAL_CONSTANT(tc::break_)>::value) {
+				return INTEGRAL_CONSTANT(tc::break_)();
+			} else if constexpr (!std::is_same<decltype(bc), INTEGRAL_CONSTANT(tc::continue_)>::value) {
+				if (tc::break_ == bc) {
+					return tc::break_;
+				}
+			}
 		}
 		return INTEGRAL_CONSTANT(tc::continue_)();
 	}
@@ -214,11 +145,11 @@ namespace tc {
 				>;
 
 				if(tc::change(bEmpty, false)) {
-					RETURN_IF_BREAK(boost::implicit_cast<breakorcontinue_t>(tc::continue_if_not_break(funcBegin)));
+					RETURN_IF_BREAK(tc::implicit_cast<breakorcontinue_t>(tc::continue_if_not_break(funcBegin)));
 				} else {
-					RETURN_IF_BREAK(boost::implicit_cast<breakorcontinue_t>(tc::continue_if_not_break(funcSeparator)));
+					RETURN_IF_BREAK(tc::implicit_cast<breakorcontinue_t>(tc::continue_if_not_break(funcSeparator)));
 				}
-				return boost::implicit_cast<breakorcontinue_t>(tc::continue_if_not_break(funcElement, std::forward<decltype(t)>(t)));
+				return tc::implicit_cast<breakorcontinue_t>(tc::continue_if_not_break(funcElement, std::forward<decltype(t)>(t)));
 			}
 		});
 
@@ -227,16 +158,16 @@ namespace tc {
 		} else {
 			using breakorcontinue_t = tc::common_type_t<decltype(breakorcontinue), decltype(tc::continue_if_not_break(funcEnd))>;
 			if(tc::break_==breakorcontinue || bEmpty) {
-				return boost::implicit_cast<breakorcontinue_t>(breakorcontinue);
+				return tc::implicit_cast<breakorcontinue_t>(breakorcontinue);
 			} else {
-				return boost::implicit_cast<breakorcontinue_t>(tc::continue_if_not_break(funcEnd));
+				return tc::implicit_cast<breakorcontinue_t>(tc::continue_if_not_break(funcEnd));
 			}
 		}
 	}
 
 	namespace no_adl {
 		template<typename RngBegin, typename RngRng, typename RngSep, typename RngEnd>
-		struct [[nodiscard]] join_framed_adaptor : tc::value_type_base<join_framed_adaptor<RngBegin, RngRng, RngSep, RngEnd>> {
+		struct [[nodiscard]] join_framed_adaptor {
 			template<typename RngBegin2, typename RngRng2, typename RngSep2, typename RngEnd2>
 			explicit join_framed_adaptor(aggregate_tag_t, RngBegin2&& rngBegin, RngRng2&& baserng, RngSep2&& rngSep, RngEnd2&& rngEnd) noexcept
 				: m_rngBegin(aggregate_tag, std::forward<RngBegin2>(rngBegin))
@@ -263,6 +194,18 @@ namespace tc {
 				);
 			}
 
+			bool empty() const& noexcept {
+				return
+					tc::empty(*m_baserng) ||
+					tc::empty(*m_rngBegin) && tc::empty(*m_rngEnd) && [&]() noexcept {
+						bool const bEmptySep = tc::empty(*m_rngSep);
+						bool bFirst = false;
+						return tc::continue_==tc::for_each(*m_baserng, [&](auto const& rng) noexcept {
+							return tc::continue_if(tc::empty(rng) && (tc::change(bFirst, true) || bEmptySep));
+						});
+					}();
+			}
+
 		private:
 			tc::reference_or_value<RngBegin> m_rngBegin;
 			tc::reference_or_value<RngRng> m_baserng;
@@ -270,28 +213,69 @@ namespace tc {
 			tc::reference_or_value<RngEnd> m_rngEnd;
 		};
 
-		template<typename RngBegin, typename RngRng, typename RngSep, typename RngEnd>
-		struct value_type_base<join_framed_adaptor<RngBegin, RngRng, RngSep, RngEnd>, tc::void_t<tc::common_range_value_t<RngBegin, tc::range_value_t<RngRng>, RngSep, RngEnd>>> {
-			using value_type = tc::common_range_value_t<RngBegin, tc::range_value_t<RngRng>, RngSep, RngEnd>;
+		template<typename JoinFramedAdaptor, typename RngBegin, typename RngRng, typename RngSep, typename RngEnd>
+		struct range_value<JoinFramedAdaptor, join_framed_adaptor<RngBegin, RngRng, RngSep, RngEnd>, tc::void_t<tc::common_range_value_t<RngBegin, tc::range_value_t<RngRng>, RngSep, RngEnd>>> final {
+			using type = tc::common_range_value_t<RngBegin, tc::range_value_t<RngRng>, RngSep, RngEnd>;
 		};
 	}
 	using no_adl::join_framed_adaptor;
 
 	template<typename RngBegin, typename RngRng, typename RngSep, typename RngEnd>
-	auto join_framed(RngBegin&& rngBegin, RngRng&& rngrng, RngSep&& rngSep, RngEnd&& rngEnd) noexcept return_ctor(
+	auto join_framed(RngBegin&& rngBegin, RngRng&& rngrng, RngSep&& rngSep, RngEnd&& rngEnd) return_ctor_noexcept(
 		join_framed_adaptor<RngBegin BOOST_PP_COMMA() RngRng BOOST_PP_COMMA() RngSep BOOST_PP_COMMA() RngEnd>,
 		(aggregate_tag, std::forward<RngBegin>(rngBegin), std::forward<RngRng>(rngrng), std::forward<RngSep>(rngSep), std::forward<RngEnd>(rngEnd))
 	)
 
 	template<typename RngBegin, typename RngRng, typename RngEnd>
-	auto join_framed(RngBegin&& rngBegin, RngRng&& rngrng, RngEnd&& rngEnd) noexcept return_ctor(
+	auto join_framed(RngBegin&& rngBegin, RngRng&& rngrng, RngEnd&& rngEnd) return_ctor_noexcept(
 		join_framed_adaptor<RngBegin BOOST_PP_COMMA() RngRng BOOST_PP_COMMA() tc::empty_range BOOST_PP_COMMA() RngEnd>,
 		(aggregate_tag, std::forward<RngBegin>(rngBegin), std::forward<RngRng>(rngrng), tc::empty_range(), std::forward<RngEnd>(rngEnd))
 	)
 
 	template<typename RngRng, typename RngSep>
-	auto join_separated(RngRng&& rngrng, RngSep&& rngSep) noexcept return_ctor(
+	auto join_separated(RngRng&& rngrng, RngSep&& rngSep) return_ctor_noexcept(
 		join_framed_adaptor<tc::empty_range BOOST_PP_COMMA() RngRng BOOST_PP_COMMA() RngSep BOOST_PP_COMMA() tc::empty_range>,
 		(aggregate_tag, tc::empty_range(), std::forward<RngRng>(rngrng), std::forward<RngSep>(rngSep), tc::empty_range())
 	)
+
+	namespace no_adl {
+		template<typename List, typename Enable = void>
+		struct make_range_impl;
+
+		template<typename T0, typename T1, typename... T, typename Enable>
+		struct [[nodiscard]] make_range_impl<tc::type::list<T0, T1, T...>, Enable> final {
+			static decltype(auto) fn(T0&& t0, T1&& t1, T&&... t) noexcept {
+				return tc::transform(
+					std::make_tuple(
+						tc::make_reference_or_value(std::forward<T0>(t0)),
+						tc::make_reference_or_value(std::forward<T1>(t1)),
+						tc::make_reference_or_value(std::forward<T>(t))...
+					),
+					tc::fn_indirection()
+				);
+			}
+		};
+
+		template<typename T0, typename... T>
+		struct make_range_impl<tc::type::list<T0, T...>, std::enable_if_t<std::conjunction<std::is_same<T0, T>...>::value>> final {
+			static constexpr decltype(auto) fn(T0&& t0, T&&... t) noexcept {
+				return tc::make_array<std::conditional_t<std::is_reference<T0>::value, T0, std::remove_cv_t<T0>>>(tc::aggregate_tag,
+					std::forward<T0>(t0), std::forward<T>(t)...
+				);
+			}
+		};
+	}
+
+	template<typename... T>
+	constexpr decltype(auto) make_range(T&&... t) noexcept {
+		return no_adl::make_range_impl<tc::type::list<T...>>::fn(std::forward<T>(t)...);
+	}
+
+	template<typename RngSep, typename... Rngs>
+	decltype(auto) concat_nonempty_separated(RngSep&& rngSep, Rngs&&... rngs) noexcept {
+		return tc::join_separated(
+			tc::filter(tc::make_range(std::forward<Rngs>(rngs)...), tc::not_fn(tc::fn_empty())),
+			std::forward<RngSep>(rngSep)
+		);
+	}
 }

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -43,7 +43,7 @@ namespace tc {
 	It && verify_at_upper_bound(Cont const& cont, It&& it) noexcept {
 #ifdef _DEBUG
 		/* standard says: the inserted element has to be placed at upper bound */
-		auto itNext = boost::next(it);
+		auto itNext = tc::next(it);
 		_ASSERTDEBUG(tc::end(cont) == itNext || cont.value_comp()(*it, *itNext));
 #endif
 		return std::forward<It>(it);
@@ -65,14 +65,14 @@ namespace tc {
 	#endif
 		auto it = NOBADALLOC(cont.emplace_hint(itHint, std::forward<Args>(args)...)); // MAYTHROW
 		_ASSERTEQUAL( cont.size(), c+1 );
-		_ASSERTEQUAL(boost::next(it), itHint);
+		_ASSERTEQUAL(tc::next(it), itHint);
 		return it;
 	}
 
 	template <typename Cont, typename... T, std::enable_if_t<
 		has_mem_fn_emplace_back<Cont>::value && (0==sizeof...(T) || tc::is_safely_constructible<tc::range_value_t<Cont>, T&& ... >::value)
 	>* = nullptr>
-	decltype(auto) cont_emplace_back(Cont& cont, T&& ... value) MAYTHROW {
+	constexpr decltype(auto) cont_emplace_back(Cont& cont, T&& ... value) noexcept(noexcept(cont.emplace_back(std::forward<T>(value)...))) {
 		if constexpr (std::is_void<decltype(cont.emplace_back(std::forward<T>(value)...))>::value) {
 			NOBADALLOC( cont.emplace_back(std::forward<T>(value)...) ); // MAYTHROW
 			return tc_back(cont);
@@ -85,16 +85,16 @@ namespace tc {
 		has_mem_fn_emplace_back<Cont>::value && !(0==sizeof...(T) || tc::is_safely_constructible<tc::range_value_t<Cont>, T&& ... >::value) &&
 		tc::is_explicit_castable<tc::range_value_t<Cont>, T&&...>::value
 	>* = nullptr>
-	decltype(auto) cont_emplace_back(Cont& cont, T&& ... value) MAYTHROW {
-		return cont_emplace_back(cont, tc::explicit_cast<tc::range_value_t<Cont>>(std::forward<T>(value)...));
-	}
+	constexpr auto cont_emplace_back(Cont& cont, T&& ... value) return_decltype_MAYTHROW(
+		cont_emplace_back(cont, tc::explicit_cast<tc::range_value_t<Cont>>(std::forward<T>(value)...))
+	)
 
 	template <typename Cont, typename... T, std::enable_if_t<
 		has_mem_fn_lower_bound<Cont>::value && (0==sizeof...(T) || tc::is_safely_constructible<tc::range_value_t<Cont>, T&& ... >::value)
 	>* = nullptr>
-	decltype(auto) cont_emplace_back(Cont& cont, T&& ... value) MAYTHROW {
-		return *tc::cont_must_emplace_before(cont, tc::end(cont), std::forward<T>(value)...); // tc::cont_must_emplace_before is not SFINAE friendly
-	}
+	constexpr auto cont_emplace_back(Cont& cont, T&& ... value) return_decltype_MAYTHROW(
+		*tc::cont_must_emplace_before(cont, tc::end(cont), std::forward<T>(value)...) // tc::cont_must_emplace_before is not SFINAE friendly
+	)
 
 	template <typename Cont, typename T0, typename T1, typename... Ts, std::enable_if_t<
 		!has_mem_fn_emplace_back<Cont>::value && !has_mem_fn_lower_bound<Cont>::value &&
@@ -168,13 +168,12 @@ namespace tc {
 		return pairitb;
 	}
 
-	template<typename Key, typename Val, typename Compare, typename Alloc, typename K, typename V, typename Better>
-	void map_try_emplace_better(tc::map<Key, Val, Compare, Alloc>& map, K&& key, V&& val, Better&& better) noexcept {
-		auto it = map.lower_bound(key);
-		if (tc::end(map) == it || map.key_comp()(key, it->first)) {
-			NOEXCEPT( tc::cont_must_emplace_before(map, tc_move(it), std::forward<K>(key), std::forward<V>(val)) );
+	template<typename Key, typename Val, typename Compare, typename Alloc, typename K, typename ...Args>
+	auto map_try_emplace(tc::map<Key, Val, Compare, Alloc>& map, K&& key, Args&& ...args) noexcept -> std::pair<typename tc::map<Key, Val, Compare, Alloc>::iterator, bool> {
+		if (auto it = map.lower_bound(key); tc::end(map) == it || map.key_comp()(key, it->first)) {
+			return std::make_pair( NOEXCEPT( tc::cont_must_emplace_before(map, tc_move_always(it), std::forward<K>(key), std::forward<Args>(args)...) ), true );
 		} else {
-			tc::assign_better(it->second, std::forward<V>(val), std::forward<Better>(better));
+			return std::make_pair(tc_move(it), false);
 		}
 	}
 }

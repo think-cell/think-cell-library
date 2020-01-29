@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -90,7 +90,7 @@ namespace tc {
 
 	namespace merge_many_detail {
 		template<typename RngRng, typename Pred>
-		auto merge_many_impl(RngRng&& rngrng, Pred&& pred) noexcept return_ctor(
+		auto merge_many_impl(RngRng&& rngrng, Pred&& pred) return_ctor_noexcept(
 			tc::no_adl::merge_many_adaptor<RngRng BOOST_PP_COMMA() Pred>,
 			(aggregate_tag, std::forward<RngRng>(rngrng) BOOST_PP_COMMA() std::forward<Pred>(pred))
 		)

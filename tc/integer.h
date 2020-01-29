@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -77,12 +77,12 @@ namespace tc {
 
 	template<typename Lhs, typename Rhs >
 	struct prepare_argument <Lhs,Rhs,std::enable_if_t< tc::arithmetic_operation_preserves_sign<Lhs,Rhs>::value > > final {
-		template< typename T > static T prepare(T t) noexcept { return t; }
+		template< typename T > static constexpr T prepare(T t) noexcept { return t; }
 	};
 
 	template<typename Lhs, typename Rhs >
 	struct prepare_argument <Lhs,Rhs,std::enable_if_t< !tc::arithmetic_operation_preserves_sign<Lhs,Rhs>::value > > final {
-		template< typename T > static std::make_unsigned_t<T> prepare(T t) noexcept { return tc::unsigned_cast(t); }
+		template< typename T > static constexpr std::make_unsigned_t<T> prepare(T t) noexcept { return tc::unsigned_cast(t); }
 	};
 
 	template< typename Lhs, typename Rhs, std::enable_if_t<
@@ -90,7 +90,7 @@ namespace tc {
 		tc::is_actual_integer<Rhs>::value &&
 		!std::is_signed<Lhs>::value
 	>* = nullptr>
-	constexpr Lhs add( Lhs lhs, Rhs rhs ) noexcept {
+	[[nodiscard]] constexpr Lhs add( Lhs lhs, Rhs rhs ) noexcept {
 		// modulo semantics, both arguments are zero- or sign-extended to unsigned and the result truncated
 		return static_cast<Lhs>(lhs+rhs);
 	}
@@ -100,7 +100,7 @@ namespace tc {
 		tc::is_actual_integer<Rhs>::value &&
 		!std::is_signed<Lhs>::value
 	>* = nullptr>
-	constexpr Lhs sub( Lhs lhs, Rhs rhs ) noexcept {
+	[[nodiscard]] constexpr Lhs sub( Lhs lhs, Rhs rhs ) noexcept {
 		// modulo semantics, both arguments are zero- or sign-extended to unsigned and the result truncated
 		return static_cast<Lhs>(lhs-rhs);
 	}
@@ -110,7 +110,7 @@ namespace tc {
 		tc::is_actual_integer<Rhs>::value &&
 		std::is_signed<Lhs>::value
 	>* = nullptr>
-	constexpr Lhs add( Lhs lhs, Rhs rhs ) noexcept {
+	[[nodiscard]] constexpr Lhs add( Lhs lhs, Rhs rhs ) noexcept {
 		// does not rely on implementation-defined truncation of integers
 		return tc::explicit_cast<Lhs>( lhs+tc::explicit_cast< std::make_signed_t<decltype(lhs+rhs)>>(rhs) );
 	}
@@ -120,8 +120,47 @@ namespace tc {
 		tc::is_actual_integer<Rhs>::value &&
 		std::is_signed<Lhs>::value
 	>* = nullptr>
-	constexpr Lhs sub( Lhs lhs, Rhs rhs ) noexcept {
+	[[nodiscard]] constexpr Lhs sub( Lhs lhs, Rhs rhs ) noexcept {
 		// does not rely on implementation-defined truncation of integers
 		return tc::explicit_cast<Lhs>( lhs-tc::explicit_cast< std::make_signed_t<decltype(lhs-rhs)>>(rhs) );
+	}
+
+	template<typename T, std::enable_if_t<tc::is_actual_integer<T>::value>* = nullptr>
+	constexpr T& mul_assign(T& lhs, T rhs) noexcept {
+		_ASSERTE( rhs < 0
+			? lhs <= std::numeric_limits<T>::lowest() / rhs
+			: std::numeric_limits<T>::lowest() / rhs <= lhs
+		);
+		_ASSERTE( rhs < 0
+			? std::numeric_limits<T>::max() / rhs <= lhs
+			: lhs <= std::numeric_limits<T>::max() / rhs
+		);
+		return lhs *= rhs;
+	}
+
+	template<typename B, typename E, std::enable_if_t<
+		tc::is_actual_integer<B>::value &&
+		tc::is_actual_integer<E>::value
+	>* = nullptr>
+	[[nodiscard]] constexpr auto pow(B const base, E exp) noexcept -> decltype(base * base) {
+		using R = decltype(base * base);
+		R result = 1;
+		if( 0 != exp ) {
+			_ASSERTE( 0 < exp );
+			R rbase = base;
+			for (;;) {
+				if( 1 == exp % 2 ) {
+					mul_assign(result, rbase);
+				}
+				exp /= 2;
+				if( 0 == exp ) {
+					break;
+				}
+				mul_assign(rbase, rbase);
+			}
+		} else {
+			_ASSERTE( 0 != base );
+		}
+		return result;
 	}
 }

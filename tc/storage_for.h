@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -13,14 +13,12 @@
 #include "type_traits.h"
 #include "casts.h"
 
-#include <boost/implicit_cast.hpp>
-
 #include <type_traits>
 
 namespace tc {
 	namespace no_adl {
 		template< typename T >
-		struct storage_for_without_dtor : tc::nonmovable {
+		struct [[nodiscard]] storage_for_without_dtor : tc::nonmovable {
 		protected:
 			static_assert( tc::is_decayed< std::remove_const_t<T> >::value, "only const allowed as qualification" );
 			std::aligned_storage_t<sizeof(T),std::alignment_of<T>::value> m_buffer;
@@ -81,7 +79,7 @@ namespace tc {
 		};
 
 		template< typename T >
-		struct storage_for : storage_for_without_dtor <T> {
+		struct [[nodiscard]] storage_for : storage_for_without_dtor <T> {
 			template <typename S>
 			static decltype(auto) from_content(S&& t) noexcept {
 				return tc::derived_cast<storage_for>(storage_for_without_dtor<T>::from_content(std::forward<S>(t)));
@@ -152,7 +150,7 @@ namespace tc {
 
 
 		template< typename T >
-		struct storage_for_without_dtor<T&> : tc::nonmovable {
+		struct [[nodiscard]] storage_for_without_dtor<T&> : tc::nonmovable {
 		protected:
 			static_assert(!std::is_reference<T>::value);
 			T* m_pt;
@@ -172,7 +170,7 @@ namespace tc {
 		};
 
 		template< typename T >
-		struct storage_for<T&> : storage_for_without_dtor <T&> {
+		struct [[nodiscard]] storage_for<T&> : storage_for_without_dtor <T&> {
 #if defined(_DEBUG) && defined(TC_PRIVATE)
 			storage_for() noexcept {
 				this->m_pt=nullptr;
@@ -193,7 +191,7 @@ namespace tc {
 		};
 
 		template< typename T >
-		struct storage_for_without_dtor<T&&> : tc::nonmovable {
+		struct [[nodiscard]] storage_for_without_dtor<T&&> : tc::nonmovable {
 		protected:
 			static_assert(!std::is_reference<T>::value);
 			T* m_pt;
@@ -209,7 +207,7 @@ namespace tc {
 		};
 
 		template< typename T >
-		struct storage_for<T&&> : storage_for_without_dtor <T&&> {
+		struct [[nodiscard]] storage_for<T&&> : storage_for_without_dtor <T&&> {
 #if defined(_DEBUG) && defined(TC_PRIVATE)
 			storage_for() noexcept {
 				this->m_pt=nullptr;

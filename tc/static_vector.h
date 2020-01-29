@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -123,6 +123,8 @@ namespace tc {
 		public:
 			static_vector_base_trivial() noexcept {};
 
+			constexpr static_vector_base_trivial(constexpr_tag_t) noexcept : m_at{} {};
+
 			// Due to C++17 constexpr limitations this special purpose constructor is the only way
 			// we have to initialize static_vector at compile time without generally sacrificing efficiency.
 			template<typename Rng, std::enable_if_t<tc::is_safely_assignable<T&, tc::range_value_t<Rng const>>::value>* = nullptr>
@@ -139,10 +141,21 @@ namespace tc {
 				}
 			}
 
+			// This specialization for trivially-assignable types is usable in constant expressions.
+			// The normal version of emplace_back cannot be used in constant expressions, because it uses placement new.
 			template<typename... Args>
-			T& emplace_back(Args&& ... args) & noexcept(noexcept(T(std::forward<Args>(args)...))) {
-				_ASSERT(!this->full());
-				T& t=m_at[this->m_iEnd];
+			constexpr typename std::enable_if<std::is_trivially_assignable<T&, T>::value && noexcept(T(std::declval<Args&&>()...)), T&>::type emplace_back(Args&& ... args) & noexcept {
+				_ASSERTE(!this->full());
+				T& t = m_at[this->m_iEnd];
+				++this->m_iEnd;
+				t = T(std::forward<Args>(args)...);
+				return t;
+			}
+
+			template<typename... Args>
+			typename std::enable_if < !std::is_trivially_assignable<T&, T>::value || !noexcept(T(std::declval<Args&&>()...)), T&>::type emplace_back(Args&& ... args) & noexcept(noexcept(T(std::forward<Args>(args)...))) {
+				_ASSERTE(!this->full());
+				T& t = m_at[this->m_iEnd];
 				++this->m_iEnd;
 				// Inside element ctors, the element is already in the container.
 				try {
@@ -160,11 +173,11 @@ namespace tc {
 			}
 
 			template<typename It>
-			void take_inplace( It&& it ) & noexcept {
+			constexpr void take_inplace( It&& it ) & noexcept {
 				this->m_iEnd=tc::iterator2index(std::forward<It>(it));
 			}
 
-			void resize(size_type n) & noexcept {
+			constexpr void resize(size_type n) & noexcept {
 				if (this->size() < n) {
 					do {
 						emplace_back();
@@ -178,7 +191,9 @@ namespace tc {
 				this->m_iEnd = 0;
 			}
 		};
+	} // no_adl
 
+	namespace static_vector_adl {
 		template<typename T, tc::static_vector_size_t N>
 		using static_vector_base_t = std::conditional_t<
 			std::is_trivially_destructible<T>::value && std::is_trivially_default_constructible<T>::value,
@@ -187,28 +202,40 @@ namespace tc {
 		>;
 
 		template< typename T, tc::static_vector_size_t N >
-		struct static_vector
+		struct [[nodiscard]] static_vector
 			: static_vector_base_t<T, N>
+#ifndef TC_RANGE_ITERATOR_HELPER_BASE_CLASS_WORKAROUND
 			, tc::range_iterator_generator_from_index<
 				static_vector<T, N>,
-				tc::static_vector_size_t, // fixed width integer for shared heap
-				boost::iterators::random_access_traversal_tag
-			> {
+				tc::static_vector_size_t // fixed width integer for shared heap
+			>
+#endif
+		{
 		private:
 			using this_type = static_vector;
+#ifdef TC_RANGE_ITERATOR_HELPER_BASE_CLASS_WORKAROUND
+			using Derived = this_type;
+#endif
 			using iterator_generator_base = tc::range_iterator_generator_from_index<
 				static_vector<T, N>,
-				tc::static_vector_size_t,
-				boost::iterators::random_access_traversal_tag
+				tc::static_vector_size_t
 			>;
 		public:
 			using base = static_vector_base_t<T, N>;
+#ifndef TC_RANGE_ITERATOR_HELPER_BASE_CLASS_WORKAROUND
 			using index = typename this_type::index;
+#else
+			using index = tc::static_vector_size_t;
+			DEFINE_RANGE_ITERATOR_GENERATOR_FROM_INDEX
+#endif
 			using difference_type = std::make_signed_t<index>;
 			using reference = T&;
 			using value_type = T; // needed for has_mem_fn_emplace_back
 
+
 			static_vector() noexcept {}
+
+			constexpr static_vector(constexpr_tag_t) : base(constexpr_tag) {}
 
 			// Due to C++17 constexpr limitations this special purpose constructor is the only way
 			// we have to initialize static_vector at compile time without generally sacrificing efficiency.
@@ -244,20 +271,20 @@ namespace tc {
 				NOEXCEPT( assign( tc_move_always(vec) ) );
 				return *this;
 			}
-
+		private:
 			STATIC_FINAL_MOD(constexpr, begin_index)() const& noexcept -> index { return 0; }
 			STATIC_FINAL_MOD(constexpr, end_index)() const& noexcept -> index { return this->m_iEnd; }
 			STATIC_FINAL_MOD(constexpr, equal_index)(index const& lhs, index const& rhs) const& noexcept -> bool { return lhs==rhs; }
 			STATIC_FINAL_MOD(constexpr, increment_index)(index& idx) const& noexcept -> void { ++idx; }
 			STATIC_FINAL_MOD(constexpr, decrement_index)(index& idx) const& noexcept -> void { --idx; }
-			STATIC_FINAL_MOD(constexpr, advance_index)(index& idx, difference_type d) const& noexcept -> void { idx += d; }
+			STATIC_FINAL_MOD(constexpr, advance_index)(index& idx, difference_type d) const& noexcept -> void { idx += static_cast<index>(d); } /* static_cast suppresses C4308 warning (negative integral constant converted to unsigned) when an iterator is decremented in a constant expression */
 			STATIC_FINAL_MOD(constexpr, distance_to_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> difference_type { return idxRhs - idxLhs; }
 			STATIC_FINAL_MOD(constexpr, middle_point)( index & idxBegin, index const& idxEnd ) const& noexcept -> void {
 				this->advance_index(idxBegin,this->distance_to_index(idxBegin,idxEnd)/2);
 			}
 			STATIC_FINAL_MOD(constexpr, dereference_index)(index idx) & noexcept -> T& { return this->dereference(idx); }
 			STATIC_FINAL_MOD(constexpr, dereference_index)(index idx) const& noexcept -> T const& { return this->dereference(idx); }
-
+		public:
 			// access
 			T* data() & noexcept {
 				return std::addressof(this->dereference(0));
@@ -272,23 +299,19 @@ namespace tc {
 				this->clear();
 				tc::append( *this, std::forward<Rng>(rng) );
 			}
-
-#ifdef TC_PRIVATE
-			using iterator_generator_base::operator();
-
-			template<ENABLE_SFINAE, std::enable_if_t<!tc::is_char<SFINAE_TYPE(T)>::value>* = nullptr>
-			void operator()(tc::report_appender appdr) const& noexcept {
-				tc::for_each(tc::concat("tc::static_vector(", tc::size(*this), ")("), appdr);
-				for( auto i=0; i<tc::size(*this); ++i ) {
-					if( 0 < i ) tc::for_each(", ", appdr);
-					tc::for_each(tc_at(*this, i), appdr);
-				}
-				appdr(')');
-			}
-#endif
 		};
-	} // no_adl
-	using no_adl::static_vector;
+	} // static_vector_adl
+	using static_vector_adl::static_vector;
+
+	template<tc::static_vector_size_t N, typename Rng>
+	auto make_static_vector(Rng&& rng) MAYTHROW {
+		return tc::explicit_cast<tc::static_vector<tc::range_value_t<Rng>, N>>(std::forward<Rng>(rng));
+	}
+
+	template<tc::static_vector_size_t N, typename... Rng>
+	auto make_static_vector(Rng&&... rng) MAYTHROW {
+		return make_static_vector<N>(tc::concat(std::forward<Rng>(rng)...));
+	}
 
 	template< typename T, tc::static_vector_size_t N >
 	struct range_filter_by_move_element<tc::static_vector<T,N>> : std::true_type {};

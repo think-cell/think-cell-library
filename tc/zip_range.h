@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -29,14 +29,13 @@ namespace tc {
 				zip_adaptor<Ranges...>,
 				std::tuple<
 					typename tc::index_t<std::remove_reference_t<Ranges>>...
-				>,
-				tc::demote_iterator_traversal_tag_t<traversal_t<Ranges>...>
+				>
 			>
 		{
 		private:
 			using this_type = zip_adaptor;
-			using proxy = std::tuple<decltype(*tc::begin(*std::declval<tc::reference_or_value<Ranges>&>()))...>;
-			using const_proxy = std::tuple<decltype(*tc::begin(*std::declval<tc::reference_or_value<Ranges> const&>()))...>;
+			using proxy = std::tuple<decltype(*tc::as_lvalue(tc::begin(*std::declval<tc::reference_or_value<Ranges>&>())))...>;
+			using const_proxy = std::tuple<decltype(*tc::as_lvalue(tc::begin(*std::declval<tc::reference_or_value<Ranges> const&>())))...>;
 		public:
 
 			template<typename... Rhs>
@@ -46,6 +45,10 @@ namespace tc {
 
 			using index = typename this_type::index;
 
+			// TODO: difference_type should be the smallest type of range_difference_type<Ranges,traversal_t<Ranges>>...
+			using difference_type = int;// std::ptrdiff_t;
+
+		private:
 			STATIC_FINAL(begin_index)() const& noexcept -> index {
 				return std::apply([&](auto&&... baseranges) {
 						return std::make_tuple(tc::begin_index(baseranges)...);
@@ -54,7 +57,14 @@ namespace tc {
 				);
 			}
 
-			STATIC_FINAL(end_index)() const& noexcept -> index {
+			STATIC_FINAL_MOD(
+				template<
+					ENABLE_SFINAE BOOST_PP_COMMA()
+					std::enable_if_t<SFINAE_VALUE(
+						std::conjunction<tc::has_end_index<std::remove_reference_t<Ranges>>...>::value
+					)>* = nullptr
+				>,
+			end_index)() const& noexcept -> index {
 				return std::apply([&](auto&&... baseranges) {
 						return std::make_tuple(tc::end_index(baseranges)...);
 					},
@@ -87,7 +97,14 @@ namespace tc {
 				);
 			}
 
-			STATIC_FINAL(decrement_index)(index& idx) const& noexcept -> void {
+			STATIC_FINAL_MOD(
+				template<
+					ENABLE_SFINAE BOOST_PP_COMMA()
+					std::enable_if_t<SFINAE_VALUE(
+						std::conjunction<tc::has_decrement_index<std::remove_reference_t<Ranges>>...>::value
+					)>* = nullptr
+				>,
+			decrement_index)(index& idx) const& noexcept -> void {
 				tc::for_each(
 					std::make_index_sequence<sizeof...(Ranges)>(),
 					[&](auto nconstIndex) noexcept {
@@ -108,10 +125,14 @@ namespace tc {
 				return tc::equal_index(*std::get<0>(m_baserng), std::get<0>(idxLhs), std::get<0>(idxRhs));
 			}
 
-			// TODO: difference_type should be the smallest type of range_difference_type<Ranges,traversal_t<Ranges>>...
-			using difference_type = int;// std::ptrdiff_t;
-
-			STATIC_FINAL(advance_index)(index& idx, difference_type d) const& noexcept -> void {
+			STATIC_FINAL_MOD(
+				template<
+					ENABLE_SFINAE BOOST_PP_COMMA()
+					std::enable_if_t<SFINAE_VALUE(
+						std::conjunction<tc::has_advance_index<std::remove_reference_t<Ranges>>...>::value
+					)>* = nullptr
+				>,
+			advance_index)(index& idx, difference_type d) const& noexcept -> void {
 				tc::for_each(
 					std::make_index_sequence<sizeof...(Ranges)>(),
 					[&](auto nconstIndex) noexcept {
@@ -120,11 +141,18 @@ namespace tc {
 				);
 			}
 
-			STATIC_FINAL(distance_to_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> difference_type {
+			// For consistency with other functions, distance_to_index is only available if all base ranges support it - even though we only require one of the base ranges to support it.
+			STATIC_FINAL_MOD(
+				template<
+					ENABLE_SFINAE BOOST_PP_COMMA()
+					std::enable_if_t<SFINAE_VALUE(
+						std::conjunction<tc::has_distance_to_index<std::remove_reference_t<Ranges>>...>::value
+					)>* = nullptr
+				>,
+			distance_to_index)(index const& idxLhs, index const& idxRhs) const& noexcept->difference_type {
 				return tc::explicit_cast<difference_type>(tc::distance_to_index(*std::get<0>(m_baserng), std::get<0>(idxLhs), std::get<0>(idxRhs)));
 			}
 
-		private:
 			template<std::size_t... Is>
 			const_proxy dereference_index_impl(index const& idx, std::index_sequence<Is...>) const& noexcept {
 				return {tc::dereference_index(*std::get<Is>(m_baserng), std::get<Is>(idx))...};
@@ -140,7 +168,7 @@ namespace tc {
 	}
 
 	template<typename... Ranges>
-	auto zip(Ranges&& ...ranges) noexcept return_ctor(
+	auto zip(Ranges&& ...ranges) return_ctor_noexcept(
 		no_adl::zip_adaptor<Ranges...>,
 		(aggregate_tag BOOST_PP_COMMA() std::forward<Ranges>(ranges)...)
 	)
@@ -157,7 +185,7 @@ namespace tc {
 			*o; // must still be valid.
 		}
 
-		- Currently, *o is 'tc::transform(*rngrng, [n](auto const& rng) return_decltype(tc_at(rng, n)))'
+		- Currently, *o is 'tc::transform(*rngrng, [n](auto const& rng) return_decltype_MAYTHROW(tc_at(rng, n)))'
 		with rngrng beeing then out of scope.
 
 		return_value_or_none.pack_element(It&&, Rng&&, Ref&& ref) is called with R-Value range, so in principle
@@ -179,7 +207,7 @@ namespace tc {
 		return tc::transform(
 			tc::iota(0, n),
 			[rngrng = tc::reference_or_value<RngRng>(tc::aggregate_tag, std::forward<RngRng>(rngrng))](auto const n) noexcept {
-				return tc::transform(*rngrng, [n](auto const& rng) return_decltype(tc_at(rng, n)));
+				return tc::transform(*rngrng, [n](auto const& rng) return_decltype_MAYTHROW(tc_at(rng, n)));
 			}
 		);
 	}

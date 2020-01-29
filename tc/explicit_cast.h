@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -85,10 +85,17 @@ namespace tc {
 		// default conversions
 
 		template<typename TTarget, typename Enable = void>
-		struct SConversions final {};
+		struct SConversions final {
+			// This is the default SConversions, not a specialization, because aggregate initialization must have lower priority than other specializations which could also be aggregate types
+			// Aggregate types are tc::is_safely_constructible from same type (copy/move). This is handled in the default explicit_cast below.
+			template<ENABLE_SFINAE, typename... Args, std::enable_if_t<std::is_class<SFINAE_TYPE(TTarget)>::value && std::is_aggregate<SFINAE_TYPE(TTarget)>::value>* = nullptr>
+			static constexpr auto fn(Args&&... args) MAYTHROW -> decltype(TTarget{std::forward<Args>(args)...}) { // can't use noexcept(noexcept(...)) here - it causes internal compiler error in MSVC 2017
+				return TTarget{std::forward<Args>(args)...};
+			}
+		};
 
 		template<typename TTarget>
-		struct SConversions<TTarget, std::enable_if_t<tc::is_char<TTarget>::value>> {
+		struct SConversions<TTarget, std::enable_if_t<tc::is_char<TTarget>::value>> final {
 			template<typename TSource, std::enable_if_t<tc::is_char< TSource >::value>* = nullptr>
 			static constexpr TTarget fn (TSource src) noexcept {
 				static_assert( tc::is_decayed< TTarget >::value );
@@ -99,7 +106,7 @@ namespace tc {
 		};
 
 		template<typename TTarget>
-		struct SConversions<TTarget, std::enable_if_t<tc::is_actual_integer<TTarget>::value>> {
+		struct SConversions<TTarget, std::enable_if_t<tc::is_actual_integer<TTarget>::value>> final {
 			template<typename TSource, std::enable_if_t<
 				std::is_floating_point<TSource>::value>* = nullptr>
 			static TTarget fn(TSource src) noexcept {
@@ -166,26 +173,13 @@ namespace tc {
 		}
 	}
 
-	template<typename TTarget, typename... Args>
-	constexpr auto explicit_cast(Args&&... args) MAYTHROW -> std::enable_if_t<
-		!tc::is_safely_constructible<std::remove_cv_t<TTarget>, Args&&...>::value,
-	decltype(explicit_cast_detail::InternalConvert<std::remove_cv_t<TTarget>>(std::forward<Args>(args)... )) > {
-		return explicit_cast_detail::InternalConvert<std::remove_cv_t<TTarget>>(std::forward<Args>(args)... );
-	}
+	template<typename TTarget, typename... Args, std::enable_if_t<!tc::is_safely_constructible<std::remove_cv_t<TTarget>, Args&&...>::value>* = nullptr>
+	[[nodiscard]] constexpr auto explicit_cast(Args&&... args)
+		return_decltype_MAYTHROW(explicit_cast_detail::InternalConvert<std::remove_cv_t<TTarget>>(std::forward<Args>(args)... ))
 
-	template<typename TTarget, typename... Args>
-	constexpr auto explicit_cast(Args&&... args) MAYTHROW -> std::enable_if_t<
-		tc::is_safely_constructible<std::remove_cv_t<TTarget>, Args&&...>::value,
-	std::remove_cv_t<TTarget> > {
-		return std::remove_cv_t<TTarget>(std::forward<Args>(args)...); // MAYTHROW
-	}
-
-	template<typename TTarget, typename... Args>
-	constexpr auto explicit_cast(tc::list_initialize_tag_t, Args&&... args) MAYTHROW -> std::enable_if_t<
-		std::is_class<TTarget>::value,
-	decltype(std::remove_cv_t<TTarget>{std::declval<Args>()...})> {
-		return std::remove_cv_t<TTarget>{std::forward<Args>(args)...};
-	}
+	template<typename TTarget, typename... Args, std::enable_if_t<tc::is_safely_constructible<std::remove_cv_t<TTarget>, Args&&...>::value>* = nullptr>
+	[[nodiscard]] constexpr auto explicit_cast(Args&&... args)
+		return_ctor_MAYTHROW(std::remove_cv_t<TTarget>, (std::forward<Args>(args)...))
 
 	///////////////////////////////////////////////
 	// special conversions
@@ -221,22 +215,22 @@ namespace tc {
 	DEFINE_FN_TMPL( explicit_cast, (typename) );
 	
 	template<typename TTarget, typename TSource, std::enable_if_t<tc::is_base_of_decayed<TTarget, TSource>::value>* = nullptr>
-	constexpr TSource&& reluctant_explicit_cast(TSource&& src) noexcept {
+	[[nodiscard]] constexpr TSource&& reluctant_explicit_cast(TSource&& src) noexcept {
 		return std::forward<TSource>(src);
 	}
 
 	template<typename TTarget, typename TSource, std::enable_if_t<!tc::is_base_of_decayed<TTarget, TSource>::value>* = nullptr>
-	constexpr std::remove_cv_t<TTarget> reluctant_explicit_cast(TSource&& src) noexcept {
+	[[nodiscard]] constexpr std::remove_cv_t<TTarget> reluctant_explicit_cast(TSource&& src) noexcept {
 		return explicit_cast<TTarget>(std::forward<TSource>(src));
 	}
 
 	template<typename T>
-	bool issingleunit(T ch) noexcept {
+	[[nodiscard]] bool issingleunit(T ch) noexcept {
 		return no_adl::char_limits<T>::in_range(tc::underlying_cast(ch));
 	}
 
 	template<typename Target, typename Source>
-	std::enable_if_t<
+	[[nodiscard]] std::enable_if_t<
 		std::is_floating_point< tc::decay_t<Source> >::value && tc::is_actual_integer< Target >::value
 	,Target> explicit_cast_with_rounding(Source&& src) noexcept {
 		double srcRounded=std::floor( static_cast<double>(std::forward<Source>(src))+.5 );
@@ -244,7 +238,7 @@ namespace tc {
 	}
 
 	template<typename Target, typename Source>
-	std::enable_if_t<
+	[[nodiscard]] std::enable_if_t<
 		!(std::is_floating_point< tc::decay_t<Source> >::value && tc::is_actual_integer< Target >::value)
 	,Target> explicit_cast_with_rounding(Source&& src) noexcept {
 		return tc::explicit_cast<Target>(src);
@@ -254,7 +248,7 @@ namespace tc {
 	
 	namespace no_adl {
 		template<typename T, typename Tuple>
-		struct lazy_ctor final {
+		struct [[nodiscard]] lazy_ctor final {
 			Tuple m_tuple;
 			operator T() && noexcept {
 				return std::apply(tc::fn_explicit_cast<std::remove_cv_t<T>>(), tc_move_always(m_tuple));

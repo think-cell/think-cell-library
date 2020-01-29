@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -85,7 +85,7 @@ namespace tc {
 
 #define ASSIGN_BY_SWAP(T) \
 	T& operator=( T other ) & noexcept { \
-		swap( *this, other ); /*not boost::swap, which may be implemented in terms of move, which would be circular*/ \
+		swap( *this, other ); /*not tc::swap, which may be implemented in terms of move, which would be circular*/ \
 		return *this; \
 	}
 

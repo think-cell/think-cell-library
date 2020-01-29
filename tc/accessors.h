@@ -1,14 +1,18 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
+#include "range_defines.h"
+#include "generic_macros.h"
 #include "type_traits.h"
+
+#include <boost/preprocessor/comparison/greater.hpp>
 
 namespace tc {
 	namespace no_adl {
@@ -50,8 +54,6 @@ namespace tc {
 	using no_adl::has_ref_ref_accessor;
 	using no_adl::has_const_ref_ref_accessor;
 }
-
-#define EXPAND(...) __VA_ARGS__
 
 #define DEFINE_MEMBER_WITHOUT_INIT(type, name) \
 		type name;

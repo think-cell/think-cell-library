@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -25,7 +25,7 @@ namespace tc {
 		template<typename TIndex, TIndex... Is, typename Func, typename... Args>
 		decltype(auto) invoke_with_constant_impl(std::integer_sequence<TIndex, Is...>, Func&& func, TIndex nIndex, Args&&... args) MAYTHROW {
 			using result_type = tc::common_reference_prvalue_as_val_t<
-				std::invoke_result_t<std::decay_t<Func>&, std::integral_constant<TIndex, Is>, Args&&...>...
+				decltype(std::declval<std::decay_t<Func>&>()(std::integral_constant<TIndex, Is>(), std::declval<Args>()...))...
 			>;
 
 			static constexpr std::add_pointer_t<result_type(std::remove_reference_t<Func>, Args&&...)> apfn[] = {
@@ -42,8 +42,10 @@ namespace tc {
 
 	template<typename ContiguousIntegerSequence, typename Func, typename... Args>
 	decltype(auto) invoke_with_constant(Func&& func, typename ContiguousIntegerSequence::value_type nIndex, Args&&... args) MAYTHROW {
-		static_assert(tc::is_contiguous_integer_sequence<ContiguousIntegerSequence>::value && 0 < ContiguousIntegerSequence::size());
+		static_assert(tc::is_contiguous_integer_sequence<ContiguousIntegerSequence>::value);
 
-		return invoke_with_constant_impl::invoke_with_constant_impl(ContiguousIntegerSequence(), std::forward<Func>(func), nIndex, std::forward<Args>(args)...);
+		if constexpr (0 < ContiguousIntegerSequence::size()) {
+			return invoke_with_constant_impl::invoke_with_constant_impl(ContiguousIntegerSequence(), std::forward<Func>(func), nIndex, std::forward<Args>(args)...);
+		}
 	}
 }

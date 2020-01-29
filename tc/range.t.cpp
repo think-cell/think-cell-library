@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -20,7 +20,7 @@ namespace {
 UNITTESTDEF( basic ) {
 	TEST_init_hack(tc::vector, int, v, {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20});
 
-	auto evenvr = tc::filter(v, [](int const& v) noexcept { return v%2==0;});
+	auto evenvr = tc::filter(v, [](int const v) noexcept { return v%2==0;});
 
 	TEST_init_hack(tc::vector, int, vexp, {2, 4, 6, 8, 10, 12, 14, 16, 18, 20});
 	TEST_RANGE_EQUAL(vexp, evenvr);
@@ -82,7 +82,7 @@ UNITTESTDEF( basic ) {
 	};
 
 	template<typename Rng>
-	auto void_range(Rng&& rng) return_decltype_xvalue_by_ref (
+	auto void_range(Rng&& rng) return_decltype_xvalue_by_ref_MAYTHROW(
 		tc::derived_or_base_cast<void_range_struct<Rng&&>>(std::forward<Rng>(rng))
 	)
 
@@ -535,4 +535,21 @@ UNITTESTDEF(filter_with_generator_range) {
 	);
 }
 
+}
+
+//---- Cartesian product ------------------------------------------------------------------------------------------------------
+
+namespace {
+	[[maybe_unused]] void cartesian_product_test(tc::array<int, 2>& an) {
+		tc::for_each(tc::cartesian_product(an, an), [](auto&& x){
+			STATICASSERTSAME(decltype(x), (std::tuple<int&, int&>&&));
+		});
+		tc::for_each(tc::cartesian_product(tc::as_const(an), tc::as_const(an)), [](auto&& x){
+			STATICASSERTSAME(decltype(x), (std::tuple<int const&, const int&>&&));
+		});
+		auto rvaluerng = [](auto sink) { sink(1); };
+		tc::for_each(tc::cartesian_product(rvaluerng, rvaluerng), [](auto&& x){
+			STATICASSERTSAME(decltype(x), (std::tuple<int const&&, int&&>&&));
+		});
+	}
 }

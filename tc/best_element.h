@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -10,7 +10,7 @@
 
 #include "range_fwd.h"
 #include "assign.h"
-#include "sub_range.h"
+#include "subrange.h"
 #include "storage_for.h"
 #include "accumulate.h"
 #include "compare.h"
@@ -18,7 +18,7 @@
 namespace tc {
 
 	template< template<typename> class RangeReturn, typename Rng, typename Less, std::enable_if_t<!RangeReturn<Rng>::requires_iterator>* = nullptr >
-	typename RangeReturn<Rng>::type best_element(Rng&& rng, Less&& less) MAYTHROW {
+	[[nodiscard]] typename RangeReturn<Rng>::type best_element(Rng&& rng, Less&& less) MAYTHROW {
 		if (auto ovalue = tc::accumulate_with_front(std::forward<Rng>(rng), tc::fn_assign_better(std::forward<Less>(less)))) {
 			return RangeReturn<Rng>::pack_element(*tc_move(ovalue));
 		} else {
@@ -27,7 +27,7 @@ namespace tc {
 	}
 
 	template< template<typename> class RangeReturn, typename Rng, typename Less, std::enable_if_t<RangeReturn<Rng>::requires_iterator>* = nullptr >
-	decltype(auto) best_element(Rng&& rng, Less less) MAYTHROW {
+	[[nodiscard]] decltype(auto) best_element(Rng&& rng, Less less) MAYTHROW {
 		auto const itEnd=tc::end(rng); // MAYTHROW
 		decltype(tc::begin(rng)) ait[2]={ tc::begin(rng) }; // MAYTHROW
 		if(ait[0]==itEnd) {
@@ -48,7 +48,7 @@ namespace tc {
 						}
 						aoref[1-i].ctor( aggregate_tag, *ait[1-i] ); // MAYTHROW
 						try {
-							if( less(**aoref[1-i],**aoref[i]) ) { // MAYTHROW
+							if( less(tc::as_const(**aoref[1-i]),tc::as_const(**aoref[i])) ) { // MAYTHROW
 								break; // only path where aoref[1-i] is not destroyed
 							}
 						} catch(...) {
@@ -63,17 +63,17 @@ namespace tc {
 	}
 
 	template< template<typename> class RangeReturn, typename Rng >
-	decltype(auto) min_element(Rng&& rng) MAYTHROW {
+	[[nodiscard]] decltype(auto) min_element(Rng&& rng) MAYTHROW {
 		return best_element<RangeReturn>(std::forward<Rng>(rng), tc::fn_less());
 	}
 
 	template< template<typename> class RangeReturn, typename Rng >
-	decltype(auto) max_element(Rng&& rng) MAYTHROW {
+	[[nodiscard]] decltype(auto) max_element(Rng&& rng) MAYTHROW {
 		return best_element<RangeReturn>(std::forward<Rng>(rng), tc::fn_greater());
 	}
 
 	template< template<typename> class RangeReturn, typename Rng, typename T >
-	decltype(auto) closest_element(Rng&& rng, T const& t) MAYTHROW {
+	[[nodiscard]] decltype(auto) closest_element(Rng&& rng, T const& t) MAYTHROW {
 		return best_element<RangeReturn>(std::forward<Rng>(rng), tc::projected(tc::fn_less(), [&](T const& t1) MAYTHROW { return std::abs(t - t1); }));
 	}
 }

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -10,49 +10,52 @@
 
 #include "range_defines.h"
 #include "casts.h"
+#include "bit_cast.h"
 #include "range_adaptor.h"
+#include "trivial_functors.h"
+#include "rvalue_property.h"
 
 namespace tc {
-	inline bool is_continuation_unit(char ch) noexcept {
+	[[nodiscard]] constexpr bool is_continuation_codeunit(char ch) noexcept {
 		return 0x80 == (0xc0 & ch);
 	}
 
-	inline bool is_continuation_unit(tc::char16 ch) noexcept {
-		return 0xdc00 <= ch && ch < 0xe000;
+	// tc::make_interval not used to avoid dependency cycle
+	[[nodiscard]] constexpr bool is_continuation_codeunit(tc::char16 ch) noexcept {
+		auto const n=tc::underlying_cast(ch);
+		return 0xdc00u<=n && n<0xe000u; // low-surrogate
 	}
 
+	namespace codeunit_sequence_size_detail {
+		using osize_t = std::optional<tc::size_proxy<int>>;
+		[[nodiscard]] /*not constexpr, relies on intrinsics*/ inline osize_t codeunit_sequence_size(char ch) noexcept { 
+			if(	auto const n=/*bitwise-not triggers promotion of operand to int*/0xff & ~tc::underlying_cast(ch);
+				0!=n // code unit 0xff is invalid
+			) {
+				switch(tc::index_of_most_significant_bit(n)) {
+					case 7: return osize_t(1);
+					case 5: return osize_t(2);
+					case 4: return osize_t(3);
+					case 3: return osize_t(4);
+					default: break; // 6=continuation, otherwise invalid
+				}
+			}
+			return std::nullopt;
+		}
+
+		// tc::make_interval not used to avoid dependency cycle
+		[[nodiscard]] constexpr osize_t codeunit_sequence_size(tc::char16 ch) noexcept {
+			auto const n=tc::underlying_cast(ch);
+			return
+				n<0xd800u || 0xdfffu<n ? osize_t(1)
+				: n<0xdc00u ? osize_t(2) // high-surrogate
+				: std::nullopt; // low-surrogate, continuation
+		}
+	}
+	using codeunit_sequence_size_detail::codeunit_sequence_size;
+
 	namespace convert_enc_impl {
-		inline bool IsLeadingSurrogate( unsigned int n ) noexcept {
-			return 0xd800 <= n && n < 0xdc00;
-		}
-
-		inline bool AddTrailingSurrogate( unsigned int& n, tc::char16 ch ) noexcept {
-			if(!IsLeadingSurrogate(n)) return false;
-			if(!tc::is_continuation_unit(ch)) return false;
-			n <<= 10;
-			n += ch;
-			n += 0x10000u - (0xD800u << 10u) - 0xDC00u;
-			return true;
-		}
-
-		char32_t const c_chReplacementCharacter = 0xfffd; // U+FFFD REPLACEMENT CHARACTER
-
-		inline int Utf8Bytes (unsigned int n) {
-			// We will replace invalid characters above 0x10ffff with c_chReplacementCharacter
-			if (!VERIFYNOTIFY(n < 0x110000)) {
-				n = tc::underlying_cast(c_chReplacementCharacter);
-			}
-
-			if (n < 0x80) {
-				return 1;
-			} else if (n < 0x800) {
-				return 2;
-			} else if (n < 0x10000) {
-				return 3;
-			} else {
-				return 4;
-			}
-		}
+		inline constexpr char32_t c_chReplacementCharacter = 0xfffd; // U+FFFD REPLACEMENT CHARACTER
 
 		template <typename Dst, typename Rng, typename Src=tc::range_value_t<Rng>>
 		struct SStringConversionRange;
@@ -60,513 +63,446 @@ namespace tc {
 		template <typename T, typename Rng>
 		using enable_if_range_of_t = std::enable_if_t<std::is_same<T, tc::range_value_t<Rng>>::value, T>;
 
-		// Lazily convert UTF-16 strings to UTF-32
-		template<typename Rng>
-		struct SStringConversionRange<char32_t, Rng, enable_if_range_of_t<tc::char16, Rng>>
-		: tc::range_iterator_generator_from_index<
-			SStringConversionRange<char32_t, Rng, tc::char16>,
-			tc::index_t<std::remove_reference_t<Rng>>,
-			typename boost::range_detail::demote_iterator_traversal_tag<
-				boost::iterators::bidirectional_traversal_tag,
-				traversal_t<Rng>
-			>::type
-		> {
-			// Indexes pointing to the second UTF-16 code unit of a surrogate pair are invalid.
-			// If the underlying range contains lone surrogates, we will convert them to REPLACEMENT CHARACTER
-			using index = typename SStringConversionRange::index;
-
-			explicit SStringConversionRange(aggregate_tag_t, Rng&& rng) noexcept
-			: m_baserng(aggregate_tag, std::forward<Rng>(rng))
+		template<typename Derived, typename Rng>
+		struct SStringConversionToUtf32RangeBase
+			: tc::range_iterator_generator_from_index<
+				Derived,
+				tc::index_t<std::remove_reference_t<Rng>>
+			> 
+		{
+			constexpr explicit SStringConversionToUtf32RangeBase(tc::aggregate_tag_t, Rng&& rng) noexcept
+				: m_baserng(tc::aggregate_tag, std::forward<Rng>(rng))
 			{}
+			using index = typename SStringConversionToUtf32RangeBase::index;
+
+		protected:
+			// Indexes pointing to continuation code units are invalid. If the underlying range contains lone continuation units, they will be converted to a
+			// REPLACEMENT CHARACTER
+
+			template<typename FuncAggregateSequence>
+			constexpr auto char_at(index const& idx, FuncAggregateSequence funcAggregateSequence) const& MAYTHROW {
+				if(	auto const ch=tc::dereference_index(*m_baserng, idx); // MAYTHROW
+					auto const onSequenceSize=VERIFYNOTIFY(tc::codeunit_sequence_size(ch))
+				) {
+					unsigned int n=tc::underlying_cast(ch);
+					if(1==*onSequenceSize || funcAggregateSequence(n, *onSequenceSize) /*MAYTHROW*/) {
+						return tc::bit_cast<char32_t>(n);
+					}
+				}
+				return c_chReplacementCharacter;
+			}
+
+			reference_or_value<Rng> m_baserng;
+
 		private:
-			using this_type = SStringConversionRange<char32_t, Rng, tc::char16>;
-			reference_or_value< Rng > m_baserng;
+			using this_type = SStringConversionToUtf32RangeBase;
+
+			STATIC_OVERRIDE_MOD(constexpr, begin_index)() const& return_decltype_MAYTHROW(
+				tc::begin_index(m_baserng)
+			)
+
+			STATIC_OVERRIDE_MOD(
+				template<ENABLE_SFINAE> constexpr,
+				end_index
+			)() const& return_decltype_MAYTHROW(
+				tc::end_index(tc::base_cast<SFINAE_TYPE(this_type)>(this)->m_baserng)
+			)
+
+			STATIC_OVERRIDE_MOD(constexpr, at_end_index)(index const& idx) const& return_decltype_MAYTHROW(
+				tc::at_end_index(*m_baserng, idx)
+			)
+
+			STATIC_OVERRIDE_MOD(
+				template<ENABLE_SFINAE> constexpr,
+				equal_index
+			)(SFINAE_TYPE(index) const& idxLhs, index const& idxRhs) const& return_decltype_noexcept(
+				tc::equal_index(*m_baserng, idxLhs, idxRhs)
+			)
+
+			STATIC_OVERRIDE_MOD(constexpr, increment_index)(index& idx) const& MAYTHROW {
+				auto const onSequenceSize=VERIFYNOTIFY(tc::codeunit_sequence_size(tc::dereference_index(*m_baserng, idx))); // MAYTHROW
+				int i=0;
+				do {
+					tc::increment_index(*m_baserng, idx); // MAYTHROW
+				} while(
+					(!onSequenceSize || ++i<*onSequenceSize) &&
+					VERIFYNOTIFYPRED(!tc::at_end_index(*m_baserng, idx), !onSequenceSize || _) &&
+					VERIFYNOTIFYPRED(tc::is_continuation_codeunit(tc::dereference_index(*m_baserng, idx) /*MAYTHROW*/), !onSequenceSize || _)
+				);
+			}
+
+			STATIC_OVERRIDE_MOD(
+				template<
+					ENABLE_SFINAE BOOST_PP_COMMA()
+					std::enable_if_t<
+						tc::has_decrement_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value &&
+						tc::has_equal_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value
+					>* = nullptr
+				> constexpr,
+				decrement_index
+			)(index& idx) const& MAYTHROW {
+				tc::range_value_t<Rng> ch;
+				int nCodeUnits=0;
+				do {
+					tc::decrement_index(*m_baserng, idx); // MAYTHROW
+					ch=tc::dereference_index(*m_baserng, idx); // MAYTHROW
+					++nCodeUnits;
+				} while(
+					tc::is_continuation_codeunit(ch) &&
+					!tc::equal_index(*m_baserng, idx, tc::begin_index(m_baserng) /*MAYTHROW*/)
+				);
+
+				if(auto const onSequenceSize=VERIFYNOTIFY(tc::codeunit_sequence_size(VERIFYINITIALIZED(ch)))) {
+					if(int i=*onSequenceSize; i<nCodeUnits) {
+						// moved backwards from an invalid sequence over into a valid one - avoid skipping the invalid sequence, move forward again
+						_ASSERTNOTIFYFALSE;
+						do {
+							tc::increment_index(*m_baserng, idx); // MAYTHROW
+						} while(0<--i);
+					}
+				}
+			}
+
+			template<typename Self>
+			static constexpr decltype(auto) base_range_(Self&& self) noexcept {
+				return *std::forward<Self>(self).m_baserng;
+			}
 
 		public:
-			STATIC_FINAL(begin_index)() const& noexcept -> index {
-				return tc::begin_index(m_baserng);
-			}
-
-			STATIC_FINAL(end_index)() const& noexcept -> index {
-				return tc::end_index(m_baserng);
-			}
-
-			STATIC_FINAL(at_end_index)(index const& idx) const& noexcept -> bool {
-				return tc::at_end_index(*m_baserng,idx);
-			}
-
-			STATIC_FINAL(dereference_index)(index idx) const& noexcept -> char32_t {
-				unsigned int n = tc::dereference_index(*m_baserng,idx);
-				if (IsLeadingSurrogate(n)) {
-					tc::increment_index(*m_baserng,idx);
-					if (!(VERIFYNOTIFY(!tc::at_end_index(*m_baserng,idx)) && AddTrailingSurrogate(n, tc::dereference_index(*m_baserng,idx)) && n < 0x110000)) {
-						return c_chReplacementCharacter;
-					}
-				} else if (!VERIFYNOTIFY(!tc::is_continuation_unit(static_cast<tc::char16>(n)))) {
-					return c_chReplacementCharacter;
-				}
-				return static_cast<char32_t>(n);
-			}
-
-			STATIC_FINAL(equal_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> bool {
-				return tc::equal_index(*m_baserng,idxLhs, idxRhs);
-			}
-
-			STATIC_FINAL(increment_index)(index& idx) const& noexcept -> void {
-				_ASSERT(!tc::at_end_index(*m_baserng,idx));
-				bool bLeadingSurrogate = IsLeadingSurrogate(tc::dereference_index(*m_baserng,idx));
-				tc::increment_index(*m_baserng,idx);
-				if (bLeadingSurrogate && VERIFYNOTIFY(!tc::at_end_index(*m_baserng,idx)) && VERIFYNOTIFY(tc::is_continuation_unit(tc::dereference_index(*m_baserng,idx)))) {
-					tc::increment_index(*m_baserng,idx);
-				}
-			}
-
-			STATIC_FINAL(decrement_index)(index& idx) const& noexcept -> void {
-				tc::decrement_index(*m_baserng,idx);
-				if (tc::is_continuation_unit(tc::dereference_index(*m_baserng,idx)) && !tc::equal_index(*m_baserng,idx, tc::begin_index(m_baserng))) {
-					tc::decrement_index(*m_baserng,idx);
-					if (!VERIFYNOTIFY(IsLeadingSurrogate(tc::dereference_index(*m_baserng,idx)))) {
-						tc::increment_index(*m_baserng,idx);
-					}
-				}
-			}
-
-			auto border_base_index(index const& idx) const& noexcept {
+			constexpr auto border_base_index(index const& idx) const& noexcept {
 				return idx;
 			}
 
-			constexpr decltype(auto) base_range() & noexcept {
-				return *m_baserng;
-			}
-			constexpr decltype(auto) base_range() const& noexcept {
-				return *m_baserng;
-			}
-			constexpr decltype(auto) base_range() && noexcept {
-				return *std::move(m_baserng);
-			}
-			constexpr decltype(auto) base_range() const&& noexcept {
-				return *std::move(m_baserng);
+			RVALUE_THIS_OVERLOAD_MOVABLE_MUTABLE_REF(base_range)
+		};
+
+		// Lazily convert UTF-16 strings to UTF-32
+		template<typename Rng>
+		struct [[nodiscard]] SStringConversionRange<char32_t, Rng, enable_if_range_of_t<tc::char16, Rng>>
+			: SStringConversionToUtf32RangeBase<SStringConversionRange<char32_t, Rng>, Rng>
+		{
+		private:
+			using this_type = SStringConversionRange<char32_t, Rng>;
+			using base_ = SStringConversionToUtf32RangeBase<this_type, Rng>;
+
+		public:
+			constexpr explicit SStringConversionRange(aggregate_tag_t, Rng&& rng) noexcept
+				: base_(aggregate_tag, std::forward<Rng>(rng))
+			{}
+			using typename base_::index;
+
+		private:
+			STATIC_FINAL_MOD(constexpr, dereference_index)(index const& idx) const& MAYTHROW {
+				return base_::char_at(
+					idx,
+					[&](unsigned int& n, int IF_TC_CHECKS(IF_TC_DEBUG(nSequenceSize))) MAYTHROW {
+						_ASSERTDEBUG(2==nSequenceSize);
+						auto const idx2=modified(idx, tc::increment_index(*this->m_baserng, _) /*MAYTHROW*/);
+						if(VERIFYNOTIFY(!tc::at_end_index(*this->m_baserng, idx2))) {
+							auto const ch2=tc::dereference_index(*this->m_baserng, idx2); // MAYTHROW
+							if(VERIFYNOTIFY(tc::is_continuation_codeunit(ch2))) {
+								n-=0xd800u;
+								_ASSERTDEBUG(n<0x400u);
+								n<<=10;
+
+								unsigned int n2=tc::underlying_cast(ch2)-0xdc00u;
+								_ASSERTDEBUG(n2<0x400u);
+								n+=n2+0x10000u;
+								_ASSERTDEBUG(n<0x110000u);
+
+								return true;
+							}
+						}
+						return false;
+					}
+				); // MAYTHROW
 			}
 		};
 	
 		// Lazily convert UTF-8 strings to UTF-32
 		template<typename Rng>
-		struct SStringConversionRange<char32_t, Rng, enable_if_range_of_t<char, Rng>>
-		: tc::range_iterator_generator_from_index<
-			SStringConversionRange<char32_t, Rng, char>,
-			tc::index_t<std::remove_reference_t<Rng>>,
-			typename boost::range_detail::demote_iterator_traversal_tag<
-				boost::iterators::bidirectional_traversal_tag,
-				traversal_t<Rng>
-			>::type
-		> {
-			// Valid indexes are those which point to:
-			// a) a single-byte (0xxxxxxxx) character,
-			// b) the starting byte (11xxxxxx) of a possibly truncated character, or
-			// c) the first byte in a run of continuation bytes (10xxxxxx).
-			// This ensures that each run of illegally encoded characters is converted to at least one REPLACEMENT CHARACTER
-			using index = typename SStringConversionRange::index;
-
-			explicit SStringConversionRange(aggregate_tag_t, Rng&& rng) noexcept
-			: m_baserng(aggregate_tag, std::forward<Rng>(rng))
-			{}
+		struct [[nodiscard]] SStringConversionRange<char32_t, Rng, enable_if_range_of_t<char, Rng>>
+			: SStringConversionToUtf32RangeBase<SStringConversionRange<char32_t, Rng>, Rng>
+		{
 		private:
-			using this_type = SStringConversionRange<char32_t, Rng, char>;
-			reference_or_value< Rng > m_baserng;
+			using this_type = SStringConversionRange<char32_t, Rng>;
+			using base_ = SStringConversionToUtf32RangeBase<this_type, Rng>;
 
 		public:
-			STATIC_FINAL(begin_index)() const& noexcept -> index {
-				return tc::begin_index(m_baserng);
-			}
+			constexpr explicit SStringConversionRange(aggregate_tag_t, Rng&& rng) noexcept
+				: base_(aggregate_tag, std::forward<Rng>(rng))
+			{}
+			using typename base_::index;
 
-			STATIC_FINAL(end_index)() const& noexcept -> index {
-				return tc::end_index(m_baserng);
-			}
+		private:
+			STATIC_FINAL_MOD(constexpr, dereference_index)(index const& idx) const& MAYTHROW {
+				return base_::char_at(
+					idx,
+					[&](unsigned int& n, int nSequenceSize) MAYTHROW {
+						n&=[&]() noexcept {
+							switch_no_default(nSequenceSize) {
+								case 2: return 0x1fu;
+								case 3: return 0xfu;
+								case 4: return 0x7u;
+							}
+						}();
 
-			STATIC_FINAL(at_end_index)(index const& idx) const& noexcept -> bool {
-				return tc::at_end_index(*m_baserng,idx);
-			}
+						auto idx2=idx;
+						int i=nSequenceSize;
+						do {
+							tc::increment_index(*this->m_baserng, idx2); // MAYTHROW
+							if(!VERIFYNOTIFY(!tc::at_end_index(*this->m_baserng, idx2))) return false;
+							auto const ch2=tc::dereference_index(*this->m_baserng, idx2); // MAYTHROW
+							if(!VERIFYNOTIFY(tc::is_continuation_codeunit(ch2))) return false;
 
-			STATIC_FINAL(dereference_index)(index idx) const& noexcept -> char32_t {
-				unsigned int n;
-				auto Continuation = [&](int i) noexcept {
-					tc::increment_index(*m_baserng,idx);
-					do {
-						if (!VERIFYNOTIFY(!tc::at_end_index(*m_baserng,idx))) return false;
-						auto const ch = tc::dereference_index(*m_baserng,idx);
-						if (!VERIFYNOTIFY(tc::is_continuation_unit(ch))) return false;
-						n = (n << 6) | (tc::underlying_cast(ch) & 0x3fu);
-						tc::increment_index(*m_baserng,idx);
-					} while (--i != 0);
-					return true;
-				};
+							n<<=6;
+							n|=tc::underlying_cast(ch2) & 0x3fu;
+						} while(1<--i);
 
-				auto ch = tc::underlying_cast(tc::dereference_index(*m_baserng,idx));
-				if (0==(ch & 0x80u)) {
-					return static_cast<char32_t>(ch);
-				} else if (0xc0==(ch & 0xe0u)) {
-					n = ch & 0x1fu;
-					// overlong sequences are forbidden (n < 0x80u can be encoded with a shorter sequence)
-					if (Continuation(1) && VERIFYNOTIFY(0x80u <= n)) {
-						_ASSERT(n < 0x800u);
-						return static_cast<char32_t>(n);
+						switch_no_default(nSequenceSize) {
+							case 2: return VERIFYNOTIFY(0x80u<=n);
+							case 3: return VERIFYNOTIFY(0x800u<=n) && VERIFYNOTIFY(n<0xd800u || 0xdfffu<n);
+							case 4: return VERIFYNOTIFY(0x10000u<=n) && VERIFYNOTIFY(n<0x110000u);
+						}
 					}
-				} else if (0xe0==(ch & 0xf0u)) {
-					n = ch & 0xfu;
-					// overlong sequences are forbidden (n < 0x800u can be encoded with a shorter sequence)
-					// UTF-16 uses U+D800 to U+DFFF for encoding low / high surrogates, this interval is also forbidden for UTF-8 by RFC 3629
-					if (Continuation(2) && VERIFYNOTIFY(0x800u <= n) && VERIFYNOTIFY(!(0xD800u <= n && n <= 0xDFFFu))) {
-						_ASSERT(n < 0x10000u);
-						return static_cast<char32_t>(n);
-					}
-				} else if (0xf0==(ch & 0xf8u)) {
-					n = ch & 0x7u;
-					// overlong sequences are forbidden (n < 0x10000u can be encoded with a shorter sequence)
-					// UTF-16 maximum code point is U+10FFFF, larger values are also forbidden for UTF-8 by RFC 3629
-					if (Continuation(3) && VERIFYNOTIFY(0x10000u <= n) && VERIFYNOTIFY(n <= 0x10FFFFu)) {
-						return static_cast<char32_t>(n);
-					}
-				}
-
-				_ASSERTNOTIFYFALSE;
-				return c_chReplacementCharacter;
-			}
-
-			STATIC_FINAL(equal_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> bool {
-				return tc::equal_index(*m_baserng,idxLhs, idxRhs);
-			}
-
-			STATIC_FINAL(increment_index)(index& idx) const& noexcept -> void {
-				auto Continuation = [&](auto i) noexcept {
-					// Skip over starting byte and i continuation bytes
-					++i;
-					do {
-						tc::increment_index(*m_baserng,idx);
-					} while (--i != 0 && VERIFYNOTIFY(!tc::at_end_index(*m_baserng,idx)) && VERIFYNOTIFY(tc::is_continuation_unit(tc::dereference_index(*m_baserng,idx))));
-				};
-				auto ch = tc::underlying_cast(tc::dereference_index(*m_baserng,idx));
-				if (0==(ch & 0x80u)) {
-					Continuation(0);
-				} else if (0xc0==(ch & 0xe0u)) {
-					Continuation(1);
-				} else if (0xe0==(ch & 0xf0u)) {
-					Continuation(2);
-				} else if (0xf0==(ch & 0xf8u)) {
-					Continuation(3);
-				} else {
-					// This is an continuation byte without a corresponding starting byte, skip over subsequent continuation bytes
-					_ASSERTNOTIFYFALSE;
-					do {
-						tc::increment_index(*m_baserng,idx);
-					} while (!tc::at_end_index(*m_baserng,idx) && tc::is_continuation_unit(tc::dereference_index(*m_baserng,idx)));
-				}
-			}
-
-			STATIC_FINAL(decrement_index)(index& idx) const& noexcept -> void {
-				int nContinuationBytes = -1;
-				do {
-					tc::decrement_index(*m_baserng,idx);
-					++nContinuationBytes;
-				} while (tc::is_continuation_unit(tc::dereference_index(*m_baserng,idx)) && VERIFYNOTIFY(!tc::equal_index(*m_baserng,idx, tc::begin_index(m_baserng))));
-
-				auto Continuation = [&](auto n) noexcept {
-					// If we skipped over excess continuation bytes, return index to the first excess continuation byte
-					if (n < nContinuationBytes) {
-						this->increment_index(idx);
-					}
-				};
-
-				auto ch = tc::dereference_index(*m_baserng,idx);
-				if (0==(ch & 0x80u)) {
-					Continuation(0);
-				} else if (0xc0==(ch & 0xe0u)) {
-					Continuation(1);
-				} else if (0xe0==(ch & 0xf0u)) {
-					Continuation(2);
-				} else if (0xf0==(ch & 0xf8u)) {
-					Continuation(3);
-				} else {
-					// This is a continuation byte, so if we stopped at it it had better be the first byte in the string.
-					_ASSERT(tc::equal_index(*m_baserng,idx, tc::begin_index(m_baserng)));
-					_ASSERTNOTIFYFALSE;
-				}
-			}
-
-			auto border_base_index(index const& idx) const& noexcept {
-				return idx;
-			}
-
-			constexpr decltype(auto) base_range() & noexcept {
-				return *m_baserng;
-			}
-			constexpr decltype(auto) base_range() const& noexcept {
-				return *m_baserng;
-			}
-			constexpr decltype(auto) base_range() && noexcept {
-				return *std::move(m_baserng);
-			}
-			constexpr decltype(auto) base_range() const&& noexcept {
-				return *std::move(m_baserng);
+				); // MAYTHROW
 			}
 		};
-		
-		template <typename Index>
-		struct SUtf16Index final {
+
+		template<typename Index>
+		struct SCodeUnitIndex final {
 			Index m_idx;
-			bool m_bTrailingSurrogate;
+			int m_nCodeUnitIndex;
+		};
+
+		template<typename Derived, typename Rng>
+		struct SStringConversionFromUtf32RangeBase
+			: tc::range_iterator_generator_from_index<
+				Derived,
+				SCodeUnitIndex<tc::index_t<std::remove_reference_t<Rng>>>
+			> 
+		{
+			explicit SStringConversionFromUtf32RangeBase(tc::aggregate_tag_t, Rng&& rng) noexcept
+				: m_baserng(tc::aggregate_tag, std::forward<Rng>(rng))
+			{}
+			using index = typename SStringConversionFromUtf32RangeBase::index;
+
+		private:
+			using this_type = SStringConversionFromUtf32RangeBase;
+
+		protected:
+			STATIC_VIRTUAL_CONSTEXPR(codeunit_at)
+			STATIC_VIRTUAL_CONSTEXPR(codepoint_last_index)
+
+		private:
+			reference_or_value<Rng> m_baserng;
+
+			constexpr auto codepoint_at(decltype(index::m_idx) const& idxBaseRng) const& MAYTHROW {
+				if(	auto const n=tc::underlying_cast(tc::dereference_index(*m_baserng, idxBaseRng)); // MAYTHROW
+					VERIFYNOTIFY(n<0x110000u) && VERIFYNOTIFY(n<0xd800u || 0xdfffu<n) 
+				) {
+					return n;
+				} else {
+					return tc::underlying_cast(c_chReplacementCharacter);
+				}
+			}
+
+			// As of Visual Studio compiler 19.15.26726, using return_ctor_MAYTHROW below triggers a C1001: internal compiler error
+			STATIC_OVERRIDE_MOD(constexpr, begin_index)() const& noexcept(noexcept(tc::begin_index(m_baserng))) {
+				return index{tc::begin_index(m_baserng) /*MAYTHROW*/, 0};
+			}
+
+			// As of Visual Studio compiler 19.15.26726, using return_ctor_MAYTHROW below triggers a C1001: internal compiler error
+			STATIC_OVERRIDE_MOD(
+				template<ENABLE_SFINAE> constexpr,
+				end_index
+			)() const& noexcept(noexcept(tc::end_index(tc::base_cast<SFINAE_TYPE(this_type)>(this)->m_baserng))) {
+				return index{tc::end_index(m_baserng) /*MAYTHROW*/, 0};
+			}
+
+			STATIC_OVERRIDE_MOD(constexpr, at_end_index)(index const& idx) const& return_decltype_MAYTHROW(
+				tc::at_end_index(*m_baserng, idx.m_idx) && (_ASSERTE(0==idx.m_nCodeUnitIndex), true)
+			)
+
+			STATIC_OVERRIDE_MOD(
+				// delay instantiation of dereference_index, so that codeunit_at can be mentioned in its declaration (return_decltype_MAYTHROW) before the
+				// Derived type is complete.
+				template<typename index_=index> constexpr,
+				dereference_index
+			)(index_ const& idx) const& return_decltype_MAYTHROW(
+				codeunit_at(codepoint_at(idx.m_idx) /*MAYTHROW*/, idx.m_nCodeUnitIndex)
+			)
+
+			STATIC_OVERRIDE_MOD(
+				template<ENABLE_SFINAE> constexpr,
+				equal_index
+			)(SFINAE_TYPE(index) const& idxLhs, index const& idxRhs) const& return_decltype_noexcept(
+				tc::equal_index(*m_baserng, idxLhs.m_idx, idxRhs.m_idx) && idxLhs.m_nCodeUnitIndex==idxRhs.m_nCodeUnitIndex
+			)
+
+			STATIC_OVERRIDE_MOD(constexpr, increment_index)(index& idx) const& MAYTHROW {
+				if(idx.m_nCodeUnitIndex<codepoint_last_index(codepoint_at(idx.m_idx) /*MAYTHROW*/)) {
+					++idx.m_nCodeUnitIndex;
+				} else {
+					idx.m_nCodeUnitIndex=0;
+					tc::increment_index(*m_baserng, idx.m_idx); // MAYTHROW
+				}
+			}
+
+			STATIC_OVERRIDE_MOD(
+				template<
+					ENABLE_SFINAE BOOST_PP_COMMA()
+					std::enable_if_t<tc::has_decrement_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value>* = nullptr
+				> constexpr,
+				decrement_index
+			)(index& idx) const& MAYTHROW {
+				if(0==idx.m_nCodeUnitIndex) {
+					tc::decrement_index(*m_baserng, idx.m_idx); // MAYTHROW
+					idx.m_nCodeUnitIndex=codepoint_last_index(codepoint_at(idx.m_idx) /*MAYTHROW*/);
+				} else {
+					--idx.m_nCodeUnitIndex;
+				}
+			}
+
+			template<typename Self>
+			static constexpr decltype(auto) base_range_(Self&& self) noexcept {
+				return *std::forward<Self>(self).m_baserng;
+			}
+
+		public:
+			constexpr auto border_base_index(index const& idx) const& noexcept {
+				_ASSERTE(0==idx.m_nCodeUnitIndex);
+				return idx.m_idx;
+			}
+
+			RVALUE_THIS_OVERLOAD_MOVABLE_MUTABLE_REF(base_range)
 		};
 
 		// Lazily convert UTF-32 strings to UTF-16
 		template<typename Rng>
-		struct SStringConversionRange<tc::char16, Rng, enable_if_range_of_t<char32_t, Rng>>
-		: tc::range_iterator_generator_from_index<
-			SStringConversionRange<tc::char16, Rng, char32_t>,
-			SUtf16Index<tc::index_t<std::remove_reference_t<Rng>>>,
-			typename boost::range_detail::demote_iterator_traversal_tag<
-				boost::iterators::bidirectional_traversal_tag,
-				traversal_t<Rng>
-			>::type
-		> {
-			using index = typename SStringConversionRange::index;
-
-			explicit SStringConversionRange(aggregate_tag_t, Rng&& rng) noexcept
-			: m_baserng(aggregate_tag, std::forward<Rng>(rng))
-			{}
+		struct [[nodiscard]] SStringConversionRange<tc::char16, Rng, enable_if_range_of_t<char32_t, Rng>>
+			: SStringConversionFromUtf32RangeBase<SStringConversionRange<tc::char16, Rng>, Rng>
+		{
 		private:
-			using this_type = SStringConversionRange<tc::char16, Rng, char32_t>;
-			reference_or_value< Rng > m_baserng;
+			using this_type = SStringConversionRange<tc::char16, Rng>;
+			using base_ = SStringConversionFromUtf32RangeBase<this_type, Rng>;
 
 		public:
-			STATIC_FINAL(begin_index)() const& noexcept -> index {
-				return {tc::begin_index(m_baserng), false};
-			}
-
-			STATIC_FINAL(end_index)() const& noexcept -> index {
-				return {tc::end_index(m_baserng), false};
-			}
-
-			STATIC_FINAL(at_end_index)(index const& idx) const& noexcept -> bool {
-				return tc::at_end_index(*m_baserng,idx.m_idx) && VERIFY(!idx.m_bTrailingSurrogate);
-			}
-
-			STATIC_FINAL(dereference_index)(index idx) const& noexcept -> tc::char16 {
-				unsigned int n = tc::underlying_cast(tc::dereference_index(*m_baserng,idx.m_idx));
-				if (0x10000 <= n) {
-					if (VERIFYNOTIFY(n < 0x110000)) {
-						if (idx.m_bTrailingSurrogate) {
-							return tc::explicit_cast<std::uint16_t>((n - 0x10000u & 0x3FFu) + 0xDC00u);
-						} else {
-							return tc::explicit_cast<std::uint16_t>(((n - 0x10000u) >> 10u) + 0xD800u);
-						}
-					} else {
-						return tc::explicit_cast<tc::char16>(c_chReplacementCharacter);
-					}
-				} else {
-					_ASSERT(!idx.m_bTrailingSurrogate);
-					_ASSERTNOTIFY(n < 0xD800 || 0xE000 <= n);
-					return tc::explicit_cast<std::uint16_t>(n);
-				}
-			}
-
-			STATIC_FINAL(equal_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> bool {
-				return idxLhs.m_bTrailingSurrogate == idxRhs.m_bTrailingSurrogate && tc::equal_index(*m_baserng,idxLhs.m_idx, idxRhs.m_idx);
-			}
-
-			STATIC_FINAL(increment_index)(index& idx) const& noexcept -> void {
-				if (!idx.m_bTrailingSurrogate && 0x10000 <= tc::underlying_cast(tc::dereference_index(*m_baserng,idx.m_idx))) {
-					idx.m_bTrailingSurrogate = true;
-				} else {
-					idx.m_bTrailingSurrogate = false;
-					tc::increment_index(*m_baserng,idx.m_idx);
-				}
-			}
-
-			STATIC_FINAL(decrement_index)(index& idx) const& noexcept -> void {
-				if (idx.m_bTrailingSurrogate) {
-					idx.m_bTrailingSurrogate = false;
-				} else {
-					tc::decrement_index(*m_baserng,idx.m_idx);
-					if (0x10000 <= tc::underlying_cast(tc::dereference_index(*m_baserng,idx.m_idx))) {
-						idx.m_bTrailingSurrogate = true;
-					}
-				}
-			}
-
-			auto border_base_index(index const& idx) const& noexcept {
-				_ASSERT(!idx.m_bTrailingSurrogate);
-				return idx.m_idx;
-			}
-
-			constexpr decltype(auto) base_range() & noexcept {
-				return *m_baserng;
-			}
-			constexpr decltype(auto) base_range() const& noexcept {
-				return *m_baserng;
-			}
-			constexpr decltype(auto) base_range() && noexcept {
-				return *std::move(m_baserng);
-			}
-			constexpr decltype(auto) base_range() const&& noexcept {
-				return *std::move(m_baserng);
-			}
-		};
-
-		template <typename Index>
-		struct SUtf8Index final {
-			Index m_idx;
-			int m_nByte;
-		};
-
-		// Lazily convert UTF-32 strings to UTF-8
-		template<typename Rng>
-		struct SStringConversionRange<char, Rng, enable_if_range_of_t<char32_t, Rng>>
-		: tc::range_iterator_generator_from_index<
-			SStringConversionRange<char, Rng, char32_t>,
-			SUtf8Index<tc::index_t<std::remove_reference_t<Rng>>>,
-			typename boost::range_detail::demote_iterator_traversal_tag<
-				boost::iterators::bidirectional_traversal_tag,
-				traversal_t<Rng>
-			>::type
-		> {
-			using index = typename SStringConversionRange::index;
-
-			explicit SStringConversionRange(aggregate_tag_t, Rng&& rng) noexcept
-			: m_baserng(aggregate_tag, std::forward<Rng>(rng))
+			constexpr explicit SStringConversionRange(aggregate_tag_t, Rng&& rng) noexcept
+				: base_(aggregate_tag, std::forward<Rng>(rng))
 			{}
+
 		private:
-			using this_type = SStringConversionRange<char, Rng, char32_t>;
-			reference_or_value< Rng > m_baserng;
-
-		public:
-			STATIC_FINAL(begin_index)() const& noexcept -> index {
-				return {tc::begin_index(m_baserng), 0};
-			}
-
-			STATIC_FINAL(end_index)() const& noexcept -> index {
-				return {tc::end_index(m_baserng), 0};
-			}
-
-			STATIC_FINAL(at_end_index)(index const& idx) const& noexcept -> bool {
-				return tc::at_end_index(*m_baserng,idx.m_idx) && VERIFY(idx.m_nByte == 0);
-			}
-
-			STATIC_FINAL(dereference_index)(index idx) const& noexcept -> char {
-				unsigned int n = tc::underlying_cast(tc::dereference_index(*m_baserng,idx.m_idx));
-				if (n < 0x80) {
-					_ASSERTEQUAL(idx.m_nByte, 0);
-					return static_cast<char>(n);
-				} else {
-					if (!VERIFYNOTIFY(n < 0x110000) || !VERIFYNOTIFY(!(0xd800 <= n && n < 0xe000))) {
-						n = tc::underlying_cast(c_chReplacementCharacter);
+			STATIC_FINAL_MOD(constexpr, codeunit_at)(unsigned int nCodePoint, int nCodeUnitIndex) const& noexcept {
+				_ASSERTDEBUG(nCodePoint<0x110000u);
+				return tc::bit_cast<tc::char16>(tc::explicit_cast<std::uint16_t>([&]() noexcept {
+					auto const nLastIndex=base_::codepoint_last_index(nCodePoint);
+					switch_no_default(nCodeUnitIndex) {
+						case 0:
+							switch_no_default(nLastIndex) {
+								case 0: return nCodePoint;
+								case 1: return (nCodePoint-0x10000u >> 10)+0xd800u;
+							}
+						case 1:
+							_ASSERTDEBUG(1==nLastIndex);
+							return (nCodePoint-0x10000u & 0x3ffu)+0xdc00u;
 					}
-
-					if (idx.m_nByte == 0) {
-						int nBytes = Utf8Bytes(n);
-						return static_cast<char>(n >> 6*(nBytes-1) | ((1 << (nBytes+1)) - 1) << (8 - nBytes));
-					} else {
-						return static_cast<char>((n >> 6*(Utf8Bytes(n)-idx.m_nByte-1) & 0x3fu) | 0x80);
-					}
-				}
+				}()));
 			}
 
-			STATIC_FINAL(equal_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> bool {
-				return idxLhs.m_nByte == idxRhs.m_nByte && tc::equal_index(*m_baserng,idxLhs.m_idx, idxRhs.m_idx);
-			}
-
-			STATIC_FINAL(increment_index)(index& idx) const& noexcept -> void {
-				++idx.m_nByte;
-				if (Utf8Bytes(tc::dereference_index(*m_baserng,idx.m_idx)) <= idx.m_nByte) {
-					idx.m_nByte = 0;
-					tc::increment_index(*m_baserng,idx.m_idx);
-				}
-			}
-
-			STATIC_FINAL(decrement_index)(index& idx) const& noexcept -> void {
-				if (idx.m_nByte == 0) {
-					tc::decrement_index(*m_baserng,idx.m_idx);
-					idx.m_nByte = Utf8Bytes(tc::dereference_index(*m_baserng,idx.m_idx)) - 1;
-				} else {
-					--idx.m_nByte;
-				}
-			}
-
-			auto border_base_index(index const& idx) const& noexcept {
-				_ASSERTEQUAL(idx.m_nByte, 0);
-				return idx.m_idx;
-			}
-
-			constexpr decltype(auto) base_range() & noexcept {
-				return *m_baserng;
-			}
-			constexpr decltype(auto) base_range() const& noexcept {
-				return *m_baserng;
-			}
-			constexpr decltype(auto) base_range() && noexcept {
-				return *std::move(m_baserng);
-			}
-			constexpr decltype(auto) base_range() const&& noexcept {
-				return *std::move(m_baserng);
+			STATIC_FINAL_MOD(constexpr, codepoint_last_index)(unsigned int nCodePoint) const& noexcept {
+				return nCodePoint<0x10000u ? 0 : 1;
 			}
 		};
 
 		template<typename Rng>
-		struct SStringConversionRange<char, Rng, enable_if_range_of_t<tc::char16, Rng>> final : SStringConversionRange<char, SStringConversionRange<char32_t, Rng>> {
-			using index = typename SStringConversionRange::index;
+		struct [[nodiscard]] SStringConversionRange<char, Rng, enable_if_range_of_t<char32_t, Rng>>
+			: SStringConversionFromUtf32RangeBase<SStringConversionRange<char, Rng>, Rng>
+		{
+		private:
+			using this_type = SStringConversionRange<char, Rng>;
+			using base_ = SStringConversionFromUtf32RangeBase<this_type, Rng>;
+
+		public:
+			constexpr explicit SStringConversionRange(aggregate_tag_t, Rng&& rng) noexcept
+				: base_(aggregate_tag, std::forward<Rng>(rng))
+			{}
+
+		private:
+			STATIC_FINAL_MOD(constexpr, codeunit_at)(unsigned int nCodePoint, int nCodeUnitIndex) const& noexcept {
+				_ASSERTDEBUG(nCodePoint<0x110000u);
+				return tc::bit_cast<char>(tc::explicit_cast<std::uint8_t>([&]() noexcept {
+					auto const nLastIndex=base_::codepoint_last_index(nCodePoint);
+					switch_no_default(nCodeUnitIndex) {
+						case 0:
+							return 0==nLastIndex
+								? nCodePoint
+								: nCodePoint>>nLastIndex*6 | ((1 << nLastIndex+1)-1)<<(7-nLastIndex);
+						case 1:
+						case 2:
+						case 3:
+							_ASSERTDEBUG(nCodeUnitIndex<=nLastIndex);
+							return (nCodePoint>>(nLastIndex-nCodeUnitIndex)*6 & 0x3fu) | 0x80u;
+					}
+				}()));
+			}
+
+			STATIC_FINAL_MOD(constexpr, codepoint_last_index)(unsigned int nCodePoint) const& noexcept {
+				return 
+					nCodePoint<0x80u ? 0
+					: nCodePoint<0x800u	? 1
+					: nCodePoint<0x10000u ? 2 : 3;
+			}
+		};
+
+		template<typename Rng>
+		struct [[nodiscard]] SStringConversionRange<char, Rng, enable_if_range_of_t<tc::char16, Rng>> final
+			: SStringConversionRange<char, SStringConversionRange<char32_t, Rng>>
+		{
 		private:
 			using base_ = SStringConversionRange<char, SStringConversionRange<char32_t, Rng>>;
+
+			template<typename Self>
+			static constexpr decltype(auto) base_range_(Self&& self) noexcept {
+				return std::forward<Self>(self).base_::base_range().base_range();
+			}
+
 		public:
-			explicit SStringConversionRange(aggregate_tag_t, Rng&& rng) noexcept
-			: base_(aggregate_tag, SStringConversionRange<char32_t, Rng>(aggregate_tag, std::forward<Rng>(rng)))
+			constexpr explicit SStringConversionRange(aggregate_tag_t, Rng&& rng) noexcept
+				: base_(aggregate_tag, SStringConversionRange<char32_t, Rng>(aggregate_tag, std::forward<Rng>(rng)))
 			{}
+			using typename base_::index;
 
-			auto border_base_index(index const& idx) const& noexcept {
-				return base_::base_range().border_base_index(base_::border_base_index(idx));
-			}
+			constexpr auto border_base_index(index const& idx) const& return_decltype_noexcept(
+				base_::base_range().border_base_index(base_::border_base_index(idx))
+			)
 
-			constexpr decltype(auto) base_range() & noexcept {
-				return base_::base_range().base_range();
-			}
-			constexpr decltype(auto) base_range() const& noexcept {
-				return base_::base_range().base_range();
-			}
-			constexpr decltype(auto) base_range() && noexcept {
-				return std::move(*this).base_::base_range().base_range();
-			}
-			constexpr decltype(auto) base_range() const&& noexcept {
-				return std::move(*this).base_::base_range().base_range();
-			}
+			RVALUE_THIS_OVERLOAD_MOVABLE_MUTABLE_REF(base_range)
 		};
 
 		template<typename Rng>
-		struct SStringConversionRange<tc::char16, Rng, enable_if_range_of_t<char, Rng>> final : SStringConversionRange<tc::char16, SStringConversionRange<char32_t, Rng>> {
-			using index = typename SStringConversionRange::index;
+		struct [[nodiscard]] SStringConversionRange<tc::char16, Rng, enable_if_range_of_t<char, Rng>> final
+			: SStringConversionRange<tc::char16, SStringConversionRange<char32_t, Rng>>
+		{
 		private:
 			using base_ = SStringConversionRange<tc::char16, SStringConversionRange<char32_t, Rng>>;
-		public:
-			explicit SStringConversionRange(aggregate_tag_t, Rng&& rng) noexcept
-			: base_(aggregate_tag, SStringConversionRange<char32_t, Rng>(aggregate_tag, std::forward<Rng>(rng)))
-			{}
 
-			auto border_base_index(index const& idx) const& noexcept {
-				return base_::base_range().border_base_index(base_::border_base_index(idx));
+			template<typename Self>
+			static constexpr decltype(auto) base_range_(Self&& self) noexcept {
+				return std::forward<Self>(self).base_::base_range().base_range();
 			}
 
-			auto base_range() & noexcept return_decltype(
-				base_::base_range().base_range()
+		public:
+			constexpr explicit SStringConversionRange(aggregate_tag_t, Rng&& rng) noexcept
+				: base_(aggregate_tag, SStringConversionRange<char32_t, Rng>(aggregate_tag, std::forward<Rng>(rng)))
+			{}
+			using typename base_::index;
+
+			constexpr auto border_base_index(index const& idx) const& return_decltype_noexcept(
+				base_::base_range().border_base_index(base_::border_base_index(idx))
 			)
 
-			auto base_range() const& noexcept return_decltype(
-				base_::base_range().base_range()
-			)
-		};
-	
-
-		template< typename Dst, typename Src, typename Enable=void >
-		struct choose_convert_enc;
-
-		template< typename Dst, typename Src >
-		struct choose_convert_enc<Dst, Src, std::enable_if_t<!tc::is_char<std::remove_reference_t<Src>>::value> > {
-			static constexpr int value=!std::is_same< Dst, tc::range_value_t< Src > >::value ? 0 : 1;
+			RVALUE_THIS_OVERLOAD_MOVABLE_MUTABLE_REF(base_range)
 		};
 	} // namespace convert_enc_impl
 
@@ -575,7 +511,7 @@ namespace tc {
 	// Converts range of char type to a lazy range of a different char type
 
 	template< typename Dst, typename Src, std::enable_if_t<tc::is_char<Dst>::value>* = nullptr>
-	auto must_convert_enc(Src&& src) noexcept return_ctor(
+	[[nodiscard]] auto must_convert_enc(Src&& src) return_ctor_noexcept(
 		convert_enc_impl::SStringConversionRange<Dst BOOST_PP_COMMA() Src>,
 		(aggregate_tag, std::forward<Src>(src))
 	)
@@ -585,12 +521,12 @@ namespace tc {
 	// Either forwards its argument (if it is a range of Dst), or converts it to a lazy range of Dst (if it is a range of another char type).
 
 	template< typename Dst, typename Src, std::enable_if_t<!std::is_same<tc::range_value_t<Src>, Dst>::value >* = nullptr>
-	auto may_convert_enc( Src&& src ) noexcept return_decltype(
+	[[nodiscard]] auto may_convert_enc( Src&& src ) return_decltype_noexcept(
 		tc::must_convert_enc<Dst>(std::forward<Src>(src))
 	)
 
 	template< typename Dst, typename Src, std::enable_if_t<std::is_same<tc::range_value_t<Src>, Dst>::value >* = nullptr>
-	Src&& may_convert_enc( Src&& src ) noexcept {
+	[[nodiscard]] Src&& may_convert_enc( Src&& src ) noexcept {
 		return std::forward<Src>( src );
 	}
 }

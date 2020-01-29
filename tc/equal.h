@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -68,7 +68,7 @@ namespace tc{
 
 			template<typename Elem>
 			break_or_continue operator()(Elem const& elem) const& noexcept {
-				if (m_it == m_itEnd || !tc::bool_cast(m_pred(*m_it, elem))) { return tc::break_; }
+				if (m_it == m_itEnd || !tc::bool_cast(m_pred(tc::as_const(*m_it), elem))) { return tc::break_; }
 				++m_it;
 				return tc::continue_;
 			}
@@ -80,7 +80,7 @@ namespace tc{
 		};
 
 		template<typename It, typename ItEnd, typename RRng, typename Pred>
-		bool starts_with(It& it, ItEnd itEnd, RRng const& rrng, Pred pred) noexcept {
+		[[nodiscard]] bool starts_with(It& it, ItEnd itEnd, RRng const& rrng, Pred pred) noexcept {
 			// TODO: this does not protect us against inputs such as transform(unordered_set)
 			static_assert(!tc::is_instance<std::unordered_set, RRng>::value);
 			static_assert(!tc::is_instance<std::unordered_map, RRng>::value);
@@ -89,7 +89,7 @@ namespace tc{
 	}
 
 	template<typename LRng, typename RRng, typename Pred>
-	bool starts_with(LRng const& lrng, RRng const& rrng, Pred&& pred) noexcept {
+	[[nodiscard]] bool starts_with(LRng const& lrng, RRng const& rrng, Pred&& pred) noexcept {
 		// TODO: this does not protect us against inputs such as transform(unordered_set)
 		static_assert(!tc::is_instance<std::unordered_set, LRng>::value);
 		static_assert(!tc::is_instance<std::unordered_map, LRng>::value);
@@ -97,12 +97,12 @@ namespace tc{
 	}
 
 	template<typename LRng, typename RRng>
-	bool starts_with(LRng const& lrng, RRng const& rrng) noexcept {
+	[[nodiscard]] bool starts_with(LRng const& lrng, RRng const& rrng) noexcept {
 		return starts_with(lrng,rrng,tc::fn_equal_to());
 	}
 
 	template<typename LRng, typename RRng, typename Pred, std::enable_if_t<is_range_with_iterators< LRng >::value>* = nullptr>
-	bool equal(LRng const& lrng, RRng const& rrng, Pred&& pred) noexcept {
+	[[nodiscard]] bool equal(LRng const& lrng, RRng const& rrng, Pred&& pred) noexcept {
 		// TODO: this does not protect us against inputs such as transform(unordered_set)
 		static_assert(!tc::is_instance<std::unordered_set, LRng>::value);
 		static_assert(!tc::is_instance<std::unordered_map, LRng>::value);
@@ -113,26 +113,26 @@ namespace tc{
 
 	// forward to the symetric case above
 	template<typename LRng, typename RRng, typename Pred, std::enable_if_t<!is_range_with_iterators< LRng >::value && is_range_with_iterators< RRng >::value>* = nullptr>
-	bool equal(LRng const& lrng, RRng const& rrng, Pred pred) noexcept {
+	[[nodiscard]] bool equal(LRng const& lrng, RRng const& rrng, Pred pred) noexcept {
 		return tc::equal(rrng, lrng, equal_impl::reverse_pred<Pred>(pred));
 	}
 
 	// is_arithmetic helpful for generic programming
 	// only do if semantics are clear-cut
 	template<typename T, typename Pred, std::enable_if_t<std::is_arithmetic< T >::value>* = nullptr>
-	bool equal(T const& lhs, T const& rhs, Pred pred) noexcept {
+	[[nodiscard]] bool equal(T const& lhs, T const& rhs, Pred pred) noexcept {
 		return pred(lhs,rhs);
 	}
 
 	// forward the non predicate version
 	template<typename LRng, typename RRng>
-	bool equal(LRng const& lrng, RRng const& rrng) noexcept {
+	[[nodiscard]] bool equal(LRng const& lrng, RRng const& rrng) noexcept {
 		return tc::equal(lrng, rrng, tc::fn_equal_to());
 	}
 
 	// boost::ends_with does not work with boost::range_iterator<transform_range>::type returning by value because it has input_iterator category
 	template<typename LRng, typename RRng, typename Pred=tc::fn_equal_to>
-	bool ends_with(LRng const& lrng, RRng const& rrng, Pred pred=Pred()) noexcept {
+	[[nodiscard]] bool ends_with(LRng const& lrng, RRng const& rrng, Pred pred=Pred()) noexcept {
 		auto itL=tc::end(lrng);
 		auto itR=tc::end(rrng);
 		auto const itBeginL=tc::begin(lrng);
@@ -142,21 +142,21 @@ namespace tc{
 			if( itL==itBeginL ) return false;
 			--itR;
 			--itL;
-			if( !tc::bool_cast(pred(*itL,*itR)) ) return false;
+			if( !tc::bool_cast(pred(tc::as_const(*itL),tc::as_const(*itR))) ) return false;
 		}
 	}
 
 	template <typename Lhs, typename Rhs, std::enable_if_t<
 		tc::is_range_with_iterators<Lhs>::value && tc::is_range_with_iterators<Rhs>::value
 	>* = nullptr>
-	bool value_equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
+	[[nodiscard]] bool value_equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
 		return tc::equal(lhs, rhs);
 	}
 
 	template <typename Lhs, typename Rhs, std::enable_if_t<
 		!tc::is_range_with_iterators<Lhs>::value && !tc::is_range_with_iterators<Rhs>::value
 	>* = nullptr>
-	bool value_equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
+	[[nodiscard]] bool value_equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
 		return tc::equal_to(lhs, rhs);
 	}
 }

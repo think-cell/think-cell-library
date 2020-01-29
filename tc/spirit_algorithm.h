@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -15,7 +15,7 @@
 
 namespace tc {
 	template<template<typename> class RangeReturn, typename RngWhere, typename RngWhat, typename Pred, std::enable_if_t<!std::is_base_of<x3::parser_base, RngWhat>::value>* = nullptr>
-	decltype(auto) search(RngWhere&& rngWhere, RngWhat const& rngWhat, Pred pred) noexcept {
+	[[nodiscard]] decltype(auto) search(RngWhere&& rngWhere, RngWhat const& rngWhat, Pred pred) noexcept {
 		auto const itWhereEnd = tc::end(rngWhere);
 		auto const itWhatBegin = tc::begin(rngWhat);
 		auto const itWhatEnd = tc::end(rngWhat);
@@ -29,14 +29,14 @@ namespace tc {
 				if (itWhere2 == itWhereEnd) {
 					return RangeReturn<RngWhere>::pack_no_element(std::forward<RngWhere>(rngWhere));
 				}
-				if (!pred(*itWhere2, *itWhat)) break;
+				if (!pred(tc::as_const(*itWhere2), tc::as_const(*itWhat))) break;
 				++itWhere2;
 				++itWhat;
 			}
 		}
 	}
 	template<template<typename> class RangeReturn, typename RngWhere, typename RngWhat, std::enable_if_t<!std::is_base_of<x3::parser_base, RngWhat>::value>* = nullptr>
-	decltype(auto) search(RngWhere&& rngWhere, RngWhat const& rngWhat) noexcept {
+	[[nodiscard]] decltype(auto) search(RngWhere&& rngWhere, RngWhat const& rngWhat) noexcept {
 		return tc::search<RangeReturn>(std::forward<RngWhere>(rngWhere), rngWhat, tc::fn_equal_to());
 	}
 

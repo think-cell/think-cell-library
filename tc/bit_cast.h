@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -9,7 +9,7 @@
 #pragma once
 
 #include "casts.h"
-#include "sub_range.h"
+#include "subrange.h"
 #include <boost/range/algorithm/copy.hpp>
 
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -125,7 +125,7 @@ namespace tc {
 				return aliasing_ref<T>::construct(m_pb);
 			}
 			type& operator+=( std::ptrdiff_t n ) & noexcept {
-				m_pb+=n*sizeof(T);
+				m_pb+=n*static_cast<std::ptrdiff_t>(sizeof(T)); // cast to signed ptrdiff_t to silence UB sanitizer
 				return *this;
 			}
 			type& operator-=( std::ptrdiff_t n ) & noexcept {
@@ -169,7 +169,7 @@ namespace tc {
 	};
 
 	template<typename Dst>
-	Dst bit_cast_range(tc::ptr_range<unsigned char const> src) noexcept {
+	[[nodiscard]] Dst bit_cast_range(tc::ptr_range<unsigned char const> src) noexcept {
 		STATICASSERTSAME(tc::remove_cvref_t<Dst>, Dst);
 		_ASSERTEQUAL(tc::size(src), sizeof(Dst));
 		static_assert(std::is_trivially_copyable< Dst >::value);
@@ -179,7 +179,7 @@ namespace tc {
 	}
 
 	template<typename Dst, typename Src, std::enable_if_t<tc::has_ptr_begin<Src>::value>* = nullptr>
-	Dst bit_cast_range(Src const& src) noexcept {
+	[[nodiscard]] Dst bit_cast_range(Src const& src) noexcept {
 		return tc::bit_cast_range<Dst>(tc::range_as_blob(src));
 	}
 
@@ -187,7 +187,7 @@ namespace tc {
 	template<typename Dst, typename Src, std::enable_if_t<!(
 		std::is_pointer<Src>::value && std::is_pointer<Dst>::value
 	)>* = nullptr>
-	Dst bit_cast(Src const& src) noexcept {
+	[[nodiscard]] Dst bit_cast(Src const& src) noexcept {
 		STATICASSERTSAME(tc::remove_cvref_t<Dst>, Dst );
 		STATICASSERTEQUAL(sizeof(Dst), sizeof(Src), "bit_cast source and destination must be same size");
 		static_assert(std::is_trivially_copyable<Dst>::value && std::is_trivially_copyable<Src>::value);
@@ -200,7 +200,7 @@ namespace tc {
 	template<typename Dst, typename Src, std::enable_if_t<
 		std::is_pointer<Src>::value && std::is_pointer<Dst>::value
 	>* = nullptr>
-	typename aliasing_ptr<std::remove_pointer_t<Dst>>::type bit_cast(Src const& src) noexcept {
+	[[nodiscard]] typename aliasing_ptr<std::remove_pointer_t<Dst>>::type bit_cast(Src const& src) noexcept {
 		STATICASSERTSAME(tc::remove_cvref_t<Dst>, Dst);
 		return typename aliasing_ptr<std::remove_pointer_t<Dst>>::type(reinterpret_cast<Dst>(src));
 	}

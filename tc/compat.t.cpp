@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -49,9 +49,9 @@ namespace {
 		WlList getWlList() const& noexcept { return m_list; }
 
 		using WlFilterdList = tc::filter_adaptor<decltype(&filter35), WlList>;
-		auto getWlFilterdList() const& noexcept return_decltype ( tc::filter(getWlList(), &filter35) )
+		auto getWlFilterdList() const& return_decltype_noexcept( tc::filter(getWlList(), &filter35) )
 
-		// This is were it gets weird, as soon as you somehow use has_range_iterator<WlFilterdList> (here at class scope)
+		// This is where it gets weird, as soon as you somehow use has_range_iterator<WlFilterdList> (here at class scope)
 		// things go crashing down, even though has_range_iterator<WlFilterdList> is perfectly fine one line later at function scope
 
 		using WlFilterdTransformedList = tc::transform_adaptor<decltype(&transf_times_100), WlFilterdList, true>; STATIC_ASSERT(tc::is_range_with_iterators<WlFilterdList>::value);
@@ -63,7 +63,6 @@ namespace {
 
 			return  tc::transform(getWlFilterdList(), &transf_times_100 );
 		}
-		//auto getWlFilterdTransformedList() const return_decltype ( tc::transform(SolidFillList(), &transf_times_100) )
 
 		TransFilterTest() noexcept {
 			TEST_init_hack(tc::vector, wrapped_long, list, {wrapped_long(1),wrapped_long(2),wrapped_long(3),wrapped_long(4),wrapped_long(5),wrapped_long(6)});
@@ -151,7 +150,7 @@ UNITTESTDEF( deduce_traits ) {
 	TEST_RANGE_EQUAL( exp, trange );
 
 	tc::vector<int> res;
-	tc::for_each( o.trans_range(), [&](int const& id) noexcept { tc::cont_emplace_back(res, id); } );
+	tc::for_each( o.trans_range(), [&](int const id) noexcept { tc::cont_emplace_back(res, id); } );
 	TEST_RANGE_EQUAL(exp, res);
 }
 

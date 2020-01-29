@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -12,7 +12,7 @@
 #include "range_fwd.h"
 
 #include "range_adaptor.h"
-#include "sub_range.h"
+#include "subrange.h"
 #include "meta.h"
 
 #include "tc_move.h"
@@ -43,9 +43,10 @@ namespace tc {
 			template<typename, typename>
 			friend struct no_adl::range_adaptor_access;
 			friend struct transform_adaptor_access;
-			template< typename Apply, typename... Args>
-			auto apply(Apply&& apply, Args&& ... args) const& MAYTHROW return_decltype (
-				tc::continue_if_not_break(std::forward<Apply>(apply), m_func(std::forward<Args>(args)...))
+			template< typename Apply, typename Arg>
+			auto apply(Apply&& apply, Arg&& arg) const& return_decltype_MAYTHROW(
+				// apply is called from a tc::invoke context, so do not tc::invoke again.
+				tc::continue_if_not_break(std::forward<Apply>(apply), tc::invoke(m_func, std::forward<Arg>(arg)))
 			)
 
 		public:
@@ -78,24 +79,24 @@ namespace tc {
 				: base_(std::forward<RngOther>(rng),std::forward<FuncOther>(func))
 			{}
 
-			template<typename Func2=Func/*enable SFINAE*/>
+			template<ENABLE_SFINAE>
 			auto STATIC_VIRTUAL_METHOD_NAME(dereference_index)(index const& idx) & MAYTHROW -> tc::transform_return_t<
-				Func2,
-				decltype(std::declval<Func2 const&>()(std::declval<range_adaptor &>().STATIC_VIRTUAL_METHOD_NAME(dereference_index)(std::declval<index const&>()))),
-				decltype(std::declval<range_adaptor &>().STATIC_VIRTUAL_METHOD_NAME(dereference_index)(std::declval<index const&>()))
+				SFINAE_TYPE(Func),
+				decltype(tc::invoke(std::declval<SFINAE_TYPE(Func) const&>(), std::declval<range_adaptor &>().template dereference_index<range_adaptor>(std::declval<index const&>()))),
+				decltype(std::declval<range_adaptor &>().template dereference_index<range_adaptor>(std::declval<index const&>()))
 			> {
 				// always call operator() const, which is assumed to be thread-safe
-				return tc::as_const(this->m_func)(base_::STATIC_VIRTUAL_METHOD_NAME(dereference_index)(idx));
+				return tc::invoke(tc::as_const(this->m_func), this->template dereference_index<base_>(idx));
 			}
 
-			template<typename Func2=Func/*enable SFINAE*/>
+			template<ENABLE_SFINAE>
 			auto STATIC_VIRTUAL_METHOD_NAME(dereference_index)(index const& idx) const& MAYTHROW -> tc::transform_return_t<
-				Func2,
-				decltype(std::declval<Func2 const&>()(std::declval<range_adaptor const&>().STATIC_VIRTUAL_METHOD_NAME(dereference_index)(std::declval<index const&>()))),
-				decltype(std::declval<range_adaptor const&>().STATIC_VIRTUAL_METHOD_NAME(dereference_index)(std::declval<index const&>()))
+				SFINAE_TYPE(Func),
+				decltype(tc::invoke(std::declval<SFINAE_TYPE(Func) const&>(), std::declval<range_adaptor const&>().template dereference_index<range_adaptor>(std::declval<index const&>()))),
+				decltype(std::declval<range_adaptor const&>().template dereference_index<range_adaptor>(std::declval<index const&>()))
 			> {
 				// always call operator() const, which is assumed to be thread-safe
-				return tc::as_const(this->m_func)(base_::STATIC_VIRTUAL_METHOD_NAME(dereference_index)(idx));
+				return tc::invoke(tc::as_const(this->m_func), this->template dereference_index<base_>(idx));
 			}
 
 			auto border_base_index(index const& idx) const& noexcept {
@@ -108,11 +109,34 @@ namespace tc {
 		};
 
 		template<typename Func, typename Rng, bool bConst>
-		struct constexpr_size<tc::transform_adaptor<Func,Rng,bConst>> : tc::constexpr_size<tc::remove_cvref_t<Rng>> {};
+		struct constexpr_size_base<tc::transform_adaptor<Func,Rng,bConst>, void> : tc::constexpr_size<Rng> {};
 
-		template< typename Func, typename Rng >
-		struct value_type_base<transform_adaptor<Func, Rng, false>, tc::void_t<decltype(std::declval<Func const&>()(std::declval<tc::range_value_t<Rng>>()))>> {
-			using value_type = tc::decay_t<decltype(std::declval<Func const&>()(std::declval<tc::range_value_t<Rng>>()))>;
+		template<typename TransformAdaptor, typename Func, typename Rng >
+		struct range_value<TransformAdaptor, transform_adaptor<Func, Rng, false>, tc::void_t<tc::range_value_t<Rng>>> final {
+			// Func is invoked with perfectly forwarded references from the base range.
+			// Hence, in an ideal world, the range_value of a transform_adaptor would be the common_type_decayed of the results of Func invocations with these references.
+			// For now, we have no way of gathering these references and there is no obvious way to get to them.
+			// We workaround this fact by basing range_value of a transform_adaptor on the range_value of the base range and add some sanity checks.
+			using type = tc::transform_value_t<Func, tc::range_value_t<Rng>>;
+
+		private:
+			// Note: sanity check causes exponential number of template instantiations for code patterns like:
+			//	 tc::make_vector(tc::transform(rng0, [](auto&& rng1) {
+			//			return tc::make_vector(tc::transform(tc_move_if_owned(rng1), [](auto&& rng2) {
+			//				return tc::make_vector(tc::transform(tc_move_if_owned(rng2), [](auto&& rng3) {
+			//					// ..
+			//				});
+			//			});
+			//		});
+			template<typename RngValueT, typename Enable = void>
+			struct same_transform_value_type final : std::true_type {};
+
+			template<typename RngValueT>
+			struct same_transform_value_type<RngValueT, tc::void_t<tc::transform_value_t<Func, RngValueT>>> final
+				: std::is_same<type, tc::transform_value_t<Func, RngValueT>> {};
+
+			static_assert(same_transform_value_type<tc::range_value_t<Rng const>>::value);
+			static_assert(same_transform_value_type<tc::range_value_t<Rng> const&>::value);
 		};
 	}
 
@@ -148,7 +172,7 @@ namespace tc {
 
 	template <typename Rng, typename Func, typename T>
 	Rng& replace_if_inplace(Rng& rng, Func func, T const& t) noexcept {
-		for_each(rng, [&](decltype(*tc::begin(rng)) v) noexcept {
+		for_each(rng, [&](auto&& v) noexcept {
 			if (func(tc::as_const(v))) {
 				v = t;
 			}
@@ -162,12 +186,12 @@ namespace tc {
 	}
 	
 	template<typename Rng, std::enable_if_t<tc::is_instance2<transform_adaptor,std::remove_reference_t<Rng>>::value>* =nullptr >
-	decltype(auto) untransform(Rng&& rng) noexcept {
+	[[nodiscard]] decltype(auto) untransform(Rng&& rng) noexcept {
 		return std::forward<Rng>(rng).base_range();
 	}
 
-	template<typename Rng, std::enable_if_t<tc::is_instance<sub_range,std::remove_reference_t<Rng>>::value>* =nullptr >
-	auto untransform(Rng&& rng) noexcept {
+	template<typename Rng, std::enable_if_t<tc::is_instance<subrange,std::remove_reference_t<Rng>>::value>* =nullptr >
+	[[nodiscard]] auto untransform(Rng&& rng) noexcept {
 		return tc::slice(untransform(std::forward<Rng>(rng).base_range()), rng.begin_index(), rng.end_index());
 	}
 

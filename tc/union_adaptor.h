@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -12,7 +12,6 @@
 #include "range_fwd.h"
 #include "range_adaptor.h"
 #include "meta.h"
-#include "types.h"
 #include "modified.h"
 #include "compare.h"
 #include "algorithm.h"
@@ -141,11 +140,6 @@ namespace tc {
 					tc::index_t<std::remove_reference_t<
 						Rng1
 					>>
-				>,
-				tc::demote_iterator_traversal_tag_t<
-					boost::iterators::bidirectional_traversal_tag,
-					traversal_t<Rng0>,
-					traversal_t<Rng1>
 				>
 			>
 		{
@@ -172,12 +166,12 @@ namespace tc {
 			}
 
 			template<int N, typename Index>
-			auto get_idx(Index&& index) & noexcept return_decltype(
+			auto get_idx(Index&& index) & return_decltype_noexcept(
 				std::get<N>(index.m_tplindex)
 			)
 
 			template<int N, typename Index>
-			auto get_idx(Index&& index) const& noexcept return_decltype(
+			auto get_idx(Index&& index) const& return_decltype_noexcept(
 				std::get<N>(index.m_tplindex)
 			)
 
@@ -207,11 +201,9 @@ namespace tc {
 			}
 
 			template<int N>
-			auto dereference_index_fwd(index const& idx) const& noexcept return_decltype(
-				tc::dereference_index(*std::get<N>(this->m_baserng), get_idx<N>(idx))
+			auto dereference_index_fwd(index const& idx) const& return_decltype_MAYTHROW(
+				tc::dereference_index(*std::get<N>(this->m_baserng), this->get_idx<N>(idx))
 			)
-
-		public:
 
 			STATIC_FINAL(at_end_index)(index const& idx) const& noexcept -> bool {
 				return tc::order::less == idx.m_order && at_end_index_fwd<0>(idx);
@@ -336,7 +328,7 @@ namespace tc {
 	using no_adl::union_adaptor;
 
 	template<typename Comp, typename Rng0, typename Rng1>
-	auto split_union(sub_range<union_adaptor<Comp, Rng0, Rng1> &> const& rngsubunion) noexcept return_decltype(
+	[[nodiscard]] auto split_union(subrange<union_adaptor<Comp, Rng0, Rng1> &> const& rngsubunion) return_decltype_NOEXCEPT( // make_tuple is noexcept(false); the rest of this should only throw bad_alloc
 		std::make_tuple(
 			tc::slice(*std::get<0>(rngsubunion.base_range().m_baserng), std::get<0>(rngsubunion.begin_index().m_tplindex), std::get<0>(rngsubunion.end_index().m_tplindex)),
 			tc::slice(*std::get<1>(rngsubunion.base_range().m_baserng), std::get<1>(rngsubunion.begin_index().m_tplindex), std::get<1>(rngsubunion.end_index().m_tplindex))
@@ -344,13 +336,13 @@ namespace tc {
 	)
 
 	template<typename Rng0, typename Rng1, typename Comp>
-	auto union_range(Rng0&& rng0, Rng1&& rng1, Comp&& comp) noexcept return_ctor(
+	auto union_range(Rng0&& rng0, Rng1&& rng1, Comp&& comp) return_ctor_noexcept(
 		union_adaptor< tc::decay_t<Comp> BOOST_PP_COMMA() Rng0 BOOST_PP_COMMA() Rng1>,
 		(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1), std::forward<Comp>(comp))
 	)
 
 	template<typename Rng0, typename Rng1>
-	auto union_range(Rng0&& rng0, Rng1&& rng1) noexcept return_decltype(
+	auto union_range(Rng0&& rng0, Rng1&& rng1) return_decltype_noexcept(
 		union_range(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1), tc::fn_compare())
 	)
 }

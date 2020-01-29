@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -13,9 +13,6 @@
 #include "implements_compare.h"
 #include "storage_for.h"
 #include "reference_or_value.h"
-#ifdef TC_PRIVATE
-#include "Library/Persistence/types.h"
-#endif
 #include "type_traits.h"
 #include "explicit_cast.h"
 #include "tag_type.h"
@@ -32,12 +29,31 @@ namespace tc {
 	DEFINE_TAG_TYPE(func_tag)
 	DEFINE_TAG_TYPE(range_tag)
 
+	namespace no_adl {
+		template< typename T >
+		struct empty_array_storage {
+			constexpr operator T*() { return nullptr; }
+			constexpr operator T const*() const { return nullptr; }
+		};
+
+		template< typename T, std::size_t N >
+		struct array_storage {
+			using type = T[N];
+		};
+
+		template< typename T >
+		struct array_storage<T, 0> {
+			using type = empty_array_storage<T>;
+		};
+	}
+
 	namespace array_adl {
 		template< typename T, std::size_t N >
 		struct array : tc::implements_compare_partial<array<T, N>> {
-			static_assert(!std::is_const<T>::value && !std::is_volatile<T>::value);
+			static_assert(!std::is_const<T>::value);
+			static_assert(!std::is_volatile<T>::value);
 		private:
-			T m_a[N];
+			typename no_adl::array_storage<T, N>::type m_a;
 
 		public:
 			using value_type = T;
@@ -52,18 +68,18 @@ namespace tc {
 			using size_type = std::size_t;
 			using difference_type = std::ptrdiff_t;
 
-			T* data() & noexcept {
-				return std::addressof(m_a[0]);
+			constexpr T* data() & noexcept {
+				return m_a;
 			}
-			T const* data() const& noexcept {
-				return std::addressof(m_a[0]);
+			constexpr T const* data() const& noexcept {
+				return m_a;
 			}
 			static constexpr std::size_t size() noexcept {
 				return N;
 			}
 
 			// We cannot tell if *this is constructed using value-initialization syntax or default-initialization syntax. Therefore, we must value-initialize here.
-			array() MAYTHROW : m_a() {}
+			constexpr array() noexcept(std::is_nothrow_constructible<T>::value) : m_a() {}
 			array(boost::container::default_init_t) noexcept {}
 
 		private:
@@ -73,7 +89,7 @@ namespace tc {
 			{}
 		public:
 			template<typename Func>
-			array(func_tag_t, Func func) MAYTHROW
+			constexpr array(func_tag_t, Func func) MAYTHROW
 				: array(tc::func_tag, func, std::make_index_sequence<N>())
 			{}
 
@@ -156,7 +172,7 @@ namespace tc {
 					tc::econstructionIMPLICIT==tc::elementwise_construction_restrictiveness<T, Args...>::value
 				>* = nullptr
 			>
-			constexpr array(tc::aggregate_tag_t, Args&& ... args) MAYTHROW
+			constexpr array(tc::aggregate_tag_t, Args&& ... args) noexcept(std::conjunction<std::is_nothrow_constructible<T, Args&&>...>::value)
 				: m_a{static_cast<T>(std::forward<Args>(args))...}
 			{
 				STATICASSERTEQUAL(sizeof...(Args), N, "array initializer list does not match number of elements");
@@ -184,7 +200,7 @@ namespace tc {
 		public:
 			template< typename Rng,
 				std::enable_if_t< 0!=N
-					&& tc::econstructionIMPLICIT==tc::construction_restrictiveness<T, decltype(*tc::begin(std::declval<Rng&>()))>::value
+					&& tc::econstructionIMPLICIT==tc::construction_restrictiveness<T, decltype(*tc::as_lvalue(tc::begin(std::declval<Rng&>())))>::value
 				>* = nullptr
 			>
 			constexpr explicit array(Rng&& rng) MAYTHROW
@@ -192,8 +208,19 @@ namespace tc {
 			{}
 
 			template< typename Rng,
-				std::enable_if_t< 0!=N 
-					&& tc::econstructionEXPLICIT==tc::construction_restrictiveness<T, decltype(*tc::begin(std::declval<Rng&>()))>::value
+				std::enable_if_t< 0 == N
+					&& tc::econstructionIMPLICIT == tc::construction_restrictiveness<T, decltype(*tc::as_lvalue(tc::begin(std::declval<Rng&>())))>::value
+				>* = nullptr
+			>
+			constexpr explicit array(Rng&& rng) MAYTHROW
+				: m_a{}
+			{
+				_ASSERTE(tc::empty(rng));
+			}
+
+			template< typename Rng,
+				std::enable_if_t<
+					tc::econstructionEXPLICIT==tc::construction_restrictiveness<T, decltype(*tc::as_lvalue(tc::begin(std::declval<Rng&>())))>::value
 				>* = nullptr 
 			>
 			explicit array(Rng&& rng) MAYTHROW
@@ -224,36 +251,36 @@ namespace tc {
 			}
 
 			// iterators
-			const_iterator begin() const& noexcept {
+			constexpr const_iterator begin() const& noexcept {
 				return data();
 			}
-			const_iterator end() const& noexcept {
+			constexpr const_iterator end() const& noexcept {
 				return data() + N;
 			}
-			iterator begin() & noexcept {
+			constexpr iterator begin() & noexcept {
 				return data();
 			}
-			iterator end() & noexcept {
+			constexpr iterator end() & noexcept {
 				return data() + N;
 			}
 
 			// access
-			T const& operator[](std::size_t i) const& noexcept {
+			[[nodiscard]] constexpr T const& operator[](std::size_t i) const& noexcept {
 				// Analysis of release mode assembly showed a significant overhead here:
 				// Without _ASSERT, this function usually consist of only one or a few "lea" instructions that can easily be inlined.
 				// With (non-debug) _ASSERT, the comparison, jump and call to ReportAssert dominate the run-time and prevent the function to get inlined.
 				_ASSERTDEBUG(i<N);
 				return *(data() + i);
 			}
-			T& operator[](std::size_t i) & noexcept {
+			[[nodiscard]] constexpr T& operator[](std::size_t i) & noexcept {
 				_ASSERTDEBUG(i<N);
 				return *(data() + i);
 			}
-			T&& operator[](std::size_t i) && noexcept {
+			[[nodiscard]] constexpr T&& operator[](std::size_t i) && noexcept {
 				_ASSERTDEBUG(i<N);
 				return std::forward<T>(*(data() + i)); // forward instead of tc_move does the right thing if T is a reference
 			}
-			T const&& operator[](std::size_t i) const&& noexcept {
+			[[nodiscard]] constexpr T const&& operator[](std::size_t i) const&& noexcept {
 				return static_cast<T const&&>((*this)[i]);
 			}
 
@@ -261,35 +288,28 @@ namespace tc {
 				std::fill_n(data(), N, t);
 			}
 
-			friend tc::order compare(array const& lhs, array const& rhs) noexcept {
+			[[nodiscard]] friend tc::order compare(array const& lhs, array const& rhs) noexcept {
 #ifdef _DEBUG
-				for (std::size_t i=0; i<N; ++i) VERIFYINITIALIZED(rhs[i]);
-				for (std::size_t i=0; i<N; ++i) VERIFYINITIALIZED(lhs[i]);
+				for (std::size_t i=0; i<N; ++i) _ASSERTINITIALIZED(rhs[i]);
+				for (std::size_t i=0; i<N; ++i) _ASSERTINITIALIZED(lhs[i]);
 #endif
 				return tc::lexicographical_compare_3way(lhs, rhs);
 			}
 
-			friend bool operator==(array const& lhs, array const& rhs) noexcept {
+			[[nodiscard]] friend bool operator==(array const& lhs, array const& rhs) noexcept {
 #ifdef _DEBUG
-				for (std::size_t i=0; i<N; ++i) VERIFYINITIALIZED(rhs[i]);
-				for (std::size_t i=0; i<N; ++i) VERIFYINITIALIZED(lhs[i]);
+				for (std::size_t i=0; i<N; ++i) _ASSERTINITIALIZED(rhs[i]);
+				for (std::size_t i=0; i<N; ++i) _ASSERTINITIALIZED(lhs[i]);
 #endif
 				return tc::equal(lhs, rhs);
 			}
-
-#ifdef TC_PRIVATE
-			// persistence
-			friend void LoadType(array& at, CXmlReader& loadhandler) noexcept {
-				LoadRange(at, loadhandler);
-			}
-#endif
 		};
 
 		template< typename T, std::size_t N >
 		struct array<T&, N> : tc::implements_compare_partial<array<T&, N>> {
 			static_assert( !std::is_reference<T>::value );
 		private:
-			T* m_a[N];
+			typename no_adl::array_storage<T*, N>::type m_a;
 
 		public:
 			using value_type = tc::decay_t<T>;
@@ -390,7 +410,7 @@ namespace tc {
 
 			// access (no rvalue-qualified overloads, must not move data out of a reference)
 			// reference semantics == no deep constness
-			T& operator[](std::size_t i) const& noexcept {
+			[[nodiscard]] T& operator[](std::size_t i) const& noexcept {
 				_ASSERTDEBUG(i<N);
 				return *m_a[i];
 			}
@@ -399,11 +419,11 @@ namespace tc {
 				std::fill_n(begin(), N, t);
 			}
 
-			friend tc::order compare(array const& lhs, array const& rhs) noexcept {
+			[[nodiscard]] friend tc::order compare(array const& lhs, array const& rhs) noexcept {
 				return tc::lexicographical_compare_3way(lhs, rhs);
 			}
 
-			friend bool operator==(array const& lhs, array const& rhs) noexcept {
+			[[nodiscard]] friend bool operator==(array const& lhs, array const& rhs) noexcept {
 				return tc::equal(lhs, rhs);
 			}
 		};
@@ -418,7 +438,7 @@ namespace tc {
 
 	namespace no_adl {
 		template<typename T, std::size_t N>
-		struct constexpr_size<tc::array<T,N>> : std::integral_constant<std::size_t, N> {};
+		struct constexpr_size_base<tc::array<T,N>, void> : std::integral_constant<std::size_t, N> {};
 
 		struct deduce_tag;
 
@@ -433,13 +453,18 @@ namespace tc {
 		};
 	}
 
+	template<std::size_t N, typename Rng>
+	[[nodiscard]] constexpr auto make_array(Rng&& rng) noexcept {
+		return tc::array<tc::decay_t<decltype(tc_front(rng))>, N>(std::forward<Rng>(rng));
+	}
+
 	template <typename Rng>
-	constexpr auto make_array(Rng&& rng) noexcept {
-		return tc::array<tc::decay_t<decltype(tc_front(rng))>, tc::constexpr_size<tc::remove_cvref_t<Rng>>::value>(std::forward<Rng>(rng));
+	[[nodiscard]] constexpr auto make_array(Rng&& rng) noexcept {
+		return make_array<tc::constexpr_size<Rng>::value>(std::forward<Rng>(rng));
 	}
 
 	template <typename T = no_adl::deduce_tag, typename... Ts, std::enable_if_t<!std::is_reference<T>::value>* = nullptr>
-	constexpr auto make_array(tc::aggregate_tag_t, Ts&&... ts) noexcept {
+	[[nodiscard]] constexpr auto make_array(tc::aggregate_tag_t, Ts&&... ts) noexcept {
 		static_assert(!std::is_reference<typename no_adl::delayed_deduce<T, Ts...>::type>::value);
 		return tc::array<typename no_adl::delayed_deduce<T, Ts...>::type, sizeof...(Ts)>(tc::aggregate_tag, std::forward<Ts>(ts)...);
 	}
@@ -455,7 +480,7 @@ namespace tc {
 	// Unfortunately, there seems to be no way to make this work in C++ without using macros
 #define MAKE_ARRAY_LVALUE_REF(z, n, d) \
 	template <typename T,std::enable_if_t<std::is_lvalue_reference<T>::value>* = nullptr> \
-	auto make_array(tc::aggregate_tag_t, BOOST_PP_ENUM_PARAMS(n, T t)) noexcept { \
+	[[nodiscard]] auto make_array(tc::aggregate_tag_t, BOOST_PP_ENUM_PARAMS(n, T t)) noexcept { \
 		return tc::array<T, n>(tc::aggregate_tag, BOOST_PP_ENUM_PARAMS(n, t)); \
 	}
 
@@ -463,7 +488,7 @@ namespace tc {
 #undef MAKE_ARRAY_LVALUE_REF
 
 	template< typename T, std::enable_if_t<!std::is_reference<T>::value>* =nullptr >
-	constexpr auto single(T&& t) noexcept {
+	[[nodiscard]] constexpr auto single(T&& t) noexcept {
 		// not tc::decay_t, we want to keep reference-like proxy objects as proxy objects
 		// just like the reference overload tc::single preserves lvalue references.
 		return tc::make_array<std::remove_cv_t<T> >(tc::aggregate_tag,std::forward<T>(t));
@@ -475,7 +500,7 @@ namespace tc {
 	};
 
 	template <typename... Ts>
-	constexpr std::size_t count_args(Ts&&...) { return sizeof...(Ts); }
+	[[nodiscard]] constexpr std::size_t count_args(Ts&&...) { return sizeof...(Ts); }
 
 	template <typename... Ts>
 	tc::common_type_t<Ts&&...> declval_common_type(Ts&&...) noexcept;

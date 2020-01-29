@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -18,7 +18,7 @@
 namespace tc {
 	namespace no_adl {
 		template< typename T >
-		struct reference_or_value final {
+		struct reference_or_value {
 			static_assert( !std::is_void<T>::value );
 			static_assert( !std::is_reference<T>::value );
 
@@ -26,7 +26,7 @@ namespace tc {
 			using reference = value_type&;
 			using const_reference = value_type const&;
 
-			constexpr reference_or_value() noexcept {} // m_t may be default-constructible
+			constexpr reference_or_value() = default; // m_t may be default-constructible
 			constexpr reference_or_value(reference_or_value const&) = default;
 			constexpr reference_or_value(reference_or_value&&) = default;
 			
@@ -86,7 +86,7 @@ namespace tc {
 		};
 
 		template< typename T >
-		struct reference_or_value<T&> final {
+		struct reference_or_value<T&> {
 		private:
 			T* m_pt;
 
@@ -109,7 +109,7 @@ namespace tc {
 		};
 
 		template< typename T >
-		struct reference_or_value<T&&> final {
+		struct reference_or_value<T&&> {
 		private:
 			T* m_pt;
 
@@ -134,7 +134,7 @@ namespace tc {
 	using no_adl::reference_or_value;
 	
 	template< typename T >
-	auto make_reference_or_value(T&& t) noexcept return_ctor(
+	[[nodiscard]] auto make_reference_or_value(T&& t) return_ctor_noexcept(
 		reference_or_value<T>,
 		(tc::aggregate_tag, std::forward<T>(t))
 	)
@@ -143,11 +143,11 @@ namespace tc {
 		template< typename Func, typename Enable, typename... Args >
 		struct stores_result_of final {
 		private:
-			tc::reference_or_value< std::invoke_result_t< Func, Args... > > m_t;
+			tc::reference_or_value< decltype(std::declval<Func>()(std::declval<Args>()...)) > m_t;
 
 		public:
-			stores_result_of( Func&& func, Args... args ) MAYTHROW
-				: m_t(aggregate_tag, std::forward<Func>(func)(static_cast<Args>(args)...))
+			stores_result_of( Func&& func, Args&&... args ) MAYTHROW
+				: m_t(aggregate_tag, std::forward<Func>(func)(std::forward<Args>(args)...))
 			{}
 
 			auto get() const& noexcept ->decltype(auto) {
@@ -174,7 +174,7 @@ namespace tc {
 		};
 
 		template< typename Func, typename... Args >
-		struct stores_result_of<Func, std::enable_if_t< std::is_void< std::invoke_result_t< Func, Args... > >::value >, Args... > final {
+		struct stores_result_of<Func, std::enable_if_t< std::is_void< decltype(std::declval<Func>()(std::declval<Args>()...)) >::value >, Args... > final {
 			stores_result_of( Func&& func, Args... args ) MAYTHROW {
 				std::forward<Func>(func)(static_cast<Args>(args)...);
 			}

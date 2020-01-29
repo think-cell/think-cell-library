@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -19,7 +19,7 @@ namespace tc {
 		struct best_impl final {
 
 			template<typename BetterRef>
-			constexpr best_impl(BetterRef&& better) : m_better(std::forward<BetterRef>(better))
+			constexpr best_impl(BetterRef&& better) noexcept : m_better(std::forward<BetterRef>(better))
 			{}
 
 		private:
@@ -34,7 +34,7 @@ namespace tc {
 			
 			template<typename T0, typename T1, typename... Args>
 			constexpr auto operator()(T0&& t0, T1&& t1, Args&&... args) const& noexcept -> decltype(auto) {
-				auto b = m_better(t0, t1);
+				auto b = m_better(tc::as_const(t0), tc::as_const(t1));
 				if constexpr (std::is_same<std::true_type, decltype(b)>::value) {
 					return operator()(std::forward<T0>(t0), std::forward<Args>(args)...);
 				} else if constexpr (std::is_same<std::false_type, decltype(b)>::value) {
@@ -55,17 +55,17 @@ namespace tc {
 		typename Better,
 		typename... Args
 	>
-	constexpr auto best(Better&& better, Args&&... args) return_decltype_xvalue_by_ref(
+	[[nodiscard]] constexpr auto best(Better&& better, Args&&... args) return_decltype_xvalue_by_ref_noexcept(
 		no_adl::best_impl<tc::decay_t<Better>>(std::forward<Better>(better))(std::forward<Args>(args)...)
 	)
 
 	template<typename... Args>
-	constexpr auto min(Args&&... args) return_decltype_xvalue_by_ref(
+	[[nodiscard]] constexpr auto min(Args&&... args) return_decltype_xvalue_by_ref_noexcept(
 		best(tc::fn_less(), std::forward<Args>(args)...)
 	)
 
 	template<typename... Args>
-	constexpr auto max(Args&&... args) return_decltype_xvalue_by_ref(
+	[[nodiscard]] constexpr auto max(Args&&... args) return_decltype_xvalue_by_ref_noexcept(
 		best(tc::fn_greater(), std::forward<Args>(args)...)
 	)
 
@@ -75,17 +75,29 @@ namespace tc {
 	DEFINE_FN(max);
 	std::true_type returns_reference_to_argument(tc::fn_max) noexcept;
 
-	template <typename Iter>
-	auto treat_as_forward_iterator(Iter&& iter) noexcept {
+	namespace no_adl {
+		template <typename Iter>
 		struct forward_iter : Iter {
 			explicit forward_iter(Iter const& iter) : Iter(iter) {}
-			using iterator_category = std::forward_iterator_tag;
 		};
-		return forward_iter{std::forward<Iter>(iter)};
+	}
+}
+
+namespace std {
+	template <typename BaseIter>
+	struct iterator_traits<tc::no_adl::forward_iter<BaseIter>> : iterator_traits<BaseIter> {
+		using iterator_category = std::forward_iterator_tag;
+	};
+}
+
+namespace tc {
+	template <typename Iter>
+	auto treat_as_forward_iterator(Iter&& iter) noexcept {
+		return no_adl::forward_iter<std::remove_reference_t<Iter>>{std::forward<Iter>(iter)};
 	}
 
 	template<typename Rng>
-	auto minmax_element(Rng&& rng) noexcept {
+	[[nodiscard]] auto minmax_element(Rng& rng) noexcept {
 		return std::minmax_element(
 			treat_as_forward_iterator(tc::begin(rng)),
 			treat_as_forward_iterator(tc::end(rng))
@@ -93,7 +105,7 @@ namespace tc {
 	}
 
 	template<typename Rng, typename Pred>
-	auto minmax_element(Rng&& rng, Pred&& pred) noexcept {
+	[[nodiscard]] auto minmax_element(Rng& rng, Pred&& pred) noexcept {
 		return std::minmax_element(
 			treat_as_forward_iterator(tc::begin(rng)),
 			treat_as_forward_iterator(tc::end(rng)),

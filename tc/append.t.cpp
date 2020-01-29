@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -50,16 +50,18 @@ UNITTESTDEF(nonreportappendable) {
 
 namespace {
 	struct STestError1 {
-		auto error() const& noexcept {
+		friend auto error(STestError1 const&) noexcept {
 			return tc::concat("STestError1(", -1, ')');
 		}
 	};
 	
 	struct STestError2 {
-		void operator()(tc::report_appender appdr) const& noexcept {
-			tc::for_each(tc::concat("STestError2(", 5, ", ", STestError1(), ')'), tc_move(appdr));
-		}
+		DECLARE_FRIEND_FN_ERROR(STestError2)
 	};
+
+	DEFINE_FRIEND_FN_ERROR(STestError2) {
+		tc::for_each(tc::concat("STestError2(", 5, ", ", STestError1(), ')'), tc_move(appdr));
+	}
 
 	struct STestError3 {};
 

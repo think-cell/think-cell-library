@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -17,6 +17,8 @@
 #include <boost/preprocessor/seq/seq.hpp>
 #include <boost/preprocessor/control/if.hpp>
 #include <boost/preprocessor/comparison/less.hpp>
+
+#define EXPAND(...) __VA_ARGS__
 
 #define PP_APPLY_MACRO(state, macro, elem) macro(elem)
 

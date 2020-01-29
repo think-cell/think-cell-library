@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -21,7 +21,7 @@ UNITTESTDEF(merge_ranges_with_simple_usecase) {
 	int N=0;
 	tc::for_each(
 		tc::merge_many(vecvecn),
-		[&](int const& n) noexcept {
+		[&](int const n) noexcept {
 			_ASSERTEQUAL(n, ++N);
 		}
 	);
@@ -43,15 +43,13 @@ UNITTESTDEF(zip_range_adaptor_test) {
 		auto it2 = tc::begin(vecn2);
 		tc::for_each(
 			rng,
-			tc::expand_tuple(
-				[&](int const& n, int const& n2) noexcept {
-					_ASSERTEQUAL(*it, n);
-					_ASSERTEQUAL(*it2, n2);
-					_ASSERTEQUAL(std::addressof(*it), std::addressof(n));
-					_ASSERTEQUAL(std::addressof(*it2), std::addressof(n2));
-					++it; ++it2;
-				}
-			)
+			[&](int const& n, int const& n2) noexcept {
+				_ASSERTEQUAL(*it, n);
+				_ASSERTEQUAL(*it2, n2);
+				_ASSERTEQUAL(std::addressof(*it), std::addressof(n));
+				_ASSERTEQUAL(std::addressof(*it2), std::addressof(n2));
+				++it; ++it2;
+			}
 		);
 		_ASSERTEQUAL(tc::end(vecn), it);
 	}
@@ -65,12 +63,10 @@ UNITTESTDEF(zip_range_adaptor_test) {
 	int N2=0;
 	tc::for_each(
 		rng,
-		tc::expand_tuple(
-			[&](int const& n, int const& n2) noexcept {
-				VERIFYEQUAL(N, n) /= 2;
-				++VERIFYEQUAL(N2, n2);
-			}
-		)
+		[&](int const n, int const n2) noexcept {
+			VERIFYEQUAL(N, n) /= 2;
+			++VERIFYEQUAL(N2, n2);
+		}
 	);
 	_ASSERTEQUAL(N2,3);
 }
@@ -102,18 +98,16 @@ UNITTESTDEF(merge_ranges_with_unique_range_2) {
 					);
 				}
 			),
-			projected_front(lesspred)
+			tc::projected_front(lesspred)
 		),
 		[&](auto rng) noexcept {
 			tc::for_each(
 				rng,
-				tc::expand_tuple(
-					[&](int const& first, int& second) noexcept {
-						second = n;
-						_ASSERTEQUAL(first, n+1);
-						++nTotal;
-					}
-				)
+				[&](int const first, int& second) noexcept {
+					second = n;
+					_ASSERTEQUAL(first, n+1);
+					++nTotal;
+				}
 			);
 			++n;
 		}

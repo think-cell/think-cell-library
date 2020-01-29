@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -25,42 +25,42 @@ namespace unbounded_adl {
 	struct greatest {};
 
 	template <typename T>
-	constexpr auto operator<(T const&, greatest) noexcept return_ctor(std::true_type, ())
+	[[nodiscard]] constexpr auto operator<(T const&, greatest) return_ctor_noexcept(std::true_type, ())
 
 	template <typename T>
-	constexpr auto operator<=(T const&, greatest) noexcept return_ctor(std::true_type, ())
+	[[nodiscard]] constexpr auto operator<=(T const&, greatest) return_ctor_noexcept(std::true_type, ())
 
 	template <typename T>
-	constexpr auto operator<(greatest, T const&) noexcept return_ctor(std::false_type, ())
+	[[nodiscard]] constexpr auto operator<(greatest, T const&) return_ctor_noexcept(std::false_type, ())
 
 	template <typename T>
-	constexpr auto operator<=(greatest, T const&) noexcept return_ctor(std::false_type, ())
+	[[nodiscard]] constexpr auto operator<=(greatest, T const&) return_ctor_noexcept(std::false_type, ())
 
 	struct least {};
 
 	template <typename T>
-	constexpr auto operator<(T const&, least) noexcept return_ctor(std::false_type, ())
+	[[nodiscard]] constexpr auto operator<(T const&, least) return_ctor_noexcept(std::false_type, ())
 
 	template <typename T>
-	constexpr auto operator<=(T const&, least) noexcept return_ctor(std::false_type, ())
+	[[nodiscard]] constexpr auto operator<=(T const&, least) return_ctor_noexcept(std::false_type, ())
 
 	template <typename T>
-	constexpr auto operator<(least, T const&) noexcept return_ctor(std::true_type, ())
+	[[nodiscard]] constexpr auto operator<(least, T const&) return_ctor_noexcept(std::true_type, ())
 
 	template <typename T>
-	constexpr auto operator<=(least, T const&) noexcept return_ctor(std::true_type, ())
+	[[nodiscard]] constexpr auto operator<=(least, T const&) return_ctor_noexcept(std::true_type, ())
 
 	template <typename T>
-	constexpr auto operator<(least, greatest) noexcept return_ctor(std::true_type, ())
+	[[nodiscard]] constexpr auto operator<(least, greatest) return_ctor_noexcept(std::true_type, ())
 
 	template <typename T>
-	constexpr auto operator<=(least, greatest) noexcept return_ctor(std::true_type, ())
+	[[nodiscard]] constexpr auto operator<=(least, greatest) return_ctor_noexcept(std::true_type, ())
 
 	template <typename T>
-	constexpr auto operator<(greatest, least) noexcept return_ctor(std::false_type, ())
+	[[nodiscard]] constexpr auto operator<(greatest, least) return_ctor_noexcept(std::false_type, ())
 
 	template <typename T>
-	constexpr auto operator<=(greatest, least) noexcept return_ctor(std::false_type, ())
+	[[nodiscard]] constexpr auto operator<=(greatest, least) return_ctor_noexcept(std::false_type, ())
 }
 using unbounded_adl::least;
 using unbounded_adl::greatest;
@@ -78,7 +78,7 @@ template<typename Lhs, typename Rhs, std::enable_if_t<
 	std::is_pointer<Rhs>::value ||
 	std::is_same<std::remove_volatile_t<Lhs>, std::remove_volatile_t<Rhs>>::value
 >* =nullptr>
-constexpr bool equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
+[[nodiscard]] constexpr bool equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
 	return lhs==rhs;
 }
 
@@ -87,78 +87,88 @@ template<typename Lhs, typename Rhs, std::enable_if_t<
 	tc::is_actual_arithmetic<Lhs>::value &&
 	tc::is_actual_arithmetic<Rhs>::value
 >* =nullptr>
-constexpr bool equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
+[[nodiscard]] constexpr bool equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
 	return tc::explicit_cast<decltype(lhs+rhs)>(lhs)==tc::explicit_cast<decltype(lhs+rhs)>(rhs);
 }
 
 // overloadable version of operator<
 template<typename Lhs, typename Rhs, std::enable_if_t< !(tc::is_actual_arithmetic<Lhs>::value && tc::is_actual_arithmetic<Rhs>::value) >* =nullptr >
-constexpr auto less(Lhs const& lhs, Rhs const& rhs) noexcept {
+[[nodiscard]] constexpr auto less(Lhs const& lhs, Rhs const& rhs) noexcept {
 	auto result = lhs < rhs;
 	static_assert(std::is_same<decltype(result), bool>::value || std::is_same<decltype(result), std::true_type>::value  || std::is_same<decltype(result), std::false_type>::value);
 	return result;
 }
 
 template<typename Lhs, typename Rhs, std::enable_if_t< tc::is_actual_arithmetic<Lhs>::value && tc::is_actual_arithmetic<Rhs>::value >* =nullptr >
-constexpr auto less(Lhs const& lhs, Rhs const& rhs) noexcept {
+[[nodiscard]] constexpr auto less(Lhs const& lhs, Rhs const& rhs) noexcept {
 	auto result = tc::explicit_cast<decltype(lhs+rhs)>(lhs)<tc::explicit_cast<decltype(lhs+rhs)>(rhs);
 	static_assert(std::is_same<decltype(result), bool>::value || std::is_same<decltype(result), std::true_type>::value || std::is_same<decltype(result), std::false_type>::value);
 	return result;
 }
 
-struct fn_equal_to {
-	template<typename Lhs, typename Rhs>
-	constexpr bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
-		return tc::equal_to(lhs,rhs);
-	}
-	using is_transparent=void;
-};
+namespace no_adl
+{
+	struct[[nodiscard]] fn_equal_to{
+		template<typename Lhs, typename Rhs>
+		[[nodiscard]] constexpr bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
+			return tc::equal_to(lhs,rhs);
+		}
+		using is_transparent = void;
+	};
 
-struct fn_not_equal_to {
-	template<typename Lhs, typename Rhs>
-	constexpr bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
-		return !tc::equal_to(lhs,rhs);
-	}
-	using is_transparent = void;
-};
+	struct[[nodiscard]] fn_not_equal_to{
+		template<typename Lhs, typename Rhs>
+		[[nodiscard]] constexpr bool operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
+			return !tc::equal_to(lhs,rhs);
+		}
+		using is_transparent = void;
+	};
 
-struct fn_less {
-	template<typename Lhs, typename Rhs>
-	constexpr auto operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
-		return tc::less(lhs,rhs);
-	}
-	using is_transparent = void;
+	struct[[nodiscard]] fn_less{
+		template<typename Lhs, typename Rhs>
+		[[nodiscard]] constexpr auto operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
+			return tc::less(lhs,rhs);
+		}
+		using is_transparent = void;
 
-	using supremum = tc::greatest;
-	using infimum = tc::least;
-};
+		using supremum = tc::greatest;
+		using infimum = tc::least;
+	};
 
-struct fn_greater_equal {
-	template<typename Lhs, typename Rhs>
-	constexpr auto operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
-		return !tc::less(lhs,rhs);
-	}
-	using is_transparent = void;
-};
+	struct[[nodiscard]] fn_greater_equal{
+		template<typename Lhs, typename Rhs>
+		[[nodiscard]] constexpr auto operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
+			return !tc::less(lhs,rhs);
+		}
+		using is_transparent = void;
+	};
 
-struct fn_greater {
-	template<typename Lhs, typename Rhs>
-	constexpr auto operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
-		return tc::less(rhs,lhs);
-	}
-	using is_transparent = void;
+	struct[[nodiscard]] fn_greater{
+		template<typename Lhs, typename Rhs>
+		[[nodiscard]] constexpr auto operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
+			return tc::less(rhs,lhs);
+		}
+		using is_transparent = void;
 
-	using supremum = tc::least;
-	using infimum = tc::greatest;
-};
+		using supremum = tc::least;
+		using infimum = tc::greatest;
+	};
 
-struct fn_less_equal {
-	template<typename Lhs, typename Rhs>
-	constexpr auto operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
-		return !tc::less(rhs,lhs);
-	}
-	using is_transparent = void;
-};
+	struct[[nodiscard]] fn_less_equal{
+		template<typename Lhs, typename Rhs>
+		[[nodiscard]] constexpr auto operator()(Lhs const& lhs, Rhs const& rhs) const& noexcept {
+			return !tc::less(rhs,lhs);
+		}
+		using is_transparent = void;
+	};
+}
+
+using no_adl::fn_equal_to;
+using no_adl::fn_not_equal_to;
+using no_adl::fn_less;
+using no_adl::fn_greater_equal;
+using no_adl::fn_greater;
+using no_adl::fn_less_equal;
 
 /////////////////////////////////////////////////////////////////////
 // assign
@@ -183,7 +193,7 @@ auto assign_better( Var&& var, Val&& val, Better better ) noexcept {
 				return false;
 			}
 		}
-	)( better(VERIFYINITIALIZED(val), VERIFYINITIALIZED(var)) );
+	)( better(tc::as_const(VERIFYINITIALIZED(val)), tc::as_const(VERIFYINITIALIZED(var))) );
 }
 
 template< typename Var, typename Val >
@@ -196,7 +206,7 @@ template< typename Var, typename Val, typename Better >
 bool assign_better( std::atomic<Var>& var, Val&& val, Better better ) noexcept {
 	Var varOld=var;
 	_ASSERTINITIALIZED( varOld );
-	while( better(VERIFYINITIALIZED(val), varOld) ) {
+	while( better(tc::as_const(VERIFYINITIALIZED(val)), tc::as_const(varOld)) ) {
 		 if( var.compare_exchange_weak( varOld, val ) ) return true;
 	}
 	return false;
@@ -239,10 +249,10 @@ void change_with_or(Var&& var, Val&& val, bool& bChanged) noexcept {
 DEFINE_FN( assign_max );
 DEFINE_FN( assign_min );
 
-template< typename Func >
-auto fn_assign_better(Func func) {
-	return [func=tc_move(func)](auto&&... args) noexcept {
-		return tc::assign_better(std::forward<decltype(args)>(args)..., func);
+template< typename Better >
+[[nodiscard]] auto fn_assign_better(Better better) {
+	return [better=tc_move(better)](auto&& var, auto&& val) noexcept {
+		return tc::assign_better(tc_move_if_owned(var), tc_move_if_owned(val), better);
 	};
 }
 
@@ -256,7 +266,7 @@ auto fn_assign_better(Func func) {
 // https://connect.microsoft.com/VisualStudio/feedback/ViewFeedback.aspx?FeedbackID=518015&ppud=0&wa=wsignin1.0
 
 template< typename Lhs, typename Rhs >
-bool binary_equal( Lhs const& lhs, Rhs const& rhs ) noexcept {
+[[nodiscard]] bool binary_equal( Lhs const& lhs, Rhs const& rhs ) noexcept {
 	STATICASSERTEQUAL( sizeof(lhs), sizeof(rhs) );
 	return 0==std::memcmp(std::addressof(lhs),std::addressof(rhs),sizeof(lhs));
 }

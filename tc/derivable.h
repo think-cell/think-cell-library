@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -65,7 +65,7 @@ namespace tc {
 	#pragma push_macro("BASE_CAST_IMPL")
 	#define BASE_CAST_IMPL(cvref) \
 	template<typename Dst, std::enable_if_t<!std::is_class<Dst>::value>* = nullptr> \
-	constexpr Dst cvref base_cast(typename boost::mpl::identity<tc::derivable_t<Dst>>::type cvref t) noexcept { \
+	[[nodiscard]] constexpr Dst cvref base_cast(typename boost::mpl::identity<tc::derivable_t<Dst>>::type cvref t) noexcept { \
 		STATICASSERTSAME(tc::remove_cvref_t<Dst>, Dst); \
 		return static_cast<Dst cvref>(t); \
 	}
@@ -82,7 +82,7 @@ namespace tc {
 	#pragma push_macro("BASE_CAST_IMPL")
 	#define BASE_CAST_IMPL(cvref) \
 	template<typename Dst, std::enable_if_t<!std::is_class<Dst>::value>* = nullptr> \
-	constexpr Dst cvref base_cast(typename boost::mpl::identity<tc::derivable_t<Dst>>::type cvref p) noexcept { \
+	[[nodiscard]] constexpr Dst cvref base_cast(typename boost::mpl::identity<tc::derivable_t<Dst>>::type cvref p) noexcept { \
 		STATICASSERTSAME(tc::remove_cvref_t<Dst>, Dst); \
 		return std::addressof(tc::base_cast<Dst>(*p)); \
 	}

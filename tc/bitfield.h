@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -18,7 +18,7 @@
 #include <climits>
 
 namespace tc {
-	inline int bit_count(unsigned int x) noexcept {
+	[[nodiscard]] inline int bit_count(unsigned int x) noexcept {
 		// http://graphics.stanford.edu/~seander/bithacks.html#CountBitsSetParallel
 		// http://aggregate.org/MAGIC/#Population%20Count%20%28Ones%20Count%29
 		x -= (x >> 1) & 0x55555555;
@@ -29,7 +29,7 @@ namespace tc {
 		return x & 0x0000003f;
 	}
 
-	inline unsigned long index_of_least_significant_bit(unsigned long x) noexcept {
+	[[nodiscard]] inline unsigned long index_of_least_significant_bit(unsigned long x) noexcept {
 	#ifdef __clang__
 		_ASSERT(0!=x);
 		return __builtin_ctzl(x);
@@ -40,7 +40,7 @@ namespace tc {
 	#endif
 	}
 
-	inline unsigned long least_significant_bit(unsigned long x) noexcept {
+	[[nodiscard]] inline unsigned long least_significant_bit(unsigned long x) noexcept {
 		if( x ) {
 			return 1ul << tc::index_of_least_significant_bit(x);
 		} else {
@@ -48,7 +48,7 @@ namespace tc {
 		}
 	}
 
-	inline unsigned long index_of_most_significant_bit(unsigned long x) noexcept {
+	[[nodiscard]] inline unsigned long index_of_most_significant_bit(unsigned long x) noexcept {
 	#ifdef __clang__
 		_ASSERT(0!=x);
 		return sizeof(unsigned long)*CHAR_BIT - 1 - __builtin_clzl(x);
@@ -59,7 +59,7 @@ namespace tc {
 	#endif
 	}
 
-	inline unsigned long most_significant_bit(unsigned long x) noexcept {
+	[[nodiscard]] inline unsigned long most_significant_bit(unsigned long x) noexcept {
 		if( x ) {
 			return 1ul << tc::index_of_most_significant_bit(x);
 		} else {

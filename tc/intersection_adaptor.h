@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -112,24 +112,24 @@ namespace tc {
 	}
 
 	template<typename Rng0, typename Rng1, typename Comp>
-	auto intersect(Rng0&& rng0, Rng1&& rng1, Comp&& comp) noexcept return_ctor(
+	auto intersect(Rng0&& rng0, Rng1&& rng1, Comp&& comp) return_ctor_noexcept(
 		intersection_difference_adaptor< true BOOST_PP_COMMA() tc::decay_t<Comp> BOOST_PP_COMMA() Rng0 BOOST_PP_COMMA() Rng1>,
 		(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1), std::forward<Comp>(comp))
 	)
 
 	template<typename Rng0, typename Rng1>
-	auto intersect(Rng0&& rng0, Rng1&& rng1) noexcept return_decltype(
+	auto intersect(Rng0&& rng0, Rng1&& rng1) return_decltype_noexcept(
 		intersect(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1), fn_compare())
 	)
 
 	template<typename Rng0, typename Rng1, typename Comp>
-	auto difference(Rng0&& rng0, Rng1&& rng1, Comp&& comp) noexcept return_ctor(
+	auto difference(Rng0&& rng0, Rng1&& rng1, Comp&& comp) return_ctor_noexcept(
 		intersection_difference_adaptor< false BOOST_PP_COMMA() tc::decay_t<Comp> BOOST_PP_COMMA() Rng0 BOOST_PP_COMMA() Rng1>,
 		(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1), std::forward<Comp>(comp))
 	)
 
 	template<typename Rng0, typename Rng1>
-	auto difference(Rng0&& rng0, Rng1&& rng1) noexcept return_decltype(
+	auto difference(Rng0&& rng0, Rng1&& rng1) return_decltype_noexcept(
 		difference(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1), fn_compare())
 	)
 

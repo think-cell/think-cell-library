@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -21,7 +21,7 @@
 namespace tc {
 
 template<typename Value, typename Accumulate>
-struct FAccumulator final : tc::derivable_t<tc::decay_t<Value>> {
+struct [[nodiscard]] FAccumulator final : tc::derivable_t<tc::decay_t<Value>> {
 	using value_t = tc::decay_t<Value>;
 
 	FAccumulator(Value&& value, Accumulate&& accumulate) noexcept
@@ -42,7 +42,7 @@ private:
 // accumulators
 
 template<typename Value, typename Accumulate>
-auto make_accumulator(Value&& value, Accumulate&& accumulate) noexcept
-	return_ctor( FAccumulator<Value BOOST_PP_COMMA() Accumulate>, (std::forward<Value>(value),std::forward<Accumulate>(accumulate)) )
+auto make_accumulator(Value&& value, Accumulate&& accumulate)
+	return_ctor_noexcept( FAccumulator<Value BOOST_PP_COMMA() Accumulate>, (std::forward<Value>(value),std::forward<Accumulate>(accumulate)) )
 
 } // namespace tc

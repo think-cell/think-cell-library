@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -20,8 +20,8 @@ UNITTESTDEF(interval_center) {
 	{
 		auto TestCenterContained=[](auto low, auto high, auto center) noexcept {
 			auto const intvl = tc::make_interval(std::forward<decltype(low)>(low), std::forward<decltype(high)>(high));
-			_ASSERTEQUAL( intvl.center(), center );
-			_ASSERT( intvl.empty() || intvl.contains(intvl.center()) ); // The empty interval contains nothing, not even its center
+			_ASSERTEQUAL( intvl.midpoint(), center );
+			_ASSERT( intvl.empty() || intvl.contains(intvl.midpoint()) ); // The empty interval contains nothing, not even its center
 		};
 		
 		TestCenterContained(0, 1, 0);
@@ -33,7 +33,7 @@ UNITTESTDEF(interval_center) {
 	{
 		auto TestCenterContained=[](auto pos, auto extent) noexcept {
 			auto intvl = tc::make_centered_interval(pos, tc_move(extent));
-			_ASSERTEQUAL( intvl.center(), pos );
+			_ASSERTEQUAL( intvl.midpoint(), pos );
 			_ASSERT( intvl.contains(pos) );
 			return intvl;
 		};
@@ -46,9 +46,9 @@ UNITTESTDEF(interval_center) {
 	}
 
 #if TC_PRIVATE
-	tc::chrono::day const tp = tc::chrono::calendar(2000,1,1).time_point();
+	tc::chrono::sys_days const tp = tc::chrono::year_month_day(2000,1,1).time_point();
 
-	auto AddDays=[](tc::chrono::day const& tpBase, int nDays) noexcept {
+	auto AddDays=[](tc::chrono::sys_days const& tpBase, int nDays) noexcept {
 		return tpBase + tc::chrono::days(nDays);
 	};
 #endif
@@ -129,19 +129,31 @@ UNITTESTDEF(interval_center) {
 namespace {
 	template<typename T>
 	void AssertNextAfter() noexcept {
-		// checking suitability of tc::nextafter for generating right exclusive intervals
+		// checking suitability of tc::nextafter_inplace for generating right exclusive intervals
 		T const fInfinity = std::numeric_limits<T>::infinity();
 		T const fZero = 0;
 		T const fOne = 1;
-		_ASSERT(0 < tc::nextafter(fZero));
-		_ASSERTEQUAL(tc::nextafter(fZero) / 2, 0);
-		_ASSERTEQUAL(tc::nextafter(fOne) - fOne, std::numeric_limits<T>::epsilon());
-		_ASSERTEQUAL(tc::nextafter(std::numeric_limits<T>::max()), fInfinity);
-		_ASSERTEQUAL(tc::nextafter(fInfinity), fInfinity);
+		_ASSERT(0 < modified(fZero, tc::nextafter_inplace(_)));
+		_ASSERTEQUAL(modified(fZero, tc::nextafter_inplace(_)) / 2, 0);
+		_ASSERTEQUAL(modified(fOne, tc::nextafter_inplace(_)) - fOne, std::numeric_limits<T>::epsilon());
+		_ASSERTEQUAL(modified(std::numeric_limits<T>::max(), tc::nextafter_inplace(_)), fInfinity);
+		_ASSERTEQUAL(modified(fInfinity, tc::nextafter_inplace(_)), fInfinity);
 	}
 }
 
 UNITTESTDEF(nextafter) {
 	AssertNextAfter<float>();
 	AssertNextAfter<double>();
+}
+
+
+UNITTESTDEF(linear_invert) {
+	tc::linear_interval_transform<int> intvltransformf(tc::make_interval(2, 5), tc::make_interval(1, 5));
+	auto const intvltransformfInverse = intvltransformf.inverted();
+	_ASSERTEQUAL(intvltransformfInverse(intvltransformf(0)), 0);
+	_ASSERTEQUAL(intvltransformfInverse(intvltransformf(1)), 1);
+}
+
+UNITTESTDEF(minmax_interval) {
+	_ASSERTEQUAL(tc::minmax_interval(tc::vector<int>{1,2,3}), tc::make_interval(1,3));
 }

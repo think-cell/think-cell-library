@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -18,6 +18,16 @@
 	#define TC_FWD(...) __VA_ARGS__
 
 	#define _CHECKS
+	#ifndef IF_TC_CHECKS
+		#define IF_TC_CHECKS(...) __VA_ARGS__
+	#endif
+	#ifndef IF_TC_DEBUG
+		#ifdef _DEBUG
+			#define IF_TC_DEBUG(...) __VA_ARGS__
+		#else
+			#define IF_TC_DEBUG(...)
+		#endif
+	#endif
 	#ifndef _ASSERT
 		#include <cassert>
 		#define _ASSERT(...) assert((__VA_ARGS__))
@@ -36,6 +46,9 @@
 	#endif
 	#ifndef _ASSERTNOTIFYFALSE
 		#define _ASSERTNOTIFYFALSE _ASSERTFALSE
+	#endif
+	#ifndef _ASSERTENOTIFY
+		#define _ASSERTENOTIFY(...) _ASSERTE((__VA_ARGS__))
 	#endif
 	#ifndef _ASSERTEQUAL
 		#define _ASSERTEQUAL(a, b) assert((a)==(b))
@@ -67,6 +80,9 @@
 		}
 		#define VERIFYEQUAL( expr, constant ) ErrorHandling::VerifyEqual(expr, constant)
 	#endif
+	#ifndef VERIFYEQUALNOPRINT
+		#define VERIFYEQUALNOPRINT VERIFYEQUAL
+	#endif
 	#ifndef VERIFY
 		#include <utility>
 		namespace ErrorHandling {
@@ -95,6 +111,9 @@
 	#ifndef VERIFYNOTIFY
 		#define VERIFYNOTIFY VERIFY
 	#endif
+	#ifndef VERIFYNOTIFYPRED
+		#define VERIFYNOTIFYPRED VERIFYPRED
+	#endif
 	#ifndef NOBADALLOC
 		#define NOBADALLOC( expr ) (expr)
 	#endif
@@ -103,6 +122,9 @@
 			[&]() noexcept -> decltype(auto) { \
 				return (__VA_ARGS__); \
 			}()
+	#endif
+	#ifndef NOEXCEPT_NO_LAMBDA
+		#define NOEXCEPT_NO_LAMBDA( ... ) (__VA_ARGS__)
 	#endif
 
 	#define THROW(...) noexcept(false)

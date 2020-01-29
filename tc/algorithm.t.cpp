@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -16,11 +16,11 @@ namespace {
 	[[maybe_unused]] void static_tests() noexcept {
 		// explicit_cast with explicit move constructor
 		struct SMove { explicit SMove(tc::vector<int>&&) noexcept {} };
-		tc::explicit_cast<SMove>(tc::vector<int>());
+		void(tc::explicit_cast<SMove>(tc::vector<int>{}));
 
 		// explicit_cast with explicit constructor
 		struct SCopy { explicit SCopy(tc::vector<int>) noexcept {} };
-		tc::explicit_cast<SCopy>(tc::vector<int>());
+		void(tc::explicit_cast<SCopy>(tc::vector<int>{}));
 	}
 
 UNITTESTDEF( quantifiers ) {
@@ -161,7 +161,7 @@ UNITTESTDEF(find_closest_if) {
 
 	auto find=[](auto const& rngn, int iStart, int nTarget, int nComparisonsMax) noexcept {
 		int nComparisons = 0;
-		return tc::find_closest_if<tc::return_element_index_or_npos>(rngn, tc::begin_next(rngn, iStart), /*bSkipSelf*/false, [&](IntCompareOnce const& n) noexcept {
+		return tc::find_closest_if_with_index<tc::return_element_index_or_npos>(rngn, iStart, /*bSkipSelf*/false, [&](IntCompareOnce const& n) noexcept {
 			_ASSERT(++nComparisons<=nComparisonsMax);
 			return n==nTarget;
 		});
@@ -180,7 +180,7 @@ UNITTESTDEF(rangefilter_on_subrange) {
 	auto rngn=tc::drop_first(vecn, 4);
 
 	{
-		tc::sort_unique_inplace(rngn); // uses range_filter<tc::sub_range<tc::vector<int>&> > internally
+		tc::sort_unique_inplace(rngn); // uses range_filter<tc::subrange<tc::vector<int>&> > internally
 		int const anExpected[]={2,3,3,0, /*rngn starts here*/ 3,4,5,6,7};
 		_ASSERT(tc::equal(vecn, anExpected));
 		_ASSERTEQUAL(tc::begin(rngn), tc::begin_next(vecn,4));
@@ -189,7 +189,7 @@ UNITTESTDEF(rangefilter_on_subrange) {
 
 	{
 		{
-			tc::range_filter<tc::sub_range<tc::vector<int>&> > filter(rngn);
+			tc::range_filter<tc::subrange<tc::vector<int>&> > filter(rngn);
 			auto it=tc::begin(rngn);
 			filter.keep(it++);
 			filter.keep(it++);
@@ -300,6 +300,33 @@ UNITTESTDEF(NaryinterleaveBreak) {
 		tc::transform(vecnBCopy, [](int n) noexcept {return n < 7 ? n + 100 : n; }),
 		vecnB
 	));
+}
+
+UNITTESTDEF(plurality_element_test) {
+	auto const str = "abcdc";
+	_ASSERTEQUAL('c', tc::plurality_element<tc::return_value>(str));
+	auto const str2 = "";
+	_ASSERTEQUAL(std::nullopt, tc::plurality_element<tc::return_value_or_none>(str2));
+	auto const str3 = "a";
+	_ASSERTEQUAL(tc::begin(str3),tc::plurality_element<tc::return_element>(str3));
+	int an[] = {1,2,3,4,3,4,3,5,6};
+	_ASSERTEQUAL(std::make_optional(4), tc::plurality_element<tc::return_value_or_none>(tc::filter(an, [](auto n) noexcept { return n % 2 == 0; })));
+}
+
+static_assert(std::is_move_constructible<decltype(tc::sort(std::declval<std::string const&>()))>::value);
+static_assert(!std::is_move_constructible<decltype(tc::sort(std::declval<std::string>()))>::value);
+static_assert(std::is_move_constructible<decltype(tc::sort(std::declval<tc::vector<int> const&>()))>::value);
+static_assert(std::is_move_constructible<decltype(tc::sort(std::declval<tc::vector<int>>()))>::value);
+
+UNITTESTDEF(sort_test) {
+	tc::vector<int> vec1{6,1,2,9,5,0,3,4,7,8};
+	_ASSERT(tc::equal(tc::sort(vec1), tc::iota(0, 10)));
+	auto rngnSorted=tc::sort(tc::vector<int>{3,7,1,9,2,5,8,4,6,0});
+	_ASSERT(tc::equal(rngnSorted, tc::iota(0, 10)));
+	tc::vector<std::pair<int, int>> vecpairnn1{{5,0}, {3,0}, {0,0}, {6,0}, {1,0}, {5,1}, {1,1}, {5,2}, {3,1}, {0,1}, {0,2}, {6,1}};
+	tc::vector<std::pair<int, int>> vecpairnn2{{0,0}, {0,1}, {0,2}, {1,0}, {1,1}, {3,0}, {3,1}, {5,0}, {5,1}, {5,2}, {6,0}, {6,1}};
+	auto const rngpairnnSorted=tc::stable_sort(tc_move(vecpairnn1),tc::projected(tc::fn_compare(),[](auto const& pairnn) noexcept { return pairnn.first; }));
+	_ASSERT(tc::equal(rngpairnnSorted, vecpairnn2));
 }
 
 }

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -14,13 +14,13 @@ namespace tc {
 
 	// this is for testing only, equivalent to slice(rng, begin(rng), end(rng)), but also works correctly on temporaries
 	template< typename Rng >
-	tc::make_sub_range_result_t< Rng > slice(Rng&& rng) noexcept {
-		return tc::make_sub_range_result_t< Rng >( std::forward<Rng>(rng), tc::begin(rng), tc::end(rng) );
+	tc::make_subrange_result_t< Rng > slice(Rng&& rng) noexcept {
+		return tc::make_subrange_result_t< Rng >( std::forward<Rng>(rng), tc::begin(rng), tc::end(rng) );
 	}
 
 	// Do we want/need something like this as a generic tool?
 	template<typename Rng>
-	auto const_slice(Rng const& rng) noexcept return_decltype(slice(rng)) 
+	auto const_slice(Rng const& rng) return_decltype_noexcept(slice(rng)) 
 
 
 	// create a generator range that gives the same values as the vector it takes (for testing)

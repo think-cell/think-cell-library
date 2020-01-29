@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2019 think-cell Software GmbH
+// Copyright (C) 2016-2020 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -24,32 +24,32 @@ namespace tc {
 	static_assert(tc::is_instance<std::vector,tc::vector<int>>::value);
 
 	template< typename Cont, typename... Rng, std::enable_if_t<has_mem_fn_clear<Cont>::value && !(has_mem_fn_lower_bound<Cont>::value || has_mem_fn_hash_function<Cont>::value)>* = nullptr>
-	void cont_assign(Cont& cont, Rng&&... rng) MAYTHROW {
+	constexpr void cont_assign(Cont& cont, Rng&&... rng) MAYTHROW {
 		//tc::assert_no_overlap(cont, std::forward<Rng>(rng));
 		tc::cont_clear(cont);
 		tc::append(cont, std::forward<Rng>(rng)...); // MAYTHROW
 	}
 
 	template< typename Cont, typename Rng, std::enable_if_t<has_mem_fn_clear<Cont>::value && (has_mem_fn_lower_bound<Cont>::value || has_mem_fn_hash_function<Cont>::value)>* = nullptr>
-	void cont_assign(Cont& cont, Rng&& rng) MAYTHROW {
+	constexpr void cont_assign(Cont& cont, Rng&& rng) MAYTHROW {
 		tc::assert_no_overlap(cont, std::forward<Rng>(rng));
 		tc::cont_clear(cont);
 		tc::cont_must_insert_range(cont, std::forward<Rng>(rng)); // MAYTHROW
 	}
 
 	template< typename Cont, typename Rng, std::enable_if_t<!has_mem_fn_clear<std::remove_reference_t<Cont>>::value && tc::is_range_with_iterators<std::remove_reference_t<Rng>>::value>* = nullptr>
-	void cont_assign(Cont&& cont, Rng&& rng) MAYTHROW {
+	constexpr void cont_assign(Cont&& cont, Rng&& rng) MAYTHROW {
 		VERIFY(boost::copy(std::forward<Rng>(rng), tc::begin(cont))==tc::end(cont)); // MAYTHROW
 	}
 
 	template< typename Cont, typename Rng, std::enable_if_t<!has_mem_fn_clear<std::remove_reference_t<Cont>>::value && !tc::is_range_with_iterators<std::remove_reference_t<Rng>>::value>* = nullptr>
-	void cont_assign(Cont&& cont, Rng&& rng) MAYTHROW {
+	constexpr void cont_assign(Cont&& cont, Rng&& rng) MAYTHROW {
 		auto itOut = tc::begin(cont);
 		tc::for_each(rng, [&](auto&& t) noexcept {
 			*itOut = std::forward<decltype(t)>(t);
 			++itOut;
 		}); // MAYTHROW
-		_ASSERT(tc::end(cont)==itOut);
+		_ASSERTE(tc::end(cont)==itOut);
 	}
 
 	template<typename Cont, typename Rng>
