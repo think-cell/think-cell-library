@@ -203,7 +203,7 @@ namespace
 		STATIC_FINAL(decrement_index)(int& i) const -> void { --i; }
 	};
 
-	void concat_iterator_auto_traversal_static_tests() {
+	[[maybe_unused]] void concat_iterator_auto_traversal_static_tests() {
 		// Any concatenation which includes a forward-traversal range should be forward-traversal
 		{
 			auto rng = tc::concat(forward_range(), forward_range());

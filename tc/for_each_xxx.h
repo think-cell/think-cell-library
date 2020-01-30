@@ -196,14 +196,16 @@ namespace tc {
 
 			bool empty() const& noexcept {
 				return
-					tc::empty(*m_baserng) ||
-					tc::empty(*m_rngBegin) && tc::empty(*m_rngEnd) && [&]() noexcept {
-						bool const bEmptySep = tc::empty(*m_rngSep);
-						bool bFirst = false;
-						return tc::continue_==tc::for_each(*m_baserng, [&](auto const& rng) noexcept {
-							return tc::continue_if(tc::empty(rng) && (tc::change(bFirst, true) || bEmptySep));
-						});
-					}();
+					tc::empty(*m_baserng)
+					|| (
+						tc::empty(*m_rngBegin) && tc::empty(*m_rngEnd) && [&]() noexcept {
+							bool const bEmptySep = tc::empty(*m_rngSep);
+							bool bFirst = false;
+							return tc::continue_==tc::for_each(*m_baserng, [&](auto const& rng) noexcept {
+								return tc::continue_if(tc::empty(rng) && (tc::change(bFirst, true) || bEmptySep));
+							});
+						}()
+					);
 			}
 
 		private:

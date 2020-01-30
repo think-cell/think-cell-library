@@ -51,7 +51,7 @@ UNITTESTDEF(dense_map_with_non_moveable_type) {
 	static_cast<void>(myenumTWO);
 
 #ifndef _MSC_VER // MSVC support for guaranteed copy elision seems to be incomplete.
-	auto anoncopyFromTransform = tc::make_dense_map<MyEnum>(47, 11).transform([](int n) {
+	[[maybe_unused]] auto anoncopyFromTransform = tc::make_dense_map<MyEnum>(47, 11).transform([](int n) {
 		return NonCopyNonMoveable(n);
 	});
 #endif

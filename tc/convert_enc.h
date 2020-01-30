@@ -401,7 +401,7 @@ namespace tc {
 						case 0:
 							switch_no_default(nLastIndex) {
 								case 0: return nCodePoint;
-								case 1: return (nCodePoint-0x10000u >> 10)+0xd800u;
+								case 1: return ((nCodePoint-0x10000u) >> 10)+0xd800u;
 							}
 						case 1:
 							_ASSERTDEBUG(1==nLastIndex);
@@ -437,7 +437,7 @@ namespace tc {
 						case 0:
 							return 0==nLastIndex
 								? nCodePoint
-								: nCodePoint>>nLastIndex*6 | ((1 << nLastIndex+1)-1)<<(7-nLastIndex);
+								: nCodePoint>>nLastIndex*6 | ((1 << (nLastIndex+1))-1)<<(7-nLastIndex);
 						case 1:
 						case 2:
 						case 3:

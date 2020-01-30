@@ -249,11 +249,11 @@ namespace tc {
 		struct is_safely_convertible_between_arithmetic_values
 			: std::integral_constant<bool,
 				std::is_same<tc::decay_t<TSource>, TTarget>::value // covers bool and various char types, which are only convertible within their own type
-				||
+				|| (
 					(
-						std::is_floating_point<TSource>::value && std::is_floating_point<TTarget>::value
+						(std::is_floating_point<TSource>::value && std::is_floating_point<TTarget>::value)
 						||
-						tc::is_actual_integer<TSource>::value && tc::is_actual_arithmetic<TTarget>::value
+						(tc::is_actual_integer<TSource>::value && tc::is_actual_arithmetic<TTarget>::value)
 					)
 					&& (
 						std::is_signed<TSource>::value
@@ -263,6 +263,7 @@ namespace tc {
 						:	// conversion to unsigned (Warning 4018) is ok here:
 							std::numeric_limits<TSource>::max() <= std::numeric_limits<TTarget>::max()
 					)
+				)
 			>
 		{
 			static_assert(std::is_convertible<TSource, TTarget>::value);
@@ -317,7 +318,10 @@ namespace tc {
 			bool,
 			// std::is_convertible or, if TTarget is const&&, consider std::is_convertible to const& also is_convertible to const&&. static_cast is needed in this case.
 			// we expand std::is_convertible because
-			(std::is_convertible<TSource, TTarget>::value || std::is_rvalue_reference<TTarget>::value && std::is_const<std::remove_reference_t<TTarget>>::value && std::is_convertible<TSource, std::remove_reference_t<TTarget>&>::value)
+			(
+				std::is_convertible<TSource, TTarget>::value
+				|| (std::is_rvalue_reference<TTarget>::value && std::is_const<std::remove_reference_t<TTarget>>::value && std::is_convertible<TSource, std::remove_reference_t<TTarget>&>::value)
+			)
 			&& (
 				std::is_reference<TTarget>::value
 				? ( // creates no reference to temporary
@@ -328,17 +332,23 @@ namespace tc {
 					// binding to reference is only allowed to same type or derived to base conversion
 
 					// 1. a mutable lvalue reference does not bind to temporary objects, so it is safe to allow it
-					std::is_lvalue_reference<TTarget>::value && !std::is_const<std::remove_reference_t<TTarget>>::value
+					(std::is_lvalue_reference<TTarget>::value && !std::is_const<std::remove_reference_t<TTarget>>::value)
 					|| 
 					// 2. same type or derived to base (const)& -> const& does not bind to temporary objects
 					// 3. same type or derived to base (const)& -> const&& does not bind to temporary objects
 					// 4. same type or derived to base && -> (const)&& does not bind to temporary objects
 					// 5. same type or derived to base const&& -> const&& does not bind to temporary objects
-					(std::is_lvalue_reference<TSource>::value || std::is_rvalue_reference<TSource>::value && std::is_rvalue_reference<TTarget>::value) &&
-					tc::is_base_of<
-						std::remove_reference_t<TTarget>,
-						std::remove_reference_t<TSource>
-					>::value
+					(
+						(
+							std::is_lvalue_reference<TSource>::value
+							|| (std::is_rvalue_reference<TSource>::value && std::is_rvalue_reference<TTarget>::value)
+						)
+						&&
+						tc::is_base_of<
+							std::remove_reference_t<TTarget>,
+							std::remove_reference_t<TSource>
+						>::value
+					)
 				)
 				: no_adl::is_value_safely_constructible<std::remove_cv_t<TTarget>, tc::type::list<TSource>>::value
 			)
@@ -400,9 +410,10 @@ namespace tc {
 			bool,
 			std::is_reference<TTarget>::value
 			? tc::is_safely_convertible<TSource, TTarget>::value
-			: std::is_constructible<TTarget, TSource>::value && (
-				no_adl::is_value_safely_constructible<std::remove_cv_t<TTarget>, tc::type::list<TSource>>::value ||
-				std::is_floating_point<std::remove_cv_t<TTarget>>::value && std::is_floating_point<tc::remove_cvref_t<TSource>>::value
+			: std::is_constructible<TTarget, TSource>::value
+				&& (
+					no_adl::is_value_safely_constructible<std::remove_cv_t<TTarget>, tc::type::list<TSource>>::value
+					|| (std::is_floating_point<std::remove_cv_t<TTarget>>::value && std::is_floating_point<tc::remove_cvref_t<TSource>>::value)
 			)
 		>
 	{};

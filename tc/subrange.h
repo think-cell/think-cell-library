@@ -501,7 +501,7 @@ namespace tc {
 			}
 			auto it=tc::begin(rng);
 #ifdef _CHECKS
-			auto const itBound=tc::end(rng);
+			[[maybe_unused]] auto const itBound=tc::end(rng);
 #endif
 			while (0<n) {
 				_ASSERTE(it!=itBound);

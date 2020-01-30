@@ -54,7 +54,7 @@ namespace {
 			rngnoncopy,
 			[](auto&& noncopy) noexcept {}
 		);
-		auto noncopy = tc_front(rngnoncopy);
+		[[maybe_unused]] auto noncopy = tc_front(rngnoncopy);
 	}
 }
 
