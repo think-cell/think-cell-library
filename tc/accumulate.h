@@ -19,19 +19,19 @@ namespace tc {
 		struct accumulate_fn /*final*/ {
 			T * m_pt;
 			AccuOp * m_paccuop;
-			accumulate_fn( T & t, AccuOp & accuop ) noexcept
+			constexpr accumulate_fn( T & t, AccuOp & accuop ) noexcept
 			:  m_pt(std::addressof(t)), m_paccuop(std::addressof(accuop))
 			{}
 
 			template<typename S>
-			auto operator()(S&& s) const& MAYTHROW {
+			constexpr auto operator()(S&& s) const& MAYTHROW {
 				return tc::continue_if_not_break(*m_paccuop, *m_pt, std::forward<S>(s));
 			}
 		};
 	}
 
 	template< typename Rng, typename T, typename AccuOp >
-	[[nodiscard]] T accumulate(Rng&& rng, T t, AccuOp accuop) MAYTHROW {
+	[[nodiscard]] constexpr T accumulate(Rng&& rng, T t, AccuOp accuop) MAYTHROW {
 		tc::for_each(std::forward<Rng>(rng), no_adl::accumulate_fn<T,AccuOp>(t,accuop));
 		return t;
 	}

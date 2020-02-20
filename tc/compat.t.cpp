@@ -9,7 +9,6 @@
 #include "range.h"
 #include "container.h" // tc::vector
 #include "range.t.h"
-#include <array>
 
 #pragma warning( push )
 #pragma warning( disable: 4018 )
@@ -24,7 +23,7 @@ namespace lookup {
 namespace {
 	using HasStdBegin = tc::vector<int>;
 	using HasNoBegin = lookup::NoBegin;
-	using HasBoostBegin = boost::iterator_range< boost::range_iterator<tc::array<unsigned long,1> const>::type >;
+	using HasBoostBegin = boost::iterator_range< boost::range_iterator<std::array<unsigned long,1> const>::type >;
 
 	STATIC_ASSERT(tc::is_range_with_iterators<HasStdBegin>::value);
 	STATIC_ASSERT(tc::is_range_with_iterators<HasBoostBegin>::value);
@@ -89,12 +88,12 @@ UNITTESTDEF( boost_iterator_range_compat ) {
 	tc::vector<unsigned long> v = original;
 
 	TEST_init_hack(tc::vector, unsigned long, baul_exp, {6});
-	tc::array<unsigned long, 1> baul; baul[0] = 6;
+	std::array<unsigned long, 1> baul; baul[0] = 6;
 
 	auto mutable_range = boost::make_iterator_range(v); TEST_RANGE_LENGTH(mutable_range, 8);
 	TEST_RANGE_EQUAL(original, mutable_range);
 
-	boost::iterator_range< boost::range_iterator<tc::array<unsigned long,1> const>::type > const baul_r = boost::make_iterator_range(baul);
+	boost::iterator_range< boost::range_iterator<std::array<unsigned long,1> const>::type > const baul_r = boost::make_iterator_range(baul);
 
 	STATIC_ASSERT(tc::is_range_with_iterators<decltype(baul)>::value);
 

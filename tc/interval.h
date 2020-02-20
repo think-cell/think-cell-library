@@ -31,7 +31,7 @@
 
 DEFINE_FN( length );
 DEFINE_FN( include );
-DEFINE_FN( inclusive_include );
+DEFINE_FN( include_inclusive );
 
 namespace tc {
 	// least and greatest are the values least/greatest with respect to operator< of a given type.
@@ -122,9 +122,8 @@ namespace tc {
 		struct difference {
 			using type = decltype(std::declval<T>() - std::declval<T>());
 		};
-
-		TC_HAS_EXPR(minus, (T), std::declval<T>()-std::declval<T>())
 	}
+	TC_HAS_EXPR(minus, (T), std::declval<T>()-std::declval<T>())
 
 	// TODO: consider using "nextup" and "nextdown" which are single argument C functions
 	// (but only for floats) standardized in IEEE 754-2008 revision and proposed in C TS 18661-1,2
@@ -178,7 +177,7 @@ namespace tc {
 #endif
 			using newT = tc::decay_t<T>;
 			using difference_type = typename std::conditional_t<
-				tc::no_adl::has_minus<T>::value
+				tc::has_minus<T>::value
 				,/*?*/tc::no_adl::difference<T const&> //Evaluation of ::type must be delayed, because it only compiles if the predicate is true
 				,/*:*/boost::mpl::identity<void>
 			>::type;
@@ -280,7 +279,7 @@ namespace tc {
 			[[nodiscard]] interval<TTarget> expanding_cast() const& noexcept;
 
 			template <typename TTarget>
-			[[nodiscard]] interval<TTarget> inclusive_expanding_cast() const& noexcept;
+			[[nodiscard]] interval<TTarget> expanding_cast_inclusive() const& noexcept;
 
 			template< typename TExtent >
 			void expand_length(TExtent&& extent) & noexcept {
@@ -302,12 +301,12 @@ namespace tc {
 				return !( (*this)[tc::lo] < (*this)[tc::hi] );
 			}
 
-			[[nodiscard]] bool inclusive_empty() const& noexcept {
+			[[nodiscard]] bool empty_inclusive() const& noexcept {
 				return (*this)[tc::hi] < (*this)[tc::lo];
 			}
 
 			[[nodiscard]] difference_type distance(T const& t) const& noexcept {
-				_ASSERT( !inclusive_empty() );
+				_ASSERT( !empty_inclusive() );
 				if( t < (*this)[tc::lo] ) {
 					return (*this)[tc::lo] - t;
 				} else if( (*this)[tc::hi] < t ) {
@@ -319,7 +318,7 @@ namespace tc {
 
 			template<typename T2>
 			[[nodiscard]] tc::common_reference_xvalue_as_ref_t<T2&&, T const&> clamp_inclusive(T2&& t) const& noexcept {
-				_ASSERT( !inclusive_empty() );
+				_ASSERT( !empty_inclusive() );
 				// static_cast necessary because T& does not implicitly convert to common_reference_t<T&, T&&> == T const&&
 				using result_t=tc::common_reference_xvalue_as_ref_t<T2&&, T const&>;
 				if( t<(*this)[tc::lo] ) {
@@ -333,7 +332,7 @@ namespace tc {
 
 			template<typename T2>
 			[[nodiscard]] tc::common_reference_xvalue_as_ref_t<T2&&, T&&> clamp_inclusive(T2&& t) && noexcept {
-				_ASSERT( !inclusive_empty() );
+				_ASSERT( !empty_inclusive() );
 				// static_cast necessary because T& does not implicitly convert to common_reference_t<T&, T&&> == T const&&
 				using result_t=tc::common_reference_xvalue_as_ref_t<T2&&, T&&>;
 				if( t<(*this)[tc::lo] ) {
@@ -365,13 +364,13 @@ namespace tc {
 
 			template<typename S>
 			[[nodiscard]] T const& closest_boundary( S const& s ) const& noexcept {
-				_ASSERT( !inclusive_empty() );
+				_ASSERT( !empty_inclusive() );
 				return (*this)[tc::not_if(s < midpoint(), tc::hi)];
 			}
 
 			template<typename S>
 			[[nodiscard]] T const& farthest_boundary( S const& s ) const& noexcept {
-				_ASSERT( !inclusive_empty() );
+				_ASSERT( !empty_inclusive() );
 				return (*this)[tc::not_if(s < midpoint(), tc::lo)];
 			}
 
@@ -405,7 +404,7 @@ namespace tc {
 
 			//returns a value X such that modified(intvl, _.ensure_length(this->length())).contains(*this + X)
 			[[nodiscard]] difference_type OffsetToFit(interval<T> const& intvl) const& noexcept {
-				_ASSERT( !inclusive_empty() ); // intvl.begin==intvl.end is treated like intvl very small
+				_ASSERT( !empty_inclusive() ); // intvl.begin==intvl.end is treated like intvl very small
 				if( (*this)[tc::lo] < intvl[tc::lo] ) {
 					auto t=intvl[tc::lo]-(*this)[tc::lo];
 					if( intvl[tc::hi] < (*this)[tc::hi]+t ) {
@@ -422,6 +421,21 @@ namespace tc {
 					return t;
 				} else {
 					return tc::explicit_cast<difference_type>(0);
+				}
+			}
+
+			void FitInsideOf(interval<T> const& intvl) & noexcept {
+				auto_cref(tLength, length());
+				if(!(tLength < intvl.length())) {
+					*this = intvl;
+				} else if((*this)[tc::lo] < intvl[tc::lo]) {
+					(*this)[tc::hi]=intvl[tc::lo]+tLength;
+					(*this)[tc::lo]=intvl[tc::lo];
+					_ASSERT(!(intvl[tc::hi]<(*this)[tc::hi]));
+				} else if(intvl[tc::hi] < (*this)[tc::hi]) {
+					(*this)[tc::lo]=intvl[tc::hi]-tLength;
+					(*this)[tc::hi]=intvl[tc::hi];
+					_ASSERT(!((*this)[tc::lo]<intvl[tc::lo]));
 				}
 			}
 
@@ -452,7 +466,7 @@ namespace tc {
 			}
 
 			template<typename S> 
-			[[nodiscard]] bool inclusive_contains(S const& t) const& noexcept {
+			[[nodiscard]] bool contains_inclusive(S const& t) const& noexcept {
 				return !(t<(*this)[tc::lo] || (*this)[tc::hi]<t);
 			}
 
@@ -498,15 +512,15 @@ namespace tc {
 				tc::assign_max( (*this)[tc::hi], t );
 			}
 
-			void inclusive_include(newT const& t) & noexcept {
-				_ASSERT( EmptyInterval()==*this || !inclusive_empty() );
+			void include_inclusive(newT const& t) & noexcept {
+				_ASSERT( EmptyInterval()==*this || !empty_inclusive() );
 				tc::assign_min( (*this)[tc::lo], t );
 				tc::assign_max( (*this)[tc::hi], t );
 			}
 
 			interval<T>& operator|=(interval<T> const& intvl) & noexcept {
-				_ASSERTDEBUG( EmptyInterval()==*this || !inclusive_empty() );
-				_ASSERTDEBUG( EmptyInterval()==intvl || !intvl.inclusive_empty() );
+				_ASSERTDEBUG( EmptyInterval()==*this || !empty_inclusive() );
+				_ASSERTDEBUG( EmptyInterval()==intvl || !intvl.empty_inclusive() );
 				tc::assign_min( (*this)[tc::lo], intvl[tc::lo] );
 				tc::assign_max( (*this)[tc::hi], intvl[tc::hi] );
 				return *this;
@@ -584,8 +598,8 @@ namespace tc {
 
 		template<typename T>
 		template<typename TTarget>
-		interval<TTarget> interval<T>::inclusive_expanding_cast() const& noexcept {
-			_ASSERT(!inclusive_empty());
+		interval<TTarget> interval<T>::expanding_cast_inclusive() const& noexcept {
+			_ASSERT(!empty_inclusive());
 			return {
 				tc::rounding_cast<TTarget>( (*this)[tc::lo], tc::roundFLOOR ),
 				tc::rounding_cast<TTarget>( (*this)[tc::hi], tc::roundCEIL )
@@ -596,7 +610,7 @@ namespace tc {
 		template<typename TTarget>
 		interval<TTarget> interval<T>::expanding_cast() const& noexcept {
 			_ASSERT(!empty()); // Rounding an empty interval may make it non-empty, which might not be intended.
-			return inclusive_expanding_cast<TTarget>();
+			return expanding_cast_inclusive<TTarget>();
 		}
 	}
 
@@ -616,7 +630,7 @@ namespace tc {
 // Alternative paths (discussion with Volker, Vladimir, Edgar):
 //
 // - "use a std::pair for intervals of the second type"
-//   BAD IDEA, obscures semantic, we cleary want some parts of the interval interface, e.g., transform.
+//   BAD IDEA, obscures semantic, we clearly want some parts of the interval interface, e.g., transform.
 //
 // - "intervals of non-fundamental T are of second type"
 //   COUNTEREXAMPLE: gridvalue.

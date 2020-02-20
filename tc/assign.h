@@ -174,7 +174,7 @@ using no_adl::fn_less_equal;
 // assign
 
 template< typename Var, typename Val, typename Better >
-auto assign_better( Var&& var, Val&& val, Better better ) noexcept {
+constexpr auto assign_better( Var&& var, Val&& val, Better better ) noexcept {
 	return tc::make_overload<bool>(
 		[&](std::true_type b) noexcept {
 			static_assert( tc::is_safely_assignable<Var&&, Val&&>::value );
@@ -193,11 +193,11 @@ auto assign_better( Var&& var, Val&& val, Better better ) noexcept {
 				return false;
 			}
 		}
-	)( better(tc::as_const(VERIFYINITIALIZED(val)), tc::as_const(VERIFYINITIALIZED(var))) );
+	)( better(tc::as_const(val), tc::as_const(var)) );
 }
 
 template< typename Var, typename Val >
-bool change( Var&& var, Val&& val ) noexcept {
+constexpr bool change( Var&& var, Val&& val ) noexcept {
 	return tc::assign_better( std::forward<Var>(var), std::forward<Val>(val), [](auto const& val_, auto const& var_) noexcept { return !tc::equal_to(var_, val_); } ); // var==val, not val==var
 }
 
@@ -226,12 +226,12 @@ bool change( std::atomic<Var>&& var, Val&& val ) noexcept; // make passing rvalu
 #endif // __EMSCRIPTEN__
 
 template< typename Var, typename Val >
-bool assign_max( Var&& var, Val&& val ) noexcept {
+constexpr bool assign_max( Var&& var, Val&& val ) noexcept {
 	return tc::assign_better( std::forward<Var>(var), std::forward<Val>(val), tc::fn_greater() ); // use operator< for comparison just like tc::min/max
 }
 
 template< typename Var, typename Val >
-bool assign_min( Var&& var, Val&& val ) noexcept {
+constexpr bool assign_min( Var&& var, Val&& val ) noexcept {
 	return tc::assign_better( std::forward<Var>(var), std::forward<Val>(val), tc::fn_less() );
 }
 

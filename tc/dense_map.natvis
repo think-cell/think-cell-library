@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?> 
 <AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
-	<Type Name="tc::no_adl::dense_map&lt;*,*&gt;">
+	<Type Name="tc::dense_map_adl::dense_map&lt;*,*&gt;">
 		<DisplayString>dense_map</DisplayString>
 		<Expand>
 			<ExpandedItem>m_a.m_a</ExpandedItem>

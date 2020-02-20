@@ -236,8 +236,8 @@ UNITTESTDEF( ensure_index_range_on_chars ) {
 
 UNITTESTDEF( construct_array_from_range ) {
 	auto rng=tc::iota(0, 10);
-	tc::array<int, 10> an(rng);
-	tc::array<int, 10> anCopy=an;
+	auto an=tc::explicit_cast<std::array<int, 10>>(rng);
+	auto anCopy=an;
 	tc::array<int&, 10> anRef(an);
 	tc::for_each(rng, [&](int n) {
 		_ASSERTEQUAL(an[n], n);
@@ -540,7 +540,7 @@ UNITTESTDEF(filter_with_generator_range) {
 //---- Cartesian product ------------------------------------------------------------------------------------------------------
 
 namespace {
-	[[maybe_unused]] void cartesian_product_test(tc::array<int, 2>& an) {
+	[[maybe_unused]] void cartesian_product_test(std::array<int, 2>& an) {
 		tc::for_each(tc::cartesian_product(an, an), [](auto&& x){
 			STATICASSERTSAME(decltype(x), (std::tuple<int&, int&>&&));
 		});

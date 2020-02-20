@@ -36,6 +36,21 @@ namespace tc {
 	using sink_value_t = typename sink_value_type_base<Sink>::sink_value_type;
 
 	namespace no_adl {
+		template<typename /*Sink*/, typename /*Enable*/=void>
+		struct sink_value_or_char final {
+			using type = char;
+		};
+
+		template<typename Sink>
+		struct sink_value_or_char<Sink, tc::void_t<tc::sink_value_t<Sink>>> final {
+			using type = tc::sink_value_t<Sink>;
+		};
+	}
+
+	template<typename Sink>
+	using sink_value_or_char_t = typename no_adl::sink_value_or_char<Sink>::type;
+
+	namespace no_adl {
 		template<typename ...T>
 		struct common_type_break_or_continue;
 

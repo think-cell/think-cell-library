@@ -36,7 +36,7 @@
 		#define _ASSERTE(...) (static_cast<void>(0))
 	#endif
 	#ifndef _ASSERTDEBUG
-		#define _ASSERTDEBUG(...) _ASSERT((__VA_ARGS__))
+		#define _ASSERTDEBUG(...) IF_TC_DEBUG(_ASSERT((__VA_ARGS__)))
 	#endif
 	#ifndef _ASSERTFALSE
 		#define _ASSERTFALSE _ASSERT(false)
@@ -54,7 +54,7 @@
 		#define _ASSERTEQUAL(a, b) assert((a)==(b))
 	#endif
 	#ifndef _ASSERTEQUALDEBUG
-		#define _ASSERTEQUALDEBUG(a, b) _ASSERTEQUAL(a, b)
+		#define _ASSERTEQUALDEBUG(a, b) IF_TC_DEBUG(_ASSERTEQUAL(a, b))
 	#endif
 	#ifndef _ASSERTINITIALIZED
 		#define _ASSERTINITIALIZED( expr ) static_cast<void>(expr)

@@ -38,11 +38,7 @@ static_assert(!tc::type::find_unique<tc::type::list<char, char const*, double, s
 
 STATICASSERTSAME((tc::type::list<int, float, char const*>), (tc::type::transform_t<tc::type::list<int&, float const&, char const*>, tc::decay_t>));
 
-template<typename T0, typename T1>
-using common_type_2_t = std::common_type_t<T0, T1>;
-
-STATICASSERTSAME(int, (tc::type::accumulate_t<tc::type::list<int>, common_type_2_t>));
-STATICASSERTSAME(float, (tc::type::accumulate_t<tc::type::list<int, char, unsigned, float/*, int**/>, common_type_2_t>));
+STATICASSERTSAME(float, (tc::type::accumulate_with_front_t<tc::type::list<int, char, unsigned, float/*, int**/>, std::common_type_t>));
 
 STATICASSERTSAME((tc::type::take_first_t<tc::type::list<int, char, unsigned, float>>), (tc::type::list<int>));
 STATICASSERTSAME((tc::type::take_first_t<tc::type::list<int, char, unsigned, float>, 2>), (tc::type::list<int, char>));

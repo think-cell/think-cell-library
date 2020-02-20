@@ -35,6 +35,9 @@
 
 namespace tc {
 	DEFINE_TAG_TYPE(list_initialize_tag)
+	DEFINE_TAG_TYPE(func_tag)
+	DEFINE_TAG_TYPE(fill_tag)
+	DEFINE_TAG_TYPE(range_tag)
 
 	namespace no_adl {
 
@@ -251,6 +254,7 @@ namespace tc {
 		struct [[nodiscard]] lazy_ctor final {
 			Tuple m_tuple;
 			operator T() && noexcept {
+				// std::remove_cv affects only values and leaves const/volatile references untouched, which is what we want.
 				return std::apply(tc::fn_explicit_cast<std::remove_cv_t<T>>(), tc_move_always(m_tuple));
 			}
 		};
@@ -266,7 +270,6 @@ namespace tc {
 		struct SConversions<std::optional<TTarget>> final {
 			template<typename... TSource>
 			static constexpr std::optional<TTarget> fn(std::in_place_t, TSource&&... src) MAYTHROW {
-				// std::remove_cv affects only values and leaves const/volatile references untouched, which is what we want.
 				return std::optional<TTarget>(std::in_place, tc::lazy_ctor<TTarget>(std::forward<TSource>(src)...));
 			}
 		};

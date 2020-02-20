@@ -31,8 +31,10 @@ namespace tc {
 		template< typename ...Args > constexpr auto operator()( Args const&... ) const& noexcept { return val; }
 	};
 
+	// MAKE_CONSTEXPR_FUNCTION is guaranteed a constexpr function.
+	// We limit the return type to small types because large types may take too much space if not used carefully
 	#define MAKE_CONSTEXPR_FUNCTION(val) \
-		[](auto&&...) constexpr noexcept { auto ret = val; static_assert(sizeof(ret)<=sizeof(void*)); return ret; }
+		[](auto&&...) constexpr noexcept { constexpr auto _ = val; static_assert(sizeof(_)<=sizeof(void*)); return val; }
 
 	struct identity {
 		template< typename T >

@@ -19,12 +19,12 @@
 
 namespace tc {
 	template<typename TTarget, typename TSource, std::enable_if_t<tc::is_base_of_decayed<TTarget, TSource>::value>* = nullptr>
-	[[nodiscard]] TSource&& reluctant_numeric_cast(TSource&& src) noexcept {
+	[[nodiscard]] constexpr TSource&& reluctant_numeric_cast(TSource&& src) noexcept {
 		return std::forward<TSource>(src);
 	}
 
 	template<typename TTarget, typename TSource, std::enable_if_t<!tc::is_base_of_decayed<TTarget, TSource>::value>* = nullptr>
-	[[nodiscard]] TTarget reluctant_numeric_cast(TSource&& src) noexcept {
+	[[nodiscard]] constexpr TTarget reluctant_numeric_cast(TSource&& src) noexcept {
 		return tc::explicit_cast<TTarget>(std::forward<TSource>(src));
 	}
 
@@ -75,22 +75,30 @@ namespace tc {
 	template< typename Lhs, typename Rhs >
 	[[nodiscard]]
 	typename TMultiply<Lhs,Rhs>::type
-	mul( Lhs lhs, Rhs rhs ) noexcept {
+	constexpr mul( Lhs lhs, Rhs rhs ) noexcept {
 		return tc::explicit_cast<typename TMultiply<Lhs,Rhs>::type>(lhs)*tc::explicit_cast<typename TMultiply<Lhs,Rhs>::type>(rhs);
 	}
 
 	template<typename T>
-	[[nodiscard]] auto sqr(T const& x)
+	[[nodiscard]] constexpr auto sqr(T const& x)
 		return_decltype_noexcept( mul(x,x) )
-
+	
+	[[nodiscard]] inline constexpr 
+#ifdef TC_MAC
+		__attribute__((optnone)) // Disable compiler optimization num/den ---> num*(1/den) resulting in tc::fdiv(49,49)==0.99999999999999989
+#endif
+	double fdiv(double num, double den) noexcept {
+		return num/den;
+	}
+	
 	template< typename Num, typename Den >
-	[[nodiscard]] constexpr double fdiv( Num num, Den den) noexcept {
-		return static_cast<double>(num)/static_cast<double>(den);
+	[[nodiscard]] constexpr double fdiv(Num num, Den den) noexcept {
+		return tc::fdiv(static_cast<double>(num), static_cast<double>(den));
 	}
 
 	struct SRoundFloor final {
 		template< typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
-		T operator()( T t ) const& noexcept {
+		constexpr T operator()( T t ) const& noexcept {
 			return t;
 		}
 		template< typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
@@ -98,18 +106,18 @@ namespace tc {
 			return std::floor(t);
 		}
 		template< typename T >
-		static T PositiveOffset( T t ) noexcept {
+		static constexpr T PositiveOffset( T t ) noexcept {
 			return 0;
 		}
 		template< typename T >
-		static T NegativeOffset( T t ) noexcept {
+		static constexpr T NegativeOffset( T t ) noexcept {
 			return t-1;
 		}
-	} const roundFLOOR{};
+	} inline constexpr roundFLOOR{};
 
 	struct SRoundNearest final {
 		template< typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
-		T operator()( T t ) const& noexcept {
+		constexpr T operator()( T t ) const& noexcept {
 			return t;
 		}
 		template< typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
@@ -117,18 +125,18 @@ namespace tc {
 			return tc::round(t);
 		}
 		template< typename T >
-		static T PositiveOffset( T t ) noexcept {
+		static constexpr T PositiveOffset( T t ) noexcept {
 			return t/2;
 		}
 		template< typename T >
-		static T NegativeOffset( T t ) noexcept {
+		static constexpr T NegativeOffset( T t ) noexcept {
 			return (t-1)/2;
 		}
-	} const roundNEAREST{};
+	} inline constexpr roundNEAREST{};
 
 	struct SRoundAwayFromZero final {
 		template< typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
-		T operator()( T t ) const& noexcept {
+		constexpr T operator()( T t ) const& noexcept {
 			return t;
 		}
 		template< typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
@@ -136,18 +144,18 @@ namespace tc {
 			return std::round(t);
 		}
 		template< typename T >
-		static T PositiveOffset( T t ) noexcept {
+		static constexpr T PositiveOffset( T t ) noexcept {
 			return t/2;
 		}
 		template< typename T >
-		static T NegativeOffset( T t ) noexcept {
+		static constexpr T NegativeOffset( T t ) noexcept {
 			return t/2;
 		}
-	} const roundAWAYFROMZERO{};
+	} inline constexpr roundAWAYFROMZERO{};
 
 	struct SRoundCeil final {
 		template< typename T, std::enable_if_t<std::is_integral<T>::value>* = nullptr>
-		T operator()( T t ) const& noexcept {
+		constexpr T operator()( T t ) const& noexcept {
 			return t;
 		}
 		template< typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
@@ -155,36 +163,36 @@ namespace tc {
 			return std::ceil(t);
 		}
 		template< typename T >
-		static T PositiveOffset( T t ) noexcept {
+		static constexpr T PositiveOffset( T t ) noexcept {
 			return t-1;
 		}
 		template< typename T >
-		static T NegativeOffset( T t ) noexcept {
+		static constexpr T NegativeOffset( T t ) noexcept {
 			return 0;
 		}
-	} const roundCEIL{};
+	} inline constexpr roundCEIL{};
 
 	struct SRoundBanker final {
-	} const roundBANKER{};
+	} inline constexpr roundBANKER{};
 
 	namespace idiv_impl {
 		// The standard guarantees that integer division rounds to zero.
 		// [expr.mul]/4 (oder 5.6/4) 
 		template< typename Num, typename Denom, typename Round >
-		Num idiv( Num num, Denom denom, Round round ) noexcept {
+		constexpr Num idiv( Num num, Denom denom, Round round ) noexcept {
 			static_assert( tc::is_actual_integer_like<Num>::value );
 			static_assert( tc::is_actual_integer_like< Denom >::value );
 			STATICASSERTEQUAL( std::numeric_limits<Num>::is_signed, std::numeric_limits<Denom>::is_signed );
-			_ASSERT( 0<denom );
+			_ASSERTE( 0<denom );
 			return tc::explicit_cast<Num>( ( num<0 ? num-Round::NegativeOffset(denom) : num+Round::PositiveOffset(denom) )/denom );
 		}
 
 		template< typename Num, typename Denom >
-		Num idiv( Num num, Denom denom, SRoundBanker ) noexcept {
+		constexpr Num idiv( Num num, Denom denom, SRoundBanker ) noexcept {
 			static_assert( tc::is_actual_integer_like<Num>::value );
 			static_assert( tc::is_actual_integer_like< Denom >::value );
 			STATICASSERTEQUAL( std::numeric_limits<Num>::is_signed, std::numeric_limits<Denom>::is_signed );
-			_ASSERT( 0<denom );
+			_ASSERTE( 0<denom );
 			auto result = num / denom;
 			auto remainder = num - result * denom;
 			if(remainder<0) -tc::inplace(remainder);
@@ -204,7 +212,7 @@ namespace tc {
 	template< typename Num, typename Denom, typename Round, std::enable_if_t<
 		tc::is_actual_integer_like<Num>::value && tc::is_actual_integer_like< Denom >::value && std::numeric_limits<Num>::is_signed && std::numeric_limits<Denom>::is_signed
 	>* = nullptr>
-	[[nodiscard]] Num idiv(Num num, Denom denom, Round round) noexcept {
+	[[nodiscard]] constexpr Num idiv(Num num, Denom denom, Round round) noexcept {
 		if (denom < 0) {
 			-tc::inplace(num);
 			-tc::inplace(denom);
@@ -215,28 +223,28 @@ namespace tc {
 	template< typename Num, typename Denom, typename Round, std::enable_if_t<
 		tc::is_actual_integer_like<Num>::value && tc::is_actual_integer_like< Denom >::value && !std::numeric_limits<Num>::is_signed && !std::numeric_limits<Denom>::is_signed
 	>* = nullptr>
-	[[nodiscard]] Num idiv( Num num, Denom denom, Round round ) noexcept {
+	[[nodiscard]] constexpr Num idiv( Num num, Denom denom, Round round ) noexcept {
 		return idiv_impl::idiv( num, denom, round );
 	}
 
 	template< typename Num, typename Denom, typename Round, std::enable_if_t<
 		tc::is_actual_integer_like<Num>::value && tc::is_actual_integer_like< Denom >::value && std::numeric_limits<Num>::is_signed && !std::numeric_limits<Denom>::is_signed
 	>* = nullptr>
-	[[nodiscard]] Num idiv( Num num, Denom denom, Round round ) noexcept {
+	[[nodiscard]] constexpr Num idiv( Num num, Denom denom, Round round ) noexcept {
 		return idiv/*not idiv_impl::idiv*/( num, tc::signed_cast(denom), round );
 	}
 
 	template< typename Num, typename Denom, typename Round, std::enable_if_t<
 		tc::is_actual_integer_like<Num>::value && tc::is_actual_integer_like< Denom >::value && !std::numeric_limits<Num>::is_signed && std::numeric_limits<Denom>::is_signed
 	>* = nullptr>
-	[[nodiscard]] Num idiv( Num num, Denom denom, Round round ) noexcept {
+	[[nodiscard]] constexpr Num idiv( Num num, Denom denom, Round round ) noexcept {
 		return idiv_impl::idiv( num, tc::unsigned_cast(denom), round );
 	}
 
 	template< typename Num, typename Denom, typename Round, std::enable_if_t<
 		tc::is_actual_integer_like<Num>::value && std::is_floating_point< Denom >::value
 	>* = nullptr>
-	[[nodiscard]] Num idiv( Num num, Denom denom, Round round ) noexcept {
+	[[nodiscard]] constexpr Num idiv( Num num, Denom denom, Round round ) noexcept {
 		return tc::explicit_cast<Num>(round(num/denom));
 	}
 
@@ -297,26 +305,26 @@ namespace tc {
 	template<typename T, typename Factor, std::enable_if_t<
 		tc::is_actual_integer< T >::value && std::is_integral< Factor >::value
 	>* = nullptr>
-	[[nodiscard]] T scale_mul(T t, Factor factor, SRoundNearest ) noexcept {
+	[[nodiscard]] constexpr T scale_mul(T t, Factor factor, SRoundNearest ) noexcept {
 		return tc::explicit_cast<T>(tc::prepare_argument<T,Factor>::prepare(t)*tc::prepare_argument<T,Factor>::prepare(factor));
 	}
 
 	template<typename T, typename Factor, typename TRound, std::enable_if_t<
 		tc::is_actual_integer< T >::value && std::is_floating_point< Factor >::value
 	>* = nullptr>
-	[[nodiscard]] T scale_mul(T t, Factor factor, TRound round) noexcept {
+	[[nodiscard]] constexpr T scale_mul(T t, Factor factor, TRound round) noexcept {
 		return tc::explicit_cast<T>(round(t*factor));
 	}
 
 	template<typename T, typename Factor, std::enable_if_t<
 		std::is_floating_point< T >::value
 	>* = nullptr>
-	[[nodiscard]] T scale_mul(T t, Factor factor, SRoundNearest ) noexcept {
+	[[nodiscard]] constexpr T scale_mul(T t, Factor factor, SRoundNearest ) noexcept {
 		return tc::explicit_cast<T>(t*factor);
 	}
 
 	template<typename T, typename Factor>
-	[[nodiscard]] T scale_mul(T t, Factor factor) noexcept {
+	[[nodiscard]] constexpr T scale_mul(T t, Factor factor) noexcept {
 		return scale_mul(t,factor,tc::roundNEAREST);
 	}
 
@@ -326,33 +334,33 @@ namespace tc {
 	template<typename T, typename Num, typename Den, typename TRound, std::enable_if_t<
 		tc::is_actual_integer< T >::value && tc::is_actual_integer< Num >::value && tc::is_actual_integer< Den >::value
 	>* = nullptr>
-	[[nodiscard]] T scale_muldiv(T t, Num num, Den den, TRound round) noexcept {
+	[[nodiscard]] constexpr T scale_muldiv(T t, Num num, Den den, TRound round) noexcept {
 		return tc::reluctant_numeric_cast<T>(idiv(mul(t, num), den, round));
 	}
 
 	template<typename T, typename Num, typename Den, typename TRound, std::enable_if_t<
 		tc::is_actual_integer< T >::value && tc::is_actual_integer< Num >::value && tc::is_floating_point_like< Den >::value
 		>* = nullptr>
-	[[nodiscard]] T scale_muldiv(T t, Num num, Den den, TRound round) noexcept {
+	[[nodiscard]] constexpr T scale_muldiv(T t, Num num, Den den, TRound round) noexcept {
 		return tc::reluctant_numeric_cast<T>(round(mul(t, num) / den));
 	}
 
 	template<typename T, typename Num, typename Den, typename TRound, std::enable_if_t<
 		tc::is_actual_integer< T >::value && tc::is_floating_point_like< Num >::value
 		>* = nullptr>
-	[[nodiscard]] T scale_muldiv(T t, Num num, Den den, TRound round) noexcept {
+	[[nodiscard]] constexpr T scale_muldiv(T t, Num num, Den den, TRound round) noexcept {
 		return tc::reluctant_numeric_cast<T>(round(t * tc::fdiv(num, den)));
 	}
 
 	template<typename T, typename Num, typename Den, std::enable_if_t<
 		tc::is_floating_point_like< T >::value
 	>* = nullptr>
-	[[nodiscard]] T scale_muldiv(T t, Num num, Den den, SRoundNearest) noexcept {
+	[[nodiscard]] constexpr T scale_muldiv(T t, Num num, Den den, SRoundNearest) noexcept {
 		return tc::reluctant_numeric_cast<T>(t * tc::fdiv(num, den));
 	}
 
 	template<typename T, typename Num, typename Den>
-	[[nodiscard]] T scale_muldiv(T const& x, Num const& num, Den const& den) noexcept {
+	[[nodiscard]] constexpr T scale_muldiv(T const& x, Num const& num, Den const& den) noexcept {
 		return scale_muldiv(x, num, den, tc::roundNEAREST);
 	}
 
@@ -362,7 +370,7 @@ namespace tc {
 	};
 
 	template<typename T>
-	[[nodiscard]] T scale_muldiv(T const& x, tc::fraction const& fracn) noexcept {
+	[[nodiscard]] constexpr T scale_muldiv(T const& x, tc::fraction const& fracn) noexcept {
 		return scale_muldiv(x, fracn.m_nNum, fracn.m_nDen);
 	}
 

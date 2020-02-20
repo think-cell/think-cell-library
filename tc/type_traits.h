@@ -498,7 +498,7 @@ namespace tc {
 
 		template<typename T0, typename T1, typename... Args>
 		struct common_type_decayed<T0, T1, Args...>
-			: tc::type::accumulate<tc::type::list<T0, T1, Args...>, tc::common_type_decayed_t> {};
+			: tc::type::accumulate_with_front<tc::type::list<T0, T1, Args...>, tc::common_type_decayed_t> {};
 	} // namespace no_adl
 
 	template<bool bCondition, template<typename> class template_, typename T>
@@ -583,7 +583,7 @@ namespace tc {
 		struct has_guaranteed_common_reference final: std::false_type {};
 
 		template<typename TypeList>
-		struct has_guaranteed_common_reference<TypeList, tc::void_t<typename tc::type::accumulate<TypeList, guaranteed_common_reference_t>::type>> final: std::true_type {};
+		struct has_guaranteed_common_reference<TypeList, tc::void_t<tc::type::accumulate_with_front_t<TypeList, guaranteed_common_reference_t>>> final: std::true_type {};
 
 		template<typename TypeList, typename Enable=void>
 		struct common_reference_xvalue_as_ref final: common_reference_xvalue_as_ref_common_type<TypeList> {};
@@ -592,7 +592,7 @@ namespace tc {
 		struct common_reference_xvalue_as_ref<TypeList, std::enable_if_t<
 			has_guaranteed_common_reference<TypeList>::value
 		>> final {
-			using type = typename tc::type::accumulate<TypeList, guaranteed_common_reference_t>::type;
+			using type = tc::type::accumulate_with_front_t<TypeList, guaranteed_common_reference_t>;
 		};
 	}
 

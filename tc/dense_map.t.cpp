@@ -9,7 +9,6 @@
 #include "range.t.h"
 #include "dense_map.h"
 
-
 DEFINE_ENUM(
 	MyEnum,
 	myenum,

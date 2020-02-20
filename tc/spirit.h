@@ -349,7 +349,7 @@ namespace tc {
 		// still call the rule_def's parse by retrieving the injected rhs parser with its ID using the default
 		// parse_rule function.
 		//   x3::rule<struct xx, std::string> const rule{""};
-		//   auto const rule_def = +x3::alpha | (tc::lit('[') >> rule >> tc::lit(']'));
+		//   auto const rule_def = rule = +x3::alpha > -(tc::single_char('[') > rule > tc::single_char(']'));
 		//   tc::parse(str, rule_def, attr); // rule and rule_def are not connected with BOOST_SPIRIT_DEFINE
 		// tc::attr_is is a rule_definition, but it's never meant or able to be used it like this. So we don't
 		// have to inject its rhs parser into the context. The injection may slow the parsing when it's recursive. 

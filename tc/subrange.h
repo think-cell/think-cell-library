@@ -1936,7 +1936,7 @@ namespace tc {
 		struct has_common_ptr_range final: std::false_type {};
 
 		template<typename TypeList>
-		struct has_common_ptr_range<TypeList, tc::void_t<typename tc::type::accumulate<TypeList, common_ptr_range_impl_t>::type>> final: std::true_type {};
+		struct has_common_ptr_range<TypeList, tc::void_t<tc::type::accumulate_with_front_t<TypeList, common_ptr_range_impl_t>>> final: std::true_type {};
 
 		// tc::common_reference_xvalue_as_ref_t customization tc::ptr_range: If
 		//		1. all input ranges are tc::is_safely_convertible to tc::ptr_range and,
@@ -1947,7 +1947,7 @@ namespace tc {
 			!has_guaranteed_common_reference<TypeList>::value &&
 			has_common_ptr_range<TypeList>::value
 		>> final {
-			using type = typename tc::type::accumulate<TypeList, common_ptr_range_impl_t>::type;
+			using type = tc::type::accumulate_with_front_t<TypeList, common_ptr_range_impl_t>;
 		};
 
 		// tc::common_reference_xvalue_as_ref_t customization tc::subrange: If

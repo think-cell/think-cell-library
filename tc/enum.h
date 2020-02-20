@@ -247,6 +247,9 @@ namespace tc {
 			Enum single() const& noexcept {
 				return VERIFYEQUAL( min(), max() );
 			}
+			bool is_singleton() const& noexcept {
+				return 0!=m_bitset && VERIFYEQUALDEBUG(0==(m_bitset & (m_bitset - 1)), min() == max());
+			}
 	
 			template<typename T=value_type,
 				std::enable_if_t<std::numeric_limits<T>::digits<=std::numeric_limits<unsigned long long>::digits>* = nullptr>

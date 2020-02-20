@@ -529,5 +529,36 @@ namespace tc {
 	[[nodiscard]] Src&& may_convert_enc( Src&& src ) noexcept {
 		return std::forward<Src>( src );
 	}
+
+	namespace no_adl {
+		template<typename Sink, typename Dst>
+		struct may_convert_enc_sink /*final*/ {
+		private:
+			tc::decay_t<Sink> m_sink;
+
+		public:
+			using sink_value_type = Dst;
+
+			explicit may_convert_enc_sink(Sink&& sink) noexcept
+				: m_sink(std::forward<Sink>(sink)) 
+			{}
+
+			template<typename CharT, std::enable_if_t<std::is_same<CharT, Dst>::value>* = nullptr>
+			auto operator()(CharT ch) const& return_decltype_MAYTHROW(
+				m_sink(ch)
+			)
+			template<typename Rng, std::enable_if_t<std::is_same<tc::range_value_t<Rng>, Dst>::value>* = nullptr>
+			auto chunk(Rng&& rng) const& return_decltype_MAYTHROW(
+				m_sink.chunk(std::forward<Rng>(rng))
+			)
+		};
+	}
+
+	template< typename Dst, typename Src, std::enable_if_t<!tc::has_range_value<Src>::value>* = nullptr>
+	[[nodiscard]] auto may_convert_enc( Src&& src ) noexcept {
+		return tc::generator_range_value<Dst>([src=tc::make_reference_or_value(std::forward<Src>(src))](auto&& sink) MAYTHROW {
+			return tc::for_each(*src, no_adl::may_convert_enc_sink<decltype(sink), Dst>(tc_move_if_owned(sink)));
+		});
+	}
 }
 

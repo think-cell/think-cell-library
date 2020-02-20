@@ -111,33 +111,46 @@ namespace tc {
 		template<typename Func, typename Rng, bool bConst>
 		struct constexpr_size_base<tc::transform_adaptor<Func,Rng,bConst>, void> : tc::constexpr_size<Rng> {};
 
-		template<typename TransformAdaptor, typename Func, typename Rng >
-		struct range_value<TransformAdaptor, transform_adaptor<Func, Rng, false>, tc::void_t<tc::range_value_t<Rng>>> final {
-			// Func is invoked with perfectly forwarded references from the base range.
-			// Hence, in an ideal world, the range_value of a transform_adaptor would be the common_type_decayed of the results of Func invocations with these references.
-			// For now, we have no way of gathering these references and there is no obvious way to get to them.
-			// We workaround this fact by basing range_value of a transform_adaptor on the range_value of the base range and add some sanity checks.
-			using type = tc::transform_value_t<Func, tc::range_value_t<Rng>>;
+		template<typename Func, typename Rng>
+		struct common_transform_range_value final {
+			template<typename TransformValueT, typename /*AlternativeRngValueT*/, typename /*Enable*/=void>
+			struct accumulate_fn final {
+				using type = TransformValueT;
+			};
 
-		private:
-			// Note: sanity check causes exponential number of template instantiations for code patterns like:
-			//	 tc::make_vector(tc::transform(rng0, [](auto&& rng1) {
-			//			return tc::make_vector(tc::transform(tc_move_if_owned(rng1), [](auto&& rng2) {
-			//				return tc::make_vector(tc::transform(tc_move_if_owned(rng2), [](auto&& rng3) {
-			//					// ..
-			//				});
-			//			});
-			//		});
-			template<typename RngValueT, typename Enable = void>
-			struct same_transform_value_type final : std::true_type {};
+			template<typename TransformValueT, typename AlternativeRngValueT>
+			struct accumulate_fn<TransformValueT, AlternativeRngValueT, tc::void_t<tc::transform_value_t<Func, AlternativeRngValueT>>> final
+				: tc::common_type_decayed<TransformValueT, tc::transform_value_t<Func, AlternativeRngValueT>>
+			{};
 
-			template<typename RngValueT>
-			struct same_transform_value_type<RngValueT, tc::void_t<tc::transform_value_t<Func, RngValueT>>> final
-				: std::is_same<type, tc::transform_value_t<Func, RngValueT>> {};
-
-			static_assert(same_transform_value_type<tc::range_value_t<Rng const>>::value);
-			static_assert(same_transform_value_type<tc::range_value_t<Rng> const&>::value);
+			template<typename TransformValueT, typename AlternativeRngValueT>
+			using accumulate_fn_t = typename accumulate_fn<TransformValueT, AlternativeRngValueT>::type;
 		};
+
+		// On a transform_adaptor, Func is invoked with perfectly forwarded references from the base range. Hence, in an ideal world, the range_value of a
+		// transform_adaptor would be the common_type_decayed of the results of Func invocations with these references. For now, we have no way of gathering
+		// these references and there is no obvious way to get to them. We workaround this fact by using the common_type_decayed on the results of Func being
+		// invoked with different reference types derived from the range_value of the base range.
+
+		// Note: this causes exponential number of template instantiations for code patterns like:
+		//	 tc::make_vector(tc::transform(rng0, [](auto&& rng1) {
+		//			return tc::make_vector(tc::transform(tc_move_if_owned(rng1), [](auto&& rng2) {
+		//				return tc::make_vector(tc::transform(tc_move_if_owned(rng2), [](auto&& rng3) {
+		//					// ..
+		//				});
+		//			});
+		//		});
+		template<typename TransformAdaptor, typename Func, typename Rng >
+		struct range_value<TransformAdaptor, transform_adaptor<Func, Rng, false>, tc::void_t<tc::range_value_t<Rng>>> final
+			: tc::type::accumulate<
+				tc::transform_value_t<Func, tc::range_value_t<Rng>>, // Func is required to work on prvalues
+				tc::type::list< // non-exhaustive alternative types (avoid template instantiations, see Note above)
+					tc::range_value_t<Rng const>,
+					tc::range_value_t<Rng> const&
+				>,
+				common_transform_range_value<Func, Rng>::template accumulate_fn_t
+			>
+		{};
 	}
 
 	namespace replace_if_impl {

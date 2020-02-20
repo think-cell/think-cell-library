@@ -25,12 +25,12 @@ namespace tc {
 		} else {
 			auto const itEnd = tc::end(rng);
 			auto it = tc::begin(rng);
-			tc::array<
+			auto ait=tc::explicit_cast<std::array<
 				tc::iterator_cache< 
 					typename boost::range_iterator<Rng>::type
 				>,
 				N
-			> ait(tc::func_tag, [&](std::size_t) noexcept { return it++; });
+			>>(tc::func_tag, [&](std::size_t) noexcept { return it++; });
 
 			for (;;) {
 				for (int n = 0; n<N; ++n) {
@@ -244,8 +244,8 @@ namespace tc {
 		template<typename List, typename Enable = void>
 		struct make_range_impl;
 
-		template<typename T0, typename T1, typename... T, typename Enable>
-		struct [[nodiscard]] make_range_impl<tc::type::list<T0, T1, T...>, Enable> final {
+		template<typename T0, typename T1, typename... T>
+		struct [[nodiscard]] make_range_impl<tc::type::list<T0, T1, T...>, std::enable_if_t<!std::conjunction<std::is_same<T0, T1>, std::is_same<T0, T>...>::value>> final {
 			static decltype(auto) fn(T0&& t0, T1&& t1, T&&... t) noexcept {
 				return tc::transform(
 					std::make_tuple(
@@ -259,7 +259,7 @@ namespace tc {
 		};
 
 		template<typename T0, typename... T>
-		struct make_range_impl<tc::type::list<T0, T...>, std::enable_if_t<std::conjunction<std::is_same<T0, T>...>::value>> final {
+		struct [[nodiscard]] make_range_impl<tc::type::list<T0, T...>, std::enable_if_t<std::conjunction<std::is_same<T0, T>...>::value>> final {
 			static constexpr decltype(auto) fn(T0&& t0, T&&... t) noexcept {
 				return tc::make_array<std::conditional_t<std::is_reference<T0>::value, T0, std::remove_cv_t<T0>>>(tc::aggregate_tag,
 					std::forward<T0>(t0), std::forward<T>(t)...

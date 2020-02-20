@@ -8,6 +8,7 @@
 
 #include "range.h"
 #include "range.t.h"
+#include "ref.h"
 
 //---- for_each ---------------------------------------------------------------------------------------------------------------
 namespace {
@@ -189,7 +190,7 @@ UNITTESTDEF( break_behavior ) {
 
 UNITTESTDEF(for_each_adjacent_tuple_deref) {
 	struct lr_overloads final{
-		tc::array<int,3> m_n;
+		std::array<int,3> m_n;
 
 		lr_overloads() noexcept {
 			m_n[0] = 0;

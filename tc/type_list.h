@@ -302,32 +302,35 @@ namespace tc {
 		using apply_t = typename apply<F, List>::type;
 
 		namespace no_adl {
-			template<typename List, template<typename...> class F>
-			struct accumulate;
+			template<typename T0, typename List, template<typename...> typename F, typename Enable=void>
+			struct accumulate {};
 
-			template<template<typename...> class F>
-			struct accumulate<list<>, F> /*final*/ {};
-
-			template<typename T0, template<typename...> class F>
-			struct accumulate<list<T0>, F> /*final*/ {
+			template<typename T0, template<typename...> typename F>
+			struct accumulate<T0, list<>, F> {
 				using type = T0;
 			};
 
-			template<typename List, template<typename...> class F, typename Enable=void>
-			struct accumulate_impl {};
-
-			template<typename T0, typename T1, typename... T, template<typename...> class F>
-			struct accumulate_impl<list<T0, T1, T...>, F, tc::void_t<F<T0, typename accumulate<list<T1, T...>, F>::type>>> {
-				using type = F<T0, typename accumulate<list<T1, T...>, F>::type>;
+			template<typename T0, typename T1, typename... T, template<typename...> typename F>
+			struct accumulate<T0, list<T1, T...>, F, tc::void_t<typename accumulate<F<T0, T1>, list<T...>, F>::type>> {
+				using type = typename accumulate<F<T0, T1>, list<T...>, F>::type;
 			};
 
-			template<typename T0, typename T1, typename... T, template<typename...> class F>
-			struct accumulate<list<T0, T1, T...>, F> /*final*/ : accumulate_impl<list<T0, T1, T...>, F> {};
+			template<typename List, template<typename...> typename F>
+			struct accumulate_with_front;
+
+			// Existing use cases do not do the right thing for single element lists.
+			// Before extending this function to single element lists (by simply removing T1), check the use cases.
+			template<typename T0, typename T1, typename... T, template<typename...> typename F>
+			struct accumulate_with_front<list<T0, T1, T...>, F> : accumulate<T0, list<T1, T...>, F> {};
 		}
 		using no_adl::accumulate;
+		using no_adl::accumulate_with_front;
 
-		template<typename List, template<typename...> class F>
-		using accumulate_t = typename no_adl::accumulate<List, F>::type;
+		template<typename T0, typename List, template<typename...> typename F>
+		using accumulate_t = typename no_adl::accumulate<T0, List, F>::type;
+
+		template<typename List, template<typename...> typename F>
+		using accumulate_with_front_t = typename no_adl::accumulate_with_front<List, F>::type;
 
 		namespace no_adl {
 			template<typename List, std::size_t N, typename Enable=void>

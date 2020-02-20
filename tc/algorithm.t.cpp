@@ -10,7 +10,10 @@
 #include "container.h" // tc::vector
 #include "range.t.h"
 #include "concat_adaptor.h"
+#include "join_adaptor.h"
 #include "spirit_algorithm.h"
+
+#include <random>
 
 namespace {
 	[[maybe_unused]] void static_tests() noexcept {
@@ -327,6 +330,26 @@ UNITTESTDEF(sort_test) {
 	tc::vector<std::pair<int, int>> vecpairnn2{{0,0}, {0,1}, {0,2}, {1,0}, {1,1}, {3,0}, {3,1}, {5,0}, {5,1}, {5,2}, {6,0}, {6,1}};
 	auto const rngpairnnSorted=tc::stable_sort(tc_move(vecpairnn1),tc::projected(tc::fn_compare(),[](auto const& pairnn) noexcept { return pairnn.first; }));
 	_ASSERT(tc::equal(rngpairnnSorted, vecpairnn2));
+}
+
+UNITTESTDEF(constexpr_sort_test) {
+	std::mt19937 gen; // same sequence of numbers each time for reproducibility
+	std::uniform_int_distribution<> dist(0, 63);
+
+	auto Test = [](auto rngn) noexcept {
+		auto vecn = tc::explicit_cast<tc::vector<int>>(rngn);
+		_ASSERTEQUAL(modified(vecn, tc::sort_inplace(_)), modified(vecn, tc::constexpr_sort_inplace(_)));
+	};
+
+	for( int i = 0; i < 17; ++i ) {
+		Test(tc::take_first([&](auto sink) noexcept { for(;;) RETURN_IF_BREAK( tc::continue_if_not_break(sink, dist(gen)) ); }, dist(gen)));
+		Test(tc::iota(0, i));
+		Test(tc::reverse(tc::iota(0, i)));
+		Test(tc::repeat_n(0, i));
+		for( int j = 0; j < 7; ++j) {
+			Test(tc::join(tc::repeat_n(tc::iota(0, j), i)));
+		}
+	}
 }
 
 }

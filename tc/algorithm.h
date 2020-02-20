@@ -439,69 +439,74 @@ namespace tc {
 		// because it uses std::sort which is not constexpr (until C++20).
 		template<typename Iterator, typename Pred>
 		constexpr void constexpr_sort_inplace(Iterator itBegin, Iterator itEnd, Pred pred) noexcept {
-			if (itBegin == itEnd || itBegin == itEnd - 1) {
-				return;
-			}
+#ifdef _CHECKS
+			int nIterationCount = 0;
+#endif
+			while (1 < itEnd - itBegin) {
+				_ASSERTENOTIFY( ++nIterationCount <= 32 ); // Do we actually run into O(n^2) complexity?
+				auto itPartitionBegin = itBegin;
+				auto itPartitionEnd = itEnd - 1;
+				// Any iterator in the interval [itBegin, itEnd - 2] works.
+				// Middle is best for sorted and reverse sorted ranges.
+				auto itPivotElement = tc::middle_point(itBegin, itPartitionEnd);
 
-			auto itPivotElement = tc::middle_point(itBegin, itEnd);
-			auto itPivotPoint = itBegin; // must be initialized for constexpr compatibility
+				for (;;) {
+					while (pred(*itPartitionBegin, *itPivotElement)) {
+						++itPartitionBegin;
+					}
+					while (pred(*itPivotElement, *itPartitionEnd)) {
+						--itPartitionEnd;
+					}
 
-			auto itPartitionBegin = itBegin;
-			auto itPartitionEnd = itEnd - 1;
+					if (itPartitionEnd <= itPartitionBegin) {
+						break;
+					}
 
-			// If the last element is chosen as the pivot, the second partition will be empty,
-			// leading to infinite recursion.
-			if (itPivotElement == itPartitionEnd) {
-				--itPivotElement;
-			}
+					if (itPartitionBegin == itPivotElement) {
+						itPivotElement = itPartitionEnd;
+					} else if (itPartitionEnd == itPivotElement) {
+						itPivotElement = itPartitionBegin;
+					}
+					tc::swap(*itPartitionBegin, *itPartitionEnd);
 
-			for (;;) {
-				while (pred(*itPartitionBegin, *itPivotElement)) {
 					++itPartitionBegin;
-				}
-				while (pred(*itPivotElement, *itPartitionEnd)) {
 					--itPartitionEnd;
 				}
 
-				if (itPartitionEnd <= itPartitionBegin) {
-					itPivotPoint = itPartitionEnd + 1;
-					break;
+				auto const itSplitPoint = itPartitionEnd + 1;
+	#if defined(_CHECKS) && defined(_DEBUG)
+				_ASSERTE(itBegin < itSplitPoint);
+				_ASSERTE(itSplitPoint < itEnd);
+
+				for (auto j = itBegin; j < itSplitPoint; ++j) {
+					_ASSERTE(!pred(*itPivotElement, *j));
 				}
-
-				if (itPartitionBegin == itPivotElement) {
-					itPivotElement = itPartitionEnd;
+				for (auto j = itSplitPoint; j < itEnd; ++j) {
+					_ASSERTE(!pred(*j, *itPivotElement));
 				}
-				else if (itPartitionEnd == itPivotElement) {
-					itPivotElement = itPartitionBegin;
+	#endif
+
+				// Recur into smaller subrange and sort larger subrange in next iteration to get O(log n) space complexity.
+				if( itSplitPoint - itBegin < itEnd - itSplitPoint ) {
+					constexpr_sort_inplace_unique_detail::constexpr_sort_inplace(itBegin, itSplitPoint, pred);
+					itBegin = itSplitPoint;
+				} else {
+					constexpr_sort_inplace_unique_detail::constexpr_sort_inplace(itSplitPoint, itEnd, pred);
+					itEnd = itSplitPoint;
 				}
-				tc::swap(*itPartitionBegin, *itPartitionEnd);
-
-				++itPartitionBegin;
-				--itPartitionEnd;
 			}
-
-#ifdef _CHECKS
-			_ASSERTE(itBegin <= itPivotPoint);
-			_ASSERTE(itPivotPoint < itEnd);
-
-			for (auto j = itBegin; j < itPivotPoint; j++) {
-				_ASSERTE(!pred(*itPivotElement, *j));
-			}
-			for (auto j = itPivotPoint + 1; j < itEnd; j++) {
-				_ASSERTE(pred(*itPivotElement, *j));
-			}
-#endif
-
-			//tc::make_iterator_range cannot be constexpr due to VERIFY calls
-			constexpr_sort_inplace_unique_detail::constexpr_sort_inplace(itBegin, itPivotPoint, pred);
-			constexpr_sort_inplace_unique_detail::constexpr_sort_inplace(itPivotPoint, itEnd, pred);
 		}
+	}
 
+	template<typename Rng, typename Pred = tc::fn_less>
+	constexpr void constexpr_sort_inplace(Rng& rng, Pred&& pred = Pred()) noexcept {
+		constexpr_sort_inplace_unique_detail::constexpr_sort_inplace(tc::begin(rng), tc::end(rng), pred);
+		_ASSERTE( tc::is_sorted(rng, pred) );
 	}
 
 	template<typename Rng, typename Pred = tc::fn_less>
 	constexpr void constexpr_sort_unique_inplace(Rng& rng, Pred&& pred = Pred()) noexcept {
-		constexpr_sort_inplace_unique_detail::constexpr_sort_inplace(tc::begin(rng), tc::end(rng), pred);
+		constexpr_sort_inplace(rng, pred);
 		tc::ordered_unique_inplace(rng, std::forward<Pred>(pred));
 	}
 

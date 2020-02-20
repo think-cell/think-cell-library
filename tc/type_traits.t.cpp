@@ -218,20 +218,6 @@ struct B : A {
 
 static_assert(
 	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<A&&>,
-		A&&
-	>::value
-);
-
-static_assert(
-	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<A&>,
-		A&
-	>::value
-);
-
-static_assert(
-	std::is_same<
 		tc::common_reference_xvalue_as_ref_t<A&&, A&&>,
 		A&&
 	>::value
@@ -276,27 +262,6 @@ static_assert(
 	std::is_same<
 		tc::common_reference_xvalue_as_ref_t<A&&, A&&, B&&>,
 		A&&
-	>::value
-);
-
-static_assert(
-	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char const>>,
-		tc::ptr_range<char const>
-	>::value
-);
-
-static_assert(
-	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char const> const>,
-		tc::ptr_range<char const> const
-	>::value
-);
-
-static_assert(
-	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char const> const&>,
-		tc::ptr_range<char const> const&
 	>::value
 );
 
@@ -437,13 +402,6 @@ static_assert(
 	std::is_same<
 		tc::common_reference_xvalue_as_ref_t<tc::vector<char>&&, tc::vector<char>&>,
 		tc::vector<char> const&&
-	>::value
-);
-
-static_assert(
-	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<int>&&>,
-		tc::ptr_range<int>&&
 	>::value
 );
 
@@ -1017,4 +975,18 @@ namespace is_instance_or_derived_test {
 	// static_assert(!tc::is_instance_or_derived<CTemplate1, CPrivateInstantiation1>::value);  // Does not compile.
 	static_assert(!tc::is_instance_or_derived<CTemplate1Int, CPrivateInstantiation1>::value);
 	static_assert(!tc::is_instance_or_derived<CTemplate2, CPrivateInstantiation1>::value);
+}
+
+namespace noncopyable_test {
+	struct NonCopyable final : tc::noncopyable {};
+	static_assert(!std::is_copy_constructible<NonCopyable>::value);
+	static_assert(!std::is_copy_assignable<NonCopyable>::value);
+	static_assert(std::is_trivially_move_constructible<NonCopyable>::value);
+	static_assert(std::is_trivially_move_assignable<NonCopyable>::value);
+
+	struct NonMovable final : tc::nonmovable {};
+	static_assert(!std::is_copy_constructible<NonMovable>::value);
+	static_assert(!std::is_copy_assignable<NonMovable>::value);
+	static_assert(!std::is_move_constructible<NonMovable>::value);
+	static_assert(!std::is_move_assignable<NonMovable>::value);
 }

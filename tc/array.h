@@ -21,14 +21,11 @@
 #include "cont_assign.h"
 #include "construction_restrictiveness.h"
 
-#include <cstdint>
 #include <boost/iterator/indirect_iterator.hpp>
+#include <cstdint>
+#include <array>
 
 namespace tc {
-	DEFINE_TAG_TYPE(fill_tag)
-	DEFINE_TAG_TYPE(func_tag)
-	DEFINE_TAG_TYPE(range_tag)
-
 	namespace no_adl {
 		template< typename T >
 		struct empty_array_storage {
@@ -74,13 +71,10 @@ namespace tc {
 			constexpr T const* data() const& noexcept {
 				return m_a;
 			}
-			static constexpr std::size_t size() noexcept {
-				return N;
-			}
 
 			// We cannot tell if *this is constructed using value-initialization syntax or default-initialization syntax. Therefore, we must value-initialize here.
 			constexpr array() noexcept(std::is_nothrow_constructible<T>::value) : m_a() {}
-			array(boost::container::default_init_t) noexcept {}
+			constexpr array(boost::container::default_init_t) noexcept(std::is_nothrow_constructible<T>::value) {}
 
 		private:
 			template<typename Func, std::size_t ...IndexPack>
@@ -284,10 +278,6 @@ namespace tc {
 				return static_cast<T const&&>((*this)[i]);
 			}
 
-			void fill(T const& t) & noexcept {
-				std::fill_n(data(), N, t);
-			}
-
 			[[nodiscard]] friend tc::order compare(array const& lhs, array const& rhs) noexcept {
 #ifdef _DEBUG
 				for (std::size_t i=0; i<N; ++i) _ASSERTINITIALIZED(rhs[i]);
@@ -428,9 +418,6 @@ namespace tc {
 			}
 		};
 
-		static_assert(has_mem_fn_size<array<int, 10>>::value);
-		static_assert(has_mem_fn_size<array<int&, 10>>::value);
-
 		static_assert(!std::is_convertible<array<int,10>, array<int, 9>>::value);
 		static_assert(!std::is_convertible<array<int,9>, array<int, 10>>::value);
 	} // namespace array_adl
@@ -438,8 +425,113 @@ namespace tc {
 
 	namespace no_adl {
 		template<typename T, std::size_t N>
-		struct constexpr_size_base<tc::array<T,N>, void> : std::integral_constant<std::size_t, N> {};
+		struct constexpr_size_base<tc::array<T, N>, void> : std::integral_constant<std::size_t, N> {};
+	}
 
+	template <typename T, std::size_t N>
+	struct decay<tc::array<T, N>> {
+		using type = tc::array<tc::decay_t<T>, N>;
+	};
+
+	/////////////////////////////////////////////////////
+	// std::array
+
+	namespace no_adl {
+		template<typename T, std::size_t N>
+		struct SConversions<std::array<T,N>> final {
+		private:
+			template<typename Func, std::size_t ...IndexPack>
+			static constexpr std::array<T, N> fn(func_tag_t, Func func, std::index_sequence<IndexPack...>) MAYTHROW {
+				return {{func(IndexPack)...}};
+			}
+		public:
+			template<typename Func>
+			static constexpr std::array<T, N> fn(func_tag_t, Func func) MAYTHROW {
+				return fn(tc::func_tag, func, std::make_index_sequence<N>());
+			}
+
+		private:
+			template <std::size_t, typename... Args>
+			static constexpr T explicit_cast_index(Args&&... args) noexcept {
+				return tc::explicit_cast<T>( std::forward<Args>(args)... );
+			}
+
+			template<
+				typename... Args,
+				std::size_t ...IndexPack
+			>
+			static constexpr std::array<T, N> fn(tc::fill_tag_t, std::index_sequence<IndexPack...>, Args&&... args) MAYTHROW {
+				STATICASSERTEQUAL(N, sizeof...(IndexPack)+1);
+				return { {
+					explicit_cast_index<IndexPack>(tc::const_forward<Args>(args)...)...,
+					tc::explicit_cast<T>(std::forward<Args>(args)...)
+				} };
+			}
+		public:
+			template<typename... Args>
+			static constexpr std::array<T, N> fn(tc::fill_tag_t, Args&&... args) MAYTHROW {
+				return fn(fill_tag, std::make_index_sequence<N-1>(), std::forward<Args>(args)...);
+			}
+
+			template <typename... Args>
+			static constexpr std::array<T,N> fn(tc::aggregate_tag_t, Args&& ... args) MAYTHROW {
+				STATICASSERTEQUAL(sizeof...(Args), N, "array initializer list does not match number of elements");
+				return { {tc::explicit_cast<T>(std::forward<Args>(args))...}};
+			}
+
+		private:
+			template<typename Iterator, std::size_t ...IndexPack>
+			static constexpr std::array<T,N> fn(tc::range_tag_t, Iterator it, Iterator itEnd, std::index_sequence<IndexPack...>) MAYTHROW {
+				STATICASSERTEQUAL(N, sizeof...(IndexPack)+1);
+				std::array<T, N> a{ {static_cast<T>((_ASSERTE(itEnd != it), *it)), static_cast<T>((static_cast<void>(IndexPack), ++it, _ASSERTE(itEnd != it), *it))...} }; // static_cast because int to double considered narrowing, forbidden in list initialization
+				_ASSERTE(itEnd==++it);
+				return a;
+			}
+		public:
+			template< typename Rng,
+				std::enable_if_t< 0!=N
+					&& tc::is_safely_constructible<T, decltype(*tc::as_lvalue(tc::begin(std::declval<Rng&>())))>::value
+				>* = nullptr
+			>
+			static constexpr std::array<T,N> fn(Rng&& rng) return_MAYTHROW(
+				fn(range_tag, tc::begin(rng), tc::end(rng), std::make_index_sequence<N-1>())
+			)
+
+			template< typename Rng >
+			static constexpr std::array<T, N> fn(int, Rng&& rng) MAYTHROW {
+				static_assert( 0!=N && tc::is_safely_constructible<T, decltype(*tc::as_lvalue(tc::begin(std::declval<Rng&>())))>::value );
+				return fn(range_tag, tc::begin(rng), tc::end(rng), std::make_index_sequence<N - 1>());
+			}
+
+			template< typename Rng,
+				std::enable_if_t< 0!=N
+					&& !tc::is_safely_constructible<T, decltype(*tc::as_lvalue(tc::begin(std::declval<Rng&>())))>::value
+					//&& tc::is_explicit_castable<T, decltype(*tc::as_lvalue(tc::begin(std::declval<Rng&>())))>::value
+				>* = nullptr 
+			>
+			static constexpr std::array<T, N> fn(Rng&& rng) MAYTHROW {
+				return fn(tc::transform(std::forward<Rng>(rng), tc::fn_explicit_cast<T>()));
+			}
+
+			template< typename Rng,
+				ENABLE_SFINAE,
+				std::enable_if_t< SFINAE_VALUE(0==N)::value >* = nullptr
+			>
+			static constexpr std::array<T,N> fn(Rng&& rng) noexcept {
+				_ASSERTE(tc::empty(rng));
+				return {};
+			}
+		};
+	}
+
+	namespace no_adl {
+		template<typename T, std::size_t N>
+		struct constexpr_size_base<std::array<T, N>, void> : std::integral_constant<std::size_t, N> {};
+	}
+
+	//////////////////////////////////////////////////////////////
+
+	namespace no_adl {
 		struct deduce_tag;
 
 		template <typename T, typename...>
@@ -455,7 +547,7 @@ namespace tc {
 
 	template<std::size_t N, typename Rng>
 	[[nodiscard]] constexpr auto make_array(Rng&& rng) noexcept {
-		return tc::array<tc::decay_t<decltype(tc_front(rng))>, N>(std::forward<Rng>(rng));
+		return tc::explicit_cast<std::array<tc::decay_t<decltype(tc_front(rng))>, N>>(std::forward<Rng>(rng));
 	}
 
 	template <typename Rng>
@@ -466,7 +558,7 @@ namespace tc {
 	template <typename T = no_adl::deduce_tag, typename... Ts, std::enable_if_t<!std::is_reference<T>::value>* = nullptr>
 	[[nodiscard]] constexpr auto make_array(tc::aggregate_tag_t, Ts&&... ts) noexcept {
 		static_assert(!std::is_reference<typename no_adl::delayed_deduce<T, Ts...>::type>::value);
-		return tc::array<typename no_adl::delayed_deduce<T, Ts...>::type, sizeof...(Ts)>(tc::aggregate_tag, std::forward<Ts>(ts)...);
+		return tc::explicit_cast<std::array<typename no_adl::delayed_deduce<T, Ts...>::type, sizeof...(Ts)>>(tc::aggregate_tag, std::forward<Ts>(ts)...);
 	}
 
 	// If T is a reference, force argument type T for all given arguments. That way, conversions
@@ -481,7 +573,7 @@ namespace tc {
 #define MAKE_ARRAY_LVALUE_REF(z, n, d) \
 	template <typename T,std::enable_if_t<std::is_lvalue_reference<T>::value>* = nullptr> \
 	[[nodiscard]] auto make_array(tc::aggregate_tag_t, BOOST_PP_ENUM_PARAMS(n, T t)) noexcept { \
-		return tc::array<T, n>(tc::aggregate_tag, BOOST_PP_ENUM_PARAMS(n, t)); \
+		return tc::explicit_cast<tc::array<T, n>>(tc::aggregate_tag, BOOST_PP_ENUM_PARAMS(n, t)); \
 	}
 
 	BOOST_PP_REPEAT_FROM_TO(1, 20, MAKE_ARRAY_LVALUE_REF, _)
@@ -494,11 +586,6 @@ namespace tc {
 		return tc::make_array<std::remove_cv_t<T> >(tc::aggregate_tag,std::forward<T>(t));
 	}
 
-	template <typename T, std::size_t N>
-	struct decay<tc::array<T, N>> {
-		using type = tc::array<tc::decay_t<T>, N>;
-	};
-
 	template <typename... Ts>
 	[[nodiscard]] constexpr std::size_t count_args(Ts&&...) { return sizeof...(Ts); }
 
@@ -507,8 +594,8 @@ namespace tc {
 }
 
 #define MAKE_TYPED_CONSTEXPR_ARRAY(type, ...) \
-	[]() noexcept -> tc::array<type, tc::count_args(__VA_ARGS__)> const& { \
-		static constexpr tc::array<type, tc::count_args(__VA_ARGS__)> c_at(tc::aggregate_tag, __VA_ARGS__); \
+	[]() noexcept -> std::array<type, tc::count_args(__VA_ARGS__)> const& { \
+		static constexpr auto c_at=tc::explicit_cast<std::array<type, tc::count_args(__VA_ARGS__)>>(tc::aggregate_tag, __VA_ARGS__); \
 		return c_at; \
 	}()
 

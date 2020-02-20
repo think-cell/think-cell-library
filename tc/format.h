@@ -33,14 +33,14 @@ namespace tc {
 			static constexpr unsigned long long c_nTenPow=integral_as_padded_dec_impl<T,N-1>::c_nTenPow*10;
 			constexpr integral_as_padded_dec_impl( T n ) noexcept : integral_as_padded_dec_impl<T,N-1>(n) {}
 
-			template<typename Sink>
+			template<typename Sink, typename Char=tc::sink_value_or_char_t<Sink>>
 			auto operator()(Sink sink) const& MAYTHROW -> tc::common_type_t<
-				decltype(tc::continue_if_not_break(std::declval<Sink&>(), std::declval<tc::sink_value_t<Sink>>())),
+				decltype(tc::continue_if_not_break(std::declval<Sink&>(), std::declval<Char>())),
 				decltype(std::declval<integral_as_padded_dec_impl<T,N-1> const&>()(std::declval<Sink>()))
 			> {
 				static_assert( std::is_unsigned<T>::value );
 				if( this->m_n<integral_as_padded_dec_impl::c_nTenPow ) {
-					RETURN_IF_BREAK(tc::continue_if_not_break(sink, tc::explicit_cast<tc::sink_value_t<Sink>>('0')));
+					RETURN_IF_BREAK(tc::continue_if_not_break(sink, tc::explicit_cast<Char>('0')));
 				}
 				return tc::base_cast< integral_as_padded_dec_impl<T,N-1> >(*this)(tc_move(sink));
 			}
@@ -56,8 +56,7 @@ namespace tc {
 
 			template<typename Sink>
 			auto operator()(Sink&& sink) const& MAYTHROW {
-				using Char = tc::sink_value_t<Sink>;
-				return tc::for_each(tc::ptr_begin( boost::lexical_cast< std::array<Char,50> >(m_n+0/*force integral promotion, otherwise unsigned/signed char gets printed as character*/) ), std::forward<Sink>(sink));
+				return tc::for_each(tc::ptr_begin( boost::lexical_cast< std::array<tc::sink_value_or_char_t<Sink>,50> >(m_n+0/*force integral promotion, otherwise unsigned/signed char gets printed as character*/) ), std::forward<Sink>(sink));
 			}
 
 			constexpr bool empty() const& noexcept { return false; }
@@ -96,8 +95,8 @@ namespace tc {
 		public:
 			as_hex_impl( T const& n ) noexcept : m_n(tc::bit_cast< typename boost::uint_t< CHAR_BIT*sizeof(T) >::exact >(n)) {} // print the bit pattern of anything we get
 
-			template<typename Sink>
-			auto operator()(Sink sink) const& MAYTHROW -> decltype(tc::continue_if_not_break(std::declval<Sink&>(), std::declval<tc::sink_value_t<Sink>>())) {
+			template<typename Sink, typename Char=tc::sink_value_or_char_t<Sink>>
+			auto operator()(Sink sink) const& MAYTHROW -> decltype(tc::continue_if_not_break(std::declval<Sink&>(), std::declval<Char>())) {
 				static_assert( 0<nWidth );
 				static_assert( nWidth<=(sizeof(m_n)*CHAR_BIT+3)/4 );
 
@@ -107,7 +106,7 @@ namespace tc {
 				} while( nWidth*4<=nShift && 0==(m_n>>nShift) );
 				for(;;) {
 					auto const nDigit=(m_n>>nShift)&0xf;
-					RETURN_IF_BREAK(tc::continue_if_not_break(sink, tc::explicit_cast<tc::sink_value_t<Sink>>(static_cast<char>(nDigit<10 ? '0'+nDigit : c_chLetterBase+(nDigit-10)))));
+					RETURN_IF_BREAK(tc::continue_if_not_break(sink, tc::explicit_cast<Char>(static_cast<char>(nDigit<10 ? '0'+nDigit : c_chLetterBase+(nDigit-10)))));
 					if( 0==nShift ) break;
 					nShift-=4;
 				}

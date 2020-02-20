@@ -126,13 +126,16 @@
 // but MSVC seems to get confused by pattern matching, when call trees are too deep.
 #define TC_HAS_EXPR_EXTERNAL_PARAMETER(Type) BOOST_PP_CAT(External,Type)
 #define TC_HAS_EXPR(name, seqArgs, ...) \
-template< BOOST_PP_SEQ_ENUM(BOOST_PP_SEQ_TRANSFORM(PP_APPLY_MACRO, TC_HAS_EXPR_TEMPLATE_PARAMETER, BOOST_PP_SEQ_TRANSFORM(PP_APPLY_MACRO, TC_HAS_EXPR_EXTERNAL_PARAMETER, seqArgs))) > \
-struct BOOST_PP_CAT(has_,name) { \
-private: \
-	template< typename... > \
-	static std::false_type check(...); /*unevaluated-only*/ \
-	template< BOOST_PP_SEQ_ENUM(BOOST_PP_SEQ_TRANSFORM(PP_APPLY_MACRO, TC_HAS_EXPR_TEMPLATE_PARAMETER, seqArgs)) > \
-	static std::true_type check(tc::void_t<decltype(__VA_ARGS__)>*); /*unevaluated-only*/ \
-public: \
-	static constexpr bool value = std::is_same<std::true_type, decltype(check<BOOST_PP_SEQ_ENUM(BOOST_PP_SEQ_TRANSFORM(PP_APPLY_MACRO, TC_HAS_EXPR_EXTERNAL_PARAMETER, seqArgs))>(nullptr))>::value; \
-};
+namespace no_adl { \
+	template< BOOST_PP_SEQ_ENUM(BOOST_PP_SEQ_TRANSFORM(PP_APPLY_MACRO, TC_HAS_EXPR_TEMPLATE_PARAMETER, BOOST_PP_SEQ_TRANSFORM(PP_APPLY_MACRO, TC_HAS_EXPR_EXTERNAL_PARAMETER, seqArgs))) > \
+	struct BOOST_PP_CAT(has_,name) { \
+	private: \
+		template< typename... > \
+		static std::false_type check(...); /*unevaluated-only*/ \
+		template< BOOST_PP_SEQ_ENUM(BOOST_PP_SEQ_TRANSFORM(PP_APPLY_MACRO, TC_HAS_EXPR_TEMPLATE_PARAMETER, seqArgs)) > \
+		static std::true_type check(tc::void_t<decltype(__VA_ARGS__)>*); /*unevaluated-only*/ \
+	public: \
+		static constexpr bool value = std::is_same<std::true_type, decltype(check<BOOST_PP_SEQ_ENUM(BOOST_PP_SEQ_TRANSFORM(PP_APPLY_MACRO, TC_HAS_EXPR_EXTERNAL_PARAMETER, seqArgs))>(nullptr))>::value; \
+	}; \
+} \
+using no_adl::BOOST_PP_CAT(has_,name);

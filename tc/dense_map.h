@@ -84,11 +84,11 @@ namespace tc {
 			
 			template<typename... Args>
 			dense_map( tc::fill_tag_t, Args&&... val ) noexcept
-			: m_a( tc::fill_tag, std::forward<Args>(val)... ) {}
+			: m_a(tc::fill_tag, std::forward<Args>(val)...) {} // TODO: tc::explicit_cast to support std::aray once copy elision works reliably
 
 			template<typename Rng>
 			dense_map(tc::range_tag_t, Rng&& rng) noexcept
-			: m_a(std::forward<Rng>(rng)) {}
+			: m_a(tc::explicit_cast<decltype(m_a)>(std::forward<Rng>(rng))) {}
 
 			// make sure forwarding ctor has at least two parameters, so no ambiguity with filling ctor and implicit copy/move ctors
 			template< typename First, typename Second, typename... Args,
@@ -98,7 +98,7 @@ namespace tc {
 				>* =nullptr
 			>
 			constexpr dense_map(First&& first, Second&& second, Args&& ...args) noexcept(std::is_nothrow_constructible<Array, tc::aggregate_tag_t,  First&&, Second&&, Args&&...>::value)
-			: m_a(tc::aggregate_tag, std::forward<First>(first), std::forward<Second>(second), std::forward<Args>(args)...) {}
+			: m_a(tc::aggregate_tag, std::forward<First>(first), std::forward<Second>(second), std::forward<Args>(args)...) {} // TODO: tc::explicit_cast to support std::aray once copy elision works reliably
 
 			template< typename First, typename Second, typename... Args,
 				std::enable_if_t<
@@ -107,17 +107,17 @@ namespace tc {
 				>* =nullptr
 			>
 			constexpr explicit dense_map(First&& first, Second&& second, Args&& ...args) noexcept(std::is_nothrow_constructible<Array, tc::aggregate_tag_t, First&&, Second&&, Args&&...>::value)
-			: m_a(tc::aggregate_tag, std::forward<First>(first), std::forward<Second>(second), std::forward<Args>(args)...) {}
+			: m_a(tc::explicit_cast<decltype(m_a)>(tc::aggregate_tag, std::forward<First>(first), std::forward<Second>(second), std::forward<Args>(args)...)) {}
 
 			template< typename Func >
 			dense_map(func_tag_t, Func func) MAYTHROW
-				: m_a(tc::func_tag, [&func](std::size_t n) MAYTHROW -> Value { // force return of Value
+				: m_a(tc::explicit_cast<decltype(m_a)>(tc::func_tag, [&func](std::size_t n) MAYTHROW -> Value { // force return of Value
 					static_assert(
 						std::is_same<Value, decltype(func(tc::contiguous_enum<Key>::begin() + n))>::value || // guaranteed copy elision, Value does not need to be copy/move constructible
 						tc::is_safely_constructible<Value, decltype(func(tc::contiguous_enum<Key>::begin() + n))>::value
 					);
 					return func(tc::contiguous_enum<Key>::begin() + n);
-				})
+				}))
 			{}
 
 			template< typename Value2 >
@@ -132,12 +132,12 @@ namespace tc {
 
 			template< typename Func, typename Value2 >
 			dense_map(transform_tag_t, other_dense_map<Value2> const& mapOther, Func&& func) MAYTHROW
-				: m_a(tc::transform(mapOther.m_a, std::forward<Func>(func)))
+				: m_a(tc::explicit_cast<decltype(m_a)>(tc::transform(mapOther.m_a, std::forward<Func>(func))))
 			{}
 
 			template< typename Func, typename Value2 >
 			dense_map(transform_tag_t, other_dense_map<Value2>&& mapOther, Func&& func) MAYTHROW
-				: m_a(tc::transform(tc_move(mapOther.m_a), std::forward<Func>(func)))
+				: m_a(tc::explicit_cast<decltype(m_a)>(tc::transform(tc_move(mapOther.m_a), std::forward<Func>(func))))
 			{}
 
 			DEFINE_MEMBER_TRANSFORM(other_dense_map, tc::type::deducible_identity_t, Value)
@@ -153,7 +153,7 @@ namespace tc {
 				std::enable_if_t<tc::econstructionIMPLICIT==tc::construction_restrictiveness<Value, Value2 const&>::value>* =nullptr
 			>
 			dense_map(other_dense_map<Value2> const& mapOther) noexcept(std::is_nothrow_constructible<Value, Value2 const&>::value)
-				: m_a(mapOther.m_a)
+				: m_a(tc::explicit_cast<decltype(m_a)>(mapOther.m_a))
 			{}
 
 			template <typename Value2,
@@ -167,7 +167,7 @@ namespace tc {
 				std::enable_if_t<tc::econstructionIMPLICIT==tc::construction_restrictiveness<Value, Value2&&>::value>* =nullptr
 			>
 			dense_map(other_dense_map<Value2>&& mapOther) noexcept(std::is_nothrow_constructible<Value, Value2&&>::value)
-				: m_a(tc_move(mapOther).m_a)
+				: m_a(tc::explicit_cast<decltype(m_a)>(tc_move(mapOther).m_a))
 			{}
 
 			template <typename Value2,
@@ -189,7 +189,7 @@ namespace tc {
 				std::enable_if_t<tc::is_safely_assignable<Value&, Value2&&>::value>* =nullptr
 			>
 			dense_map& operator=(other_dense_map<Value2>&& rhs) & noexcept(std::is_nothrow_assignable<Array, typename other_dense_map<Value2>::Array&&>::value) {
-				m_a=tc_move(rhs.m_a);
+				tc::cont_assign(m_a, tc_move(rhs.m_a));
 				return *this;
 			}
 
@@ -215,16 +215,16 @@ namespace tc {
 			// iterators
 			using iterator = typename boost::range_iterator< Array >::type;
 			using const_iterator = typename boost::range_iterator< Array const >::type;
-			const_iterator begin() const& noexcept {
+			constexpr const_iterator begin() const& noexcept {
 				return tc::begin(m_a);
 			}
-			const_iterator end() const& noexcept {
+			constexpr const_iterator end() const& noexcept {
 				return tc::end(m_a);
 			}
-			iterator begin() & noexcept {
+			constexpr iterator begin() & noexcept {
 				return tc::begin(m_a);
 			}
-			iterator end() & noexcept {
+			constexpr iterator end() & noexcept {
 				return tc::end(m_a);
 			}
 			
@@ -269,7 +269,7 @@ namespace tc {
 
 			template<typename... Args>
 			dense_map( tc::fill_tag_t, Args&&... val ) noexcept
-				:	m_a(tc::fill_tag, std::forward<Args>(val)...)
+				:	m_a(tc::explicit_cast<decltype(m_a)>(tc::fill_tag, std::forward<Args>(val)...))
 			{}
 
 			template< typename Value0, typename Value1,
@@ -279,7 +279,7 @@ namespace tc {
 				>* =nullptr
 			>
 			constexpr dense_map( Value0&& val0, Value1&& val1 ) noexcept(std::is_nothrow_constructible<Array, tc::aggregate_tag_t, Value0&&, Value1&&>::value)
-			:	m_a(tc::aggregate_tag, std::forward<Value0>(val0),std::forward<Value1>(val1))
+			:	m_a(tc::explicit_cast<decltype(m_a)>(tc::aggregate_tag, std::forward<Value0>(val0),std::forward<Value1>(val1)))
 			{}
 
 			template< typename Value0, typename Value1,
@@ -289,20 +289,20 @@ namespace tc {
 				>* =nullptr
 			>
 			constexpr explicit dense_map( Value0&& val0, Value1&& val1 ) noexcept(std::is_nothrow_constructible<Array, tc::aggregate_tag_t, Value0&&, Value1&&>::value)
-			:	m_a(tc::aggregate_tag,std::forward<Value0>(val0),std::forward<Value1>(val1))
+			:	m_a(tc::explicit_cast<decltype(m_a)>(tc::aggregate_tag,std::forward<Value0>(val0),std::forward<Value1>(val1)))
 			{}
 
 			template< typename Func >
 			dense_map(func_tag_t, Func func) noexcept
-				: m_a(tc::func_tag, [&func](std::size_t n) noexcept ->Value { // force return of Value
+				: m_a(tc::explicit_cast<decltype(m_a)>(tc::func_tag, [&func](std::size_t n) noexcept ->Value { // force return of Value
 					static_assert(tc::is_safely_constructible<Value, decltype(func(0!=n))>::value);
 					return func(0!=n);
-				})
+				}))
 			{}
 
 			template< typename Func, typename Value2 >
 			dense_map(transform_tag_t, other_dense_map<Value2> const& mapOther, Func&& func) MAYTHROW
-				: m_a(tc::transform(mapOther.m_a, std::forward<Func>(func)))
+				: m_a(tc::explicit_cast<decltype(m_a)>(tc::transform(mapOther.m_a, std::forward<Func>(func))))
 			{}
 
 			DEFINE_MEMBER_TRANSFORM(other_dense_map, tc::type::deducible_identity_t, Value)

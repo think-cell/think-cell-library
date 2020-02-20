@@ -208,7 +208,7 @@ namespace tc {
 			tc::verify_functor_t<tc::decay_t<Transform>> m_transform;
 
 			template< typename ...Args >
-			auto operator()(Args&& ... args) const& MAYTHROW -> tc::transform_return_t<
+			constexpr auto operator()(Args&& ... args) const& MAYTHROW -> tc::transform_return_t<
 				Func,
 				decltype(m_func(tc::invoke(m_transform, std::forward<Args>(args))...)),
 				decltype(tc::invoke(m_transform, std::forward<Args>(args)))...
@@ -234,7 +234,7 @@ namespace tc {
 	}
 
 	template< typename Func, typename Transform >
-	auto projected(Func&& func, Transform&& transform) noexcept -> no_adl::projected_impl<Func, Transform> {
+	constexpr auto projected(Func&& func, Transform&& transform) noexcept -> no_adl::projected_impl<Func, Transform> {
 		// Using return_ctor_noexcept here causes an internal compiler error in MSVC 2017 when compiling TCCrmPortal
 		return no_adl::projected_impl<Func, Transform>{ std::forward<Func>(func), std::forward<Transform>(transform) };
 	}
