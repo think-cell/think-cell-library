@@ -31,8 +31,9 @@
 #pragma clang diagnostic ignored "-Wconversion"
 #pragma clang diagnostic ignored "-Wsign-compare"
 #endif
+#include <boost/spirit/version.hpp>
 #include <boost/spirit/home/x3.hpp>
-#include <boost/spirit/home/support/common_terminals.hpp>
+#include <boost/spirit/home/support.hpp>
 #ifndef __clang__
 #pragma warning(pop)
 #else
@@ -121,7 +122,11 @@ namespace boost { namespace spirit { namespace traits {
 	// http://boost.2283326.n4.nabble.com/BOOST-ASSERT-isascii-ch-is-triggered-by-char-classification-parsers-tp3475081p3475081.html
 
 	template<>
-	struct ischar<char, char_encoding::ascii, false> final {
+	struct ischar<char, char_encoding::ascii
+#if SPIRIT_VERSION < 0x2010
+		, false
+#endif
+	> final {
 		static bool call(char ch) noexcept {
 			return char_encoding::ascii::isascii_(ch);
 		}
@@ -131,8 +136,12 @@ namespace boost { namespace spirit { namespace traits {
 #ifdef __clang__
 
 // add char16_t support to Spirit
-
-namespace boost { namespace spirit { namespace x3 { namespace traits
+//
+namespace boost { namespace spirit
+#if SPIRIT_VERSION < 0x2041
+	{ namespace x3
+#endif
+	{ namespace traits
 	{
 		///////////////////////////////////////////////////////////////////////////
 		// Determine if T is a character type
@@ -184,7 +193,10 @@ namespace boost { namespace spirit { namespace x3 { namespace traits
 
 		template <std::size_t N>
 		struct char_type_of<char16_t const(&)[N]> final : mpl::identity<wchar_t const> {};
-	}}}}
+#if SPIRIT_VERSION < 0x2041
+	}
+#endif
+	}}}
 
 namespace boost { namespace spirit { namespace char_encoding {
 	///////////////////////////////////////////////////////////////////////////
