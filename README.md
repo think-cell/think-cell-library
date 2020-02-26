@@ -30,7 +30,7 @@ You need to have boost installed (we tested with [1.70.0](https://www.boost.org/
 * `/std:c++latest`
 * `/permissive` 
 
-Unfortuately this is the only supported Visual C++ version, all later ones have too many code generation bugs...
+Unfortunately this is the only supported Visual C++ version, all later ones have too many code generation bugs...
 
 ##### clang Apple LLVM 10.0.0 (Xcode 10.0) or later
 * `-std=c++17`
