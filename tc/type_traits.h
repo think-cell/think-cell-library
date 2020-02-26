@@ -11,6 +11,7 @@
 #include "type_list.h"
 
 #include <boost/mpl/identity.hpp>
+#include <string>
 #include <type_traits>
 #include <limits>
 #include <vector>
