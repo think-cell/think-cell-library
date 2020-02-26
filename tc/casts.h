@@ -18,6 +18,7 @@
 #include "container_traits.h"
 
 #include <boost/mpl/identity.hpp>
+#include <boost/implicit_cast.hpp>
 #include <boost/integer.hpp>
 #ifndef __EMSCRIPTEN__
 #include <boost/filesystem/path.hpp>
