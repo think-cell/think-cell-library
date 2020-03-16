@@ -250,27 +250,48 @@ namespace tc {
 	DEFINE_FN_TMPL( explicit_cast_with_rounding, (typename) );
 	
 	namespace no_adl {
-		template<typename T, typename Tuple>
+		template<typename T, typename... Args>
 		struct [[nodiscard]] lazy_ctor final {
-			Tuple m_tuple;
-			operator T() && noexcept {
-				// std::remove_cv affects only values and leaves const/volatile references untouched, which is what we want.
+			std::tuple<Args&&...> m_tuple;
+			// std::remove_cv affects only values and leaves const/volatile references untouched, which is what we want.
+			operator T() && noexcept(noexcept(tc::explicit_cast<std::remove_cv_t<T>>(std::forward<Args>(std::declval<Args>())...))) {
 				return std::apply(tc::fn_explicit_cast<std::remove_cv_t<T>>(), tc_move_always(m_tuple));
 			}
 		};
+
 	}
 
 	template<typename T, typename... Args>
 	auto lazy_ctor(Args&&... args) noexcept {
-		return tc::no_adl::lazy_ctor<T, decltype(std::forward_as_tuple(std::forward<Args>(args)...))>{ std::forward_as_tuple(std::forward<Args>(args)...) };
+		return tc::no_adl::lazy_ctor<T, Args...>{ std::forward_as_tuple(std::forward<Args>(args)...) };
 	}
+
+	namespace detail {
+		template<typename T, typename Func, typename... Args>
+		constexpr decltype(auto) with_lazy_explicit_cast_impl(std::true_type, Func func, Args&&... args) return_MAYTHROW(
+			func(std::forward<Args>(args)...)
+		)
+
+		template<typename T, typename Func, typename... Args>
+		constexpr decltype(auto) with_lazy_explicit_cast_impl(std::false_type, Func func, Args&&... args) return_MAYTHROW(
+			func(tc::lazy_ctor<T>(std::forward<Args>(args)...))
+		)
+	}
+
+	template<typename T, typename Func, typename... Args>
+	constexpr decltype(auto) with_lazy_explicit_cast(Func&& func, Args&&... args) return_MAYTHROW(
+		tc::detail::with_lazy_explicit_cast_impl<T>(tc::is_safely_constructible<T, Args&&...>{}, std::forward<Func>(func), std::forward<Args>(args)...)
+	)
 
 	namespace no_adl {
 		template<typename TTarget>
 		struct SConversions<std::optional<TTarget>> final {
 			template<typename... TSource>
-			static constexpr std::optional<TTarget> fn(std::in_place_t, TSource&&... src) MAYTHROW {
-				return std::optional<TTarget>(std::in_place, tc::lazy_ctor<TTarget>(std::forward<TSource>(src)...));
+			static constexpr std::optional<TTarget> fn(std::in_place_t, TSource&&... src) MAYTHROW { // return_MAYTHROW triggers C1001 An internal error has occured in the compiler
+				return tc::with_lazy_explicit_cast<TTarget> (
+					[](auto&&... args) MAYTHROW { return std::optional<TTarget>(std::in_place, std::forward<decltype(args)>(args)...); }, // return_MAYTHROW triggers C1001 An internal error has occured in the compiler
+					std::forward<TSource>(src)...
+				);
 			}
 		};
 	}

@@ -54,46 +54,51 @@ namespace tc {
 
 	namespace no_adl {
 		template<typename It, typename Enable = void >
-		struct element {
+		struct nullable_iterator {
 			static_assert(tc::is_decayed<It>::value);
-			struct type : It {
+			template<typename Derived>
+			struct base : It {
 				using difference_type = typename std::iterator_traits<It>::difference_type;
 				using value_type = typename std::iterator_traits<It>::value_type;
 				using pointer = typename std::iterator_traits<It>::pointer;
 				using reference = typename std::iterator_traits<It>::reference;
 				using iterator_category = typename std::iterator_traits<It>::iterator_category;
 
-				type() noexcept : m_bValid(false) {}
+			private:
+				Derived& derived() noexcept {return tc::derived_cast<Derived>(*this);}
+			public:
+
+				base() noexcept : m_bValid(false) {}
 
 				// no implicit conversion from It; we must ensure that It has the semantics of element rather than border before allowing the construction
-				explicit type(It const& it) noexcept : It(it), m_bValid(true) {}
-				explicit type(It && it) noexcept : It(tc_move(it)), m_bValid(true) {}
+				explicit base(It const& it) noexcept : It(it), m_bValid(true) {}
+				explicit base(It && it) noexcept : It(tc_move(it)), m_bValid(true) {}
 
-				type& operator=(It const& it) & noexcept {
+				Derived& operator=(It const& it) & noexcept {
 					It::operator=(it);
 					m_bValid = true;
-					return *this;
+					return derived();
 				}
-				type& operator=(It && it) & noexcept {
+				Derived& operator=(It && it) & noexcept {
 					It::operator=(tc_move(it));
 					m_bValid = true;
-					return *this;
+					return derived();
 				}
 
 				explicit operator bool() const& noexcept {
 					return m_bValid;
 				}
 
-				type& operator++() & noexcept {
+				Derived& operator++() & noexcept {
 					_ASSERT(m_bValid);
 					++tc::base_cast<It>(*this);
-					return *this;
+					return derived();
 				}
 
-				type& operator--() & noexcept {
+				Derived& operator--() & noexcept {
 					_ASSERT(m_bValid);
 					--tc::base_cast<It>(*this);
-					return *this;
+					return derived();
 				}
 
 				reference operator*() const& noexcept {
@@ -106,26 +111,48 @@ namespace tc {
 					return tc::base_cast<It>(*this).operator->();
 				}
 
+			protected:
+				bool m_bValid;
+			};
+
+			struct element_type final : base<element_type> {
+				using base_ = base<element_type>;
+				using base_::base_;
+				using base_::operator=;
+
 				template <typename It_ = It>
 				auto element_base() const& noexcept {
-					using ItBase = element<decltype(tc::base_cast<It>(*this).element_base())>;
-					return m_bValid ? ItBase{ tc::base_cast<It>(*this).element_base() } : ItBase{};
+					using ItBase = typename nullable_iterator<decltype(tc::base_cast<It>(*this).element_base())>::element_type;
+					return this->m_bValid ? ItBase{ tc::base_cast<It>(*this).element_base() } : ItBase{};
 				}
+			};
 
-			private:
-				bool m_bValid;
+			struct border_type final : base<border_type> {
+				using base_ = base<border_type>;
+				using base_::base_;
+				using base_::operator=;
+
+				template <typename It_ = It>
+				auto border_base() const& noexcept {
+					using ItBase = typename nullable_iterator<decltype(tc::base_cast<It>(*this).border_base())>::border_type;
+					return this->m_bValid ? ItBase{ tc::base_cast<It>(*this).border_base() } : ItBase{};
+				}
 			};
 		};
 
 		template<typename It>
-		struct element< It, std::enable_if_t< has_bool_cast<It>::value > > {
+		struct nullable_iterator< It, std::enable_if_t< has_bool_cast<It>::value > > {
 			static_assert(tc::is_decayed<It>::value);
-			using type = It;
+			using element_type = It;
+			using border_type = It;
 		};
 	}
 
 	template< typename It >
-	using element_t=typename no_adl::element<It>::type;
+	using element_t = typename no_adl::nullable_iterator<It>::element_type;
+	
+	template< typename It >
+	using border_t = typename no_adl::nullable_iterator<It>::border_type;
 
 	template< typename It >
 	auto make_element(It&& it) noexcept {

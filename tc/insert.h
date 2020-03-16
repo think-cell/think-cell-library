@@ -168,10 +168,11 @@ namespace tc {
 		return pairitb;
 	}
 
+	// std::map::try_emplace enforces eager construction of the key_type object
 	template<typename Key, typename Val, typename Compare, typename Alloc, typename K, typename ...Args>
 	auto map_try_emplace(tc::map<Key, Val, Compare, Alloc>& map, K&& key, Args&& ...args) noexcept -> std::pair<typename tc::map<Key, Val, Compare, Alloc>::iterator, bool> {
 		if (auto it = map.lower_bound(key); tc::end(map) == it || map.key_comp()(key, it->first)) {
-			return std::make_pair( NOEXCEPT( tc::cont_must_emplace_before(map, tc_move_always(it), std::forward<K>(key), std::forward<Args>(args)...) ), true );
+			return std::make_pair( NOEXCEPT( tc::cont_must_emplace_before(map, tc_move_always(it), std::piecewise_construct, std::forward_as_tuple(std::forward<K>(key)), std::forward_as_tuple(std::forward<Args>(args)...)) ), true );
 		} else {
 			return std::make_pair(tc_move(it), false);
 		}

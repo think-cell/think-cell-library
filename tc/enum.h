@@ -62,19 +62,20 @@ namespace tc {
 	}
 }
 
-template<typename Enum, std::enable_if_t<!tc::contiguous_enum<Enum>::value>* = nullptr>
-[[nodiscard]] constexpr bool IsWellDefinedEnum(std::underlying_type_t<Enum> const& /*n*/) noexcept { // reference to avoid error C4701: potentially uninitialized local variable
+template<typename Enum, typename Integer, std::enable_if_t<!tc::contiguous_enum<Enum>::value && tc::is_actual_integer<Integer>::value>* = nullptr>
+[[nodiscard]] constexpr bool IsWellDefinedEnum(Integer const& /*n*/) noexcept { // reference to avoid error C4701: potentially uninitialized local variable
 	// TODO: Implement IsWellDefinedEnum(...) for all persisted enum types.
 	return true;
 }
 
-template<typename Enum, std::enable_if_t<tc::contiguous_enum<Enum>::value>* = nullptr>
-[[nodiscard]] constexpr bool IsWellDefinedEnum(std::underlying_type_t<Enum> const& n) noexcept { // reference to avoid error C4701: potentially uninitialized local variable
+template<typename Enum, typename Integer, std::enable_if_t<tc::contiguous_enum<Enum>::value && tc::is_actual_integer<Integer>::value>* = nullptr>
+[[nodiscard]] constexpr bool IsWellDefinedEnum(Integer const& n) noexcept { // reference to avoid error C4701: potentially uninitialized local variable
 	// There are values that e can have without UB that are not one its enum values, in particular when e has a fixed underlying_type or the value fits
 	// into the bits needed for representing the enum values:
 	// http://stackoverflow.com/questions/18195312/what-happens-if-you-static-cast-invalid-value-to-enum-class
 	// We do not allow such values here.
-	return tc::underlying_cast(tc::contiguous_enum<Enum>::begin()) <= n && n <= tc::underlying_cast(tc::contiguous_enum<Enum>::end());
+	return tc::explicit_cast<Integer>(tc::underlying_cast(tc::contiguous_enum<Enum>::begin())) <= n
+		&& n <= tc::explicit_cast<Integer>(tc::underlying_cast(tc::contiguous_enum<Enum>::end()));
 }
 
 namespace tc {
@@ -202,6 +203,16 @@ namespace tc {
 #ifdef _DEBUG
 				void(tc::explicit_cast<Enum>(tc::contiguous_enum<OtherEnum>::begin())); // check convertibility
 #endif
+			}
+			template<typename Func>
+			constexpr enumset(tc::func_tag_t, Func func) MAYTHROW :
+				m_bitset(0)
+			{
+				for (Enum e = tc::contiguous_enum<Enum>::begin(); e != tc::contiguous_enum<Enum>::end(); ++e) {
+					if (tc::bool_cast(func(tc::as_const(e)))) { // MAYTHROW
+						*this |= e;
+					}
+				}
 			}
 			constexpr void bitwise_not() & noexcept {
 				m_bitset^=mask();

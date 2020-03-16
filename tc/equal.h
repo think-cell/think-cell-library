@@ -78,33 +78,35 @@ namespace tc{
 			Pred& m_pred;
 		};
 
+		// TODO: this does not protect us against inputs such as transform(unordered_set)
+		template<typename X> struct is_unordered_range : std::false_type {};
+		template<typename... X> struct is_unordered_range<std::unordered_set<X...>> : std::true_type {};
+		template<typename... X> struct is_unordered_range<std::unordered_map<X...>> : std::true_type {};
+
 		template<typename It, typename ItEnd, typename RRng, typename Pred>
 		[[nodiscard]] bool starts_with(It& it, ItEnd itEnd, RRng const& rrng, Pred pred) noexcept {
-			// TODO: this does not protect us against inputs such as transform(unordered_set)
-			static_assert(!tc::is_instance<std::unordered_set, RRng>::value);
-			static_assert(!tc::is_instance<std::unordered_map, RRng>::value);
+			static_assert(!is_unordered_range<tc::decay_t<RRng>>::value);
 			return tc::continue_ == tc::for_each(rrng, equal_impl::is_equal_elem<It, ItEnd, Pred>(pred, it, tc_move(itEnd)));
 		}
 	}
 
-	template<typename LRng, typename RRng, typename Pred>
-	[[nodiscard]] bool starts_with(LRng const& lrng, RRng const& rrng, Pred&& pred) noexcept {
-		// TODO: this does not protect us against inputs such as transform(unordered_set)
-		static_assert(!tc::is_instance<std::unordered_set, LRng>::value);
-		static_assert(!tc::is_instance<std::unordered_map, LRng>::value);
-		return equal_impl::starts_with(tc::as_lvalue(tc::begin(lrng)), tc::end(lrng), rrng, std::forward<Pred>(pred));
+	template<template<typename> typename RangeReturn, typename LRng, typename RRng, typename Pred>
+	[[nodiscard]] decltype(auto) starts_with(LRng&& lrng, RRng const& rrng, Pred&& pred) noexcept {
+		static_assert(!equal_impl::is_unordered_range<tc::decay_t<LRng>>::value);
+		auto itlrng = tc::begin(lrng);
+		return equal_impl::starts_with(itlrng, tc::end(lrng), rrng, std::forward<Pred>(pred))
+			? RangeReturn<LRng>::pack_border(itlrng, std::forward<LRng>(lrng))
+			: RangeReturn<LRng>::pack_no_border(std::forward<LRng>(lrng));
 	}
 
-	template<typename LRng, typename RRng>
-	[[nodiscard]] bool starts_with(LRng const& lrng, RRng const& rrng) noexcept {
-		return starts_with(lrng,rrng,tc::fn_equal_to());
+	template<template<typename> typename RangeReturn, typename LRng, typename RRng>
+	[[nodiscard]] decltype(auto) starts_with(LRng&& lrng, RRng const& rrng) noexcept {
+		return starts_with<RangeReturn>(std::forward<LRng>(lrng), rrng, tc::fn_equal_to());
 	}
 
 	template<typename LRng, typename RRng, typename Pred, std::enable_if_t<is_range_with_iterators< LRng >::value>* = nullptr>
 	[[nodiscard]] bool equal(LRng const& lrng, RRng const& rrng, Pred&& pred) noexcept {
-		// TODO: this does not protect us against inputs such as transform(unordered_set)
-		static_assert(!tc::is_instance<std::unordered_set, LRng>::value);
-		static_assert(!tc::is_instance<std::unordered_map, LRng>::value);
+		static_assert(!equal_impl::is_unordered_range<tc::decay_t<LRng>>::value);
 		auto it = tc::begin(lrng);
 		auto_cref(itEnd, tc::end(lrng));
 		return equal_impl::starts_with(it,itEnd,rrng,std::forward<Pred>(pred)) && itEnd == it;
@@ -130,18 +132,18 @@ namespace tc{
 	}
 
 	// boost::ends_with does not work with boost::range_iterator<transform_range>::type returning by value because it has input_iterator category
-	template<typename LRng, typename RRng, typename Pred=tc::fn_equal_to>
-	[[nodiscard]] bool ends_with(LRng const& lrng, RRng const& rrng, Pred pred=Pred()) noexcept {
+	template<template<typename> typename RangeReturn, typename LRng, typename RRng, typename Pred=tc::fn_equal_to>
+	[[nodiscard]] decltype(auto) ends_with(LRng&& lrng, RRng const& rrng, Pred pred=Pred()) noexcept {
 		auto itL=tc::end(lrng);
 		auto itR=tc::end(rrng);
 		auto const itBeginL=tc::begin(lrng);
 		auto const itBeginR=tc::begin(rrng);
 		for(;;) {
-			if( itR==itBeginR ) return true;
-			if( itL==itBeginL ) return false;
+			if( itR==itBeginR ) return RangeReturn<LRng>::pack_border(itL, std::forward<LRng>(lrng));
+			if( itL==itBeginL ) return RangeReturn<LRng>::pack_no_border(std::forward<LRng>(lrng));
 			--itR;
 			--itL;
-			if( !tc::bool_cast(pred(tc::as_const(*itL),tc::as_const(*itR))) ) return false;
+			if( !tc::bool_cast(pred(tc::as_const(*itL),tc::as_const(*itR))) ) return RangeReturn<LRng>::pack_no_border(std::forward<LRng>(lrng));
 		}
 	}
 

@@ -228,6 +228,12 @@ namespace tc {
 				return tc::end(m_a);
 			}
 			
+#ifdef _DEBUG
+			friend void uninitialize_impl(dense_map& dm) noexcept {
+				UNINITIALIZED(dm.m_a);
+			}
+#endif
+
 #ifdef TC_PRIVATE
 			// persistence
 			friend void LoadType<>( dense_map<Key, Value>& dm, CXmlReader& loadhandler ) THROW(ExLoadFail);
@@ -343,6 +349,12 @@ namespace tc {
 			iterator end() & noexcept {
 				return tc::end(m_a);
 			}
+
+#ifdef _DEBUG
+			friend void uninitialize_impl(dense_map& dm) noexcept {
+				UNINITIALIZED(dm.m_a);
+			}
+#endif
 
 #ifdef TC_PRIVATE
 			// persistence
@@ -474,7 +486,9 @@ namespace tc {
 	TC_DENSE_MAP_SUPPORT_2(class_name, tc::type::deducible_identity_t)
 
 #define TC_DENSE_MAP_SUPPORT_2(class_name, value_template) \
-	class_name() noexcept : base_(/*boost::container::default_init_t{}*/) {}; /*leave fundamental Value uninitialized*/ \
+	class_name() noexcept : base_(/*boost::container::default_init_t{}*/) {}; /*TODO: leave fundamental Value uninitialized*/ \
+	\
+	class_name(boost::container::default_init_t) noexcept : base_(boost::container::default_init_t{}) {}; /*leave fundamental Value uninitialized*/ \
 	\
 	/* inherit default ctor and constructors with at least two arguments from dense_map*/ \
 	template <typename A0, typename A1, typename ...Args, \

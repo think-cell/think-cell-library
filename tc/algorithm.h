@@ -625,6 +625,11 @@ namespace tc {
 		tc::assert_no_null_terminator(rng);
 	}
 
+	template<typename Char, std::size_t N, std::enable_if_t<tc::is_char<Char>::value>* = nullptr>
+	[[nodiscard]] constexpr auto take_null_terminated(Char const (&ach)[N]) noexcept {
+		return tc::find_first<tc::return_take_before>(tc::as_array(ach), Char());
+	}
+
 	namespace get_buffer_detail {
 #if defined _DEBUG && !defined __clang__
 		namespace no_adl {

@@ -978,6 +978,7 @@ namespace tc {
 
 			template<typename It>
 			static constexpr type pack_border(It&&, Rng&&) noexcept {}
+			static constexpr type pack_no_border(Rng&&) noexcept {}
 			template<typename It, typename Ref>
 			static constexpr type pack_element(It&&, Rng&&, Ref&&) noexcept {}
 			template<typename Ref>
@@ -1002,6 +1003,11 @@ namespace tc {
 				_ASSERTE(it != tc::begin(rng));
 				return boost::prior(it);
 			}
+
+			static constexpr type pack_no_border(Rng&& rng) noexcept {
+				_ASSERTFALSE;
+				return tc::begin(rng);
+			}
 		};
 
 		template< typename Rng >
@@ -1015,6 +1021,10 @@ namespace tc {
 				} else {
 					return type{}; // value initialization to initialize pointers to nullptr
 				}
+			}
+
+			static constexpr type pack_no_border(Rng&&) noexcept {
+				return type{};
 			}
 		};
 
@@ -1030,6 +1040,10 @@ namespace tc {
 					return tc::begin(rng);
 				}
 			}
+
+			static constexpr type pack_no_border(Rng&& rng) noexcept {
+				return tc::begin(rng);
+			}
 		};
 
 		template< typename Rng >
@@ -1040,6 +1054,11 @@ namespace tc {
 			static constexpr type pack_border(typename boost::range_iterator<Rng>::type it, Rng&& rng) noexcept {
 				_ASSERTE(it != tc::end(rng));
 				return it;
+			}
+
+			static constexpr type pack_no_border(Rng&& rng) noexcept {
+				_ASSERTFALSE;
+				return tc::begin(rng);
 			}
 		};
 
@@ -1054,6 +1073,10 @@ namespace tc {
 					return type{}; // value initialization to initialize pointers to nullptr
 				}
 			}
+
+			static constexpr type pack_no_border(Rng&&) noexcept {
+				return type{};
+			}
 		};
 
 		// returning bound
@@ -1066,6 +1089,25 @@ namespace tc {
 			static constexpr type pack_border(typename boost::range_iterator<Rng>::type it, Rng&& rng) noexcept {
 				return it;
 			}
+
+			static constexpr type pack_no_border(Rng&& rng) noexcept {
+				_ASSERTFALSE;
+				return tc::begin(rng);
+			}
+		};
+
+		template< typename Rng >
+		struct return_border_or_none final {
+			using type = tc::border_t< typename boost::range_iterator<Rng>::type >;
+			static constexpr bool requires_iterator = true;
+
+			static constexpr type pack_border(typename boost::range_iterator<Rng>::type it, Rng&& rng) noexcept {
+				return type(it);
+			}
+
+			static constexpr type pack_no_border(Rng&&) noexcept {
+				return type{};
+			}
 		};
 
 		template< typename Rng >
@@ -1076,18 +1118,28 @@ namespace tc {
 			static constexpr type pack_border(typename boost::range_iterator<Rng>::type it, Rng&& rng) noexcept {
 				return tc::explicit_cast<type>(it - tc::begin(rng));
 			}
+
+			static constexpr type pack_no_border(Rng&&) noexcept {
+				_ASSERTFALSE;
+				return type(0);
+			}
 		};
 
 		// returning range
 
-		template< typename >
+		template< typename Rng >
 		struct return_take final {
+			using type = decltype(tc::take(std::declval<Rng>(), tc::begin(std::declval<Rng&>())));
 			static constexpr bool requires_iterator = true;
 
-			template <typename Rng>
-			static constexpr auto pack_border(typename boost::range_iterator<Rng>::type it, Rng&& rng) return_decltype_xvalue_by_ref_noexcept(
-				tc::take(std::forward<Rng>(rng), it)
-			)
+			static constexpr type pack_border(typename boost::range_iterator<Rng>::type it, Rng&& rng) noexcept {
+				return tc::take(std::forward<Rng>(rng), it);
+			}
+
+			static constexpr type pack_no_border(Rng&& rng) noexcept {
+				_ASSERTFALSE;
+				return tc::take(std::forward<Rng>(rng), tc::begin(rng));
+			}
 		};
 
 		template< typename Rng >
@@ -1097,6 +1149,37 @@ namespace tc {
 
 			static constexpr type pack_border(typename boost::range_iterator<Rng>::type it, Rng&& rng) noexcept {
 				return tc::drop(std::forward<Rng>(rng), it);
+			}
+
+			static constexpr type pack_no_border(Rng&& rng) noexcept {
+				_ASSERTFALSE;
+				return tc::drop(std::forward<Rng>(rng), tc::end(rng));
+			}
+		};
+
+		template< typename Rng >
+		struct return_drop_or_none final {
+			using type = std::optional<decltype(tc::drop(std::declval<Rng>(), tc::begin(std::declval<Rng&>())))>;
+			static constexpr bool requires_iterator = true;
+
+			static constexpr type pack_border(typename boost::range_iterator<Rng>::type it, Rng&& rng) noexcept {
+				return tc::drop(std::forward<Rng>(rng), it);
+			}
+			static constexpr type pack_no_border(Rng&&) noexcept {
+				return std::nullopt;
+			}
+		};
+
+		template< typename Rng >
+		struct return_drop_or_all final {
+			using type = decltype(tc::drop(std::declval<Rng>(), tc::begin(std::declval<Rng&>())));
+			static constexpr bool requires_iterator = true;
+
+			static constexpr type pack_border(typename boost::range_iterator<Rng>::type it, Rng&& rng) noexcept {
+				return tc::drop(std::forward<Rng>(rng), it);
+			}
+			static constexpr type pack_no_border(Rng&& rng) noexcept {
+				return std::forward<Rng>(rng);
 			}
 		};
 
@@ -1124,6 +1207,13 @@ namespace tc {
 				return false;
 			}
 			static constexpr type pack_no_element() noexcept {
+				return false;
+			}
+			template<typename It>
+			static constexpr type pack_border(It&&, Rng&&) noexcept {
+				return true;
+			}
+			static constexpr type pack_no_border(Rng&&) noexcept {
 				return false;
 			}
 		};
@@ -1652,9 +1742,12 @@ namespace tc {
 	using no_adl::return_element_after;
 	using no_adl::return_element_after_or_null;
 	using no_adl::return_border;
+	using no_adl::return_border_or_none;
 	using no_adl::return_border_index;
 	using no_adl::return_take;
 	using no_adl::return_drop;
+	using no_adl::return_drop_or_none;
+	using no_adl::return_drop_or_all;
 	using no_adl::return_bool;
 	using no_adl::return_element;
 	using no_adl::return_element_or_null;

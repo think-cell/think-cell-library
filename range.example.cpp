@@ -19,7 +19,7 @@ namespace {
 
 template <typename... Args>
 void print(Args&&... args) noexcept {
-	std::printf("%s", boost::implicit_cast<char const*>(tc::make_c_str<char>(std::forward<Args>(args)...)));
+	std::printf("%s", tc::implicit_cast<char const*>(tc::make_c_str<char>(std::forward<Args>(args)...)));
 }
 
 //---- Basic ------------------------------------------------------------------------------------------------------------------

@@ -47,13 +47,21 @@ namespace tc {
 		template<typename U> \
 		struct transform_result<value_template<U>, void> : tc::type::identity<class_template<U>> {}; \
 	public: \
-		template<typename Func> \
-		[[nodiscard]] typename transform_result<tc::transform_value_t<Func, value_template<T> const&>, void>::type transform(Func&& func) const& MAYTHROW { \
-			return {tc::transform_tag, *this, std::forward<Func>(func)}; \
+		template<std::size_t nDepth=0, typename Func, std::enable_if_t<0==nDepth>* = nullptr> \
+		[[nodiscard]] auto transform(Func&& func) const& return_decltype_MAYTHROW( \
+			typename transform_result<tc::transform_value_t<Func BOOST_PP_COMMA() value_template<T> const&> BOOST_PP_COMMA() void>::type(tc::transform_tag, *this, std::forward<Func>(func)) \
+		) \
+		template<std::size_t nDepth=0, typename Func, std::enable_if_t<0==nDepth>* = nullptr> \
+		[[nodiscard]] auto transform(Func&& func) && return_decltype_MAYTHROW( \
+			typename transform_result<tc::transform_value_t<Func BOOST_PP_COMMA() value_template<T>> BOOST_PP_COMMA() void>::type(tc::transform_tag, tc_move_always(*this), std::forward<Func>(func)) \
+		) \
+		template<std::size_t nDepth, typename Func, std::enable_if_t<0<nDepth>* = nullptr> \
+		[[nodiscard]] auto transform(Func&& func) const& MAYTHROW { \
+			return transform([&](auto const& val) MAYTHROW { return val.template transform<nDepth-1>(std::forward<Func>(func)); }); \
 		} \
-		template<typename Func> \
-		[[nodiscard]] typename transform_result<tc::transform_value_t<Func, value_template<T>>, void>::type transform(Func&& func) && MAYTHROW { \
-			return {tc::transform_tag, tc_move_always(*this), std::forward<Func>(func)}; \
+		template<std::size_t nDepth, typename Func, std::enable_if_t<0<nDepth>* = nullptr> \
+		[[nodiscard]] auto transform(Func&& func) && MAYTHROW { \
+			return transform([&](auto&& val) MAYTHROW { return tc_move_if_owned(val).template transform<nDepth-1>(std::forward<Func>(func)); }); \
 		}
 
 #define DEFINE_MEMBER_TRANSFORM_2(class_template, value_template) \

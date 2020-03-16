@@ -24,13 +24,13 @@ Does hacking our library give you a kick, and do you think you can contribute mo
 ------------------
 Usage instructions
 ------------------
-You need to have boost installed (we tested with [1.70.0](https://www.boost.org/users/history/version_1_70_0.html)) and the following compiler settings:
+You need to have boost installed (we tested with [1.72.0](https://www.boost.org/users/history/version_1_72_0.html)) and the following compiler settings:
 
 ##### Visual C++ 19.15 (Visual Studio 2017 15.8)
 * `/std:c++latest`
 * `/permissive` 
 
-Unfortuately this is the only supported Visual C++ version, all later ones have too many code generation bugs...
+Unfortunately this is the only supported Visual C++ version, all later ones have too many code generation bugs...
 
 ##### clang Apple LLVM 10.0.0 (Xcode 10.0) or later
 * `-std=c++17`

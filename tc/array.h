@@ -293,6 +293,12 @@ namespace tc {
 #endif
 				return tc::equal(lhs, rhs);
 			}
+
+#ifdef _DEBUG
+			friend void uninitialize_impl(array& a) noexcept {
+				UNINITIALIZED(a.m_a);
+			}
+#endif
 		};
 
 		template< typename T, std::size_t N >

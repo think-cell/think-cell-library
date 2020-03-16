@@ -55,3 +55,17 @@ UNITTESTDEF(dense_map_with_non_moveable_type) {
 	});
 #endif
 }
+
+UNITTESTDEF(test_only) {
+	auto const dm = tc::make_dense_map<MyEnum>(5, 10);
+	auto const dm2 = dm.transform([](auto const n) noexcept { return n * 0.5; });
+	_ASSERTEQUAL(dm2[myenumONE], 2.5);
+	_ASSERTEQUAL(dm2[myenumTWO], 5);
+
+	auto const dm3 = tc::make_dense_map<MyEnum>(tc::make_dense_map<bool>(5, 10), tc::make_dense_map<bool>(3, 6));
+	auto const dm4 = dm3.transform<1>([](auto const n) noexcept { return n * 0.5; });
+	_ASSERTEQUAL(dm4[myenumONE][false], 2.5);
+	_ASSERTEQUAL(dm4[myenumONE][true], 5);
+	_ASSERTEQUAL(dm4[myenumTWO][false], 1.5);
+	_ASSERTEQUAL(dm4[myenumTWO][true], 3);
+}

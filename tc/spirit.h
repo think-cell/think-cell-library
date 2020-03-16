@@ -40,6 +40,17 @@
 #endif
 #include <boost/fusion/adapted/std_tuple.hpp>
 
+// We prefer x3::rule to simple parser. Because:
+//   1. parsers are copied around in spirit.
+//   2. x3::rule is a special parser reference which does not store the actual parser inside.
+// The standard way to define a namespace scope x3::rule is like below:
+//   x3::rule<struct SIdXXX(, Attribute)> const ruleXXX;
+//   auto const ruleXXX_def = actual_parser;
+//   BOOST_SPIRIT_DEFINE(ruleXXX)
+// Notes:
+//   1. We don't have to wrap actual_parser with tc::attr_is or x3::omit.
+//   2. The attribute can be propagated exactly as in tc::attr_is.
+
 namespace x3 = boost::spirit::x3;
 namespace tc {
 	template< typename Rng, typename Expr, typename... Attr, std::enable_if_t< sizeof...(Attr)<2 >* = nullptr>
@@ -116,75 +127,7 @@ namespace tc {
 	}
 }
 
-namespace boost { namespace spirit { namespace traits {
-	// prevent access violation when using ascii::alpha, ascii::digit and ascii::alnum on narrow char input containing non-ascii characters
-	// http://boost.2283326.n4.nabble.com/BOOST-ASSERT-isascii-ch-is-triggered-by-char-classification-parsers-tp3475081p3475081.html
-
-	template<>
-	struct ischar<char, char_encoding::ascii, false> final {
-		static bool call(char ch) noexcept {
-			return char_encoding::ascii::isascii_(ch);
-		}
-	};
-}}}
-
 #ifdef __clang__
-
-// add char16_t support to Spirit
-
-namespace boost { namespace spirit { namespace x3 { namespace traits
-	{
-		///////////////////////////////////////////////////////////////////////////
-		// Determine if T is a character type
-		///////////////////////////////////////////////////////////////////////////
-		template <>
-		struct is_char<char16_t> : mpl::true_ {};
-
-		///////////////////////////////////////////////////////////////////////////
-		// Determine if T is a string
-		///////////////////////////////////////////////////////////////////////////
-		template <>
-		struct is_string<char16_t const*> final : mpl::true_ {};
-
-		template <>
-		struct is_string<char16_t*> final : mpl::true_ {};
-
-		template <std::size_t N>
-		struct is_string<char16_t[N]> final : mpl::true_ {};
-
-		template <std::size_t N>
-		struct is_string<char16_t const[N]> final : mpl::true_ {};
-
-		template <std::size_t N>
-		struct is_string<char16_t(&)[N]> final : mpl::true_ {};
-
-		template <std::size_t N>
-		struct is_string<char16_t const(&)[N]> final : mpl::true_ {};
-
-		///////////////////////////////////////////////////////////////////////////
-		// Get the underlying char type of a string
-		///////////////////////////////////////////////////////////////////////////
-		template <>
-		struct char_type_of<char16_t> final : mpl::identity<wchar_t> {};
-
-		template <>
-		struct char_type_of<char16_t const*> final : mpl::identity<wchar_t const> {};
-
-		template <>
-		struct char_type_of<char16_t*> final : mpl::identity<wchar_t> {};
-
-		template <std::size_t N>
-		struct char_type_of<char16_t[N]> final : mpl::identity<wchar_t> {};
-
-		template <std::size_t N>
-		struct char_type_of<char16_t const[N]> final : mpl::identity<wchar_t const> {};
-
-		template <std::size_t N>
-		struct char_type_of<char16_t(&)[N]> final : mpl::identity<wchar_t> {};
-
-		template <std::size_t N>
-		struct char_type_of<char16_t const(&)[N]> final : mpl::identity<wchar_t const> {};
-	}}}}
 
 namespace boost { namespace spirit { namespace char_encoding {
 	///////////////////////////////////////////////////////////////////////////
@@ -329,18 +272,17 @@ namespace boost { namespace spirit { namespace x3 {
 namespace tc {
 	namespace attr_is_id_adl {
 		struct attr_is_id;
-		// tc::attr_is directive creates a rule_definition with an attribute type of T
-		// it should be used to specify the attribute type of a sub-parser.
-		//   auto const rule_def = x3::lit('-') >> tc::attr_is<std::string>[+x3::alpha];
-		// it should NOT be used to specify the attribute type of another rule definition.
-		//   Not recommended:
-		//     x3::rule<struct xxx, std::string> const rule{""};
-		//     auto const rule_def = tc::attr_is<std::string>[+x3::alpha];
-		//     BOOST_SPIRIT_DEFINE(rule)
-		//   Recommended (2nd line if attribute propagation is not automatic):
-		//     auto const rule_def = rule = +x3::alpha;
-		// it doesn't insert dummy values into the context
-
+		// tc::attr_is<T>[parser] directive creates an x3::rule_definition (an x3::parser with a customized attribute type).
+		// When specifying an attribute, in some cases the attribute can be filled by the parser without any additional code:
+		//   auto const parser = tc::attr_is<std::string>[+x3::alpha];
+		// In other cases, you may have to write a semantic action and access the attribute via x3::_val(ctx) to fill it:
+		//   auto const parser = tc::attr_is<std::string>[+x3::alpha[([](auto const& ctx) noexcept {
+		//     tc::append(
+		//       x3::_val(ctx)/*attribute of innermost x3::rule_definition, which is what is specified in tc::attr_is<>*/,
+		//       tc::single(x3::_attr(ctx))/*automatic attribute of the parser attached; in this case x3::alpha is producing char*/
+		//     );
+		//   })]];
+		
 		// When we call the parse method of a x3::rule_definition, it will check if there is a specialization
 		// of the parse_rule function on rule_definition's ID. Normally this specialization is provided by
 		// BOOST_SPIRIT_DEFINE macro. Otherwise the parse method will inject a reference of rule_definition's
@@ -348,19 +290,20 @@ namespace tc {
 		// BOOST_SPIRIT_DEFINE macro, for example when they are defined locally, the parse method of x3::rule can
 		// still call the rule_def's parse by retrieving the injected rhs parser with its ID using the default
 		// parse_rule function.
-		//   x3::rule<struct xx, std::string> const rule{""};
+		//   x3::rule<struct xx, std::string> const rule;
 		//   auto const rule_def = rule = +x3::alpha > -(tc::single_char('[') > rule > tc::single_char(']'));
 		//   tc::parse(str, rule_def, attr); // rule and rule_def are not connected with BOOST_SPIRIT_DEFINE
-		// tc::attr_is is a rule_definition, but it's never meant or able to be used it like this. So we don't
-		// have to inject its rhs parser into the context. The injection may slow the parsing when it's recursive. 
-		// BOOST_SPIRIT_DEFINE is for global rule(_def)s. So we need to declare the specialization of the parse_rule
-		// function on attr_is_id. We don't have to implement it because it's only used in the decltype and is never
+		// tc::attr_is is a rule_definition, but it cannot be recursive because it does not have a name. So we don't
+		// need to inject its rhs parser into the context, and we should avoid it because it may slow the parsing. 
+		// To do that, we declare the specialization of the parse_rule function on attr_is_id.
+		// We don't have to implement it because it's only used in the decltype and is never
 		// called (because x3::rule with attr_is_id is never exposed).
 		template <typename Iterator, typename Context, typename Attribute, typename ActualAttribute>
 		bool parse_rule(
-		    x3::rule<attr_is_id, Attribute> const& rule_
-		  , Iterator& first, Iterator const& last
-		  , Context const& context, ActualAttribute& attr);
+			x3::rule<attr_is_id, Attribute> const& rule_,
+			Iterator& first, Iterator const& last,
+			Context const& context, ActualAttribute& attr
+		);
 		// Attribute is the Attribute type the rule propagates
 		// ActualAttribute is the Attribute variable type we give to tc::parse function
 	}
@@ -416,7 +359,7 @@ namespace tc {
 	inline constexpr auto asciiupper = char_range(tc::explicit_cast<Char>('A'), tc::explicit_cast<Char>('Z'));
 
 #ifndef __clang__
-	inline auto UnusedInlineFunctionToWorkaroundCompilerBug() noexcept {
+	inline auto UnusedInlineFunctionToWorkaroundCompilerBug() noexcept { // TODO: fixed in VS2019
 		asciidigit<char>;
 		asciidigit<wchar_t>;
 		asciilower<char>;
@@ -552,20 +495,6 @@ namespace tc {
 
 	template<typename Char, typename T>
 	using symbols = x3::symbols_parser<typename boost::spirit::traits::char_encoding_from_char<tc::decay_t<Char>>::type, T>;
-
-	namespace no_adl {
-		struct quoted_symbols final: tc::symbols<char, char const> {
-			quoted_symbols() noexcept {
-				add ("\\a", '\a')("\\b", '\b')("\\f", '\f')("\\n", '\n')
-					("\\r", '\r')("\\t", '\t')("\\v", '\v')
-					("\\\\", '\\')("\\\'", '\'')("\\\"", '\"');
-			}
-		};
-	}
-	x3::rule<struct SIdNarrowQuotedSymbols, std::string> const narrow_quoted_symbols{"narrow_quoted_symbols"};
-	auto const narrow_quoted_symbols_def = x3::rule<struct SIdNarrowQuotedSymbols,std::string>{} %=
-		x3::confix("\"", "\"")[x3::no_skip[*(no_adl::quoted_symbols{} | tc::lit("\\x")[([](auto& ctx) noexcept {x3::_pass(ctx)=false;})] | (tc::char_<char> - '"'))]];
-	BOOST_SPIRIT_DEFINE(narrow_quoted_symbols)
 
 	namespace no_adl {
 		struct move_attr_to_val_impl final {

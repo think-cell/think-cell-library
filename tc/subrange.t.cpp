@@ -593,14 +593,14 @@ namespace {
 #ifdef TC_PRIVATE
 	UNITTESTDEF(hash_string_range) {
 		std::string strNarrow = "test";
-		_ASSERTEQUAL(tc::hash_range<std::size_t>(strNarrow), tc::hash_range<std::size_t>(tc::as_pointers(strNarrow)));
-		_ASSERTEQUAL(tc::hash_range<std::size_t>(strNarrow), tc::hash_range<std::size_t>("test"));
+		_ASSERTEQUAL((tc::hash_range<std::size_t, char>(strNarrow)), (tc::hash_range<std::size_t, char>(tc::as_pointers(strNarrow))));
+		_ASSERTEQUAL((tc::hash_range<std::size_t, char>(strNarrow)), (tc::hash_range<std::size_t, char>("test")));
 		std::basic_string<tc::char16> strWide = UTF16("test");
-		_ASSERTEQUAL(tc::hash_range<std::size_t>(strWide), tc::hash_range<std::size_t>(tc::as_pointers(strWide)));
-		_ASSERTEQUAL(tc::hash_range<std::size_t>(strWide), tc::hash_range<std::size_t>(UTF16("test")));
-		_ASSERTEQUAL(tc::hash_range<std::size_t>(tc::make_vector(strWide)), tc::hash_range<std::size_t>(tc::as_pointers(strWide)));
-		_ASSERTEQUAL(tc::hash_range<std::size_t>(strNarrow), tc::hash<std::size_t>(strNarrow));
-		_ASSERTEQUAL(tc::hash_range<std::size_t>(strWide), tc::hash<std::size_t>(strWide));
+		_ASSERTEQUAL((tc::hash_range<std::size_t, tc::char16>(strWide)), (tc::hash_range<std::size_t, tc::char16>(tc::as_pointers(strWide))));
+		_ASSERTEQUAL((tc::hash_range<std::size_t, tc::char16>(strWide)), (tc::hash_range<std::size_t, tc::char16>(UTF16("test"))));
+		_ASSERTEQUAL((tc::hash_range<std::size_t, tc::char16>(tc::make_vector(strWide))), (tc::hash_range<std::size_t, tc::char16>(tc::as_pointers(strWide))));
+		_ASSERTEQUAL((tc::hash_range<std::size_t, char>(strNarrow)), (tc::hash<std::size_t, std::string>(strNarrow)));
+		_ASSERTEQUAL((tc::hash_range<std::size_t, tc::char16>(strWide)), (tc::hash<std::size_t, std::basic_string<tc::char16>>(strWide)));
 	}
 #endif
 
