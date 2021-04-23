@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -20,11 +20,13 @@
 namespace tc {
 	template<typename TTarget, typename TSource, std::enable_if_t<tc::is_base_of_decayed<TTarget, TSource>::value>* = nullptr>
 	[[nodiscard]] constexpr TSource&& reluctant_numeric_cast(TSource&& src) noexcept {
+		STATICASSERTSAME(tc::remove_cvref_t<TTarget>, TTarget);
 		return std::forward<TSource>(src);
 	}
 
 	template<typename TTarget, typename TSource, std::enable_if_t<!tc::is_base_of_decayed<TTarget, TSource>::value>* = nullptr>
 	[[nodiscard]] constexpr TTarget reluctant_numeric_cast(TSource&& src) noexcept {
+		STATICASSERTSAME(tc::remove_cvref_t<TTarget>, TTarget);
 		return tc::explicit_cast<TTarget>(std::forward<TSource>(src));
 	}
 
@@ -82,14 +84,20 @@ namespace tc {
 	template<typename T>
 	[[nodiscard]] constexpr auto sqr(T const& x)
 		return_decltype_noexcept( mul(x,x) )
-	
+
+#ifdef _MSC_VER
+	#pragma float_control(precise, on, push) // RT#17630: Disable compiler optimization num/den ---> num*(1/den) resulting in tc::fdiv(1287,100)==12.870000000000001
+#endif
 	[[nodiscard]] inline constexpr 
-#ifdef TC_MAC
+#ifdef __clang__
 		__attribute__((optnone)) // Disable compiler optimization num/den ---> num*(1/den) resulting in tc::fdiv(49,49)==0.99999999999999989
 #endif
 	double fdiv(double num, double den) noexcept {
 		return num/den;
 	}
+#ifdef _MSC_VER
+	#pragma float_control(pop)
+#endif
 	
 	template< typename Num, typename Den >
 	[[nodiscard]] constexpr double fdiv(Num num, Den den) noexcept {
@@ -259,27 +267,27 @@ namespace tc {
 	// scale_div
 
 	template< typename Num, typename Denom, typename Round, std::enable_if_t<tc::is_actual_integer< Num >::value>* = nullptr >
-	[[nodiscard]] Num scale_div( Num num, Denom denom, Round round ) noexcept {
+	[[nodiscard]] constexpr Num scale_div( Num num, Denom denom, Round round ) noexcept {
 		return idiv(num,denom,round);
 	}
 
 	template< typename Num, typename Denom, std::enable_if_t<std::is_floating_point< Num >::value>* = nullptr >
-	[[nodiscard]] Num scale_div( Num num, Denom denom, SRoundNearest ) noexcept {
+	[[nodiscard]] constexpr Num scale_div( Num num, Denom denom, SRoundNearest ) noexcept {
 		return tc::explicit_cast<Num>(num/denom);
 	}
 
 	template< typename Num, typename Denom >
-	[[nodiscard]] Num scale_div( Num num, Denom denom ) noexcept {
-		return scale_div(num,denom,tc::roundNEAREST);
+	[[nodiscard]] constexpr Num scale_div( Num num, Denom denom ) noexcept {
+		return tc::scale_div(num,denom,tc::roundNEAREST);
 	}
 
 	template< bool bGeneralized, typename T, std::enable_if_t<tc::is_actual_integer< T >::value>* = nullptr >
-	[[nodiscard]] T internal_lower_half(T t) noexcept {
-		return scale_div(t, 2, tc::roundFLOOR);
+	[[nodiscard]] constexpr T internal_lower_half(T t) noexcept {
+		return tc::scale_div(t, 2, tc::roundFLOOR);
 	}
 
 	template< bool bGeneralized, typename T, std::enable_if_t<std::is_floating_point< T >::value>* = nullptr >
-	[[nodiscard]] T internal_lower_half(T t) noexcept {
+	[[nodiscard]] constexpr T internal_lower_half(T t) noexcept {
 		return t / 2;
 	}
 
@@ -289,15 +297,15 @@ namespace tc {
 	}
 
 	template< typename T >
-	[[nodiscard]] auto lower_half(T&& t) return_decltype_noexcept( internal_lower_half</*bGeneralized*/ false>(std::forward<T>(t)) )
+	[[nodiscard]] constexpr auto lower_half(T&& t) return_decltype_noexcept( tc::internal_lower_half</*bGeneralized*/ false>(std::forward<T>(t)) )
 
 	template< bool bGeneralized, typename T >
-	[[nodiscard]] auto internal_midpoint(T const& begin, T const& end) noexcept {
-		return begin + internal_lower_half<bGeneralized>(end - begin);
+	[[nodiscard]] constexpr auto internal_midpoint(T const& begin, T const& end) noexcept {
+		return begin + tc::internal_lower_half<bGeneralized>(end - begin);
 	}
 
 	template< typename T >
-	[[nodiscard]] auto midpoint(T const& begin, T const& end) return_decltype_noexcept( internal_midpoint</*bGeneralized*/false>(begin, end) )
+	[[nodiscard]] constexpr auto midpoint(T const& begin, T const& end) return_decltype_noexcept( tc::internal_midpoint</*bGeneralized*/false>(begin, end) )
 
 	/////////////////////////////////
 	// scale_mul
@@ -398,8 +406,6 @@ namespace tc {
 		return rounding_cast<Dst>(std::forward<Src>(x), roundNEAREST);
 	}
 
-	DEFINE_FN_TMPL(rounding_cast,(typename))
-
 	template<typename Lhs, typename Rhs, typename TRound>
 	void assign_rounding_cast(Lhs& lhs, Rhs&& rhs, TRound round) noexcept {
 		lhs=tc::rounding_cast<Lhs>(std::forward<Rhs>(rhs), round);
@@ -409,4 +415,38 @@ namespace tc {
 	void assign_rounding_cast(Lhs& lhs, Rhs&& rhs) noexcept {
 		lhs=tc::rounding_cast<Lhs>(std::forward<Rhs>(rhs));
 	}
+
+	namespace no_adl {
+		struct fn_div {
+			template<typename Num, typename Denom, typename Quot = decltype(std::declval<Num>() / std::declval<Denom>())>
+			[[nodiscard]] constexpr Quot operator()(Num&& num, Denom&& denom) const& noexcept {
+				if constexpr( tc::is_actual_integer_like<tc::decay_t<Num>>::value && tc::is_actual_integer_like<tc::decay_t<Denom>>::value ) {
+					// TODO static_assert( dependent_false<Num, Denom>::value, "Do not rely on language int/int-behavior, use tc::scale_div " );
+					return tc::idiv(tc::explicit_cast<Quot>(std::forward<Num>(num)), std::forward<Denom>(denom), tc::roundNEAREST);
+				} else {
+					static_assert( std::is_floating_point<tc::decay_t<Num>>::value || std::is_floating_point<tc::decay_t<Denom>>::value || std::is_class<tc::decay_t<Num>>::value || std::is_class<tc::decay_t<Denom>>::value );
+					static_assert( !tc::is_instance<tc::size_proxy, tc::decay_t<Num>>::value );
+					static_assert( !tc::is_instance<tc::size_proxy, tc::decay_t<Denom>>::value );
+					return std::forward<Num>(num) / std::forward<Denom>(denom);
+				}
+			}
+		};
+
+		struct fn_assign_div {
+			template<typename Num, typename Denom>
+			[[nodiscard]] constexpr Num& operator()(Num& num, Denom&& denom) const& noexcept {
+				if constexpr( tc::is_actual_integer_like<tc::decay_t<Num>>::value ) {
+					// TODO static_assert( dependent_false<Num, Denom>::value, "Do not rely on language int/int-behavior, use tc::scale_div " );
+					num = tc::idiv(num, std::forward<Denom>(denom), tc::roundNEAREST);
+				} else {
+					static_assert( std::is_floating_point<tc::decay_t<Num>>::value || std::is_class<tc::decay_t<Num>>::value );
+					static_assert( !tc::is_instance<tc::size_proxy, tc::decay_t<Num>>::value );
+					num /= std::forward<Denom>(denom);
+				}
+				return num;
+			}
+		};
+	}
+	using no_adl::fn_div;
+	using no_adl::fn_assign_div;
 }

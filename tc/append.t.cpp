@@ -1,19 +1,23 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #include "range.t.h"
 
-static_assert(tc::is_appendable<std::string&, char const*>::value);
-static_assert(!tc::is_appendable<std::string&, int>::value);
-static_assert(tc::is_appendable<std::string&, tc::char16 const*, decltype(tc::as_dec(5))>::value);
-static_assert(!tc::is_appendable<std::string&, tc::size_proxy<int>>::value);
-static_assert(!tc::is_appendable<std::string&, tc::vector<int>>::value);
-static_assert(!tc::is_appendable<std::string&, tc::static_vector<int, 3>>::value);
+static_assert(tc::is_appendable<std::basic_string<char>&, char const*>::value);
+static_assert(!tc::is_appendable<std::basic_string<char>&, int>::value);
+static_assert(tc::is_appendable<std::basic_string<char>&, tc::char16 const*, decltype(tc::as_dec(5))>::value);
+static_assert(!tc::is_appendable<std::basic_string<char>&, tc::size_proxy<int>>::value);
+static_assert(!tc::is_appendable<std::basic_string<char>&, tc::vector<int>>::value);
+static_assert(!tc::is_appendable<std::basic_string<char>&, tc::static_vector<int, 3>>::value);
+//static_assert(!tc::is_appendable<std::pair<std::basic_string<char>&, char const*>>::value);
+//static_assert(!tc::is_appendable<std::tuple<std::basic_string<char>&, char const*>>::value);
+//static_assert(!tc::is_appendable<tc::tuple<std::basic_string<char>&, char const*>>::value);
+
 #ifdef TC_PRIVATE
 static_assert(tc::is_appendable<tc::SReportStream&, int>::value);
 static_assert(tc::is_appendable<tc::SReportStream&, tc::size_proxy<int>>::value);
@@ -23,9 +27,9 @@ static_assert(tc::is_appendable<tc::SReportStream&, char const*, tc::size_proxy<
 UNITTESTDEF(nonappendable) {
 	tc::vector<int> vecnTest{1, 2, 3};
 	auto rngTest1=tc::transform(vecnTest, [](auto n) noexcept { return n + 1; });
-	static_assert(!tc::is_appendable<std::string&, decltype(rngTest1)>::value);
+	static_assert(!tc::is_appendable<std::basic_string<char>&, decltype(rngTest1)>::value);
 	auto rngTest2=tc::filter(vecnTest, [](auto const n) noexcept { return n%2==1; });
-	static_assert(!tc::is_appendable<std::string&, decltype(rngTest2)>::value);
+	static_assert(!tc::is_appendable<std::basic_string<char>&, decltype(rngTest2)>::value);
 }
 
 namespace {
@@ -50,22 +54,22 @@ UNITTESTDEF(nonreportappendable) {
 
 namespace {
 	struct STestError1 {
-		friend auto error(STestError1 const&) noexcept {
+		friend auto debug_output_impl(STestError1 const&) noexcept {
 			return tc::concat("STestError1(", -1, ')');
 		}
 	};
 	
 	struct STestError2 {
-		DECLARE_FRIEND_FN_ERROR(STestError2)
+		DECLARE_FRIEND_FN_DEBUG_OUTPUT_IMPL(STestError2)
 	};
 
-	DEFINE_FRIEND_FN_ERROR(STestError2) {
+	DEFINE_FRIEND_FN_DEBUG_OUTPUT_IMPL(STestError2) {
 		tc::for_each(tc::concat("STestError2(", 5, ", ", STestError1(), ')'), tc_move(appdr));
 	}
 
 	struct STestError3 {};
 
-	auto error(STestError3 const&) noexcept {
+	auto debug_output_impl(STestError3 const&) noexcept {
 		return [](tc::report_appender appdr) noexcept {
 			tc::for_each(tc::concat("STestError3(", STestError2(), ", ", nullptr, ')'), tc_move(appdr));
 		};

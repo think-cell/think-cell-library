@@ -1,14 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "range_fwd.h"
 #include "accumulator.h"
 #include "enum.h"
@@ -16,9 +16,6 @@
 #include "noncopyable.h"
 #include "derivable.h"
 #include "invoke.h"
-
-#include <boost/mpl/has_xxx.hpp>
-#include <boost/preprocessor.hpp>
 
 #include <type_traits>
 #include <functional>
@@ -50,39 +47,46 @@ namespace tc {
 			} \
 		} \
 	}
+	
+	namespace continue_if_not_break_adl {
+		template<typename BreakOrContinueDefault = INTEGRAL_CONSTANT(tc::continue_)>
+		struct impl_t final {
+			BreakOrContinueDefault m_breakorcontinue;
+		};
+		inline constexpr impl_t<> impl = {INTEGRAL_CONSTANT(tc::continue_)()};
+		template<typename BreakOrContinue>
+		using is_break_or_continue = tc::type::find_unique<tc::type::list<tc::break_or_continue, INTEGRAL_CONSTANT(tc::break_), INTEGRAL_CONSTANT(tc::continue_)>, BreakOrContinue>;
+
+		template<typename BreakOrContinue, std::enable_if_t<is_break_or_continue<BreakOrContinue>::found>* = nullptr>
+		constexpr impl_t<BreakOrContinue> operator,(BreakOrContinue breakorcontinue, impl_t<> const&) noexcept {
+			return {breakorcontinue};
+		}
+		// The built-in "operator," would be fine, but this is needed to protect against other libraries that overload "operator," (e.g. boost::proto).
+		template<typename NotBreakOrContinue, std::enable_if_t<!is_break_or_continue<tc::remove_cvref_t<NotBreakOrContinue>>::found>* = nullptr>
+		constexpr impl_t<> const& operator,(NotBreakOrContinue&& /*notbreakorcontinue*/, impl_t<> const& _) noexcept {
+			return _;
+		}
+		// Built-in:
+		//template<typename >
+		//impl_t<> const& operator,(void, impl_t<> const& _) noexcept {
+		//	return _;
+		//}
+#define tc_internal_continue_if_not_break(...) tc::decay_copy(((__VA_ARGS__), tc::continue_if_not_break_adl::impl).m_breakorcontinue)
+	}
+
+	template<typename Void, std::enable_if_t<std::is_void<Void>::value>* = nullptr>
+	constexpr Void implicit_cast(INTEGRAL_CONSTANT(tc::continue_)) noexcept {}
+
 
 	//////////////////////////////////////////////////////////////////////////
 
 	//// continue_if_not_break ///////////////////////////////////////////////////////////////////////////
 	// Func returns break_or_continue
 
-	template <typename Func, typename ...Args,
-		typename R = decltype(tc::invoke(std::declval<Func>(), std::declval<Args>()...)),
-		std::enable_if_t<
-			tc::type::find_unique<tc::type::list<tc::break_or_continue, INTEGRAL_CONSTANT(tc::break_), INTEGRAL_CONSTANT(tc::continue_)>, tc::decay_t<R>>::found
-		>* = nullptr
-	>
-	constexpr R continue_if_not_break(Func&& func, Args&& ... args) noexcept(noexcept(
-		tc::invoke(std::forward<Func>(func), std::forward<Args>(args)...)
-	)) {
-		static_assert(tc::is_decayed<R>::value);
-		return tc::invoke(std::forward<Func>(func), std::forward<Args>(args)...);
-	}
-
-	// Func does not return break_or_continue
-	template <typename Func, typename ...Args,
-		typename R = decltype(tc::invoke(std::declval<Func>(), std::declval<Args>()...)),
-		std::enable_if_t<
-			!tc::type::find_unique<tc::type::list<tc::break_or_continue, INTEGRAL_CONSTANT(tc::break_), INTEGRAL_CONSTANT(tc::continue_)>, tc::decay_t<R>>::found
-		>* = nullptr
-	>
-	constexpr INTEGRAL_CONSTANT(tc::continue_) continue_if_not_break(Func&& func, Args&& ... args) noexcept(noexcept(
-		tc::invoke(std::forward<Func>(func), std::forward<Args>(args)...)
-	)) {
-		tc::invoke(std::forward<Func>(func), std::forward<Args>(args)...);
-		return {};
-	}
-
+	template<typename Sink, typename... Args>
+	constexpr auto continue_if_not_break(Sink const& sink, Args&&... args) return_decltype_MAYTHROW(
+		tc_internal_continue_if_not_break(tc::invoke(sink, std::forward<Args>(args)...))
+	)
 
 	///////////////////////////////////////////////////
 	// std::function should support tc::continue_;
@@ -184,7 +188,7 @@ namespace tc {
 		template< typename Ret, typename ...Args >
 		struct function< Ret(Args...) > : tc::no_adl::function_base</*bNoExcept*/false, Ret, Args...>
 		{
-			using base_ = tc::no_adl::function_base</*bNoExcept*/false, Ret, Args...>;
+			using base_ = typename function::function_base;
 			using base_::base_;
 
 			using base_::operator bool;
@@ -201,7 +205,7 @@ namespace tc {
 		template< typename Ret, typename ...Args >
 		struct function< Ret(Args...) noexcept > : tc::no_adl::function_base</*bNoExcept*/true, Ret, Args...>
 		{
-			using base_ = tc::no_adl::function_base</*bNoExcept*/true, Ret, Args...>;
+			using base_ = typename function::function_base;
 			using base_::base_;
 
 			using base_::operator bool;

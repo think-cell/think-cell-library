@@ -1,13 +1,13 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "const_forward.h"
 #include "compare.h"
 #include "implements_compare.h"
@@ -72,9 +72,28 @@ namespace tc {
 				return m_a;
 			}
 
+			operator decltype(m_a)& () & noexcept {
+				static_assert(0 < N);
+				return m_a;
+			}
+
+			operator decltype(m_a) const& () const& noexcept {
+				static_assert(0 < N);
+				return m_a;
+			}
+
 			// We cannot tell if *this is constructed using value-initialization syntax or default-initialization syntax. Therefore, we must value-initialize here.
-			constexpr array() noexcept(std::is_nothrow_constructible<T>::value) : m_a() {}
-			constexpr array(boost::container::default_init_t) noexcept(std::is_nothrow_constructible<T>::value) {}
+			template<ENABLE_SFINAE,
+				std::enable_if_t<std::is_default_constructible<SFINAE_TYPE(T)>::value>* =nullptr
+			>
+			constexpr array() noexcept(std::is_nothrow_constructible<T>::value) : m_a{} {}
+
+			template<ENABLE_SFINAE,
+				// std::is_default_constructible checks for value-initialization, instead of default-initialization. However, T cannot be const, so there should
+				// be no observable difference
+				std::enable_if_t<std::is_default_constructible<SFINAE_TYPE(T)>::value>* =nullptr
+			>
+			constexpr explicit array(boost::container::default_init_t) noexcept(std::is_nothrow_constructible<T>::value) {}
 
 		private:
 			template<typename Func, std::size_t ...IndexPack>
@@ -96,6 +115,7 @@ namespace tc {
 			template<
 				typename... Args,
 				std::size_t ...IndexPack
+				// Visual Studio compiler bug: https://developercommunity.visualstudio.com/t/guaranteed-copy-elision-fails-initializi/1404252
 #if defined(_MSC_FULL_VER) && 191326128<=_MSC_FULL_VER // Copy-elision is required to initialize the array from function return value
 				, ENABLE_SFINAE,
 				std::enable_if_t<
@@ -163,6 +183,7 @@ namespace tc {
 
 			template <typename... Args,
 				std::enable_if_t<
+					0 < sizeof...(Args) &&
 					tc::econstructionIMPLICIT==tc::elementwise_construction_restrictiveness<T, Args...>::value
 				>* = nullptr
 			>
@@ -174,6 +195,7 @@ namespace tc {
 
 			template <typename... Args,
 				std::enable_if_t<
+					0 == sizeof...(Args) ||
 					tc::econstructionEXPLICIT==tc::elementwise_construction_restrictiveness<T, Args...>::value
 				>* = nullptr
 			>
@@ -226,7 +248,7 @@ namespace tc {
 			>
 			array& operator=(array<T2, N> const& rhs) & MAYTHROW {
 				for (std::size_t i = 0; i<N; ++i) {
-					*(data() + i)=VERIFYINITIALIZED(rhs[i]);
+					*(data() + i)=VERIFYINITIALIZED(tc_at_nodebug(rhs, i));
 				}
 				return *this;
 			}
@@ -239,7 +261,7 @@ namespace tc {
 					// Use tc_move(rhs)[i] instead of tc_move(rhs[i]) here so we do not
 					// need to specialize for the case that rhs is an array of reference.
 					// Note that it is safe to call rhs::operator[]()&& on different indices.
-					*(data() + i)=VERIFYINITIALIZED(tc_move(rhs)[i]);
+					*(data() + i)=VERIFYINITIALIZED(tc_move_always(tc_at_nodebug(rhs, i)));
 				}
 				return *this;
 			}
@@ -256,42 +278,6 @@ namespace tc {
 			}
 			constexpr iterator end() & noexcept {
 				return data() + N;
-			}
-
-			// access
-			[[nodiscard]] constexpr T const& operator[](std::size_t i) const& noexcept {
-				// Analysis of release mode assembly showed a significant overhead here:
-				// Without _ASSERT, this function usually consist of only one or a few "lea" instructions that can easily be inlined.
-				// With (non-debug) _ASSERT, the comparison, jump and call to ReportAssert dominate the run-time and prevent the function to get inlined.
-				_ASSERTDEBUG(i<N);
-				return *(data() + i);
-			}
-			[[nodiscard]] constexpr T& operator[](std::size_t i) & noexcept {
-				_ASSERTDEBUG(i<N);
-				return *(data() + i);
-			}
-			[[nodiscard]] constexpr T&& operator[](std::size_t i) && noexcept {
-				_ASSERTDEBUG(i<N);
-				return std::forward<T>(*(data() + i)); // forward instead of tc_move does the right thing if T is a reference
-			}
-			[[nodiscard]] constexpr T const&& operator[](std::size_t i) const&& noexcept {
-				return static_cast<T const&&>((*this)[i]);
-			}
-
-			[[nodiscard]] friend tc::order compare(array const& lhs, array const& rhs) noexcept {
-#ifdef _DEBUG
-				for (std::size_t i=0; i<N; ++i) _ASSERTINITIALIZED(rhs[i]);
-				for (std::size_t i=0; i<N; ++i) _ASSERTINITIALIZED(lhs[i]);
-#endif
-				return tc::lexicographical_compare_3way(lhs, rhs);
-			}
-
-			[[nodiscard]] friend bool operator==(array const& lhs, array const& rhs) noexcept {
-#ifdef _DEBUG
-				for (std::size_t i=0; i<N; ++i) _ASSERTINITIALIZED(rhs[i]);
-				for (std::size_t i=0; i<N; ++i) _ASSERTINITIALIZED(lhs[i]);
-#endif
-				return tc::equal(lhs, rhs);
 			}
 
 #ifdef _DEBUG
@@ -332,7 +318,7 @@ namespace tc {
 			}
 		public:
 			template<typename Func>
-			array(func_tag_t, Func func) MAYTHROW 
+			array(func_tag_t, Func func) MAYTHROW
 				: array(tc::func_tag, func, std::make_index_sequence<N>())
 			{}
 
@@ -362,7 +348,7 @@ namespace tc {
 		public:
 			template< typename Rng,
 				std::enable_if_t< 0!=N
-					&& tc::econstructionIMPLICIT==tc::construction_restrictiveness<T&, decltype(tc_front(std::declval<Rng&>()))>::value
+					&& tc::econstructionIMPLICIT==tc::construction_restrictiveness<T&, decltype(*tc::as_lvalue(tc::begin(std::declval<Rng&>())))>::value
 				>* = nullptr
 			>
 			constexpr explicit array(Rng&& rng) MAYTHROW
@@ -406,7 +392,7 @@ namespace tc {
 
 			// access (no rvalue-qualified overloads, must not move data out of a reference)
 			// reference semantics == no deep constness
-			[[nodiscard]] T& operator[](std::size_t i) const& noexcept {
+			[[nodiscard]] constexpr T& operator[](std::size_t i) const& noexcept {
 				_ASSERTDEBUG(i<N);
 				return *m_a[i];
 			}
@@ -414,18 +400,25 @@ namespace tc {
 			void fill(T const& t) const& noexcept {
 				std::fill_n(begin(), N, t);
 			}
-
-			[[nodiscard]] friend tc::order compare(array const& lhs, array const& rhs) noexcept {
-				return tc::lexicographical_compare_3way(lhs, rhs);
-			}
-
-			[[nodiscard]] friend bool operator==(array const& lhs, array const& rhs) noexcept {
-				return tc::equal(lhs, rhs);
-			}
 		};
 
-		static_assert(!std::is_convertible<array<int,10>, array<int, 9>>::value);
-		static_assert(!std::is_convertible<array<int,9>, array<int, 10>>::value);
+		template<typename Lhs, typename Rhs, std::size_t N>
+		[[nodiscard]] constexpr bool operator==(array<Lhs, N> const& lhs, array<Rhs, N> const& rhs) noexcept {
+#ifdef _DEBUG
+			tc::for_each(lhs, TC_FN(_ASSERTINITIALIZED));
+			tc::for_each(rhs, TC_FN(_ASSERTINITIALIZED));
+#endif
+			return tc::equal(lhs, rhs);
+		}
+
+		template<typename Lhs, std::size_t N, typename Rhs>
+		[[nodiscard]] constexpr tc::order compare_impl(array<Lhs, N> const& lhs, Rhs const& rhs) noexcept {
+#ifdef _DEBUG
+			tc::for_each(lhs, TC_FN(_ASSERTINITIALIZED));
+			tc::for_each(rhs, TC_FN(_ASSERTINITIALIZED));
+#endif
+			return tc::lexicographical_compare_3way(lhs, rhs);
+		}
 	} // namespace array_adl
 	using array_adl::array;
 
@@ -434,105 +427,83 @@ namespace tc {
 		struct constexpr_size_base<tc::array<T, N>, void> : std::integral_constant<std::size_t, N> {};
 	}
 
-	template <typename T, std::size_t N>
-	struct decay<tc::array<T, N>> {
-		using type = tc::array<tc::decay_t<T>, N>;
-	};
-
 	/////////////////////////////////////////////////////
 	// std::array
 
 	namespace no_adl {
 		template<typename T, std::size_t N>
-		struct SConversions<std::array<T,N>> final {
-		private:
-			template<typename Func, std::size_t ...IndexPack>
-			static constexpr std::array<T, N> fn(func_tag_t, Func func, std::index_sequence<IndexPack...>) MAYTHROW {
-				return {{func(IndexPack)...}};
-			}
-		public:
-			template<typename Func>
-			static constexpr std::array<T, N> fn(func_tag_t, Func func) MAYTHROW {
-				return fn(tc::func_tag, func, std::make_index_sequence<N>());
-			}
-
-		private:
-			template <std::size_t, typename... Args>
-			static constexpr T explicit_cast_index(Args&&... args) noexcept {
-				return tc::explicit_cast<T>( std::forward<Args>(args)... );
-			}
-
-			template<
-				typename... Args,
-				std::size_t ...IndexPack
-			>
-			static constexpr std::array<T, N> fn(tc::fill_tag_t, std::index_sequence<IndexPack...>, Args&&... args) MAYTHROW {
-				STATICASSERTEQUAL(N, sizeof...(IndexPack)+1);
-				return { {
-					explicit_cast_index<IndexPack>(tc::const_forward<Args>(args)...)...,
-					tc::explicit_cast<T>(std::forward<Args>(args)...)
-				} };
-			}
-		public:
-			template<typename... Args>
-			static constexpr std::array<T, N> fn(tc::fill_tag_t, Args&&... args) MAYTHROW {
-				return fn(fill_tag, std::make_index_sequence<N-1>(), std::forward<Args>(args)...);
-			}
-
-			template <typename... Args>
-			static constexpr std::array<T,N> fn(tc::aggregate_tag_t, Args&& ... args) MAYTHROW {
-				STATICASSERTEQUAL(sizeof...(Args), N, "array initializer list does not match number of elements");
-				return { {tc::explicit_cast<T>(std::forward<Args>(args))...}};
-			}
-
-		private:
-			template<typename Iterator, std::size_t ...IndexPack>
-			static constexpr std::array<T,N> fn(tc::range_tag_t, Iterator it, Iterator itEnd, std::index_sequence<IndexPack...>) MAYTHROW {
-				STATICASSERTEQUAL(N, sizeof...(IndexPack)+1);
-				std::array<T, N> a{ {static_cast<T>((_ASSERTE(itEnd != it), *it)), static_cast<T>((static_cast<void>(IndexPack), ++it, _ASSERTE(itEnd != it), *it))...} }; // static_cast because int to double considered narrowing, forbidden in list initialization
-				_ASSERTE(itEnd==++it);
-				return a;
-			}
-		public:
-			template< typename Rng,
-				std::enable_if_t< 0!=N
-					&& tc::is_safely_constructible<T, decltype(*tc::as_lvalue(tc::begin(std::declval<Rng&>())))>::value
-				>* = nullptr
-			>
-			static constexpr std::array<T,N> fn(Rng&& rng) return_MAYTHROW(
-				fn(range_tag, tc::begin(rng), tc::end(rng), std::make_index_sequence<N-1>())
-			)
-
-			template< typename Rng >
-			static constexpr std::array<T, N> fn(int, Rng&& rng) MAYTHROW {
-				static_assert( 0!=N && tc::is_safely_constructible<T, decltype(*tc::as_lvalue(tc::begin(std::declval<Rng&>())))>::value );
-				return fn(range_tag, tc::begin(rng), tc::end(rng), std::make_index_sequence<N - 1>());
-			}
-
-			template< typename Rng,
-				std::enable_if_t< 0!=N
-					&& !tc::is_safely_constructible<T, decltype(*tc::as_lvalue(tc::begin(std::declval<Rng&>())))>::value
-					//&& tc::is_explicit_castable<T, decltype(*tc::as_lvalue(tc::begin(std::declval<Rng&>())))>::value
-				>* = nullptr 
-			>
-			static constexpr std::array<T, N> fn(Rng&& rng) MAYTHROW {
-				return fn(tc::transform(std::forward<Rng>(rng), tc::fn_explicit_cast<T>()));
-			}
-
-			template< typename Rng,
-				ENABLE_SFINAE,
-				std::enable_if_t< SFINAE_VALUE(0==N)::value >* = nullptr
-			>
-			static constexpr std::array<T,N> fn(Rng&& rng) noexcept {
-				_ASSERTE(tc::empty(rng));
-				return {};
-			}
-		};
+		struct constexpr_size_base<std::array<T, N>, void> : std::integral_constant<std::size_t, N> {};
 	}
 
-	namespace no_adl {
-		template<typename T, std::size_t N>
-		struct constexpr_size_base<std::array<T, N>, void> : std::integral_constant<std::size_t, N> {};
+	namespace explicit_convert_std_array_detail {
+		template<typename T, std::size_t N, typename Func, std::size_t... IndexPack>
+		constexpr std::array<T, N> with_func_tag_impl(tc::type::identity<std::array<T, N>>, Func func, std::index_sequence<IndexPack...>) MAYTHROW {
+			return {{func(IndexPack)...}};
+		}
+
+		template<typename T, std::size_t, typename... Args>
+		constexpr T explicit_cast_index(Args&&... args) noexcept {
+			return tc::explicit_cast<T>( std::forward<Args>(args)... );
+		}
+
+		template<typename T, std::size_t N, std::size_t ...IndexPack, typename... Args>
+		constexpr std::array<T, N> with_fill_tag_impl(tc::type::identity<std::array<T, N>>, std::index_sequence<IndexPack...>, Args&&... args) MAYTHROW {
+			STATICASSERTEQUAL(N, sizeof...(IndexPack)+1);
+			return { {
+				explicit_cast_index<T, IndexPack>(tc::const_forward<Args>(args)...)...,
+				tc::explicit_cast<T>(std::forward<Args>(args)...)
+			} };
+		}
+
+		template<typename T, std::size_t N, typename Iterator, std::size_t... IndexPack>
+		constexpr std::array<T, N> with_range_tag_impl(tc::type::identity<std::array<T, N>>, Iterator it, Iterator itEnd, std::index_sequence<IndexPack...>) MAYTHROW {
+			STATICASSERTEQUAL(N, sizeof...(IndexPack)+1);
+			std::array<T, N> a{ {static_cast<T>((_ASSERTE(itEnd != it), *it)), static_cast<T>((static_cast<void>(IndexPack), ++it, _ASSERTE(itEnd != it), *it))...} }; // static_cast because int to double considered narrowing, forbidden in list initialization
+			_ASSERTE(itEnd==++it);
+			return a;
+		}
+	}
+
+	namespace explicit_convert_adl {
+		template<typename T, std::size_t N, typename Func>
+		constexpr std::array<T, N> explicit_convert_impl(adl_tag_t, tc::type::identity<std::array<T, N>> id, tc::func_tag_t, Func func) MAYTHROW {
+			static_assert(tc::is_safely_constructible<T, decltype(func(N-1))>::value);
+			return tc::explicit_convert_std_array_detail::with_func_tag_impl(id, tc_move(func), std::make_index_sequence<N>());
+		}
+
+		template<typename T, std::size_t N, typename... Args, std::enable_if_t<0!=N && tc::is_explicit_castable<T, Args&&...>::value>* = nullptr>
+		constexpr std::array<T, N> explicit_convert_impl(adl_tag_t, tc::type::identity<std::array<T, N>> id, tc::fill_tag_t, Args&& ... args) MAYTHROW {
+			return tc::explicit_convert_std_array_detail::with_fill_tag_impl(id, std::make_index_sequence<N-1>(), std::forward<Args>(args)...);
+		}
+
+		template<typename T, std::size_t N, typename... Args, std::enable_if_t<std::conjunction<tc::is_explicit_castable<T, Args&&>...>::value>* = nullptr>
+		constexpr std::array<T, N> explicit_convert_impl(adl_tag_t, tc::type::identity<std::array<T, N>>, tc::aggregate_tag_t, Args&& ... args) MAYTHROW {
+			STATICASSERTEQUAL(sizeof...(Args), N, "array initializer list does not match number of elements");
+			return {{tc::explicit_cast<T>(std::forward<Args>(args))...}};
+		}
+
+		template<typename T, std::size_t N, typename Rng, std::enable_if_t<
+			0!=N &&
+			tc::is_safely_constructible<T, decltype(*tc::as_lvalue(tc::begin(std::declval<Rng&>())))>::value
+		>* = nullptr>
+		constexpr std::array<T, N> explicit_convert_impl(adl_tag_t, tc::type::identity<std::array<T, N>> id, Rng&& rng) MAYTHROW {
+			return tc::explicit_convert_std_array_detail::with_range_tag_impl(id, tc::begin(rng), tc::end(rng), std::make_index_sequence<N-1>());
+		}
+
+		template<typename T, std::size_t N, typename Rng, std::enable_if_t<
+			0!=N
+			&& !tc::is_safely_constructible<T, decltype(*tc::as_lvalue(tc::begin(std::declval<Rng&>())))>::value
+			&& tc::is_explicit_castable<T, decltype(*tc::as_lvalue(tc::begin(std::declval<Rng&>())))>::value
+		>* = nullptr>
+		constexpr std::array<T, N> explicit_convert_impl(adl_tag_t, tc::type::identity<std::array<T, N>>, Rng&& rng) MAYTHROW {
+			return tc::explicit_cast<std::array<T, N>>(tc::transform(std::forward<Rng>(rng), tc::fn_explicit_cast<T>()));
+		}
+
+		template<typename T, std::size_t N, typename Rng, std::enable_if_t<0==N>* = nullptr>
+		constexpr std::array<T, N> explicit_convert_impl(adl_tag_t, tc::type::identity<std::array<T, N>>, Rng&& rng) noexcept {
+			_ASSERTE(tc::empty(rng));
+			return {};
+		}
 	}
 
 	//////////////////////////////////////////////////////////////
@@ -551,15 +522,25 @@ namespace tc {
 		};
 	}
 
-	template<std::size_t N, typename Rng>
-	[[nodiscard]] constexpr auto make_array(Rng&& rng) noexcept {
-		return tc::explicit_cast<std::array<tc::decay_t<decltype(tc_front(rng))>, N>>(std::forward<Rng>(rng));
-	}
+	template<typename TTarget, std::size_t N, typename Rng>
+	[[nodiscard]] constexpr auto make_array(Rng&& rng) return_decltype_MAYTHROW(
+		tc::explicit_cast<std::array<TTarget, N>>(std::forward<Rng>(rng))
+	)
 
-	template <typename Rng>
-	[[nodiscard]] constexpr auto make_array(Rng&& rng) noexcept {
-		return make_array<tc::constexpr_size<Rng>::value>(std::forward<Rng>(rng));
-	}
+	template<std::size_t N, typename Rng>
+	[[nodiscard]] constexpr auto make_array(Rng&& rng) return_decltype_MAYTHROW(
+		tc::make_array<tc::range_value_t<Rng>, N>(std::forward<Rng>(rng))
+	)
+
+	template<typename TTarget, typename Rng>
+	[[nodiscard]] constexpr auto make_array(Rng&& rng) return_decltype_MAYTHROW(
+		tc::make_array<TTarget, tc::constexpr_size<Rng>::value>(std::forward<Rng>(rng))
+	)
+
+	template<typename Rng>
+	[[nodiscard]] constexpr auto make_array(Rng&& rng) return_decltype_MAYTHROW(
+		tc::make_array<tc::constexpr_size<Rng>::value>(std::forward<Rng>(rng))
+	)
 
 	template <typename T = no_adl::deduce_tag, typename... Ts, std::enable_if_t<!std::is_reference<T>::value>* = nullptr>
 	[[nodiscard]] constexpr auto make_array(tc::aggregate_tag_t, Ts&&... ts) noexcept {
@@ -578,7 +559,7 @@ namespace tc {
 	// Unfortunately, there seems to be no way to make this work in C++ without using macros
 #define MAKE_ARRAY_LVALUE_REF(z, n, d) \
 	template <typename T,std::enable_if_t<std::is_lvalue_reference<T>::value>* = nullptr> \
-	[[nodiscard]] auto make_array(tc::aggregate_tag_t, BOOST_PP_ENUM_PARAMS(n, T t)) noexcept { \
+	[[nodiscard]] constexpr auto make_array(tc::aggregate_tag_t, BOOST_PP_ENUM_PARAMS(n, T t)) noexcept { \
 		return tc::explicit_cast<tc::array<T, n>>(tc::aggregate_tag, BOOST_PP_ENUM_PARAMS(n, t)); \
 	}
 
@@ -591,19 +572,4 @@ namespace tc {
 		// just like the reference overload tc::single preserves lvalue references.
 		return tc::make_array<std::remove_cv_t<T> >(tc::aggregate_tag,std::forward<T>(t));
 	}
-
-	template <typename... Ts>
-	[[nodiscard]] constexpr std::size_t count_args(Ts&&...) { return sizeof...(Ts); }
-
-	template <typename... Ts>
-	tc::common_type_t<Ts&&...> declval_common_type(Ts&&...) noexcept;
 }
-
-#define MAKE_TYPED_CONSTEXPR_ARRAY(type, ...) \
-	[]() noexcept -> std::array<type, tc::count_args(__VA_ARGS__)> const& { \
-		static constexpr auto c_at=tc::explicit_cast<std::array<type, tc::count_args(__VA_ARGS__)>>(tc::aggregate_tag, __VA_ARGS__); \
-		return c_at; \
-	}()
-
-#define MAKE_CONSTEXPR_ARRAY(...) \
-	MAKE_TYPED_CONSTEXPR_ARRAY(decltype(tc::declval_common_type(__VA_ARGS__)), __VA_ARGS__)

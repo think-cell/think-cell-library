@@ -1,23 +1,20 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 
 #include "break_or_continue.h"
 #include "index_range.h"
 #include "meta.h"
-#include "scope.h"
+#include "tuple.h"
 #include "utility.h"
-#include "conditional.h"
-
-#include <optional>
 
 namespace tc {
 
@@ -78,160 +75,278 @@ namespace tc {
 			>;
 		};
 	}
+	template<typename... T>
+	using common_type_break_or_continue_t = typename no_adl::common_type_break_or_continue<T...>::type;
+
+	namespace no_adl {
+		template<typename Func, typename Rng, typename Enable=void>
+		struct has_mem_fn_chunk /*final*/: std::false_type {};
+
+		template<typename Func, typename Rng>
+		struct has_mem_fn_chunk<Func, Rng, tc::void_t<decltype(std::declval<Func>().chunk(std::declval<Rng>()))>> /*final*/: std::true_type {};
+	}
+	using no_adl::has_mem_fn_chunk;
+
+	DEFINE_MEM_FN(chunk);
+
+	namespace void_generator_type_check_no_adl {
+		template<typename BreakOrContinue, tc::break_or_continue>
+		struct check_sink_result;
+
+		template<typename BreakOrContinue>
+		struct check_sink_result<BreakOrContinue, tc::continue_> {
+			static_assert(
+				!std::is_same<BreakOrContinue, tc::break_or_continue>::value &&
+				!std::is_same<BreakOrContinue, INTEGRAL_CONSTANT(tc::break_)>::value,
+				"Functor may return break_, but range does not support it."
+			);
+		};
+
+		template<typename BreakOrContinue>
+		struct check_sink_result<BreakOrContinue, tc::break_> {
+			static_assert(
+				std::is_same<BreakOrContinue, INTEGRAL_CONSTANT(tc::break_)>::value,
+				"Functor does not always break, but range does (broken range implementation)."
+			);
+		};
+
+		template<tc::break_or_continue breakorcontinue, typename Sink>
+		struct verify_sink_result_impl final : Sink {
+			static_assert( tc::is_decayed<Sink>::value );
+			using guaranteed_break_or_continue = INTEGRAL_CONSTANT(breakorcontinue);
+
+			template<typename... Args, typename R = decltype(std::declval<Sink const&>()(std::declval<Args>()...))>
+			constexpr INTEGRAL_CONSTANT(breakorcontinue) operator()(Args&&... args) const& noexcept(noexcept(
+				tc::base_cast<Sink>(*this)(std::declval<Args&&>()...)
+			)) {
+				check_sink_result<R, breakorcontinue>();
+				tc::base_cast<Sink>(*this)(std::forward<Args>(args)...); // MAYTHROW
+				return {};
+			}
+
+			template<typename Rng, std::enable_if_t<tc::has_mem_fn_chunk<Sink const&, Rng>::value>* = nullptr>
+			constexpr INTEGRAL_CONSTANT(breakorcontinue) chunk(Rng&& rng) const& noexcept(noexcept(
+				tc::base_cast<Sink>(*this).chunk(std::forward<Rng>(rng))
+			)) {
+				check_sink_result<decltype(tc::base_cast<Sink>(*this).chunk(std::forward<Rng>(rng))), breakorcontinue>();
+				tc::base_cast<Sink>(*this).chunk(std::forward<Rng>(rng)); // MAYTHROW
+				return {};
+			}
+		};
+
+		template<typename Sink, typename = void>
+		struct guaranteed_break_or_continue final {
+			using type = tc::break_or_continue;
+		};
+
+		template<typename Sink>
+		struct guaranteed_break_or_continue<Sink, tc::void_t<typename std::remove_reference_t<Sink>::guaranteed_break_or_continue>> final {
+			using type = typename std::remove_reference_t<Sink>::guaranteed_break_or_continue;
+		};
+	}
+	template<typename Sink>
+	using guaranteed_break_or_continue_t = typename void_generator_type_check_no_adl::guaranteed_break_or_continue<Sink>::type;
+
+	template<typename BreakOrContinue, typename Sink, std::enable_if_t<
+		std::is_same<BreakOrContinue, tc::break_or_continue>::value || 
+		std::is_same<BreakOrContinue, tc::guaranteed_break_or_continue_t<Sink>>::value
+	>* = nullptr>
+	constexpr decltype(auto) verify_sink_result(Sink&& sink) noexcept {
+		return std::forward<Sink>(sink);
+	}
+
+	template<typename BreakOrContinue, typename Sink, std::enable_if_t<
+		!std::is_same<BreakOrContinue, tc::break_or_continue>::value &&
+		!std::is_same<BreakOrContinue, tc::guaranteed_break_or_continue_t<Sink>>::value
+	>* = nullptr>
+	constexpr void_generator_type_check_no_adl::verify_sink_result_impl<BreakOrContinue::value, tc::decay_t<Sink>> verify_sink_result(Sink&& sink) noexcept {
+		static_assert( std::is_same<guaranteed_break_or_continue_t<Sink>, tc::break_or_continue>::value, "Mismatch between range and sink result types (broken range implementation)." );
+		return {std::forward<Sink>(sink)};
+	}
 
 	//-------------------------------------------------------------------------------------------------------------------------
 	// for_each
 
-	namespace no_adl {
-		template< typename Rng, typename Func, typename RngDecayed, typename Enable=void >
-		struct ForEachSpecialRange {};
+	namespace for_each_adl {
+		DEFINE_ADL_TAG_TYPE(adl_tag)
+	}
+	template<typename> \
+	void for_each_impl() noexcept; /*TODO c++20: workaround for c++17*/
 
-		template< typename Enumset, typename Func, typename Enum >
-		struct ForEachSpecialRange<Enumset, Func, tc::enumset<Enum>, tc::void_t<tc::common_type_t<decltype(tc::continue_if_not_break(std::declval<tc::decay_t<Func> const&>(), std::declval<Enum&>())), INTEGRAL_CONSTANT(tc::continue_)>>> {
-			static constexpr auto fn(Enumset&& enumset, tc::decay_t<Func> const func) MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, std::declval<Enum&>())), INTEGRAL_CONSTANT(tc::continue_)> {
-				for (Enum e = tc::contiguous_enum<Enum>::begin(); e != tc::contiguous_enum<Enum>::end(); ++e) {
-					if ((enumset&e)) {
-						RETURN_IF_BREAK(tc::continue_if_not_break(func, e));
-					}
-				}
-				return INTEGRAL_CONSTANT(tc::continue_)();
-			}
-		};
+	template<typename Rng, typename Sink>
+	using for_each_uses_chunk = tc::has_mem_fn_chunk<tc::decay_t<Sink> const&, Rng>;
 
-		template< typename Func, typename TypeList, typename Enable=void >
-		struct ForEachSpecialRangeParameterPack;
+	namespace for_each_detail {
+		DEFINE_ENUM(EOverload, eoverload, (CHUNK)(ADL)(INVOKERNG)(ADLTAG)(INDEX)(ITERATOR)(NONE))
 
-		template< typename Func, typename ...T >
-		struct ForEachSpecialRangeParameterPack<Func, tc::type::list<T...>, tc::void_t<typename common_type_break_or_continue<decltype(tc::continue_if_not_break(std::declval<tc::decay_t<Func> const&>(), T()))...>::type>> final {
-			static constexpr auto fn(tc::decay_t<Func> const func) MAYTHROW {
-				using result_type = typename common_type_break_or_continue<decltype(tc::continue_if_not_break(func, T()))...>::type;
+		namespace no_adl {
+			template<typename BreakOrContinue>
+			struct make_break_or_continue;
+			template<> struct make_break_or_continue<INTEGRAL_CONSTANT(tc::continue_)> { using type = INTEGRAL_CONSTANT(tc::continue_); };
+			template<> struct make_break_or_continue<INTEGRAL_CONSTANT(tc::break_)> { using type = INTEGRAL_CONSTANT(tc::break_); };
+			template<> struct make_break_or_continue<tc::break_or_continue> { using type = tc::break_or_continue; };
+			template<> struct make_break_or_continue<void> { using type = INTEGRAL_CONSTANT(tc::continue_); };
+		}
+		template<typename BreakOrContinue>
+		using make_break_or_continue_t = typename no_adl::make_break_or_continue<BreakOrContinue>::type;
 
-				if constexpr (std::is_same<INTEGRAL_CONSTANT(tc::continue_), result_type>::value) {
-					(tc::invoke(func, T()), ...);
-					return INTEGRAL_CONSTANT(tc::continue_)();
-				} else {
-					auto const breakorcontinue = ((tc::continue_ == tc::continue_if_not_break(func, T())) && ...) ? tc::continue_ : tc::break_;
+		namespace no_adl {
+			template<typename Rng, typename Sink, int nPriority = 0, typename = void>
+			struct select_overload : select_overload<Rng, Sink, nPriority + 1> {};
 
-					if constexpr (std::is_same<INTEGRAL_CONSTANT(tc::break_), result_type>::value) {
-						return INTEGRAL_CONSTANT(tc::break_)();
-					} else {
-						return breakorcontinue;
-					}
-				}
-			}
-		};
+#pragma push_macro("SELECT_OVERLOAD_IF")
+#define SELECT_OVERLOAD_IF(priority, eoverload, enable_if) \
+			template<typename Rng, typename Sink> \
+			struct select_overload<Rng, Sink, priority, BOOST_PP_REMOVE_PARENS(enable_if)> : std::integral_constant<EOverload, eoverload> {};
 
-		template< typename IntSequence, typename Func, typename TIndex, TIndex... Is >
-		struct ForEachSpecialRange<IntSequence, Func, std::integer_sequence<TIndex, Is...>> {
-			static constexpr auto fn(IntSequence&&, Func&& func) return_decltype_MAYTHROW(
-				ForEachSpecialRangeParameterPack<Func BOOST_PP_COMMA() tc::type::list<std::integral_constant<TIndex BOOST_PP_COMMA() Is>...>>::fn(std::forward<Func>(func))
-			)
-		};
-
-		template< typename TypeList, typename Func, typename... Ts >
-		struct ForEachSpecialRange<TypeList, Func, tc::type::list<Ts...>> {
-			static constexpr auto fn(TypeList&&, Func&& func) return_decltype_MAYTHROW(
-				ForEachSpecialRangeParameterPack<Func BOOST_PP_COMMA() tc::type::list<tc::type::identity<Ts>...>>::fn(std::forward<Func>(func))
-			)
-		};
-
-		template<typename T, T... I>
-		struct has_value_type<std::integer_sequence<T, I...>> final: std::false_type {};
-
-		template< typename Rng, typename Func, typename RngDecayed, typename Enable=void >
-		struct ForEachElement: ForEachSpecialRange<Rng, Func, RngDecayed> {};
-		
-		template< typename Rng, typename Func, typename RngDecayed >
-		struct ForEachElement<Rng, Func, RngDecayed, std::enable_if_t<
-			std::is_void<decltype(std::declval<Rng>()(std::declval<Func>()))>::value ||
-			std::is_same<decltype(std::declval<Rng>()(std::declval<Func>())), INTEGRAL_CONSTANT(tc::continue_)>::value
-		>> {
-			static constexpr INTEGRAL_CONSTANT(tc::continue_) fn(Rng&& rng, Func&& func) noexcept(noexcept(
-				std::forward<Rng>(rng)( tc::make_ensure_non_breaking_functor<Func>(std::forward<Func>(func)) )
-			)) {
-				std::forward<Rng>(rng)( tc::make_ensure_non_breaking_functor<Func>(std::forward<Func>(func)) );
-				return {};
-			}
-		};
-
-		template< typename Rng, typename Func, typename RngDecayed >
-		struct ForEachElement<Rng, Func, RngDecayed, std::enable_if_t<
-			std::is_same<decltype(std::declval<Rng>()(std::declval<Func>())), INTEGRAL_CONSTANT(tc::break_)>::value
-		>> {
-			static constexpr INTEGRAL_CONSTANT(tc::break_) fn(Rng&& rng, Func&& func) MAYTHROW {
-				std::forward<Rng>(rng)( tc::make_ensure_always_breaking_functor<Func>(std::forward<Func>(func)) );
-				return {};
-			}
-		};
-
-		template< typename Rng, typename Func, typename RngDecayed >
-		struct ForEachElement<Rng, Func, RngDecayed, std::enable_if_t<
-			std::is_same<decltype(std::declval<Rng>()(std::declval<Func>())), tc::break_or_continue>::value
-		>> {
-			static constexpr tc::break_or_continue fn(Rng&& rng, Func&& func) MAYTHROW {
-				return std::forward<Rng>(rng)( std::forward<Func>(func) );
-			}
-		};
-
-		template<typename Rng, typename Func, typename RngDecayed, typename Enable=void>
-		struct is_invocable_on_range_reference final: std::false_type {};
-
-		template<typename Rng, typename Func, typename RngDecayed>
-		struct is_invocable_on_range_reference<Rng, Func, RngDecayed, std::enable_if_t<tc::is_range_with_iterators<RngDecayed>::value && !tc::has_index<RngDecayed>::value>> final: std::integral_constant<bool,
-			tc::is_invocable<tc::decay_t<Func> const&, tc::range_reference_t<Rng>>::value
-		> {};
-
-		template< typename Rng, typename Func, typename RngDecayed >
-		struct ForEachElement<Rng, Func, RngDecayed, std::enable_if_t<is_invocable_on_range_reference<Rng, Func, RngDecayed>::value>> {
-			static constexpr auto fn(Rng&& rng, tc::decay_t<Func> const func) noexcept(noexcept(
-				tc::end(rng)
-			) && noexcept(
-				++tc::as_lvalue(tc::begin(rng))
-			) && noexcept(
-				tc::continue_if_not_break(func, *tc::begin(rng))
-			)) -> tc::common_type_t<decltype(tc::continue_if_not_break(func, *tc::begin(rng))), INTEGRAL_CONSTANT(tc::continue_)> {
-				auto const itEnd=tc::end(rng);
-				for(auto it = tc::begin(rng); it!= itEnd; ++it) {
-					RETURN_IF_BREAK( tc::continue_if_not_break(func, *it) );
-				}
-				return INTEGRAL_CONSTANT(tc::continue_)();
-			}
-		};
-
-		template< typename Rng, typename Func, typename RngDecayed, typename Enable=void >
-		struct ForEachChunk final: ForEachElement<Rng, Func, RngDecayed> {};
-
-		template< typename Rng, typename Func, typename RngDecayed >
-		struct ForEachChunk<Rng, Func, RngDecayed, std::enable_if_t<tc::has_mem_fn_chunk<tc::decay_t<Func> const&, Rng>::value>> final {
-			static auto fn(Rng&& rng, tc::decay_t<Func> const func) noexcept(noexcept(func.chunk(std::forward<Rng>(rng)))) {
-				return tc::continue_if_not_break(
-					[&]() noexcept(noexcept(
-						func.chunk(std::forward<Rng>(rng))
-					)) {
-						return func.chunk(std::forward<Rng>(rng));
-					}
-				);
-			}
-		};
+			SELECT_OVERLOAD_IF(0, eoverloadCHUNK, (std::enable_if_t<tc::for_each_uses_chunk<Rng, Sink>::value>))
+			SELECT_OVERLOAD_IF(1, eoverloadADL, (tc::void_t<decltype(for_each_impl(std::declval<Rng>(), std::declval<Sink>()))>))
+			SELECT_OVERLOAD_IF(1, eoverloadINVOKERNG, (tc::void_t<make_break_or_continue_t<decltype(std::declval<Rng>()(std::declval<Sink>()))>>))
+			SELECT_OVERLOAD_IF(2, eoverloadADLTAG, (tc::void_t<decltype(for_each_impl(for_each_adl::adl_tag, std::declval<Rng>(), std::declval<Sink>()))>))
+			SELECT_OVERLOAD_IF(2, eoverloadINDEX, (std::enable_if_t<tc::has_index<std::remove_reference_t<Rng>>::value>))
+			SELECT_OVERLOAD_IF(3, eoverloadITERATOR, (std::enable_if_t<tc::is_range_with_iterators<Rng>::value>))
+			SELECT_OVERLOAD_IF(4, eoverloadNONE, (void))
+#pragma pop_macro("SELECT_OVERLOAD_IF")
+		}
+		using no_adl::select_overload;
 	}
 
-	// Primary for_each dispatcher
-	template<typename Rng, typename Func>
-	constexpr auto for_each(Rng&& rng, Func&& func) return_decltype_MAYTHROW(
-		tc::no_adl::ForEachChunk<Rng, Func, std::conditional_t<std::is_array<std::remove_reference_t<Rng>>::value, tc::remove_cvref_t<Rng>, tc::decay_t<Rng>>>::fn(std::forward<Rng>(rng), std::forward<Func>(func))
+	template<typename Rng, typename Sink, std::enable_if_t<for_each_detail::eoverloadCHUNK == for_each_detail::select_overload<Rng, Sink>::value>* = nullptr>
+	constexpr auto for_each(Rng&& rng, Sink&& sink) return_MAYTHROW(
+		tc_internal_continue_if_not_break(/*do we really need that copy?*/tc::as_const(tc::as_lvalue(tc::decay_copy(sink))).chunk(std::forward<Rng>(rng)))
 	)
 
-	namespace no_adl {
-		template< typename Tuple, typename Func, typename... Ts >
-		struct ForEachSpecialRange<Tuple, Func, std::tuple<Ts...>> {
-			static constexpr auto fn(Tuple&& tuple, tc::decay_t<Func> func) MAYTHROW {
-				return tc::for_each(
-					std::make_index_sequence<std::tuple_size<std::remove_reference_t<Tuple>>::value>(),
-					[&](auto nconstIndex) MAYTHROW {
-						return tc::invoke(func, std::get<nconstIndex()>(std::forward<Tuple>(tuple)));
-					}
-				);
+	template<typename Rng, typename Sink, std::enable_if_t<for_each_detail::eoverloadADL == for_each_detail::select_overload<Rng, Sink>::value>* = nullptr>
+	constexpr auto for_each(Rng&& rng, Sink&& sink) return_MAYTHROW(
+		for_each_impl(std::forward<Rng>(rng), std::forward<Sink>(sink))
+	)
+
+	template<typename Rng, typename Sink, std::enable_if_t<for_each_detail::eoverloadADLTAG == for_each_detail::select_overload<Rng, Sink>::value>* = nullptr>
+	constexpr auto for_each(Rng&& rng, Sink&& sink) return_MAYTHROW(
+		for_each_impl(for_each_adl::adl_tag, std::forward<Rng>(rng), std::forward<Sink>(sink))
+	)
+
+	template<typename Rng, typename Sink, std::enable_if_t<for_each_detail::eoverloadINVOKERNG == for_each_detail::select_overload<Rng, Sink>::value>* = nullptr>
+	constexpr auto for_each(Rng&& rng, Sink&& sink) return_MAYTHROW(
+		tc_internal_continue_if_not_break(std::forward<Rng>(rng)(tc::verify_sink_result<for_each_detail::make_break_or_continue_t<decltype(std::declval<Rng>()(std::declval<Sink>()))>>(std::forward<Sink>(sink))))
+	)
+
+	template<typename Rng, typename Sink, std::enable_if_t<for_each_detail::eoverloadINDEX == for_each_detail::select_overload<Rng, Sink>::value>* = nullptr>
+	constexpr auto for_each(Rng&& rng, Sink&& sink_) noexcept(
+		noexcept(rng.at_end_index(tc::as_lvalue(tc::decay_copy(rng.begin_index())))) &&
+		noexcept(rng.increment_index(tc::as_lvalue(rng.begin_index()))) &&
+		noexcept(tc::continue_if_not_break(std::declval<tc::decay_t<Sink> const&>(), rng.dereference_index(tc::as_lvalue(rng.begin_index()))))
+	) -> tc::common_type_t<decltype(tc::continue_if_not_break(std::declval<tc::decay_t<Sink> const&>(), rng.dereference_index(tc::as_lvalue(rng.begin_index())))), INTEGRAL_CONSTANT(tc::continue_)> {
+		tc::decay_t<Sink> const sink = sink_; // do we really need that copy?
+		for (auto i = rng.begin_index(); !rng.at_end_index(i); rng.increment_index(i)) {
+			RETURN_IF_BREAK(tc::continue_if_not_break(sink, rng.dereference_index(i)));
+		}
+		return INTEGRAL_CONSTANT(tc::continue_)();
+	}
+
+	template<typename Rng, typename Sink, std::enable_if_t<for_each_detail::eoverloadITERATOR == for_each_detail::select_overload<Rng, Sink>::value>* = nullptr>
+	constexpr auto for_each(Rng&& rng, Sink&& sink_) noexcept(
+		noexcept(tc::end(rng)) && 
+		noexcept(++tc::as_lvalue(tc::begin(rng))) && 
+		noexcept(tc::continue_if_not_break(std::declval<tc::decay_t<Sink> const&>(), *tc::as_lvalue(tc::begin(rng))))
+	) -> tc::common_type_t<decltype(tc::continue_if_not_break(std::declval<tc::decay_t<Sink> const&>(), *tc::as_lvalue(tc::begin(rng)))), INTEGRAL_CONSTANT(tc::continue_)> {
+		tc::decay_t<Sink> const sink = sink_; // do we really need that copy?
+		auto const itEnd = tc::end(rng);
+		for(auto it = tc::begin(rng); it!= itEnd; ++it) {
+			RETURN_IF_BREAK( tc::continue_if_not_break(sink, *it) );
+		}
+		return INTEGRAL_CONSTANT(tc::continue_)();
+	}
+
+	namespace for_each_detail {
+		template<typename... T, typename Sink, typename R = typename tc::common_type_break_or_continue_t<decltype(tc::continue_if_not_break(std::declval<Sink>(), T()))...>>
+		constexpr R for_each_parameter_pack(tc::type::list<T...>, Sink const sink) MAYTHROW /*ICE on MSVC 2017: noexcept((noexcept(tc::continue_if_not_break(sink, T())) && ...))*/ {
+			if constexpr (std::is_same<INTEGRAL_CONSTANT(tc::continue_), R>::value) {
+				(sink(T()), ...); // plain call, tc::invoke on std::integral_constant or tc::type has no value.
+				return INTEGRAL_CONSTANT(tc::continue_)();
+			} else {
+				auto const breakorcontinue = tc::continue_if(((tc::continue_ == tc_internal_continue_if_not_break(sink(T()))) && ...));
+
+				if constexpr (std::is_same<INTEGRAL_CONSTANT(tc::break_), R>::value) {
+					return INTEGRAL_CONSTANT(tc::break_)();
+				} else {
+					return breakorcontinue;
+				}
 			}
-		};
+		}
+
+		namespace no_adl {
+			template<typename IntSeq>
+			struct integer_sequence_to_type_list;
+
+			template<typename TIndex, TIndex... Is>
+			struct integer_sequence_to_type_list<std::integer_sequence<TIndex, Is...>> {
+				using type = tc::type::list<std::integral_constant<TIndex, Is>...>;
+			};
+
+			template<typename Tuple, typename Sink>
+			struct tuple_index_sink final {
+				Tuple&& m_tuple;
+				Sink m_sink;
+				template<std::size_t I>
+				constexpr auto operator()(std::integral_constant<std::size_t, I>) const& return_decltype_MAYTHROW(
+					tc::invoke(m_sink, /*adl*/get<I>(std::forward<Tuple>(m_tuple)))
+				)
+			};
+		}
+		using no_adl::integer_sequence_to_type_list;
+		using no_adl::tuple_index_sink;
+	}
+
+	namespace for_each_adl {
+		template<typename TIndex, TIndex... Is, typename Sink>
+		constexpr auto for_each_impl(adl_tag_t, std::integer_sequence<TIndex, Is...>, Sink&& sink) return_decltype_MAYTHROW(
+			for_each_detail::for_each_parameter_pack(tc::type::list<std::integral_constant<TIndex, Is>...>(), std::forward<Sink>(sink))
+		)
+
+		template<typename... Ts, typename Sink>
+		constexpr auto for_each_impl(adl_tag_t, tc::type::list<Ts...>, Sink&& sink) return_decltype_MAYTHROW(
+			for_each_detail::for_each_parameter_pack(tc::type::list<tc::type::identity<Ts>...>(), std::forward<Sink>(sink))
+		)
+
+		template<typename Tuple, typename Sink,
+			std::enable_if_t<tc::is_instance_or_derived<std::tuple, Tuple>::value>* = nullptr,
+			typename IndexList = typename for_each_detail::integer_sequence_to_type_list<std::make_index_sequence<std::tuple_size<std::remove_reference_t<Tuple>>::value>>::type
+		>
+		constexpr auto for_each_impl(adl_tag_t, Tuple&& tuple, Sink&& sink) return_decltype_MAYTHROW(
+			for_each_detail::for_each_parameter_pack(IndexList(), for_each_detail::tuple_index_sink<Tuple, tc::decay_t<Sink>>{std::forward<Tuple>(tuple), std::forward<Sink>(sink)})
+		)
+	}
+
+	namespace tuple_adl {
+		template<typename Tuple, typename Sink, typename IndexSeq = std::make_index_sequence<std::remove_reference_t<Tuple>::tc_tuple_impl::size>>
+		constexpr auto for_each_impl(Tuple&& tuple, Sink&& sink) return_decltype_MAYTHROW(
+			tc::for_each(
+				IndexSeq(),
+				for_each_detail::tuple_index_sink<Tuple, tc::decay_t<Sink>>{std::forward<Tuple>(tuple), std::forward<Sink>(sink)}
+			)
+		)
+
+		template<typename Tuple, typename Sink, typename ReverseIndexSeq = tc::make_reverse_integer_sequence<std::size_t, 0, std::remove_reference_t<Tuple>::tc_tuple_impl::size>>
+		constexpr auto for_each_reverse_impl(Tuple&& tuple, Sink&& sink) return_decltype_MAYTHROW(
+			tc::for_each(
+				ReverseIndexSeq(),
+				for_each_detail::tuple_index_sink<Tuple, tc::decay_t<Sink>>{std::forward<Tuple>(tuple), std::forward<Sink>(sink)}
+			)
+		)
+	}
+
+	TC_HAS_EXPR(for_each, (Rng)(Sink), tc::for_each(std::declval<Rng>(), std::declval<Sink>()))
+
+	template<typename... Fn>
+	[[nodiscard]] constexpr auto break_or_continue_sequence(Fn&&... fn) MAYTHROW {
+		return tc::for_each(tc::forward_as_tuple(std::forward<Fn>(fn)...), [](auto fn) MAYTHROW {
+			return fn(); // MAYTHROW
+		});
 	}
 }
+
+#define TC_BREAK_OR_CONTINUE_SEQUENCE_IMPL(...) ([&]() MAYTHROW { return TC_EXPAND(__VA_ARGS__); })
+
+#define tc_break_or_continue_sequence(exprseq) \
+	tc::break_or_continue_sequence(TC_PP_ENUM_TRANSFORMED_SEQ(TC_PP_APPLY_MACRO, TC_BREAK_OR_CONTINUE_SEQUENCE_IMPL, exprseq))

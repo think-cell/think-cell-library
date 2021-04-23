@@ -1,14 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "range_fwd.h"
 #include "type_traits.h"
 #include "functors.h"
@@ -47,7 +47,7 @@ namespace tc {
 		struct range_reference<Rng, std::enable_if_t<std::is_reference<Rng>::value>> : range_reference<std::remove_reference_t<Rng>> {};
 
 		template< typename Rng >
-		struct range_reference<Rng, std::enable_if_t<!std::is_reference<Rng>::value && is_range_with_iterators<Rng>::value> > {
+		struct range_reference<Rng, std::enable_if_t<!std::is_reference<Rng>::value && is_range_with_iterators<Rng>::value, tc::void_t<typename std::iterator_traits<typename boost::range_iterator<Rng>::type>::reference>> > {
 			using type = typename std::iterator_traits<typename boost::range_iterator<Rng>::type>::reference;
 		};
 	}
@@ -57,35 +57,46 @@ namespace tc {
 	using range_reference_t = typename range_reference<T>::type;
 	
 	namespace no_adl {
-		template< typename Rng, typename RngDecayed = tc::decay_t<Rng>, typename Enable = void >
+		template< typename Rng, typename RngNoCvref = tc::remove_cvref_t<Rng>, typename Enable = void >
 		struct range_value final {};
 
-		template< typename RngDecayed, typename Enable=void >
-		struct has_value_type final: std::false_type {};
+		template< typename RngNoRef, typename Enable=void >
+		struct has_value_type final : std::false_type {
+			static_assert(!std::is_reference<RngNoRef>::value);
+		};
 
-		template< typename RngDecayed >
-		struct has_value_type<RngDecayed, tc::void_t<typename RngDecayed::value_type>>: std::true_type {};
+		template< typename Rng >
+		struct has_value_type<Rng, tc::void_t<typename Rng::value_type>> : std::true_type {};
 
-		template< typename Rng, typename RngDecayed >
-		struct range_value<Rng, RngDecayed, std::enable_if_t<is_range_with_iterators<Rng>::value && has_value_type<RngDecayed>::value>> final {
+		template< typename Rng, typename RngNoCvref >
+		struct range_value<Rng, RngNoCvref, std::enable_if_t<
+			is_range_with_iterators<Rng>::value && has_value_type<RngNoCvref>::value,
+			tc::void_t<tc::decay_t<tc::range_reference_t<Rng>>>
+		>> final {
 			using type = tc::decay_t<tc::range_reference_t<Rng>>;
 			STATICASSERTSAME(type, typename std::iterator_traits<typename boost::range_iterator<Rng>::type>::value_type);
-			STATICASSERTSAME(type, typename RngDecayed::value_type);
+			STATICASSERTSAME(type, typename RngNoCvref::value_type);
 		};
 
-		template< typename Rng, typename RngDecayed >
-		struct range_value<Rng, RngDecayed, std::enable_if_t<is_range_with_iterators<Rng>::value && !has_value_type<RngDecayed>::value>> final {
+		template< typename Rng, typename RngNoCvref >
+		struct range_value<Rng, RngNoCvref, std::enable_if_t<
+			is_range_with_iterators<Rng>::value && !has_value_type<RngNoCvref>::value,
+			tc::void_t<tc::decay_t<tc::range_reference_t<Rng>>>
+		>> final {
 			using type = tc::decay_t<tc::range_reference_t<Rng>>;
 			STATICASSERTSAME(type, typename std::iterator_traits<typename boost::range_iterator<Rng>::type>::value_type);
 		};
 
-		template< typename Rng, typename RngDecayed >
-		struct range_value<Rng, RngDecayed, std::enable_if_t<!is_range_with_iterators<Rng>::value && has_value_type<RngDecayed>::value>> final {
-			using type = typename RngDecayed::value_type;
+		template< typename Rng, typename RngNoCvref >
+		struct range_value<Rng, RngNoCvref, std::enable_if_t<!is_range_with_iterators<Rng>::value && has_value_type<RngNoCvref>::value>> final {
+			using type = typename RngNoCvref::value_type;
 		};
 
-		template< typename Rng, typename RngDecayed >
-		struct range_value<Rng, RngDecayed, std::enable_if_t<!is_range_with_iterators<Rng>::value && !has_value_type<RngDecayed>::value, tc::void_t<tc::range_reference_t<Rng>>>> final {
+		template< typename Rng, typename RngNoCvref >
+		struct range_value<Rng, RngNoCvref, std::enable_if_t<
+			!is_range_with_iterators<Rng>::value && !has_value_type<RngNoCvref>::value,
+			tc::void_t<tc::decay_t<tc::range_reference_t<Rng>>>
+		>> final {
 			using type = tc::decay_t<tc::range_reference_t<Rng>>;
 		};
 	}
@@ -94,25 +105,40 @@ namespace tc {
 	template<typename T>
 	using range_value_t = typename range_value<T>::type;
 
+	namespace empty_range_adl {
+		struct empty_range;
+	}
+	using empty_range_adl::empty_range;
+
 	namespace no_adl {
 		template<typename Rng, typename Enable=void>
-		struct has_range_value final: std::false_type {};
+		struct has_range_value /*final*/: std::false_type {};
 
 		template<typename Rng>
-		struct has_range_value<Rng, tc::void_t<tc::range_value_t<Rng>>> final: std::true_type {};
+		struct has_range_value<Rng, tc::void_t<tc::range_value_t<Rng>>> /*final*/: std::true_type {};
+	}
+	using no_adl::has_range_value;
+
+	namespace no_adl {
+		
+		template<typename T, typename Enable=void>
+		struct common_range_value_base {};
+
+		template<typename... TValue>
+		struct common_range_value_base<tc::type::list<TValue...>, tc::void_t<tc::common_type_decayed_t<TValue...>>> {
+			using type = tc::common_type_decayed_t<TValue...>;
+		};
 
 		template<typename T, typename Enable=void>
 		struct common_range_value_filtered {};
 
 		template<typename... Rng>
-		struct common_range_value_filtered<tc::type::list<Rng...>, tc::void_t<tc::common_type_decayed_t<tc::range_value_t<Rng>...>>> {
-			using type = tc::common_type_decayed_t<tc::range_value_t<Rng>...>;
-		};
+		struct common_range_value_filtered<tc::type::list<Rng...>, std::enable_if_t<std::conjunction<tc::has_range_value<Rng>...>::value>>: common_range_value_base<tc::type::list<tc::range_value_t<Rng>...>> {};
 
 		template<typename... Rng>
-		struct common_range_value final: common_range_value_filtered<tc::type::filter_t<tc::type::list<Rng...>, has_range_value>> {};
+		struct common_range_value final: common_range_value_filtered<typename tc::type::partition<tc::type::list<tc::remove_cvref_t<Rng>...>, tc::type::rcurry<tc::is_safely_convertible, tc::empty_range>::template type>::false_part> {};
 	};
-	using no_adl::has_range_value;
+	
 
 	template<typename... Rng>
 	using common_range_value_t = typename no_adl::common_range_value<Rng...>::type;
@@ -121,32 +147,63 @@ namespace tc {
 		template<typename Value, typename Func>
 		struct [[nodiscard]] FuncWithValue : tc::decay_t<Func> {
 			using value_type = Value;
-
-			using tc::decay_t<Func>::operator();
-
-			FuncWithValue(Func&& func) noexcept
-				: tc::decay_t<Func>(std::forward<Func>(func))
-			{}
 		};
 	}
 
 	template<typename Value, typename Func>
-	auto generator_range_value(Func&& func) noexcept {
-		return no_adl::FuncWithValue<Value, Func>(std::forward<Func>(func));
+	constexpr auto generator_range_value(Func&& func) noexcept {
+		return no_adl::FuncWithValue<Value, Func>{std::forward<Func>(func)};
 	}
-}
 
-namespace tc {
+	namespace no_adl {
+		template<typename Rng, typename>
+		struct constexpr_size_base {};
+
+		template<typename T, std::size_t N>
+		struct constexpr_size_base<T[N], void> : std::integral_constant<std::size_t, N - tc::is_char<T>::value> {};
+	}
+	template<typename Rng>
+	using constexpr_size = no_adl::constexpr_size_base<tc::remove_cvref_t<Rng>>;
+
+	namespace no_adl {
+		template<typename Rng, typename = void>
+		struct has_constexpr_size : std::false_type {};
+
+		template<typename Rng>
+		struct has_constexpr_size<Rng, std::void_t<typename tc::constexpr_size<Rng>::type>> : std::true_type {};
+	}
+	using no_adl::has_constexpr_size;
+
 	namespace begin_end_adl {
 		DEFINE_ADL_TAG_TYPE(begin_end_tag);
 
 		template<typename T, std::size_t N>
 		constexpr T* begin(begin_end_tag_t, T (&at)[N]) noexcept {
-			return at+0;
+			return at;
+		}
+		template<typename T, std::size_t N>
+		constexpr T const* begin(begin_end_tag_t, T const (&at)[N]) noexcept {
+			return at;
 		}
 		template<typename T, std::size_t N>
 		constexpr T* end(begin_end_tag_t, T (&at)[N]) noexcept {
-			return at+N;
+			if constexpr( tc::is_char<T>::value ) {
+				auto const nSize = tc::strlen(at);
+				_ASSERTE( tc::constexpr_size<T[N]>::value == nSize );
+				return at+nSize;
+			} else {
+				return at+tc::constexpr_size<T[N]>::value;
+			}
+		}
+		template<typename T, std::size_t N>
+		constexpr T const* end(begin_end_tag_t, T const (&at)[N]) noexcept {
+			if constexpr( tc::is_char<T>::value ) {
+				auto const nSize = tc::strlen(at);
+				_ASSERTE( tc::constexpr_size<T[N]>::value == nSize );
+				return at+nSize;
+			} else {
+				return at+tc::constexpr_size<T[N]>::value;
+			}
 		}
 
 		template<typename It>
@@ -160,9 +217,7 @@ namespace tc {
 	}
 }
 
-#pragma push_macro("CHAR_RANGE")
 #define CHAR_RANGE( xchar ) \
-static_assert(tc::is_char<xchar>::value); \
 namespace boost { \
 	template<> \
 	struct range_mutable_iterator<xchar*> { \
@@ -198,46 +253,39 @@ namespace boost { \
 		using type = xchar const*; \
 	}; \
 } \
-namespace tc { \
-	namespace begin_end_adl { \
-		constexpr xchar* begin(begin_end_tag_t, xchar* pch) noexcept { \
-			return pch; \
-		} \
-		constexpr xchar const* begin(begin_end_tag_t, xchar const* pch) noexcept { \
-			return pch; \
-		} \
-		template<std::size_t N> \
-		constexpr xchar* begin(begin_end_tag_t, xchar (&ach)[N]) noexcept { \
-			return ach; \
-		} \
-		template<std::size_t N> \
-		constexpr xchar const* begin(begin_end_tag_t, xchar const (&ach)[N]) noexcept { \
-			return ach; \
-		} \
-		constexpr xchar* end(begin_end_tag_t, xchar* pch) noexcept { \
-			return pch+tc::strlen(pch); \
-		} \
-		constexpr xchar const* end(begin_end_tag_t, xchar const* pch) noexcept { \
-			return pch+tc::strlen(pch); \
-		} \
-		template<std::size_t N> \
-		constexpr xchar* end(begin_end_tag_t, xchar (&ach)[N]) noexcept { \
-			return ach+VERIFYEQUAL(tc::strlen(ach),N-1); \
-		} \
-		template<std::size_t N> \
-		constexpr xchar const* end(begin_end_tag_t, xchar const(&ach)[N]) noexcept { \
-			return ach+VERIFYEQUAL(tc::strlen(ach),N-1); \
-		} \
-		\
+namespace tc::begin_end_adl { \
+	/* Note: We cannot use overloading to differentiate xchar* and xchar(&)[N]. */ \
+	template<typename CharPtrConvertible, std::enable_if_t< \
+		tc::is_safely_convertible<CharPtrConvertible, xchar*>::value \
+			&& !tc::has_constexpr_size<CharPtrConvertible>::value \
+	>* = nullptr> \
+	constexpr xchar* begin(begin_end_tag_t, CharPtrConvertible&& pchc) noexcept { \
+		return pchc; \
 	} \
-	template<std::size_t N> \
-	[[nodiscard]] constexpr auto size_raw(xchar const (&ach)[N]) noexcept { \
-		return VERIFYEQUAL(tc::strlen(ach),N-1); \
+	template<typename CharPtrConvertible, std::enable_if_t< \
+		tc::is_safely_convertible<CharPtrConvertible, xchar*>::value \
+			&& !tc::has_constexpr_size<CharPtrConvertible>::value \
+	>* = nullptr> \
+	constexpr xchar* end(begin_end_tag_t, CharPtrConvertible&& pchc) noexcept { \
+		xchar* pch = pchc; \
+		return pch+tc::strlen(pch); \
 	} \
-	\
-	namespace no_adl { \
-		template<std::size_t N> \
-		struct constexpr_size_base<xchar[N], void> : std::integral_constant<std::size_t, N - 1> {}; \
+	template<typename CharPtrConvertible, std::enable_if_t< \
+		tc::is_safely_convertible<CharPtrConvertible, xchar const*>::value \
+			&& !tc::is_safely_convertible<CharPtrConvertible, xchar*>::value \
+			&& !tc::has_constexpr_size<CharPtrConvertible>::value \
+	>* = nullptr> \
+	constexpr xchar const* begin(begin_end_tag_t, CharPtrConvertible&& pchc) noexcept { \
+		return pchc; \
+	} \
+	template<typename CharPtrConvertible, std::enable_if_t< \
+		tc::is_safely_convertible<CharPtrConvertible, xchar const*>::value \
+			&& !tc::is_safely_convertible<CharPtrConvertible, xchar*>::value \
+			&& !tc::has_constexpr_size<CharPtrConvertible>::value \
+	>* = nullptr> \
+	constexpr xchar const* end(begin_end_tag_t, CharPtrConvertible&& pchc) noexcept { \
+		xchar const* pch = pchc; \
+		return pch+tc::strlen(pch); \
 	} \
 }
 
@@ -249,34 +297,16 @@ CHAR_RANGE(wchar_t)
 #ifndef BOOST_NO_CXX11_CHAR32_T
 	CHAR_RANGE(char32_t)
 #endif
-#pragma pop_macro("CHAR_RANGE")
 
 namespace tc{
 	namespace no_adl {
-		template<typename Rng, template<typename> class Pred, bool is_range_with_iterators>
-		struct is_range_of2;
-		
-		template<typename Rng, template<typename> class Pred>
-		struct is_range_of2<Rng, Pred, true> : Pred< tc::range_value_t<Rng> >::type {};
+		template<template<typename...> typename TTrait, typename Rng, typename=void>
+		struct is_range_of final: std::false_type {};
 
-		template<typename Rng, template<typename> class Pred>
-		struct is_range_of2<Rng, Pred, false> : std::false_type {};
-
-		template<typename Rng, template<typename> class Pred>
-		struct is_range_of1 : is_range_of2<Rng, Pred, tc::is_range_with_iterators<Rng>::value >::type {};
-
-		template<typename Rng, template<typename> class Pred>
-		struct is_range_of : is_range_of1< std::remove_reference_t<Rng>, Pred > {};
-	};
-	using no_adl::is_range_of;
-
-	namespace no_adl {
-		template<typename Rng>
-		struct is_char_range final : is_range_of<Rng, is_char> {};
+		template<template<typename...> typename TTrait, typename Rng>
+		struct is_range_of<TTrait, Rng, std::enable_if_t<TTrait<tc::range_value_t<Rng>>::value>> final: std::true_type {};
 	}
-	using no_adl::is_char_range;
-
-	static_assert( is_char_range<wchar_t const* const>::value );
+	using no_adl::is_range_of;
 }
 
 namespace tc_begin_end_no_adl {
@@ -353,6 +383,12 @@ namespace tc {
 		// Rng has member begin
 		tc::end(static_cast<Rng const&>(rng))
 	)
+	
+	template <typename Rng>
+	auto cyclic_next(typename boost::range_iterator<std::remove_reference_t<Rng>>::type it, Rng&& rng) noexcept {
+		++it;
+		return tc::end(rng)==it ? tc::begin(std::forward<Rng>(rng)) : it;
+	}
 }
 
 //////////////////////////////////////////////

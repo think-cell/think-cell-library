@@ -1,17 +1,20 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
+#include "empty_chain.h"
 #include "generic_macros.h"
 #include "modified.h"
-#include "empty_chain.h"
+#include "round.h"
 
 namespace tc {
+	void assert_no_overlap() = delete;
+
 	#pragma push_macro("GENERIC_OP_BODY")
 	#define GENERIC_OP_BODY(op, operation_body) \
 		template< typename Lhs, typename Rhs> \
@@ -60,7 +63,7 @@ namespace tc {
 	} \
 	namespace no_adl { \
 		template< typename Base = void > \
-		struct name : std::conditional_t<std::is_void<Base>::value, tc::empty_chain<name<void>>, Base> { \
+		struct TC_EMPTY_BASES name : std::conditional_t<std::is_void<Base>::value, tc::empty_chain<name<void>>, Base> { \
 		private: \
 			template< typename Lhs, typename Rhs > \
 			using is_compound_available = tc::generic_operator_helper::has_mem_fn_compound_ ##name<Lhs&, Rhs>; \
@@ -78,7 +81,7 @@ namespace tc {
 		}; \
 		\
 		template< typename Other, typename Base = void > \
-		struct external_ ##name : std::conditional_t<std::is_void<Base>::value, tc::empty_chain<external_ ##name <void>>, Base> { \
+		struct TC_EMPTY_BASES external_ ##name : std::conditional_t<std::is_void<Base>::value, tc::empty_chain<external_ ##name <void>>, Base> { \
 		private: \
 			template< typename Lhs, typename Rhs > \
 			using is_compound_available = tc::generic_operator_helper::has_compound_ ##name<Lhs&, Rhs>; \
@@ -101,8 +104,7 @@ namespace tc {
 		}; \
 	} \
 	using no_adl::name; \
-	using no_adl::external_ ##name;
-		
+	using no_adl::external_ ##name; \
 	
 	// By default, tc::addable &co. allow operations for which there exists a corresponding lhs.operator op=(rhs) member operator
 	// For cases where the left-hand side requires a promoting conversion before the operation can take place,
@@ -112,6 +114,7 @@ namespace tc {
 	//		Note: A wouldn't need to derive from addable, if the generic operators were global, but that would increase the complexity of compiling any operator call
 	//	2. C.operator+=(B) (with appropriate cvref qualifiers) must exist and be accessible
 	//	3. there must be a specialization for tc::binary_operator_conversions::addable_conversion_type<A, B> that defines the alias type=C;
+
 	DEFINE_GENERIC_OP(addable, +);
 	DEFINE_GENERIC_OP(subtractable, -);
 	DEFINE_GENERIC_OP(multipliable, *);
@@ -179,4 +182,76 @@ namespace tc {
 		PROXY_CONVERSION(subtractable, setlike);
 		#pragma pop_macro("PROXY_CONVERSION")
 	}
+
+
+	namespace scalar_binary_op_detail::no_adl {
+		template<typename FnOp, typename Rhs>
+		struct func {
+			Rhs const& m_rhs;
+			template<typename LhsElement>
+			constexpr auto operator()(LhsElement&& lhselem) const& return_decltype_xvalue_by_ref_MAYTHROW( // should be NOEXCEPT, but NOEXCEPT does not allow xvalues.
+				FnOp()(std::forward<LhsElement>(lhselem), m_rhs)
+			)
+		};
+
+		struct no_prepost_scalar_operation {
+			template<typename Scalar>
+			static constexpr void pre(Scalar const&) noexcept {}
+			template<typename Lhs, typename Scalar>
+			static constexpr void post(Lhs const&, Scalar const& scalar) noexcept {}
+		};
+
+		template<typename Pred>
+		struct assert_zero_to_scalar_relation final : no_prepost_scalar_operation {
+			template<typename Scalar>
+			static constexpr void pre(Scalar const& scalar) noexcept {
+				_ASSERTE( Pred()(tc::explicit_cast<Scalar>(0), scalar) );
+			}
+		};
+	}
+	using scalar_binary_op_detail::no_adl::no_prepost_scalar_operation;
+	using assert_non_zero_scalar = scalar_binary_op_detail::no_adl::assert_zero_to_scalar_relation<fn_not_equal_to>;
+	using assert_non_negative_scalar = scalar_binary_op_detail::no_adl::assert_zero_to_scalar_relation<fn_less_equal>;
+	using assert_positive_scalar = scalar_binary_op_detail::no_adl::assert_zero_to_scalar_relation<fn_less>;
+
+#pragma push_macro("DEFINE_SCALAR_OP")
+#define DEFINE_SCALAR_OP(name, op, fnop, fnassignop, prepostopdefault) \
+	namespace no_adl { \
+		template<typename Base = void, std::size_t nTransformDepth = 0, typename PrePostOperation = prepostopdefault> \
+		struct TC_EMPTY_BASES scalar_ ## name : std::conditional_t<std::is_void<Base>::value, tc::empty_chain<scalar_ ## name<void, nTransformDepth, PrePostOperation>>, Base> { \
+			template<typename Lhs, typename Rhs, std::enable_if_t<tc::is_base_of_decayed<scalar_ ## name, Lhs>::value>* = nullptr> \
+			[[nodiscard]] friend constexpr \
+			decltype(std::declval<Lhs>().template transform<nTransformDepth>(std::declval<scalar_binary_op_detail::no_adl::func<fnop, Rhs>>())) \
+			operator op(Lhs&& lhs, Rhs const& rhs) noexcept { \
+				PrePostOperation::pre(rhs); \
+				decltype(auto) _ = std::forward<Lhs>(lhs).template transform<nTransformDepth>(scalar_binary_op_detail::no_adl::func<fnop, Rhs>{rhs}); \
+				PrePostOperation::post(_, rhs); \
+				return _; \
+			} \
+			\
+			template<typename Lhs, typename Rhs, std::enable_if_t< \
+				tc::is_base_of_decayed<scalar_ ## name, Lhs>::value, \
+				tc::void_t<decltype(tc::for_each(std::declval<Lhs&>(), std::declval<scalar_binary_op_detail::no_adl::func<fnassignop, Rhs>>()))> \
+			>* = nullptr> \
+			friend constexpr Lhs& operator op ## =(Lhs& lhs, Rhs const& rhs) noexcept { \
+				PrePostOperation::pre(rhs); \
+				tc::for_each(lhs, scalar_binary_op_detail::no_adl::func<fnassignop, Rhs>{rhs}); \
+				PrePostOperation::post(lhs, rhs); \
+				return lhs; \
+			} \
+		}; \
+	} \
+	using no_adl::scalar_ ## name;
+
+	DEFINE_SCALAR_OP(addable, +, tc::fn_plus, tc::fn_assign_plus, tc::no_prepost_scalar_operation)
+	DEFINE_SCALAR_OP(subtractable, -, tc::fn_minus, tc::fn_assign_minus, tc::no_prepost_scalar_operation)
+	DEFINE_SCALAR_OP(multipliable, *, tc::fn_mul, tc::fn_assign_mul, tc::no_prepost_scalar_operation)
+	DEFINE_SCALAR_OP(dividable, /, tc::fn_div, tc::fn_assign_div, tc::assert_non_zero_scalar)
+#pragma pop_macro("DEFINE_SCALAR_OP")
+
+	namespace no_adl {
+		template<typename Base = void, std::size_t nTransformDepth = 0>
+		using scalar_multiplicative = tc::scalar_multipliable<tc::scalar_dividable<Base, nTransformDepth>, nTransformDepth>;
+	}
+	using no_adl::scalar_multiplicative;
 }

@@ -1,14 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "functors.h"
 #include "tc_move.h"
 
@@ -16,8 +16,8 @@
 #include "type_traits.h"
 #include "meta.h"
 #include "container_traits.h"
+#include "template_func.h"
 
-#include <boost/mpl/identity.hpp>
 #include <boost/integer.hpp>
 #ifndef __EMSCRIPTEN__
 #include <boost/filesystem/path.hpp>
@@ -31,14 +31,9 @@ namespace tc {
 	/////////////////////////////////////////////
 	// same_cvref
 
-	template< typename T >
-	struct is_plain_type final
-		: std::is_same< T, std::remove_pointer_t< tc::remove_cvref_t<T> > >::type
-	{};
-
 	template<typename Dst, typename Src>
 	struct same_cvref : apply_cvref<Dst, Src> {
-		static_assert( is_plain_type<Dst>::value, "use non-cv-qualified non-reference Dst type or apply_cvref" );
+		STATICASSERTSAME(Dst, tc::remove_cvref_t<Dst>); // use non-cv-qualified non-reference Dst type or apply_cvref
 	};
 
 	template< typename Dst, typename Src >
@@ -53,7 +48,7 @@ namespace tc {
 	#pragma push_macro("BASE_CAST_IMPL")
 	#define BASE_CAST_IMPL(cvref) \
 	template<typename Dst, std::enable_if_t<std::is_class<Dst>::value>* = nullptr> \
-	[[nodiscard]] constexpr Dst cvref base_cast(typename boost::mpl::identity<Dst>::type cvref t) noexcept { \
+	[[nodiscard]] constexpr Dst cvref base_cast(typename tc::type::identity<Dst>::type cvref t) noexcept { \
 		STATICASSERTSAME(tc::remove_cvref_t<Dst>, Dst); \
 		return static_cast<Dst cvref>(t); \
 	}
@@ -73,17 +68,28 @@ namespace tc {
 
 	/////////////////////////////////////////////
 	// derived_cast
+	
+	namespace derived_cast_detail {
+		namespace derived_cast_internal_default {
+			template<typename To, typename From>
+			[[nodiscard]] constexpr same_cvref_t< To, From&&> derived_cast_internal_impl( tc::type::identity<To>, From&& t ) noexcept {
+				static_assert( std::is_base_of<std::remove_reference_t<From>, To>::value, "derived_cast is for downcasts only.");
+				return static_cast< same_cvref_t< To, From&&> >(t);
+			}
 
-	template< typename To, typename From >
-	[[nodiscard]] constexpr same_cvref_t< To, From&&> derived_cast( From&& t ) noexcept {
-		static_assert( std::is_base_of<std::remove_reference_t<From>, To>::value, "derived_cast is for downcasts only.");
-		return static_cast< same_cvref_t< To, From&&> >(t);
+			template<typename To, typename From>
+			[[nodiscard]] constexpr same_cvref_t< To, From>* derived_cast_internal_impl( tc::type::identity<To>, From* pt ) noexcept {
+				static_assert( std::is_base_of<std::remove_pointer_t<From>, To>::value, "derived_cast is for downcasts only.");
+				return static_cast< same_cvref_t< To, From>* >(pt);
+			}
+		}
+
+		DEFINE_TMPL_FUNC_WITH_CUSTOMIZATIONS(derived_cast_internal)
 	}
 
-	template< typename To, typename From >
-	[[nodiscard]] constexpr same_cvref_t< To, From>* derived_cast( From* pt ) noexcept {
-		static_assert( std::is_base_of<std::remove_pointer_t<From>, To>::value, "derived_cast is for downcasts only.");
-		return static_cast< same_cvref_t< To, From>* >(pt);
+	template<typename To, typename From>
+	[[nodiscard]] constexpr decltype(auto) derived_cast(From&& t) noexcept {
+		return tc::derived_cast_detail::derived_cast_internal(tc::type::identity<To>(), std::forward<From>(t));
 	}
 
 	template< typename To, typename From >
@@ -96,13 +102,27 @@ namespace tc {
 		return static_cast< same_cvref_t< To, From>* >(pt);
 	}
 
-	DEFINE_FN2_TMPL( derived_cast, (typename) );
-
 	//-------------------------------------------------------------------------------------------------------------------------
 
-	template< typename T, std::enable_if_t<tc::is_char<T>::value>* =nullptr>
-	[[nodiscard]] constexpr auto underlying_cast(T t)
-		return_decltype_noexcept( static_cast<typename boost::uint_t<sizeof(T)*8>::exact>(t) )
+	namespace underlying_cast_default {
+		template< typename T, std::enable_if_t<tc::is_char<T>::value>* =nullptr>
+		[[nodiscard]] constexpr auto underlying_cast_impl(T t)
+			return_decltype_noexcept( static_cast<typename boost::uint_t<sizeof(T)*8>::exact>(t) )
+
+		template< typename Enum, std::enable_if_t< std::is_enum<Enum>::value >* =nullptr >
+		[[nodiscard]] constexpr std::underlying_type_t<Enum> underlying_cast_impl( Enum e ) noexcept {
+			return static_cast<std::underlying_type_t<Enum>>(e);
+		}
+
+		// No implicit conversions to bool
+		template< typename T, std::enable_if_t< std::is_same<T, bool>::value >* =nullptr >
+		[[nodiscard]] constexpr unsigned char underlying_cast_impl(T b) noexcept {
+			STATICASSERTEQUAL(sizeof(bool), sizeof(unsigned char));
+			return static_cast<unsigned char>(b);
+		}
+	}
+
+	DEFINE_TMPL_FUNC_WITH_CUSTOMIZATIONS(underlying_cast)
 
 	template< typename T, std::enable_if_t<tc::is_actual_integer<T>::value>* =nullptr>
 	[[nodiscard]] constexpr auto unsigned_cast(T t) noexcept code_return_decltype(
@@ -118,8 +138,7 @@ namespace tc {
 		return static_cast<std::make_signed_t<T>>(t);
 	}
 
-	#pragma warning( push )
-	#pragma warning( disable: 4180 ) // qualifier applied to function type has no meaning; ignored
+	MODIFY_WARNINGS_BEGIN(((disable)(4180))) // qualifier applied to function type has no meaning; ignored
 
 		template< typename T >
 		[[nodiscard]] constexpr T const& as_const(T& t) noexcept { // intention is to avoid side-effects
@@ -136,7 +155,7 @@ namespace tc {
 			return const_cast<std::remove_const_t<T>&>(t);
 		}
 
-	#pragma warning( pop )
+	MODIFY_WARNINGS_END
 
 	template< typename T >
 	[[nodiscard]] constexpr T const* make_const_ptr( T const* pt ) noexcept {
@@ -147,18 +166,6 @@ namespace tc {
 	[[nodiscard]] constexpr T* make_mutable_ptr( T const* pt ) noexcept {
 		return const_cast<T*>(pt);
 	}
-
-	template<typename Func>
-	struct [[nodiscard]] make_arg_mutable_impl final {
-	private:
-		tc::decay_t<Func> m_func;
-	public:
-		make_arg_mutable_impl(Func&& func) noexcept : m_func(std::forward<Func>(func)) {}
-		template<typename T> auto operator()(T const& t) const& return_decltype_MAYTHROW( m_func( as_mutable(t) ) )
-	};
-
-	template<typename Func>
-	auto make_arg_mutable(Func&& func) return_decltype_noexcept( make_arg_mutable_impl<Func>( std::forward<Func>(func) ) )
 
 	/////////////////////////////////////////////
 	// void_cast
@@ -199,15 +206,17 @@ namespace tc {
 	// implicit_cast
 
 	template<typename TTarget, typename TSource, std::enable_if_t<!tc::is_actual_integer<std::remove_reference_t<TSource>>::value && tc::is_safely_convertible<TSource&&, TTarget>::value>* = nullptr>
-	[[nodiscard]] TTarget implicit_cast(TSource&& src) noexcept {
+	[[nodiscard]] constexpr TTarget implicit_cast(TSource&& src) noexcept {
 		return std::forward<TSource>(src);
 	}
 
 	// bit filed cannot bind to universal reference
+MODIFY_WARNINGS_BEGIN(((disable)(4244))) // disable warning C4244: conversion from 'int' to 'float', possible loss of data
 	template<typename TTarget, typename TSource, std::enable_if_t<tc::is_actual_integer<TSource>::value && tc::is_safely_convertible<TSource&&, TTarget>::value>* = nullptr>
-	[[nodiscard]] TTarget implicit_cast(TSource src) noexcept {
+	[[nodiscard]] constexpr TTarget implicit_cast(TSource src) noexcept {
 		return src;
 	}
+MODIFY_WARNINGS_END
 
 	/////////////////////////////////////////////
 	// reluctant_implicit_cast
@@ -219,6 +228,7 @@ namespace tc {
 		TSource&&,
 		TTarget
 	> reluctant_implicit_cast(TSource&& src) noexcept {
+		STATICASSERTSAME(tc::remove_cvref_t<TTarget>, TTarget);
 		return std::forward<TSource>(src);
 	}
 
@@ -228,11 +238,13 @@ namespace tc {
 
 	template<typename TTarget, typename TSource, std::enable_if_t<tc::is_base_of_decayed<TTarget, TSource>::value>* = nullptr>
 	[[nodiscard]] TSource&& reluctant_static_cast(TSource&& src) noexcept {
+		STATICASSERTSAME(tc::remove_cvref_t<TTarget>, TTarget);
 		return std::forward<TSource>(src);
 	}
 
 	template<typename TTarget, typename TSource, std::enable_if_t<!tc::is_base_of_decayed<TTarget, TSource>::value>* = nullptr>
 	[[nodiscard]] TTarget reluctant_static_cast(TSource&& src) noexcept {
+		STATICASSERTSAME(tc::remove_cvref_t<TTarget>, TTarget);
 		return static_cast<TTarget>(std::forward<TSource>(src));
 	}
 
@@ -258,12 +270,12 @@ namespace tc {
 	}
 
 	template<typename Char, std::enable_if_t<tc::is_char<Char>::value>* = nullptr>
-	[[nodiscard]] Char const* as_c_str(Char const* psz) noexcept {
+	[[nodiscard]] constexpr Char const* as_c_str(Char const* psz) noexcept {
 		return psz;
 	}
 
 	template<typename Char, std::enable_if_t<tc::is_char<Char>::value>* = nullptr>
-	[[nodiscard]] Char* as_c_str(Char* psz) noexcept {
+	[[nodiscard]] constexpr Char* as_c_str(Char* psz) noexcept {
 		return psz;
 	}
 

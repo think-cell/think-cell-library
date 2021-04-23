@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -11,16 +11,15 @@
 
 #define INHERIT_CTORS( Derived, ... ) \
 	template< typename T0, std::enable_if_t< \
-		( std::is_same< __VA_ARGS__, tc::decay_t<T0> >::value || \
-		!std::is_base_of< __VA_ARGS__, tc::decay_t<T0> >::value ) && \
+		!tc::is_base_of_decayed< __VA_ARGS__, T0 >::value && \
 		std::is_convertible< T0 &&, __VA_ARGS__ >::value \
 	>* =nullptr> \
 	Derived( T0&& t0 ) noexcept(std::is_nothrow_constructible<__VA_ARGS__, T0&&>::value) \
 	:	__VA_ARGS__( std::forward<T0>(t0) ) {} \
 	template< typename T0, std::enable_if_t< \
-		( std::is_same< __VA_ARGS__, tc::decay_t<T0> >::value || \
-		!std::is_base_of< __VA_ARGS__, tc::decay_t<T0> >::value ) && \
-		!std::is_convertible< T0 &&, __VA_ARGS__ >::value \
+		!tc::is_base_of_decayed< __VA_ARGS__, T0 >::value && \
+		!std::is_convertible< T0 &&, __VA_ARGS__ >::value || \
+		std::is_same< __VA_ARGS__, tc::decay_t<T0, /*bPreventSlicing*/false> >::value \
 	>* =nullptr> \
 	explicit Derived( T0&& t0) noexcept(std::is_nothrow_constructible<__VA_ARGS__, T0&&>::value) \
 	:	__VA_ARGS__( std::forward<T0>(t0) ) {} \
@@ -36,8 +35,8 @@
 // was used nonetheless.
 #define INHERIT_ASSIGN( ... ) \
 	template<typename TAssignSource, std::enable_if_t< \
-		std::is_same< __VA_ARGS__, tc::decay_t<TAssignSource> >::value || \
-		!std::is_base_of< __VA_ARGS__, tc::decay_t<TAssignSource> >::value \
+		std::is_same< __VA_ARGS__, tc::decay_t<TAssignSource, /*bPreventSlicing*/false> >::value || \
+		!tc::is_base_of_decayed< __VA_ARGS__, TAssignSource >::value \
 	>* = nullptr> \
 	this_type& operator=(TAssignSource&& t) & noexcept { \
 		STATICASSERTEQUAL( sizeof(__VA_ARGS__), sizeof(this_type), "move other members?"); \

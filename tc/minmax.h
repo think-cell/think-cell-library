@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -34,17 +34,20 @@ namespace tc {
 			
 			template<typename T0, typename T1, typename... Args>
 			constexpr auto operator()(T0&& t0, T1&& t1, Args&&... args) const& noexcept -> decltype(auto) {
-				auto b = m_better(tc::as_const(t0), tc::as_const(t1));
+				// analogous to std::min/std::max: if equivalent, return the first parameter
+				auto b = m_better(tc::as_const(t1), tc::as_const(t0));
 				if constexpr (std::is_same<std::true_type, decltype(b)>::value) {
-					return operator()(std::forward<T0>(t0), std::forward<Args>(args)...);
-				} else if constexpr (std::is_same<std::false_type, decltype(b)>::value) {
+					// t1 is better
 					return operator()(std::forward<T1>(t1), std::forward<Args>(args)...);
+				} else if constexpr (std::is_same<std::false_type, decltype(b)>::value) {
+					// t0 is better or equal
+					return operator()(std::forward<T0>(t0), std::forward<Args>(args)...);
 				} else {
 					STATICASSERTSAME(decltype(b), bool);
 					return CONDITIONAL_PRVALUE_AS_VAL(
 						b,
-						operator()(std::forward<T0>(t0), std::forward<Args>(args)...),
-						operator()(std::forward<T1>(t1), std::forward<Args>(args)...)
+						/*t1 is better*/operator()(std::forward<T1>(t1), std::forward<Args>(args)...),
+						/*t0 is better or equal*/operator()(std::forward<T0>(t0), std::forward<Args>(args)...)
 					);
 				}
 			}
@@ -94,6 +97,11 @@ namespace tc {
 	template <typename Iter>
 	auto treat_as_forward_iterator(Iter&& iter) noexcept {
 		return no_adl::forward_iter<std::remove_reference_t<Iter>>{std::forward<Iter>(iter)};
+	}
+
+	template <typename T>
+	auto treat_as_forward_iterator(T* ptr) noexcept {
+		return ptr;
 	}
 
 	template<typename Rng>

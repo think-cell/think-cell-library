@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -17,12 +17,12 @@ STATICASSERTSAME(tc::remove_rvalue_reference_t<int&>, int&);
 STATICASSERTSAME(tc::remove_rvalue_reference_t<int const&>, int const&);
 STATICASSERTSAME(tc::remove_rvalue_reference_t<int&&>, int);
 STATICASSERTSAME(tc::remove_rvalue_reference_t<int const&&>, int const);
-STATICASSERTSAME(tc::remove_rvalue_reference_t<std::vector<int>>, std::vector<int>);
-STATICASSERTSAME(tc::remove_rvalue_reference_t<std::vector<int> const>, std::vector<int> const);
-STATICASSERTSAME(tc::remove_rvalue_reference_t<std::vector<int>&>, std::vector<int>&);
-STATICASSERTSAME(tc::remove_rvalue_reference_t<std::vector<int> const&>, std::vector<int> const&);
-STATICASSERTSAME(tc::remove_rvalue_reference_t<std::vector<int>&&>, std::vector<int>);
-STATICASSERTSAME(tc::remove_rvalue_reference_t<std::vector<int> const&&>, std::vector<int> const);
+STATICASSERTSAME(tc::remove_rvalue_reference_t<tc::vector<int>>, tc::vector<int>);
+STATICASSERTSAME(tc::remove_rvalue_reference_t<tc::vector<int> const>, tc::vector<int> const);
+STATICASSERTSAME(tc::remove_rvalue_reference_t<tc::vector<int>&>, tc::vector<int>&);
+STATICASSERTSAME(tc::remove_rvalue_reference_t<tc::vector<int> const&>, tc::vector<int> const&);
+STATICASSERTSAME(tc::remove_rvalue_reference_t<tc::vector<int>&&>, tc::vector<int>);
+STATICASSERTSAME(tc::remove_rvalue_reference_t<tc::vector<int> const&&>, tc::vector<int> const);
 
 namespace void_t_test {
 	template< typename T, typename=void >
@@ -169,13 +169,13 @@ static_assert(!tc::is_safely_convertible<SToInt&, int const&&>::value);
 static_assert(!tc::is_safely_convertible<SToInt&&, int&&>::value);
 static_assert(!tc::is_safely_convertible<SToInt&&, int const&&>::value);
 
-static_assert(tc::is_safely_convertible<std::string&, tc::ptr_range<char>>::value);
-static_assert(tc::is_safely_convertible<std::string&, tc::ptr_range<char const>>::value);
-static_assert(!tc::is_safely_convertible<std::string, tc::ptr_range<char const>>::value);
-static_assert(!tc::is_safely_convertible<std::string const, tc::ptr_range<char const>>::value);
-static_assert(!tc::is_safely_convertible<std::string&&, tc::ptr_range<char const>>::value);
-static_assert(!tc::is_safely_convertible<std::string const&&, tc::ptr_range<char const>>::value);
-static_assert(tc::is_safely_convertible<std::string const&, tc::ptr_range<char const>>::value);
+static_assert(tc::is_safely_convertible<std::basic_string<char>&, tc::ptr_range<char>>::value);
+static_assert(tc::is_safely_convertible<std::basic_string<char>&, tc::ptr_range<char const>>::value);
+static_assert(!tc::is_safely_convertible<std::basic_string<char>, tc::ptr_range<char const>>::value);
+static_assert(!tc::is_safely_convertible<std::basic_string<char> const, tc::ptr_range<char const>>::value);
+static_assert(!tc::is_safely_convertible<std::basic_string<char>&&, tc::ptr_range<char const>>::value);
+static_assert(!tc::is_safely_convertible<std::basic_string<char> const&&, tc::ptr_range<char const>>::value);
+static_assert(tc::is_safely_convertible<std::basic_string<char> const&, tc::ptr_range<char const>>::value);
 static_assert(!tc::is_safely_convertible<char const*, tc::ptr_range<char>>::value);
 static_assert(tc::is_safely_convertible<char const*, tc::ptr_range<char const>>::value);
 static_assert(tc::is_safely_convertible<char const* &, tc::ptr_range<char const>>::value);
@@ -190,8 +190,8 @@ static_assert(tc::is_safely_convertible<tc::ptr_range<int> const&, tc::ptr_range
 static_assert(!tc::is_safely_convertible<tc::ptr_range<char const>, decltype(tc::concat("abc", "def"))>::value);
 static_assert(!tc::is_safely_convertible<tc::ptr_range<char const>, tc::vector<int>>::value);
 
-static_assert(!tc::is_safely_convertible<std::string&, tc::ptr_range<char>&>::value);
-static_assert(!tc::is_safely_convertible<std::string&, tc::ptr_range<char> const&>::value);
+static_assert(!tc::is_safely_convertible<std::basic_string<char>&, tc::ptr_range<char>&>::value);
+static_assert(!tc::is_safely_convertible<std::basic_string<char>&, tc::ptr_range<char> const&>::value);
 
 #ifdef TC_MAC
 static_assert(tc::is_safely_constructible<void (^)(), void (^)()>::value);
@@ -288,14 +288,14 @@ static_assert(
 
 static_assert(
 	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char const>, std::string&>,
+		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char const>, std::basic_string<char>&>,
 		tc::ptr_range<char const>
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char>, std::string const&>,
+		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char>, std::basic_string<char> const&>,
 		tc::ptr_range<char const>
 	>::value
 );
@@ -406,7 +406,7 @@ static_assert(
 );
 
 static_assert(
-	!tc::has_common_reference_xvalue_as_ref<tc::type::list<tc::ptr_range<char>, std::string&&>>::value
+	!tc::has_common_reference_xvalue_as_ref<tc::type::list<tc::ptr_range<char>, std::basic_string<char>&&>>::value
 );
 
 static_assert(
@@ -414,7 +414,7 @@ static_assert(
 );
 
 static_assert(
-	!tc::has_common_reference_xvalue_as_ref<tc::type::list<char const*, tc::ptr_range<char>, std::string const&&>>::value
+	!tc::has_common_reference_xvalue_as_ref<tc::type::list<char const*, tc::ptr_range<char>, std::basic_string<char> const&&>>::value
 );
 
 static_assert(
@@ -426,7 +426,7 @@ static_assert(
 );
 
 static_assert(
-	!tc::has_common_reference_xvalue_as_ref<tc::type::list<tc::ptr_range<char const>, std::string>>::value
+	!tc::has_common_reference_xvalue_as_ref<tc::type::list<tc::ptr_range<char const>, std::basic_string<char>>>::value
 );
 
 static_assert(
@@ -564,15 +564,15 @@ static_assert(
 );
 
 static_assert(
-	!tc::has_common_reference_prvalue_as_val<tc::type::list<tc::vector<char>&&, std::string&>>::value
+	!tc::has_common_reference_prvalue_as_val<tc::type::list<tc::vector<char>&&, std::basic_string<char>&>>::value
 );
 
 static_assert(
-	!tc::has_common_reference_prvalue_as_val<tc::type::list<tc::vector<char>&&, std::string&, tc::ptr_range<char const>>>::value
+	!tc::has_common_reference_prvalue_as_val<tc::type::list<tc::vector<char>&&, std::basic_string<char>&, tc::ptr_range<char const>>>::value
 );
 
 static_assert(
-	!tc::has_common_reference_prvalue_as_val<tc::type::list<tc::vector<char>, std::string&>>::value
+	!tc::has_common_reference_prvalue_as_val<tc::type::list<tc::vector<char>, std::basic_string<char>&>>::value
 );
 
 static_assert(
@@ -593,6 +593,25 @@ static_assert(
 	std::is_same<
 		tc::common_reference_xvalue_as_ref_t<tc::subrange<tc::vector<int>&>, tc::subrange<tc::vector<int>>&>,
 		tc::subrange<tc::vector<int>&>
+	>::value
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<int>, tc::subrange<tc::vector<int>&>>,
+		tc::ptr_range<int>
+	>::value
+);
+
+STATICASSERTSAME(
+	tc::ptr_range_t<tc::subrange<tc::vector<int>>&>,
+	tc::ptr_range<int>
+);
+
+static_assert(
+	std::is_same<
+		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<int>, tc::subrange<tc::vector<int>>&>,
+		tc::ptr_range<int>
 	>::value
 );
 
@@ -627,7 +646,7 @@ static_assert(
 
 static_assert(
 	std::is_same<
-		tc::common_reference_prvalue_as_val_t<tc::vector<char>&, std::string&>,
+		tc::common_reference_prvalue_as_val_t<tc::vector<char>&, std::basic_string<char>&>,
 		tc::ptr_range<char>
 	>::value
 );
@@ -845,9 +864,7 @@ UNITTESTDEF(minTest) {
 	{
 		tc::projected(
 			tc::fn_min(),
-			[](S&& s) noexcept ->S&& {
-				return static_cast<S&&>(s);
-			}
+			tc::fn_static_cast<S&&>()
 		)(createS(1), createS(2));
 	}
 

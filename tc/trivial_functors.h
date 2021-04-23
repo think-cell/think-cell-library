@@ -1,45 +1,56 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
-#include <utility>
+#include "assert_defs.h"
+#include "utility.h"
 
 namespace tc {
-	struct noop {
-		template<typename ...Args> void operator()(Args const&...) const& noexcept {}
-	};
+	namespace no_adl {
+		struct noop {
+			template<typename ...Args> constexpr void operator()(Args const&...) const& noexcept {}
+		};
 
-	template<typename T=void>
-	struct never_called {
-		template<typename ...Args> T operator()(Args const&...) const& noexcept {_ASSERTFALSE; return {}; }
-	};
+		template<typename T=void>
+		struct never_called {
+			template<typename ...Args> T operator()(Args const&...) const& noexcept {_ASSERTFALSE; return tc::construct_default_or_terminate<T>(); }
+		};
 
-	template<>
-	struct never_called<void> {
-		template<typename ...Args> void operator()(Args const&...) const {_ASSERTFALSE; }
-	};
+		template<auto val>
+		struct constexpr_function {
+			template< typename ...Args > constexpr auto operator()( Args const&... ) const& noexcept { return val; }
+		};
 
-	template<auto val>
-	struct constexpr_function {
-		template< typename ...Args > constexpr auto operator()( Args const&... ) const& noexcept { return val; }
-	};
-
-	// MAKE_CONSTEXPR_FUNCTION is guaranteed a constexpr function.
-	// We limit the return type to small types because large types may take too much space if not used carefully
-	#define MAKE_CONSTEXPR_FUNCTION(val) \
-		[](auto&&...) constexpr noexcept { constexpr auto _ = val; static_assert(sizeof(_)<=sizeof(void*)); return val; }
-
-	struct identity {
-		template< typename T >
-		T&& operator()(T&& t) const& noexcept {
-			return std::forward<T>(t);
-		}
-	};
+		struct identity {
+			template< typename T >
+			constexpr T&& operator()(T&& t) const& noexcept {
+				return std::forward<T>(t);
+			}
+		};
+	}
+	using no_adl::noop;
+	using no_adl::never_called;
+	using no_adl::constexpr_function;
 }
+
+// MAKE_CONSTEXPR_FUNCTION is guaranteed a constexpr function.
+#define MAKE_CONSTEXPR_FUNCTION(...) \
+	[]() constexpr noexcept { \
+		/*bool_constant is needed, because otherwise MSVC doesn't correctly evaluate the `if constexpr`*/ \
+		if constexpr (std::bool_constant<sizeof(decltype(__VA_ARGS__)) <= sizeof(void*)>::value) { \
+			return [](auto&& ...) constexpr noexcept { \
+				constexpr auto _ = __VA_ARGS__; \
+				return _; \
+			}; \
+		} else { \
+			return [](auto&& ...) constexpr noexcept -> decltype(auto) { \
+				return as_constexpr(__VA_ARGS__); \
+			}; \
+		} \
+	}()	

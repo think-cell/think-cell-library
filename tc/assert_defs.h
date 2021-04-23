@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -11,11 +11,10 @@
 #ifdef TC_PRIVATE
 	#include "Library/ErrorReporting/assert_fwd.h"
 #else
+	#include "fundamental.h"
 	#include <type_traits>
 	#include <cstdlib>
 	#include <cassert>
-
-	#define TC_FWD(...) __VA_ARGS__
 
 	#define _CHECKS
 	#ifndef IF_TC_CHECKS
@@ -56,6 +55,13 @@
 	#ifndef _ASSERTEQUALDEBUG
 		#define _ASSERTEQUALDEBUG(a, b) IF_TC_DEBUG(_ASSERTEQUAL(a, b))
 	#endif
+	#ifndef _ASSERTANYOF
+		#include <boost/preprocessor/seq/enum.hpp>
+		#define _ASSERTANYOFDEBUG(expr, values) [](auto const& e, auto const&... val) noexcept { assert( ((e == val) || ...) ); }(expr, BOOST_PP_SEQ_ENUM(TC_FWD(values)))
+	#endif
+	#ifndef _ASSERTANYOFDEBUG
+		#define _ASSERTANYOFDEBUG(expr, values) IF_TC_DEBUG(_ASSERTANYOF(expr, values))
+	#endif
 	#ifndef _ASSERTINITIALIZED
 		#define _ASSERTINITIALIZED( expr ) static_cast<void>(expr)
 	#endif
@@ -63,7 +69,11 @@
 		#define _ASSERTPRINT( cond, ... ) assert( cond )
 	#endif
 	#ifndef STATICASSERTEQUAL
-		#define STATICASSERTEQUAL(n1, ...) static_assert(n1 == __VA_ARGS__)
+		#include <boost/preprocessor/facilities/empty.hpp>
+		#include <boost/preprocessor/facilities/overload.hpp>
+		#define STATICASSERTEQUAL_2(n1, n2) static_assert((n1) == (n2));
+		#define STATICASSERTEQUAL_3(n1, n2, strMessage) static_assert((n1) == (n2), strMessage);
+		#define STATICASSERTEQUAL(...) BOOST_PP_CAT(BOOST_PP_OVERLOAD(STATICASSERTEQUAL_, __VA_ARGS__)(__VA_ARGS__),BOOST_PP_EMPTY())
 	#endif
 	#ifndef STATICASSERTSAME
 		#include <boost/preprocessor/punctuation/remove_parens.hpp>
@@ -108,6 +118,9 @@
 	#ifndef VERIFYINITIALIZED
 		#define VERIFYINITIALIZED( expr ) (expr)
 	#endif
+	#ifndef VERIFYNOTIFYEQUAL
+		#define VERIFYNOTIFYEQUAL VERIFYEQUAL
+	#endif
 	#ifndef VERIFYNOTIFY
 		#define VERIFYNOTIFY VERIFY
 	#endif
@@ -116,6 +129,9 @@
 	#endif
 	#ifndef NOBADALLOC
 		#define NOBADALLOC( expr ) (expr)
+	#endif
+	#ifndef NOBADALLOC_LAMBDA
+		#define NOBADALLOC_LAMBDA( expr ) (expr)
 	#endif
 	#ifndef NOEXCEPT
 		#define NOEXCEPT( ... ) \
@@ -126,10 +142,6 @@
 	#ifndef NOEXCEPT_NO_LAMBDA
 		#define NOEXCEPT_NO_LAMBDA( ... ) (__VA_ARGS__)
 	#endif
-
-	#define THROW(...) noexcept(false)
-
-	#define MAYTHROW noexcept(false)
 
 	#define switch_no_default(...) \
 	switch( auto const& /*lifetime extended until end of switch block*/ __switch=(__VA_ARGS__) ) \

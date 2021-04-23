@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -16,25 +16,26 @@
 #include "append.h"
 #include "tag_type.h"
 #include "quantifier.h"
+#include "equal.h"
+#include "static_vector.h"
 #include <boost/version.hpp>
 
 #ifndef __clang__
-#pragma warning(push)
-#pragma warning(disable:4127) // conditional expression is constant
-#if BOOST_VERSION==105900
-#pragma warning(disable:4244) // conversion from 'unsigned __int64' to 'double', possible loss of data, see ticket 11608
-#endif
-#pragma warning(disable:4459) // declaration hides global declaration
+MODIFY_WARNINGS_BEGIN(
+	((disable)(4127)) // conditional expression is constant
+	((disable)(4459)) // declaration hides global declaration
+)
 #else
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wsign-conversion"
 #pragma clang diagnostic ignored "-Wconversion"
 #pragma clang diagnostic ignored "-Wsign-compare"
+#pragma clang diagnostic ignored "-Wunknown-warning-option"
 #endif
 #include <boost/spirit/home/x3.hpp>
 #include <boost/spirit/home/support/common_terminals.hpp>
 #ifndef __clang__
-#pragma warning(pop)
+MODIFY_WARNINGS_END
 #else
 #pragma clang diagnostic pop
 #endif
@@ -125,89 +126,44 @@ namespace tc {
 			return false;
 		}
 	}
-}
 
-#ifdef __clang__
+	namespace no_adl {
+		template<typename Char, typename Enable=void>
+		struct char_encoding;
 
-namespace boost { namespace spirit { namespace char_encoding {
-	///////////////////////////////////////////////////////////////////////////
-	//  Test characters for specified conditions (using std wchar_t functions)
-	///////////////////////////////////////////////////////////////////////////
-
-	struct standard_16
-	{
-		using char_type = char16_t;
-
-		template <typename Char>
-		static typename std::char_traits<Char>::int_type
-		to_int_type(Char ch) noexcept
-		{
-			return std::char_traits<Char>::to_int_type(ch);
-		}
-
-		template <typename Char>
-		static Char
-		to_char_type(typename std::char_traits<Char>::int_type ch) noexcept
-		{
-			return std::char_traits<Char>::to_char_type(ch);
-		}
-
-		static bool
-		ischar(int ch) noexcept
-		{
-			// we have to watch out for sign extensions (casting is there to
-			// silence certain compilers complaining about signed/unsigned
-			// mismatch)
-			return 0<=ch && ch<=0xffff;
-		}
-
-		static ::boost::uint32_t
-		toucs4(int ch) noexcept
-		{
-			return ch;
-		}
-	};
-}}}
-
-namespace boost { namespace spirit { namespace traits
-	{
-		template <>
-		struct char_encoding_from_char<char16_t> final
-		: boost::mpl::identity<boost::spirit::char_encoding::standard_16>
-		{};
-	}}}
-
-
-namespace boost { namespace spirit { namespace x3 {
-	namespace standard_16 {
-		using char_type = any_char<char_encoding::standard_16>;
-        auto const char_ = char_type{};
+		template<typename Char>
+		struct char_encoding<Char, std::enable_if_t<tc::is_char<Char>::value>> final {
+			using char_type = Char;
+			static constexpr bool ischar(int) noexcept {
+				return true;
+			}
+			static ::boost::uint32_t toucs4(int ch) noexcept { // for debug only
+				return ch;
+			}
+		};
 	}
-}}}
+	using no_adl::char_encoding;
 
-#endif
-
-namespace tc {
 	DEFINE_TAG_TYPE(unused_type)
 
 	template<typename Char>
 	inline constexpr auto char_ = tc::unused_type;
 
 	template<>
-	inline constexpr auto char_<char> = x3::any_char<typename boost::spirit::traits::char_encoding_from_char<char>::type>();
+	inline constexpr auto char_<char> = x3::any_char<tc::char_encoding<char>>();
 
 	template<>
-	inline constexpr auto char_<wchar_t> = x3::any_char<typename boost::spirit::traits::char_encoding_from_char<wchar_t>::type>();
+	inline constexpr auto char_<wchar_t> = x3::any_char<tc::char_encoding<wchar_t>>();
 
 #ifdef __clang__
 	template<>
-	inline constexpr auto char_<char16_t> = x3::any_char<typename boost::spirit::traits::char_encoding_from_char<char16_t>::type>();
+	inline constexpr auto char_<char16_t> = x3::any_char<tc::char_encoding<char16_t>>();
 #endif
 
 	template<typename Char>
 	constexpr
 	x3::literal_char<
-		typename boost::spirit::traits::char_encoding_from_char<tc::decay_t<Char>>::type
+		tc::char_encoding<Char>
 	> single_char(Char ch) noexcept {
 		return {ch};
 	}
@@ -224,7 +180,7 @@ namespace tc {
 			template <typename CharType, typename Context, std::enable_if_t<std::is_same<CharType, attribute_type>::value>* = nullptr>
 			bool test(CharType const& ch, Context& context) const& noexcept {
 				return tc::any_of(m_rng, [&](auto const& chAllowed) noexcept {
-					return 0==x3::get_case_compare<typename boost::spirit::traits::char_encoding_from_char<CharType>::type>(context)(ch, chAllowed);
+					return 0==x3::get_case_compare<tc::char_encoding<CharType>>(context)(ch, chAllowed);
 				});
 			}
 		private:
@@ -237,9 +193,9 @@ namespace tc {
 		return tc_move_if_owned(rng);
 	}
 
-	template<typename Char>
-	x3::literal_char<
-		typename boost::spirit::traits::char_encoding_from_char<tc::decay_t<Char>>::type,
+	template<typename Char, std::enable_if_t<tc::is_char<Char>::value>* = nullptr>
+	constexpr x3::literal_char<
+		tc::char_encoding<Char>,
 		x3::unused_type
 	> lit(Char ch) noexcept {
 		return {ch};
@@ -248,12 +204,12 @@ namespace tc {
 	template<typename Char>
 	using literal_string_type = x3::literal_string<
 		tc::ptr_range<Char const>,
-		typename boost::spirit::traits::char_encoding_from_char<Char>::type,
+		tc::char_encoding<Char>,
 		x3::unused_type
 	>;
 
-	template<typename RngChar>
-	auto lit(RngChar&& str, std::enable_if_t<tc::is_safely_convertible<RngChar&&, tc::ptr_range<tc::range_value_t<RngChar> const>>::value>* = nullptr) noexcept {
+	template<typename RngChar, std::enable_if_t<tc::is_safely_convertible<RngChar&&, tc::ptr_range<tc::range_value_t<RngChar> const>>::value>* = nullptr>
+	constexpr auto lit(RngChar&& str) noexcept {
 		static_assert(!tc::is_instance<std::basic_string, RngChar>::value, "tc::lit won't own string data. Use tc::as_lvalue or x3::lit.");
 		return literal_string_type<tc::range_value_t<RngChar>>(std::forward<RngChar>(str));
 	}
@@ -274,9 +230,9 @@ namespace tc {
 		struct attr_is_id;
 		// tc::attr_is<T>[parser] directive creates an x3::rule_definition (an x3::parser with a customized attribute type).
 		// When specifying an attribute, in some cases the attribute can be filled by the parser without any additional code:
-		//   auto const parser = tc::attr_is<std::string>[+x3::alpha];
+		//   auto const parser = tc::attr_is<std::basic_string<char>>[+x3::alpha];
 		// In other cases, you may have to write a semantic action and access the attribute via x3::_val(ctx) to fill it:
-		//   auto const parser = tc::attr_is<std::string>[+x3::alpha[([](auto const& ctx) noexcept {
+		//   auto const parser = tc::attr_is<std::basic_string<char>>[+x3::alpha[([](auto const& ctx) noexcept {
 		//     tc::append(
 		//       x3::_val(ctx)/*attribute of innermost x3::rule_definition, which is what is specified in tc::attr_is<>*/,
 		//       tc::single(x3::_attr(ctx))/*automatic attribute of the parser attached; in this case x3::alpha is producing char*/
@@ -290,7 +246,7 @@ namespace tc {
 		// BOOST_SPIRIT_DEFINE macro, for example when they are defined locally, the parse method of x3::rule can
 		// still call the rule_def's parse by retrieving the injected rhs parser with its ID using the default
 		// parse_rule function.
-		//   x3::rule<struct xx, std::string> const rule;
+		//   x3::rule<struct xx, std::basic_string<char>> const rule;
 		//   auto const rule_def = rule = +x3::alpha > -(tc::single_char('[') > rule > tc::single_char(']'));
 		//   tc::parse(str, rule_def, attr); // rule and rule_def are not connected with BOOST_SPIRIT_DEFINE
 		// tc::attr_is is a rule_definition, but it cannot be recursive because it does not have a name. So we don't
@@ -313,7 +269,7 @@ namespace tc {
 		template<typename T>
 		struct attr_is_type {
 			template<typename Expr>
-			auto operator[](Expr&& expr) const& noexcept {
+			constexpr auto operator[](Expr&& expr) const& noexcept {
 				// returns a x3::rule_definition with attr_is_id, Attribute type of T and rhs parser of x3::as_parser(expr)
 				return x3::rule<attr_is_id, T>{"attr_is"} = x3::as_parser(std::forward<Expr>(expr));
 			}
@@ -336,7 +292,7 @@ namespace tc {
 
 			template<typename CharType, typename Context, std::enable_if_t<std::is_same<CharType, Char>::value>* = nullptr>
 			bool test(CharType const& ch, Context& context) const& noexcept {
-				auto_cref( compare, x3::get_case_compare<typename boost::spirit::traits::char_encoding_from_char<CharType>::type>(context) );
+				auto_cref( compare, x3::get_case_compare<tc::char_encoding<CharType>>(context) );
 				return 0 <= compare(ch, m_chFirst) && compare(ch, m_chLast) <= 0;
 			}
 		private:
@@ -368,6 +324,35 @@ namespace tc {
 		asciiupper<wchar_t>;
 	}
 #endif
+
+	namespace no_adl {
+		struct asciilit_impl final: x3::parser<asciilit_impl> {
+			static bool const has_attribute = false;
+			using attribute_type = x3::unused_type;
+			explicit constexpr asciilit_impl(tc::ptr_range<char const> str) noexcept: m_str(tc_move(str)) {
+				_ASSERTE(tc::all_of(m_str, [](char const ch) constexpr noexcept { return '\0'<=ch && ch<='\x7f'; }));
+			}
+
+			template<typename Iterator, typename Context, typename Attribute>
+			bool parse(Iterator& first, Iterator const& last, Context const& context, x3::unused_type, Attribute& attr) const& {
+				x3::skip_over(first, last, context);
+				if(auto const first_=tc::starts_with<tc::return_border_or_null>(tc::make_iterator_range(first, last), m_str, [](auto const chInput, char const chLit) noexcept {
+					return chInput == tc::explicit_cast<decltype(chInput)>(chLit);
+				})) {
+					first=first_;
+					return true;
+				}
+				return false;
+			}
+		private:
+			tc::ptr_range<char const> m_str;
+		};
+	}
+
+	template<std::size_t N>
+	constexpr auto asciilit(char const (&str)[N]) noexcept {
+		return tc::no_adl::asciilit_impl(str);
+	}
 
 	namespace no_adl {
 		struct blank final: x3::char_parser<blank> {
@@ -405,96 +390,27 @@ namespace tc {
 
 	inline constexpr auto blank = no_adl::blank{};
 	inline constexpr auto space = no_adl::space{};
+
+	template <bool bSigned>
+	struct xml_percentage_policies final : std::conditional_t<bSigned, x3::real_policies<double>, x3::ureal_policies<double>> {
+		static constexpr bool allow_leading_dot = false;
+		static constexpr bool allow_trailing_dot = false;
+		// do not parse exponents
+		template<typename Iterator> static bool parse_exp(Iterator& first, Iterator const& last) noexcept { return false; }
+		// do not parse NANs
+		template<typename Iterator, typename Attribute> static bool parse_nan(Iterator& first, Iterator const& last, Attribute& attr) noexcept { return false; }
+		// do not parse INFs
+		template<typename Iterator, typename Attribute> static bool parse_inf(Iterator& first, Iterator const& last, Attribute& attr) noexcept { return false; }
+	};
+
 }
 
-namespace boost { namespace spirit { namespace x3 {
-	DEFINE_ADL_TAG_TYPE(ascii_no_case_tag)
-
-	template <typename Encoding>
-	struct ascii_no_case_compare
-	{
-		template < template <typename> class basic_charset>
-		typename Encoding::char_type
-		in_set( typename Encoding::char_type const ch
-		      , basic_charset<typename Encoding::char_type> const &set)
-		{
-			// case-insensitive set should be all uppercase
-			return set.test(tc::toasciiupper(ch));
-		}
-		
-		std::int32_t operator()(
-			  typename Encoding::char_type const lc
-			, typename Encoding::char_type const rc) const
-		{
-			return tc::toasciiupper(lc) - tc::toasciiupper(rc);
-		}
-		
-		template <typename CharClassTag>
-		CharClassTag get_char_class_tag(CharClassTag tag) const
-		{
-			return tag;
-		}
-		
-		alpha_tag get_char_class_tag(lower_tag ) const
-		{
-			return {};
-		}
-		
-		alpha_tag get_char_class_tag(upper_tag ) const
-		{
-			return {};
-		}
-	};
-
-	template <typename Encoding>
-	ascii_no_case_compare<Encoding> get_case_compare_impl(ascii_no_case_tag_t const&)
-	{
-		return {};
-	}
-
-	// propagate no_case information through the context
-	template <typename Subject>
-	struct ascii_no_case_directive : unary_parser<Subject, ascii_no_case_directive<Subject>>
-	{
-		typedef unary_parser<Subject, ascii_no_case_directive<Subject> > base_type;
-		static bool const is_pass_through_unary = true;
-		static bool const handles_container = Subject::handles_container;
-		
-		ascii_no_case_directive(Subject const& subject)
-		  : base_type(subject) {}
-		
-		template <typename Iterator, typename Context
-		  , typename RContext, typename Attribute>
-		bool parse(Iterator& first, Iterator const& last
-		  , Context const& context, RContext& rcontext, Attribute& attr) const
-		{
-			return this->subject.parse(
-				first, last
-			  , make_context<no_case_tag>(ascii_no_case_tag, context)
-			  , rcontext
-			  , attr);
-		}
-	};
-
-	struct ascii_no_case_gen
-	{
-		template <typename Subject>
-		ascii_no_case_directive<typename extension::as_parser<Subject>::value_type>
-		operator[](Subject const& subject) const
-		{
-			return { as_parser(subject) };
-		}
-	};
-}}}
-
 namespace tc {
-    inline constexpr auto ascii_no_case = x3::ascii_no_case_gen{};
-
 	template<typename Char>
-	const auto asciixdigit = asciidigit<Char> | ascii_no_case[char_range(tc::explicit_cast<Char>('A'), tc::explicit_cast<Char>('F'))];
+	inline constexpr auto asciixdigit = asciidigit<Char> | char_range(tc::explicit_cast<Char>('A'), tc::explicit_cast<Char>('F')) | char_range(tc::explicit_cast<Char>('a'), tc::explicit_cast<Char>('f'));
 
 	template<typename Char, typename T>
-	using symbols = x3::symbols_parser<typename boost::spirit::traits::char_encoding_from_char<tc::decay_t<Char>>::type, T>;
+	using symbols = x3::symbols_parser<tc::char_encoding<Char>, T>;
 
 	namespace no_adl {
 		struct move_attr_to_val_impl final {
@@ -505,7 +421,7 @@ namespace tc {
 		};
 		template<typename T>
 		struct move_attr_to_ext_val_impl final {
-			move_attr_to_ext_val_impl(T& t) noexcept: m_t(t) {}
+			constexpr move_attr_to_ext_val_impl(T& t) noexcept: m_t(t) {}
 			template<typename Context>
 			void operator()(Context& ctx) noexcept {
 				m_t=tc_move_always(x3::_attr(ctx));
@@ -516,7 +432,7 @@ namespace tc {
 	}
 
 	template<typename T>
-	auto move_attr_to_val(T& t) noexcept {
+	constexpr auto move_attr_to_val(T& t) noexcept {
 		return no_adl::move_attr_to_ext_val_impl<T>(t);
 	}
 
@@ -532,12 +448,12 @@ namespace boost { namespace spirit { namespace x3 {
 	template<typename Subject, typename ID>
 	struct with_val_directive : unary_parser<Subject, with_val_directive<Subject, ID>>
 	{
-		using base_type = unary_parser<Subject, with_val_directive<Subject, ID>>;
+		using base_type = typename with_val_directive::unary_parser;
 		static bool const is_pass_through_unary = true;
         static bool const handles_container = Subject::handles_container;
 		using subject_type = Subject;
 
-		with_val_directive(Subject const& subject): base_type(subject) {}
+		constexpr with_val_directive(Subject const& subject): base_type(subject) {}
 
 		template <typename Iterator, typename Context, typename RContext, typename Attribute>
 		bool parse(Iterator& first, Iterator const& last, Context const& context, RContext& rcontext, Attribute& attr) const
@@ -554,7 +470,7 @@ namespace boost { namespace spirit { namespace x3 {
 	struct with_val_gen
 	{	
 		template <typename Subject>
-		with_val_directive<typename extension::as_parser<Subject>::value_type, ID>
+		constexpr with_val_directive<typename extension::as_parser<Subject>::value_type, ID>
 		operator[](Subject const& subject) const
 		{
 			return { as_parser(subject) };
@@ -573,8 +489,8 @@ namespace boost { namespace spirit { namespace x3
 	template <typename context_tag>
 	struct lazy_parser : parser<lazy_parser<context_tag>>
 	{
-		using base_type = parser<lazy_parser<context_tag>>;
-		       
+		using base_type = typename lazy_parser::parser;
+
 		template <typename Iterator, typename Context, typename RContext, typename Attribute>
 		bool parse(Iterator& first, Iterator const& last, Context const& context, RContext& rcontext, Attribute& attr) const
 		{
@@ -605,4 +521,31 @@ namespace boost { namespace spirit { namespace x3 { namespace traits
 			>::type>::type,
 			Context
 		> {};
+}}}}
+
+///////////////////////////////
+// static_vector support
+
+namespace boost { namespace spirit { namespace x3 { namespace traits
+{
+	template <typename T, tc::static_vector_size_t N>
+	struct push_back_container<tc::static_vector<T, N>, void>
+	{
+		template <typename Value>
+		static bool call(tc::static_vector<T, N>& c, Value&& val)
+		{
+			tc::cont_emplace_back(c, tc_move_if_owned(val));
+			return true;
+		}
+	};
+	template <typename T, tc::static_vector_size_t N>
+	struct append_container<tc::static_vector<T, N>, void>
+	{
+		template <typename Iterator>
+		static bool call(tc::static_vector<T, N>& c, Iterator first, Iterator last)
+		{
+			tc::append(c, tc::make_iterator_range(first, last));
+			return true;
+		}
+	};
 }}}}

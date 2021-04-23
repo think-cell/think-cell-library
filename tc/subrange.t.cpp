@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -55,6 +55,8 @@ namespace {
 	[[maybe_unused]] void ref_test(SRVI & rng) noexcept {
 		CSRVI const_rng(rng);
 		SRVI non_const_rng(rng);
+		UNUSED_TEST_VARIABLE(const_rng);
+		UNUSED_TEST_VARIABLE(non_const_rng);
 	}
 
 	UNITTESTDEF( const_subrange ) {
@@ -66,8 +68,9 @@ namespace {
 		(void) csrvi;
 
 		SRVI non_const_rng(srvi);
-
+		UNUSED_TEST_VARIABLE(non_const_rng);
 		CSRVI const_rng(srvi);
+		UNUSED_TEST_VARIABLE(const_rng);
 	}
 
 	UNITTESTDEF( sub_subrange_rvalue ) {
@@ -136,18 +139,18 @@ namespace {
 
 	UNITTESTDEF(union_range_tests) {
 		TEST_RANGE_EQUAL(
-			MAKE_CONSTEXPR_ARRAY(1,2,3,4),
+			as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,4)),
 			tc::union_range(
-				MAKE_CONSTEXPR_ARRAY(1,4),
-				MAKE_CONSTEXPR_ARRAY(2,3)
+				as_constexpr(tc::make_array(tc::aggregate_tag, 1,4)),
+				as_constexpr(tc::make_array(tc::aggregate_tag, 2,3))
 			)
 		);
 
 		TEST_RANGE_EQUAL(
-			MAKE_CONSTEXPR_ARRAY(4,3,2,1,0),
+			as_constexpr(tc::make_array(tc::aggregate_tag, 4,3,2,1,0)),
 			tc::union_range(
-				MAKE_CONSTEXPR_ARRAY(4,2,0),
-				MAKE_CONSTEXPR_ARRAY(3,2,1),
+				as_constexpr(tc::make_array(tc::aggregate_tag, 4,2,0)),
+				as_constexpr(tc::make_array(tc::aggregate_tag, 3,2,1)),
 				[](int lhs, int rhs) noexcept {return tc::compare(rhs,lhs);}
 			)
 		);
@@ -155,8 +158,8 @@ namespace {
 		_ASSERTEQUAL(
 			*tc::upper_bound<tc::return_border>(
 				tc::union_range(
-					MAKE_CONSTEXPR_ARRAY(1,2,4),
-					MAKE_CONSTEXPR_ARRAY(2,3)
+					as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,4)),
+					as_constexpr(tc::make_array(tc::aggregate_tag, 2,3))
 				),
 				2
 			),
@@ -165,20 +168,20 @@ namespace {
 
 		{
 			auto rng = tc::union_range(
-				MAKE_CONSTEXPR_ARRAY(1,2,3,3,4,4,5),
-				MAKE_CONSTEXPR_ARRAY(1,1,1,3,4,4,4)
+				as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,3,4,4,5)),
+				as_constexpr(tc::make_array(tc::aggregate_tag, 1,1,1,3,4,4,4))
 			);
 
 			TEST_RANGE_EQUAL(
 				rng,
-				MAKE_CONSTEXPR_ARRAY(1,1,1,2,3,3,4,4,4,5)
+				as_constexpr(tc::make_array(tc::aggregate_tag, 1,1,1,2,3,3,4,4,4,5))
 			);
 
 			{
 				auto it = tc::lower_bound<tc::return_border>(rng,3);
 				_ASSERTEQUAL(*it,3);
 				_ASSERTEQUAL(*boost::prior(it), 2);
-				_ASSERTEQUAL(*tc::next(it), 3);
+				_ASSERTEQUAL(*modified(it, ++_), 3);
 	}
 			{
 				auto it = tc::upper_bound<tc::return_border>(rng,1);
@@ -190,8 +193,8 @@ namespace {
 		}
 		{
 			auto rng = tc::union_range(
-				MAKE_CONSTEXPR_ARRAY(1,1,1,1,1,1,1,1,1),
-				MAKE_CONSTEXPR_ARRAY(1,1)
+				as_constexpr(tc::make_array(tc::aggregate_tag, 1,1,1,1,1,1,1,1,1)),
+				as_constexpr(tc::make_array(tc::aggregate_tag, 1,1))
 			);
 			auto it = tc::lower_bound<tc::return_border>(rng,1);
 			_ASSERTEQUAL(*it,1);
@@ -232,10 +235,10 @@ namespace {
 
 	UNITTESTDEF(union_range_generator) {
 		TEST_RANGE_EQUAL(
-			MAKE_CONSTEXPR_ARRAY(1,2,3,5,6),
+			as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,5,6)),
 			tc::union_range(
 				GenRange(),
-				MAKE_CONSTEXPR_ARRAY(2,6)
+				as_constexpr(tc::make_array(tc::aggregate_tag, 2,6))
 			)
 		);
 
@@ -250,7 +253,7 @@ namespace {
 		);
 
 		TEST_RANGE_EQUAL(
-			MAKE_CONSTEXPR_ARRAY(1.1,3.1,5.1),
+			as_constexpr(tc::make_array(tc::aggregate_tag, 1.1,3.1,5.1)),
 			rngMut
 		);
 
@@ -265,16 +268,16 @@ namespace {
 
 		TEST_RANGE_EQUAL(
 			tc::slice(rgntrnsfn, tc::begin(rgntrnsfn), tc::end(rgntrnsfn)),
-			MAKE_CONSTEXPR_ARRAY(1,4,9)
+			as_constexpr(tc::make_array(tc::aggregate_tag, 1,4,9))
 		);
 
 		TEST_RANGE_EQUAL(
-			MAKE_CONSTEXPR_ARRAY( 1, 2, 3 ),
+			as_constexpr(tc::make_array(tc::aggregate_tag,  1, 2, 3 )),
 			tc::untransform(tc::slice(rgntrnsfn, tc::begin(rgntrnsfn), tc::end(rgntrnsfn)))
 		);
 
 		TEST_RANGE_EQUAL(
-			MAKE_CONSTEXPR_ARRAY( 2 ),
+			tc::single(2),
 			tc::untransform(tc::equal_range(tc::transform(vecn, [](int n) noexcept {return n*n; }), 4))
 		);
 
@@ -282,7 +285,7 @@ namespace {
 			auto rng = tc::transform(tc::filter(vecn, [](int n) noexcept {return n<3;}), [](int n) noexcept {return n*n; });
 
 			TEST_RANGE_EQUAL(
-				MAKE_CONSTEXPR_ARRAY( 2 ),
+				tc::single(2),
 				tc::untransform(tc::equal_range(rng, 4))
 			);
 		}
@@ -293,9 +296,10 @@ namespace {
 			_ASSERTEQUAL(tc::size(vecn), 3);
 			_ASSERTEQUAL(std::addressof(*tc::begin(rng)), std::addressof(*tc::begin(vecn)));
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
-			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value);
+			// rewrite the following line to ::value once VC++ compiler bug is resolved https://developercommunity.visualstudio.com/content/problem/1088659/class-local-to-function-template-erroneously-cant.html
+			static_assert(!std::is_const_v<std::remove_reference_t<decltype(rng)>>);
 			TEST_RANGE_EQUAL(
-				MAKE_CONSTEXPR_ARRAY(1,2,3),
+				as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
 				rng
 			);
 		}
@@ -308,7 +312,7 @@ namespace {
 			static_assert(std::is_lvalue_reference<decltype((rng))>::value);
 			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
-				MAKE_CONSTEXPR_ARRAY(1,2,3),
+				as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
 				rng
 			);
 		}
@@ -318,7 +322,7 @@ namespace {
 			auto rng = tc::untransform(tc::transform(tc::vector<int>{1, 2, 3}, [](int n) noexcept {return n*n;}));
 			STATICASSERTSAME(decltype(rng),tc::vector<int>);
 			TEST_RANGE_EQUAL(
-				MAKE_CONSTEXPR_ARRAY(1,2,3),
+				as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
 				rng
 			);
 		}
@@ -331,9 +335,10 @@ namespace {
 			_ASSERTEQUAL(tc::size(vecn), 3);
 			_ASSERTEQUAL(std::addressof(*tc::begin(rng)), std::addressof(*tc::begin(vecn)));
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
-			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value);
+			// rewrite the following line to ::value once VC++ compiler bug is resolved https://developercommunity.visualstudio.com/content/problem/1088659/class-local-to-function-template-erroneously-cant.html
+			static_assert(!std::is_const_v<std::remove_reference_t<decltype(rng)>>);
 			TEST_RANGE_EQUAL(
-				MAKE_CONSTEXPR_ARRAY(1,2,3),
+				as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
 				rng
 			);
 		}
@@ -348,7 +353,7 @@ namespace {
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
 			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
-				MAKE_CONSTEXPR_ARRAY(1,2,3),
+				as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
 				rng
 			);
 		}
@@ -363,7 +368,7 @@ namespace {
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
 			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
-				MAKE_CONSTEXPR_ARRAY(1,2,3),
+				as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
 				rng
 			);
 		}
@@ -377,9 +382,10 @@ namespace {
 				std::addressof(*tc::begin(rng))
 			);
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
-			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value);
+			// rewrite the following line to ::value once VC++ compiler bug is resolved https://developercommunity.visualstudio.com/content/problem/1088659/class-local-to-function-template-erroneously-cant.html
+			static_assert(!std::is_const_v<std::remove_reference_t<decltype(rng)>>);
 			TEST_RANGE_EQUAL(
-				MAKE_CONSTEXPR_ARRAY(1,2,3),
+				as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
 				rng
 			);
 		}
@@ -394,7 +400,7 @@ namespace {
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
 			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
-				MAKE_CONSTEXPR_ARRAY(1,2,3),
+				as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
 				rng
 			);
 		}
@@ -493,23 +499,23 @@ namespace {
 	UNITTESTDEF(difference_range) {
 		TEST_RANGE_EQUAL(
 			tc::difference(
-				MAKE_CONSTEXPR_ARRAY(1,2,2,4,7,8,8,11,11),
-				MAKE_CONSTEXPR_ARRAY(2,3,4,8,8)
+				as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,2,4,7,8,8,11,11)),
+				as_constexpr(tc::make_array(tc::aggregate_tag, 2,3,4,8,8))
 			),
-			MAKE_CONSTEXPR_ARRAY(1,2,7,11,11)
+			as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,7,11,11))
 		);
 	}
 
 	UNITTESTDEF(difference_unordered_set) {
 		tc::unordered_set<int> setn1;
-		tc::cont_assign(setn1, MAKE_CONSTEXPR_ARRAY(1,2,3,4,5,6,7,8,9,10,11));
+		tc::cont_assign(setn1, as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,4,5,6,7,8,9,10,11)));
 
 		tc::unordered_set<int> setn2;
-		tc::cont_assign(setn2, MAKE_CONSTEXPR_ARRAY(10,9,8,7,6,5,4,3,2,1));
+		tc::cont_assign(setn2, as_constexpr(tc::make_array(tc::aggregate_tag, 10,9,8,7,6,5,4,3,2,1)));
 
 		TEST_RANGE_EQUAL(
 			tc::set_difference(setn1, setn2),
-			MAKE_CONSTEXPR_ARRAY(11)
+			tc::single(11)
 		);
 
 		tc::vector<int> vecn;
@@ -519,14 +525,14 @@ namespace {
 
 		TEST_RANGE_EQUAL(
 			tc::sort(vecn),
-			MAKE_CONSTEXPR_ARRAY(1,2,3,4,5,6,7,8,9,10)
+			as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,4,5,6,7,8,9,10))
 		);
 	}
 
 	UNITTESTDEF(tc_unique) {
 		TEST_RANGE_EQUAL(
-			tc::adjacent_unique(MAKE_CONSTEXPR_ARRAY(1,2,2,4,7,8,8,11,11)),
-			MAKE_CONSTEXPR_ARRAY(1,2,4,7,8,11)
+			tc::adjacent_unique(as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,2,4,7,8,8,11,11))),
+			as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,4,7,8,11))
 		);
 
 		tc::vector<int> vecn{1,1,2,2};
@@ -586,21 +592,21 @@ namespace {
 
 		TEST_RANGE_EQUAL(
 			vecmn,
-			MAKE_CONSTEXPR_ARRAY(1,2,3,4)
+			as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,4))
 		);
 	}
 
 #ifdef TC_PRIVATE
 	UNITTESTDEF(hash_string_range) {
-		std::string strNarrow = "test";
-		_ASSERTEQUAL((tc::hash_range<std::size_t, char>(strNarrow)), (tc::hash_range<std::size_t, char>(tc::as_pointers(strNarrow))));
-		_ASSERTEQUAL((tc::hash_range<std::size_t, char>(strNarrow)), (tc::hash_range<std::size_t, char>("test")));
+		std::basic_string<char> strNarrow = "test";
+		_ASSERTEQUAL((tc::hash_range<SHash::hash64_t, char>(strNarrow)), (tc::hash_range<SHash::hash64_t, char>(tc::as_pointers(strNarrow))));
+		_ASSERTEQUAL((tc::hash_range<SHash::hash64_t, char>(strNarrow)), (tc::hash_range<SHash::hash64_t, char>("test")));
 		std::basic_string<tc::char16> strWide = UTF16("test");
-		_ASSERTEQUAL((tc::hash_range<std::size_t, tc::char16>(strWide)), (tc::hash_range<std::size_t, tc::char16>(tc::as_pointers(strWide))));
-		_ASSERTEQUAL((tc::hash_range<std::size_t, tc::char16>(strWide)), (tc::hash_range<std::size_t, tc::char16>(UTF16("test"))));
-		_ASSERTEQUAL((tc::hash_range<std::size_t, tc::char16>(tc::make_vector(strWide))), (tc::hash_range<std::size_t, tc::char16>(tc::as_pointers(strWide))));
-		_ASSERTEQUAL((tc::hash_range<std::size_t, char>(strNarrow)), (tc::hash<std::size_t, std::string>(strNarrow)));
-		_ASSERTEQUAL((tc::hash_range<std::size_t, tc::char16>(strWide)), (tc::hash<std::size_t, std::basic_string<tc::char16>>(strWide)));
+		_ASSERTEQUAL((tc::hash_range<SHash::hash64_t, tc::char16>(strWide)), (tc::hash_range<SHash::hash64_t, tc::char16>(tc::as_pointers(strWide))));
+		_ASSERTEQUAL((tc::hash_range<SHash::hash64_t, tc::char16>(strWide)), (tc::hash_range<SHash::hash64_t, tc::char16>(UTF16("test"))));
+		_ASSERTEQUAL((tc::hash_range<SHash::hash64_t, tc::char16>(tc::make_vector(strWide))), (tc::hash_range<SHash::hash64_t, tc::char16>(tc::as_pointers(strWide))));
+		_ASSERTEQUAL((tc::hash_range<SHash::hash64_t, char>(strNarrow)), (tc::hash<SHash::hash64_t, std::basic_string<char>>(strNarrow)));
+		_ASSERTEQUAL((tc::hash_range<SHash::hash64_t, tc::char16>(strWide)), (tc::hash<SHash::hash64_t, std::basic_string<tc::char16>>(strWide)));
 	}
 #endif
 
@@ -609,9 +615,9 @@ namespace {
 			for(int i=0;;++i) { RETURN_IF_BREAK(tc::continue_if_not_break(sink, i)); }
 		};
 
-		_ASSERTEQUAL(tc::for_each(tc::take_first(rngn), [](int) noexcept {}), tc::continue_);
-		_ASSERTEQUAL(tc::for_each(tc::take_first(rngn), [](int) noexcept { return tc::break_; }), tc::break_);
-		_ASSERT(tc::equal(MAKE_CONSTEXPR_ARRAY(0,1,2,3), tc::take_first(rngn, 4)));
+		_ASSERTEQUAL(tc::for_each(tc::begin_next<tc::return_take>(rngn), [](int) noexcept {}), tc::continue_);
+		_ASSERTEQUAL(tc::for_each(tc::begin_next<tc::return_take>(rngn), [](int) noexcept { return tc::break_; }), tc::break_);
+		_ASSERT(tc::equal(as_constexpr(tc::make_array(tc::aggregate_tag, 0,1,2,3)), tc::begin_next<tc::return_take>(rngn, 4)));
 
 		auto rngch = tc::concat("123", [](auto&& sink) noexcept { return tc::for_each("456", std::forward<decltype(sink)>(sink)); });
 
@@ -619,8 +625,8 @@ namespace {
 			auto operator()(char) const& noexcept { _ASSERTFALSE; return tc::construct_default_or_terminate<tc::break_or_continue>(); }
 			auto chunk(tc::ptr_range<char const> str) const& noexcept { return INTEGRAL_CONSTANT(tc::continue_)(); }
 		};
-		_ASSERTEQUAL(tc::for_each(tc::take_first(rngch, 4), assert_no_single_char_sink()), tc::continue_);
-		_ASSERT(tc::equal("1234", tc::take_first(rngch, 4)));
+		_ASSERTEQUAL(tc::for_each(tc::begin_next<tc::return_take>(rngch, 4), assert_no_single_char_sink()), tc::continue_);
+		_ASSERT(tc::equal("1234", tc::begin_next<tc::return_take>(rngch, 4)));
 	}
 
 	UNITTESTDEF( drop_first_sink ) {
@@ -629,11 +635,11 @@ namespace {
 			return tc::continue_;
 		};
 
-		_ASSERTEQUAL(tc::for_each(tc::drop_first(rngn), [](int) noexcept {}), tc::continue_);
-		_ASSERTEQUAL(tc::for_each(tc::drop_first(rngn), [](int) noexcept { return tc::break_; }), tc::break_);
-		_ASSERT(tc::equal(MAKE_CONSTEXPR_ARRAY(4,5,6), tc::drop_first(rngn, 4)));
+		_ASSERTEQUAL(tc::for_each(tc::begin_next<tc::return_drop>(rngn), [](int) noexcept {}), tc::continue_);
+		_ASSERTEQUAL(tc::for_each(tc::begin_next<tc::return_drop>(rngn), [](int) noexcept { return tc::break_; }), tc::break_);
+		_ASSERT(tc::equal(as_constexpr(tc::make_array(tc::aggregate_tag, 4,5,6)), tc::begin_next<tc::return_drop>(rngn, 4)));
 
-		auto rngch = tc::drop_first(tc::concat("123", [](auto&& sink) noexcept { return tc::for_each("456", std::forward<decltype(sink)>(sink)); }), 2);
+		auto rngch = tc::begin_next<tc::return_drop>(tc::concat("123", [](auto&& sink) noexcept { return tc::for_each("456", std::forward<decltype(sink)>(sink)); }), 2);
 
 		struct assert_no_single_char_sink /*final*/ {
 			auto operator()(char) const& noexcept { _ASSERTFALSE; return tc::construct_default_or_terminate<tc::break_or_continue>(); }
@@ -642,5 +648,55 @@ namespace {
 		_ASSERTEQUAL(tc::for_each(rngch, assert_no_single_char_sink()), tc::continue_);
 		_ASSERT(tc::equal("3456", rngch));
 	}
+
+	UNITTESTDEF( front ) {
+		_ASSERTEQUAL(tc::front<tc::return_value>(tc::single(1)), 1);
+		_ASSERTEQUAL(*tc::front<tc::return_element>(tc::single(1)), 1);
+		_ASSERTEQUAL(tc::front<tc::return_value_or_none>(tc::make_empty_range<int>()), std::nullopt);
+	}
+
+	UNITTESTDEF( ptr_range_from_subrange ) {
+		std::basic_string<char> str("1234");
+		_ASSERTEQUAL( tc::begin(tc::as_pointers(tc::begin_next<tc::return_drop>(str, 2))), tc::begin(tc::begin_next<tc::return_drop>(tc::as_pointers(str), 2)) );
+		_ASSERTEQUAL( tc::end(tc::as_pointers(tc::begin_next<tc::return_take>(str, 2))), tc::end(tc::begin_next<tc::return_take>(tc::as_pointers(str), 2)) );
+	}
+#ifndef __clang__
+	namespace {
+		struct STestPtrs {
+			constexpr STestPtrs(char const* itBegin,char const* itEnd): m_itBegin(itBegin),m_itEnd(itEnd) {}
+
+			char const* m_itBegin;
+			char const* m_itEnd;
+		};
+	}
+
+	UNITTESTDEF( constexpr_ptr_to_string_literal_runtime_bug ) {
+		// https://developercommunity.visualstudio.com/content/problem/900648/codegen-constexpr-pointer-to-trailing-zero-on-stri.html
+		// Visual Studio 2017/2019 will fire at run time if we disable string pooling by setting /GF-.
+		constexpr char const* str = "abcde";
+		constexpr STestPtrs ptrs(tc::begin(str), tc::end(str));
+		static_assert(tc::begin(str)==ptrs.m_itBegin);
+		static_assert(tc::end(str)==ptrs.m_itEnd);
+		_ASSERTEQUAL(tc::begin(str), ptrs.m_itBegin); // run time compare
+		_ASSERTEQUAL(tc::end(str), ptrs.m_itEnd);  // run time compare
+	}
+#endif
 }
 
+STATICASSERTEQUAL( sizeof(tc::ptr_range<int>), 2 * sizeof(int*) );
+static_assert( std::is_nothrow_default_constructible<tc::ptr_range<int>>::value );
+static_assert( std::is_trivially_destructible<tc::ptr_range<int>>::value );
+static_assert( std::is_trivially_copy_constructible<tc::ptr_range<int>>::value );
+static_assert( std::is_trivially_move_constructible<tc::ptr_range<int>>::value );
+static_assert( std::is_trivially_copy_assignable<tc::ptr_range<int>>::value );
+static_assert( std::is_trivially_move_assignable<tc::ptr_range<int>>::value );
+static_assert( std::is_trivially_copyable<tc::ptr_range<int>>::value );
+
+namespace {
+	UNITTESTDEF( subrange_index_translation ) {
+		TEST_RANGE_EQUAL("est", []() noexcept {
+			std::basic_string<char> str = "Test";
+			return tc::begin_next<tc::return_drop>(tc_move(str));
+		}());
+	}
+}

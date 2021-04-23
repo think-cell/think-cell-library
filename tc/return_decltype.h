@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -45,6 +45,11 @@ namespace tc {
 	return (__VA_ARGS__); \
 }
 
+#define code_return_decltype_xvalue_by_ref(code, ...) -> decltype((__VA_ARGS__)) { \
+	code \
+	return (__VA_ARGS__); \
+}
+
 #define return_by_val(...) -> tc::decay_t<decltype((__VA_ARGS__))> { \
 	return (__VA_ARGS__); \
 }
@@ -73,12 +78,13 @@ namespace tc {
 	static_assert(noexcept((__VA_ARGS__)), "expression is not noexcept"); \
 	return (__VA_ARGS__); \
 }
+
 // We cannot have return_decltype_xvalue_by_val_NOEXCEPT since xvalues cannot be passed through NOEXCEPT.
 
 	// helper function to decay rvalues when decltype cannot be used because of lambdas in the expression
 	// note that contrary to return_decltype_xvalue_by_val, this helper function also decays prvalues
 	template<typename T>
-	xvalue_decay_t<T&&> lvalue_or_decay(T&& t) noexcept {
+	constexpr xvalue_decay_t<T&&> lvalue_or_decay(T&& t) noexcept {
 		return std::forward<T>(t);
 	}
 }
@@ -97,25 +103,3 @@ namespace tc {
 	code \
 	return T __VA_ARGS__ ; \
 }
-
-#include "range_defines.h"
-namespace decltype_return_test {
-	struct A {
-		int a;
-		void access_a() & noexcept {
-			STATICASSERTSAME(decltype(a), int);
-			STATICASSERTSAME(decltype((a)), int&);
-		}
-		int& b;
-		void access_b() & noexcept {
-			STATICASSERTSAME(decltype(b), int&);
-			STATICASSERTSAME(decltype((b)), int&);
-		}
-		int&& c;
-		void access_c() & noexcept {
-			STATICASSERTSAME(decltype(c), int&&);
-			STATICASSERTSAME(decltype((c)), int&);
-		}
-	};
-}
-

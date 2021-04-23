@@ -1,19 +1,24 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
+#include "assert_defs.h"
 #include "type_list.h"
 
-#include <boost/mpl/identity.hpp>
+#include <boost/logic/tribool.hpp>
+#include <string>
 #include <type_traits>
 #include <limits>
 #include <vector>
+#ifndef __EMSCRIPTEN__
+#include <atomic>
+#endif
 
 // Use as type of constructor arguments that are required for enabling / disabling constructor through SFINAE.
 // To be replaced by template parameter default when Visual C++ supports template parameter defaults for functions.
@@ -28,30 +33,31 @@ namespace tc {
 
 	//////////////////////////
 	// decay
-	template<typename T>
-	struct decay {
-		using type = std::decay_t<T>; // must still do function-to-pointer
-	};
+	namespace no_adl {
+		template<typename T, bool bPreventSlicing = true>
+		struct decay {
+			using type = std::decay_t<T>; // must still do function-to-pointer
+		};
 
-	// forbid decaying of C arrays, they decay to pointers, very unlike std/tc::array
-	template<typename T>
-	struct do_not_decay_arrays {
-	private:
-		char dummy; // make non-empty, empty structs are preferred in make_subrange_result
-	};
+		// forbid decaying of C arrays, they decay to pointers, very unlike std/tc::array
+		template<typename T>
+		struct do_not_decay_arrays {
+		private:
+			char dummy; // make non-empty, empty structs are preferred in make_subrange_result
+		};
 
 #pragma push_macro("DECAY_ARRAY_IMPL")
 #define DECAY_ARRAY_IMPL(cv) \
-	template<typename T> \
-	struct decay<T cv[]> { \
-		using type=do_not_decay_arrays<T cv[]>; \
-	}; \
-	template<typename T,std::size_t N> \
-	struct decay<T cv[N]> { \
-		using type = do_not_decay_arrays<T cv[N]>; \
-	};
+		template<typename T, bool bPreventSlicing> \
+		struct decay<T cv[], bPreventSlicing> { \
+			using type=do_not_decay_arrays<T cv[]>; \
+		}; \
+		template<typename T,std::size_t N, bool bPreventSlicing> \
+		struct decay<T cv[N], bPreventSlicing> { \
+			using type = do_not_decay_arrays<T cv[N]>; \
+		};
 
-	DECAY_ARRAY_IMPL(BOOST_PP_EMPTY())
+		DECAY_ARRAY_IMPL(BOOST_PP_EMPTY())
 #if defined(__clang__) || 190023725<=_MSC_FULL_VER
 		DECAY_ARRAY_IMPL(const)
 		DECAY_ARRAY_IMPL(volatile)
@@ -59,33 +65,46 @@ namespace tc {
 #endif
 #pragma pop_macro("DECAY_ARRAY_IMPL")
 
-	template<typename T>
-	struct decay<T volatile> {
-		using type = typename tc::decay<T>::type; // recursive
-	};
+		template<typename T, bool bPreventSlicing>
+		struct decay<T volatile, bPreventSlicing> {
+			using type = typename decay<T, bPreventSlicing>::type; // recursive
+		};
 
-	template<typename T>
-	struct decay<T const> {
-		using type = typename tc::decay<T>::type; // recursive
-	};
+		template<typename T, bool bPreventSlicing>
+		struct decay<T const, bPreventSlicing> {
+			using type = typename decay<T, bPreventSlicing>::type; // recursive
+		};
 
-	template<typename T>
-	struct decay<T const volatile> {
-		using type = typename tc::decay<T>::type; // recursive
-	};
+		template<typename T, bool bPreventSlicing>
+		struct decay<T const volatile, bPreventSlicing> {
+			using type = typename decay<T, bPreventSlicing>::type; // recursive
+		};
 
-	template<typename T>
-	struct decay<T&> {
-		using type = typename tc::decay<T>::type; // recursive
-	};
+		template<typename T, bool bPreventSlicing, bool bIsNonLeafPolymorphic = std::is_polymorphic<T>::value && !std::is_final<T>::value>
+		struct decay_reference {
+			using type = typename decay<T, bPreventSlicing>::type; // recursive
+		};
 
-	template<typename T>
-	struct decay<T&&> {
-		using type = typename tc::decay<T>::type; // recursive
-	};
+		template<typename T>
+		struct decay_reference<T, /*bPreventSlicing*/true, /*bIsNonLeafPolymorphic*/true> {};
 
-	template<typename T>
-	using decay_t = typename decay<T>::type;
+		template<typename T, bool bPreventSlicing>
+		struct decay<T&, bPreventSlicing> : decay_reference<T, bPreventSlicing> {}; // recursive
+
+		template<typename T, bool bPreventSlicing>
+		struct decay<T&&, bPreventSlicing> : decay_reference<T, bPreventSlicing> {}; // recursive
+
+#ifndef __EMSCRIPTEN__
+		template<typename T, bool bPreventSlicing>
+		struct decay<std::atomic<T>, bPreventSlicing> {
+			using type = typename decay<T, bPreventSlicing>::type; // recursive
+		};
+#endif
+	}
+	using no_adl::decay;
+
+	template<typename T, bool bPreventSlicing = true>
+	using decay_t = typename decay<T, bPreventSlicing>::type;
 
 	//	auto a=b; uses std::decay
 	// <=>
@@ -138,8 +157,11 @@ namespace tc {
 	template< typename T >
 	using is_decayed=std::is_same< T, tc::decay_t<T> >;
 
+	template <typename T>
+	using is_integral=std::integral_constant< bool, std::is_integral<T>::value && !tc::is_bool<T>::value >;
+
 	template<typename T>
-	using is_actual_integer=std::integral_constant< bool, std::is_integral<T>::value && !tc::is_char<T>::value && !tc::is_bool<T>::value >;
+	using is_actual_integer=std::integral_constant< bool, tc::is_integral<T>::value && !tc::is_char<T>::value>;
 
 	template<typename T>
 	using is_actual_arithmetic=std::integral_constant<bool, tc::is_actual_integer<T>::value || std::is_floating_point<T>::value>;
@@ -152,13 +174,13 @@ namespace tc {
 	struct is_base_of_impl : std::integral_constant< bool,
 		std::is_same<Base,Derived>::value || std::is_base_of<Base, Derived>::value
 	> {};
-	
+
 	template<typename Base, typename Derived>
 	using is_base_of=tc::is_base_of_impl< std::remove_cv_t<Base>, std::remove_cv_t<Derived> >;
-	
+
 	template<typename Base, typename Derived>
 	struct is_base_of_decayed : std::integral_constant< bool,
-		tc::is_base_of< Base, tc::decay_t<Derived> >::value
+		tc::is_base_of< Base, tc::decay_t<Derived, /*bPreventSlicing*/false> >::value
 	> {
 		static_assert(tc::is_decayed<Base>::value);
 	};
@@ -241,9 +263,11 @@ namespace tc {
 			static_assert(std::is_arithmetic<TTarget>::value);
 		};
 
-#pragma warning(push)
-#pragma warning(disable: 4018) // signed/unsigned mismatch
-#pragma	warning(disable: 4804) // '<=': unsafe use of type 'bool' in operation
+MODIFY_WARNINGS_BEGIN(
+	((disable)(4018)) // signed/unsigned mismatch
+	((disable)(4388)) // signed/unsigned mismatch
+	((disable)(4804)) // '<=': unsafe use of type 'bool' in operation
+)
 
 		template<typename TSource, typename TTarget>
 		struct is_safely_convertible_between_arithmetic_values
@@ -260,7 +284,7 @@ namespace tc {
 						?	std::is_signed<TTarget>::value
 							&& std::numeric_limits<TSource>::max() <= std::numeric_limits<TTarget>::max()
 							&& std::numeric_limits<TTarget>::lowest() <= std::numeric_limits<TSource>::lowest()
-						:	// conversion to unsigned (Warning 4018) is ok here:
+						:	// conversion to unsigned (Warning 4018 and 4388) is ok here:
 							std::numeric_limits<TSource>::max() <= std::numeric_limits<TTarget>::max()
 					)
 				)
@@ -269,7 +293,7 @@ namespace tc {
 			static_assert(std::is_convertible<TSource, TTarget>::value);
 		};
 
-#pragma warning(pop)
+MODIFY_WARNINGS_END
 
 		template<typename TSource, typename TTarget>
 		struct is_safely_convertible_to_arithmetic_value<TSource, TTarget, std::enable_if_t<std::is_arithmetic<std::remove_reference_t<TSource>>::value>> final
@@ -358,6 +382,12 @@ namespace tc {
 	template<>
 	struct is_safely_convertible<void, void> : std::true_type {};
 
+	template<typename TSource>
+	struct is_safely_convertible<TSource, void> : std::false_type {};
+
+	template<typename TTarget>
+	struct is_safely_convertible<void, TTarget> : std::false_type {};
+
 	// TODO: similar to std::is_convertible, implicit_uniform_construction_from should check if the function
 	//		T F() { return { Arg1, Arg2, Arg3.... }; }
 	// would compile. Currently, we only check the weaker expression
@@ -390,7 +420,7 @@ namespace tc {
 	struct is_implicitly_constructible<TTarget,Arg0> final : tc::is_safely_convertible<Arg0,TTarget> {};
 
 	template<typename TTarget, typename... Args>
-	struct is_safely_constructible final :
+	struct is_safely_constructible :
 		std::integral_constant<
 			bool,
 			// Require std::is_class<TTarget>:
@@ -405,7 +435,7 @@ namespace tc {
 	};
 
 	template<typename TTarget, typename TSource>
-	struct is_safely_constructible<TTarget, TSource> final :
+	struct is_safely_constructible<TTarget, TSource> :
 		std::integral_constant<
 			bool,
 			std::is_reference<TTarget>::value
@@ -419,7 +449,7 @@ namespace tc {
 	{};
 
 	template<typename TTarget, typename TSource>
-	struct is_safely_assignable final
+	struct is_safely_assignable
 		: std::integral_constant<
 			bool,
 			std::is_assignable<TTarget, TSource>::value
@@ -496,12 +526,22 @@ namespace tc {
 #endif
 		};
 
+		template<>
+		struct common_type_decayed<bool, tc::decay_t<decltype(boost::indeterminate)>> {
+			using type = boost::tribool;
+		};
+
+		template<>
+		struct common_type_decayed<tc::decay_t<decltype(boost::indeterminate)>, bool> {
+			using type = boost::tribool;
+		};
+
 		template<typename T0, typename T1, typename... Args>
 		struct common_type_decayed<T0, T1, Args...>
 			: tc::type::accumulate_with_front<tc::type::list<T0, T1, Args...>, tc::common_type_decayed_t> {};
 	} // namespace no_adl
 
-	template<bool bCondition, template<typename> class template_, typename T>
+	template<bool bCondition, template<typename> typename template_, typename T>
 	using apply_if_t = std::conditional_t<
 		bCondition,
 		typename template_<T>::type,
@@ -573,8 +613,11 @@ namespace tc {
 
 		template<typename... Args>
 		struct common_reference_xvalue_as_ref_common_type<tc::type::list<Args...>, std::enable_if_t<
-			tc::type::all_of<tc::type::list<Args...>, std::is_reference>::value
-		>>: tc::common_type_decayed<tc::decay_t<Args>...> {};
+			tc::type::all_of<tc::type::list<Args...>, std::is_reference>::value,
+			tc::void_t</*tc::common_type_t<Args...>*/typename tc::common_type_decayed<tc::decay_t<Args>...>::type>
+		>> {
+			using type = /*tc::common_type_t<Args...>*/typename tc::common_type_decayed<tc::decay_t<Args>...>::type;
+		};
 
 		template<typename T0, typename T1>
 		using guaranteed_common_reference_t = typename guaranteed_common_reference<T0, T1>::type;
@@ -616,17 +659,13 @@ namespace tc {
 	using no_adl::has_common_reference_xvalue_as_ref;
 
 	namespace no_adl {
-		template<typename TTarget>
-		struct curried_is_safely_convertible /*final*/ {
-			template<typename TSource>
-			using type = tc::is_safely_convertible<TSource, TTarget>;
-		};
-
-		template<typename TypeList>
-		struct common_reference_prvalue_as_val_base;
+		template<typename TypeList, typename = void>
+		struct common_reference_prvalue_as_val_base {};
 
 		template<typename... Args>
-		struct common_reference_prvalue_as_val_base<tc::type::list<Args...>>: tc::common_type_decayed<tc::decay_t<Args>...> {};
+		struct common_reference_prvalue_as_val_base<tc::type::list<Args...>, tc::void_t</*tc::common_type_t<Args...>*/typename tc::common_type_decayed<tc::decay_t<Args>...>::type>> {
+			using type = /*tc::common_type_t<Args...>*/typename tc::common_type_decayed<tc::decay_t<Args>...>::type;
+		};
 
 		template<typename TypeList, typename Enable=void>
 		struct common_reference_prvalue_as_val final: common_reference_prvalue_as_val_base<TypeList> {};
@@ -635,7 +674,7 @@ namespace tc {
 		struct common_reference_prvalue_as_val<tc::type::list<Args...>, std::enable_if_t<
 			tc::type::all_of<
 				tc::type::list<Args...>,
-				curried_is_safely_convertible<tc::common_reference_xvalue_as_ref_t<Args&&...>>::template type
+				tc::type::rcurry<tc::is_safely_convertible, /*TTarget*/tc::common_reference_xvalue_as_ref_t<Args&&...>>::template type
 			>::value
 		>> final {
 			using type = tc::common_reference_xvalue_as_ref_t<Args&&...>;
@@ -668,28 +707,33 @@ namespace tc {
 		struct has_operator_arrow final : std::false_type {};
 		template <typename T>
 		struct has_operator_arrow<T, tc::void_t<decltype(std::declval<T>().operator->())>> final : std::true_type {};
+		template <typename T>
+		struct has_operator_arrow<T, std::enable_if_t<
+			std::is_pointer<std::decay_t<T>>::value &&
+			// Pseudo destructor access is legal for scalars types.
+			(
+				std::is_class<std::remove_pointer_t<std::decay_t<T>>>::value ||
+				std::is_union<std::remove_pointer_t<std::decay_t<T>>>::value ||
+				std::is_scalar<std::remove_pointer_t<std::decay_t<T>>>::value
+			)
+		>> final : std::true_type {};
 	}
 	using no_adl::has_operator_arrow;
 
 	template< typename Func >
-	struct delayed_returns_reference_to_argument {
-		using type=decltype(returns_reference_to_argument(std::declval<Func>())); // invoke ADL
-	};
+	struct delayed_returns_reference_to_argument : decltype(returns_reference_to_argument(std::declval<Func>())) {}; // invoke ADL
 
 	namespace no_adl {
 		template<typename Func, typename TargetExpr, typename... SourceExpr>
-		struct transform_return final {
-			static constexpr bool bDecay=std::conditional_t<
-				!std::conjunction<std::is_reference<SourceExpr>...>::value && std::is_rvalue_reference<TargetExpr>::value
-				, delayed_returns_reference_to_argument<Func>
-				, std::false_type
-			>::type::value;
-			using type=std::conditional_t<
-				bDecay
-				, tc::decay_t<TargetExpr>
-				, TargetExpr
-			>;
-		};
+		struct transform_return final : std::conditional_t<
+			std::conjunction<
+				std::is_rvalue_reference<TargetExpr>,
+				std::negation<std::conjunction<std::is_reference<SourceExpr>...>>,
+				delayed_returns_reference_to_argument<Func>
+			>::value
+			, tc::decay<TargetExpr>
+			, tc::type::identity<TargetExpr>
+		> {};
 	}
 
 	template<typename... Args>
@@ -711,91 +755,105 @@ namespace tc {
 
 		template<typename T, typename DummyT>
 		using sfinae_dependent_type_t = typename sfinae_dependent_type<T, DummyT>::type;
-
-		template<auto val, typename DummyT, typename Enable=void>
-		struct sfinae_dependent_value;
-
-		template<auto val, typename DummyT>
-		struct sfinae_dependent_value<val, DummyT, std::enable_if_t<std::is_same<DummyT, sfinae_dependency_dummy>::value>> final {
-			static constexpr auto value = val;
-		};
 	}
 
 #define ENABLE_SFINAE \
 	typename EnableSfinaeDependencyT = tc::no_adl::sfinae_dependency_dummy
 
-#define SFINAE_TYPE(T) \
-	tc::no_adl::sfinae_dependent_type_t<T, EnableSfinaeDependencyT>
+#define SFINAE_TYPE(...) \
+	tc::no_adl::sfinae_dependent_type_t<__VA_ARGS__, EnableSfinaeDependencyT>
 
-#define SFINAE_VALUE(val) \
-	tc::no_adl::sfinae_dependent_value<val, EnableSfinaeDependencyT>::value
+#if defined(_MSC_VER) && _MSC_VER <= 1922
+// decltype(void(), std::decval<T>()) is T instead of T&& in MSVC until 19.22. Fixed in 19.23.
+#define SFINAE_VALUE(...) \
+	static_cast<decltype((__VA_ARGS__))>(SFINAE_TYPE(void)(), __VA_ARGS__)
+#else
+#define SFINAE_VALUE(...) \
+	(SFINAE_TYPE(void)(), __VA_ARGS__)
+#endif
 
 	/////////////////////////////////////////////
 	// is_instance
 
 	namespace no_adl {
-		template<template<typename...> class X, typename T> struct is_instance : public std::false_type {};
-		template<template<typename...> class X, typename T> struct is_instance<X, T const> : public is_instance<X, T> {};
-		template<template<typename...> class X, typename T> struct is_instance<X, T volatile> : public is_instance<X, T> {};
-		template<template<typename...> class X, typename T> struct is_instance<X, T const volatile> : public is_instance<X, T> {};
-		template<template<typename...> class X, typename... Y> struct is_instance<X, X<Y...>> : public std::true_type {
+		template<template<typename...> typename X, typename T> struct is_instance : public std::false_type {};
+		template<template<typename...> typename X, typename T> struct is_instance<X, T const> : public is_instance<X, T> {};
+		template<template<typename...> typename X, typename T> struct is_instance<X, T volatile> : public is_instance<X, T> {};
+		template<template<typename...> typename X, typename T> struct is_instance<X, T const volatile> : public is_instance<X, T> {};
+		template<template<typename...> typename X, typename... Y> struct is_instance<X, X<Y...>> : public std::true_type {
 			using arguments = tc::type::list<Y...>;
 		};
+		
+		template<template<typename, bool> typename X, typename T> struct is_instance1 : public std::false_type {};
+		template<template<typename, bool> typename X, typename T> struct is_instance1<X, T const> : public is_instance1<X, T> {};
+		template<template<typename, bool> typename X, typename T> struct is_instance1<X, T volatile> : public is_instance1<X, T> {};
+		template<template<typename, bool> typename X, typename T> struct is_instance1<X, T const volatile> : public is_instance1<X, T> {};
+		template<template<typename, bool> typename X, typename Y, bool b> struct is_instance1<X, X<Y,b>> : public std::true_type {
+			using first_argument = Y;
+			static constexpr auto second_argument = b;
+		};
 
-		template<template<typename, typename, bool> class X, typename T> struct is_instance2 : public std::false_type {};
-		template<template<typename, typename, bool> class X, typename T> struct is_instance2<X, T const> : public is_instance2<X, T> {};
-		template<template<typename, typename, bool> class X, typename T> struct is_instance2<X, T volatile> : public is_instance2<X, T> {};
-		template<template<typename, typename, bool> class X, typename T> struct is_instance2<X, T const volatile> : public is_instance2<X, T> {};
-		template<template<typename, typename, bool> class X, typename Y1, typename Y2, bool b> struct is_instance2<X, X<Y1,Y2,b>> : public std::true_type {
+		template<template<typename, typename, bool> typename X, typename T> struct is_instance2 : public std::false_type {};
+		template<template<typename, typename, bool> typename X, typename T> struct is_instance2<X, T const> : public is_instance2<X, T> {};
+		template<template<typename, typename, bool> typename X, typename T> struct is_instance2<X, T volatile> : public is_instance2<X, T> {};
+		template<template<typename, typename, bool> typename X, typename T> struct is_instance2<X, T const volatile> : public is_instance2<X, T> {};
+		template<template<typename, typename, bool> typename X, typename Y1, typename Y2, bool b> struct is_instance2<X, X<Y1,Y2,b>> : public std::true_type {
 			using first_argument = Y1;
 			using second_argument = Y2;
 			static constexpr auto third_argument = b;
 		};
 
-		template<template<typename, bool> class X, typename T> struct is_instance3 : public std::false_type {};
-		template<template<typename, bool> class X, typename T> struct is_instance3<X, T const> : public is_instance3<X, T> {};
-		template<template<typename, bool> class X, typename T> struct is_instance3<X, T volatile> : public is_instance3<X, T> {};
-		template<template<typename, bool> class X, typename T> struct is_instance3<X, T const volatile> : public is_instance3<X, T> {};
-		template<template<typename, bool> class X, typename Y, bool b> struct is_instance3<X, X<Y, b>> : public std::true_type {
-			using first_argument = Y;
-			static constexpr auto second_argument = b;
+		template<template<bool, typename...> typename X, typename T> struct is_instance_b : std::false_type {};
+		template<template<bool, typename...> typename X, bool b, typename... Y> struct is_instance_b<X, X<b, Y...>> : std::true_type {
+			static constexpr auto first_argument = b;
+			using arguments = tc::type::list<Y...>;
 		};
 	}
 	using no_adl::is_instance;
+	using no_adl::is_instance1;
 	using no_adl::is_instance2;
-	using no_adl::is_instance3;
+	template<template<bool, typename...> typename X, typename T>
+	using is_instance_b = no_adl::is_instance_b<X, std::remove_cv_t<T>>;
 
-	namespace is_instance_or_derived_detail {
-		namespace no_adl {
-			template<template<typename...> class Template, typename... Args>
-			struct is_instance_or_derived_found : std::true_type {
-				using base_instance = Template<Args...>;
-				using arguments = tc::type::list<Args...>;
-			};
+	namespace no_adl {
+		template<template<typename...> typename Template, typename... Args>
+		struct is_instance_or_derived_found : std::true_type {
+			using base_instance = Template<Args...>;
+			using arguments = tc::type::list<Args...>;
+		};
 
-			template<template<typename...> class Template>
-			struct CDetector {
-				template<typename... Args>
-				static is_instance_or_derived_found<Template, Args...> detector(Template<Args...>*);
+		template<template<typename...> typename Template>
+		struct is_instance_or_derived_detector final {
+			template<typename... Args>
+			static is_instance_or_derived_found<Template, Args...> detector(Template<Args...>*);
 
-				static std::false_type detector(...);
-			};
-		}
-		using no_adl::CDetector;
+			static std::false_type detector(...);
+		};
+
+		template<template<typename...> typename Template, typename T>
+#ifdef _MSC_VER // MSVC has problems with decltype in some contexts. The base class list is usually fine.
+		struct is_instance_or_derived :
+#else
+		using is_instance_or_derived =
+#endif
+			decltype(
+				is_instance_or_derived_detector<Template>::detector(
+					std::declval<tc::remove_cvref_t<T>*>()
+				)
+			)
+#ifdef _MSC_VER
+		{}
+#endif
+		;
 	}
-	template<template<typename...> class Template, typename T>
-	using is_instance_or_derived = decltype(
-		tc::is_instance_or_derived_detail::CDetector<Template>::detector(
-			std::declval<tc::remove_cvref_t<T>*>()
-		)
-	);
+	using no_adl::is_instance_or_derived;
 
 	/////////////////////////////////////////////
 	// apply_cvref
 
 	template<typename Dst, typename Src>
 	struct apply_cvref {
-		static_assert( std::is_same< Src, tc::remove_cvref_t<Src> >::value && !std::is_reference_v<Src>, "Src must not be cv-qualified. Check if a template specialization of apply_cvref is missing." );
+		static_assert( std::is_same< Src, tc::remove_cvref_t<Src> >::value && !std::is_reference<Src>::value, "Src must not be cv-qualified. Check if a template specialization of apply_cvref is missing." );
 		using type = Dst;
 	};
 
@@ -822,4 +880,39 @@ namespace tc {
 
 	template< typename Dst, typename Src >
 	using apply_cvref_t = typename apply_cvref<Dst, Src>::type;
+
+	namespace no_adl {
+		template<typename F>
+		struct is_noexcept_function : std::false_type {};
+		template<class Ret, class... Args>
+		struct is_noexcept_function<Ret(Args...) noexcept> : std::true_type {};
+		template<class Ret, class... Args>
+		struct is_noexcept_function<Ret(Args..., ...) noexcept> : std::true_type {};
+
+		template< class T >
+		struct is_noexcept_member_function_pointer_helper : std::false_type {};
+		template< class T, class U>
+		struct is_noexcept_member_function_pointer_helper<T U::*> : is_noexcept_function<tc::remove_cvref_t<T>> {};
+ 
+		template< class T >
+		struct is_noexcept_member_function_pointer : is_noexcept_member_function_pointer_helper<T> {};
+	}
+	using no_adl::is_noexcept_function;
+	using no_adl::is_noexcept_member_function_pointer;
+
+	namespace no_adl {
+		template<typename T, typename = void>
+		struct is_equality_comparable : std::false_type {};
+
+		template<typename T>
+		struct is_equality_comparable<T, std::enable_if_t<
+			tc::is_safely_convertible<decltype(std::declval<T const&>() == std::declval<T const&>()), bool>::value
+		>> : std::true_type {
+			STATICASSERTSAME(
+				decltype(std::declval<T const&>() == std::declval<T const&>()),
+				decltype(std::declval<T const&>() != std::declval<T const&>())
+			); // Use tc::equality_comparable to generate operator !=
+		};
+	}
+	using no_adl::is_equality_comparable;
 }

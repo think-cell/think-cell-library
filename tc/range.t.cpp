@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -15,6 +15,8 @@
 #include "sparse_adaptor.h"
 
 namespace {
+
+static_assert( tc::is_range_of<tc::is_char, wchar_t const* const>::value );
 
 //---- Basic ------------------------------------------------------------------------------------------------------------------
 UNITTESTDEF( basic ) {
@@ -240,9 +242,9 @@ UNITTESTDEF( construct_array_from_range ) {
 	auto anCopy=an;
 	tc::array<int&, 10> anRef(an);
 	tc::for_each(rng, [&](int n) {
-		_ASSERTEQUAL(an[n], n);
-		_ASSERTEQUAL(anCopy[n], n);
-		_ASSERTEQUAL(anRef[n], n);
+		_ASSERTEQUAL(tc::at(an, n), n);
+		_ASSERTEQUAL(tc::at(anCopy, n), n);
+		_ASSERTEQUAL(tc::at(anRef, n), n);
 	});
 }
 
@@ -513,7 +515,7 @@ UNITTESTDEF(filter_with_generator_range) {
 			int
 		>::value
 	);
-	auto vecnx = tc::make_vector(tc::concat(GeneratorInt(), GeneratorInt()));
+	auto vecnx = tc::make_vector(GeneratorInt(), GeneratorInt());
 	_ASSERTEQUAL(tc::size(vecnx), 8);
 
 	static_assert(
@@ -535,6 +537,15 @@ UNITTESTDEF(filter_with_generator_range) {
 	);
 }
 
+UNITTESTDEF(make_constexpr_array_test) {
+	constexpr auto const& an = as_constexpr(tc::make_array(tc::aggregate_tag, 1, 2, 3));
+	static_assert(tc::at(an, 0) == 1);
+	static_assert(tc::at(an, 1) == 2);
+	static_assert(tc::at(an, 2) == 3);
+	static_assert(tc::size(an) == 3);
+	_ASSERT(tc::equal(an, tc::iota(1, 4)));
+}
+
 }
 
 //---- Cartesian product ------------------------------------------------------------------------------------------------------
@@ -542,14 +553,14 @@ UNITTESTDEF(filter_with_generator_range) {
 namespace {
 	[[maybe_unused]] void cartesian_product_test(std::array<int, 2>& an) {
 		tc::for_each(tc::cartesian_product(an, an), [](auto&& x){
-			STATICASSERTSAME(decltype(x), (std::tuple<int&, int&>&&));
+			STATICASSERTSAME(decltype(x), (tc::tuple<int&, int&>&&));
 		});
 		tc::for_each(tc::cartesian_product(tc::as_const(an), tc::as_const(an)), [](auto&& x){
-			STATICASSERTSAME(decltype(x), (std::tuple<int const&, const int&>&&));
+			STATICASSERTSAME(decltype(x), (tc::tuple<int const&, const int&>&&));
 		});
 		auto rvaluerng = [](auto sink) { sink(1); };
 		tc::for_each(tc::cartesian_product(rvaluerng, rvaluerng), [](auto&& x){
-			STATICASSERTSAME(decltype(x), (std::tuple<int const&&, int&&>&&));
+			STATICASSERTSAME(decltype(x), (tc::tuple<int const&&, int&&>&&));
 		});
 	}
 }

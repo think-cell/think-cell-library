@@ -1,14 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "range_fwd.h"
 #include "range_adaptor.h"
 #include "meta.h"
@@ -17,54 +17,39 @@
 #include "subrange.h"
 
 namespace tc {
-	namespace no_adl {
+	namespace reverse_adaptor_detail {
+		namespace for_each_reverse_default {
+			template<typename Rng, typename Sink>
+			auto for_each_reverse_impl(Rng&& rng, Sink const sink) MAYTHROW
+				-> tc::common_type_t<decltype(tc::continue_if_not_break(sink, tc::dereference_index(std::declval<Rng>(), tc::as_lvalue(tc::begin_index(std::declval<Rng&>()))))), INTEGRAL_CONSTANT(tc::continue_)>
+			{
+				auto const idxBegin = tc::begin_index(rng);
+				auto idxEnd = tc::end_index(rng);
+				while( idxBegin != idxEnd ) {
+					tc::decrement_index(rng, idxEnd);
+					RETURN_IF_BREAK(tc::continue_if_not_break(sink, tc::dereference_index(rng, idxEnd)));
+				}
+				return INTEGRAL_CONSTANT(tc::continue_)();
+			}
+		}
+
+		DEFINE_TMPL_FUNC_WITH_CUSTOMIZATIONS(for_each_reverse)
+	}
+
+	namespace reverse_adaptor_adl {
 		template<typename Rng>
-		struct [[nodiscard]] reverse_adaptor<Rng, false> {
-		protected:
-			reference_or_value<Rng> m_baserng;
+		struct [[nodiscard]] reverse_adaptor<Rng, false> : tc::range_adaptor_base_range<Rng> {
+			using tc::range_adaptor_base_range<Rng>::range_adaptor_base_range;
 
-		private:
-			template<typename Rng_, typename Func>
-			static auto internal_enumerate(Rng_&& baserng, Func&& func, int) return_decltype_MAYTHROW(
-				tc::remove_cvref_t<Rng_>::enumerate_reversed(std::forward<Rng_>(baserng), std::forward<Func>(func))
-			)
-			template<typename Rng_, typename Func>
-			static auto internal_enumerate(Rng_&& baserng, Func&& func, ...) return_decltype_MAYTHROW(
-				internal_enumerate(tc::make_iterator_range(tc::begin(baserng), tc::end(baserng)), std::forward<Func>(func), 0)
+			template<typename Self, typename Sink, std::enable_if_t<tc::is_base_of_decayed<reverse_adaptor, Self>::value>* = nullptr>
+			friend auto for_each_impl(Self&& self, Sink&& sink) return_MAYTHROW(
+				reverse_adaptor_detail::for_each_reverse(std::forward<Self>(self).base_range(), std::forward<Sink>(sink))
 			)
 
-		public:
-			template<typename RngRef>
-			explicit reverse_adaptor(aggregate_tag_t, RngRef&& rng) noexcept :
-				m_baserng(reference_or_value< Rng >(aggregate_tag, std::forward<RngRef>(rng)))
-			{}
-
-			template<typename Func>
-			auto operator()(Func&& func) const/* no & */ return_decltype_MAYTHROW(
-				internal_enumerate(*m_baserng, std::forward<Func>(func), 0)
+			template<typename Self, typename Sink, std::enable_if_t<tc::is_base_of_decayed<reverse_adaptor, Self>::value>* = nullptr>
+			friend auto for_each_reverse_impl(Self&& self, Sink&& sink) return_MAYTHROW(
+				tc::for_each(std::forward<Self>(self).base_range(), std::forward<Sink>(sink))
 			)
-			template<typename Func>
-			auto operator()(Func&& func) /* no & */ return_decltype_MAYTHROW(
-				internal_enumerate(*m_baserng, std::forward<Func>(func), 0)
-			)
-
-			template<typename This, typename Func>
-			static auto enumerate_reversed(This&& rngThis, Func&& func) return_decltype_MAYTHROW(
-				tc::for_each(*std::forward<This>(rngThis).m_baserng, std::forward<Func>(func))
-			)
-
-			constexpr decltype(auto) base_range() & noexcept {
-				return *m_baserng;
-			}
-			constexpr decltype(auto) base_range() const& noexcept {
-				return *m_baserng;
-			}
-			constexpr decltype(auto) base_range() && noexcept {
-				return *std::move(m_baserng);
-			}
-			constexpr decltype(auto) base_range() const&& noexcept {
-				return *std::move(m_baserng);
-			}
 		};
 
 		template<typename Rng>
@@ -85,16 +70,17 @@ namespace tc {
 			static_assert(tc::has_decrement_index<std::remove_reference_t<Rng>>::value, "Base range must have bidirectional traversal or it cannot be reversed");
 
 		public:
-			using index = typename reverse_adaptor::index;
+			using typename reverse_adaptor::range_iterator_from_index::index;
 			using reverse_adaptor<Rng, false>::reverse_adaptor;
+			static constexpr bool c_bHasStashingIndex=tc::has_stashing_index<std::remove_reference_t<Rng>>::value;
 
 		private:
 			STATIC_FINAL(begin_index)() const& noexcept -> index {
-				auto idx = tc::end_index(this->m_baserng);
-				if( tc::equal_index(*this->m_baserng,tc::begin_index(this->m_baserng),idx) ) {
+				auto idx = this->base_end_index();
+				if( this->base_begin_index() == idx ) {
 					return std::nullopt;
 				} else {
-					tc::decrement_index(*this->m_baserng,idx);
+					tc::decrement_index(this->base_range(),idx);
 					return idx;
 				}
 			}
@@ -108,37 +94,28 @@ namespace tc {
 			}
 
 			STATIC_FINAL(increment_index)(index& idx) const& noexcept -> void {
-				if (tc::equal_index(*this->m_baserng,tc::begin_index(this->m_baserng), *idx)) {
+				if (this->base_begin_index() == *idx) {
 					idx = std::nullopt;
 				} else {
-					tc::decrement_index(*this->m_baserng,*idx);
+					tc::decrement_index(this->base_range(),*idx);
 				}
 			}
 
 			STATIC_FINAL(decrement_index)(index& idx) const& noexcept -> void {
 				if (idx) {
-					tc::increment_index(*this->m_baserng,*idx);
+					tc::increment_index(this->base_range(),*idx);
 				} else {
-					idx = tc::begin_index(this->m_baserng);
+					idx = this->base_begin_index();
 				}
 			}
 
 			STATIC_FINAL(dereference_index)(index const& idx) const& return_decltype_MAYTHROW(
-				tc::dereference_index(*this->m_baserng,*idx)
+				tc::dereference_index(this->base_range(),*idx)
 			)
 
 			STATIC_FINAL(dereference_index)(index const& idx) & return_decltype_MAYTHROW(
-				tc::dereference_index(*this->m_baserng,*idx)
+				tc::dereference_index(this->base_range(),*idx)
 			)
-
-			STATIC_FINAL_MOD(
-				template<
-					ENABLE_SFINAE BOOST_PP_COMMA()
-					std::enable_if_t<tc::has_equal_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value>* = nullptr
-				>,
-			equal_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> bool {
-				return tc::bool_cast(idxLhs) == tc::bool_cast(idxRhs) && (!idxLhs || tc::equal_index(*this->m_baserng,*idxLhs, *idxRhs));
-			}
 
 			STATIC_FINAL_MOD(
 				template<
@@ -146,7 +123,7 @@ namespace tc {
 					std::enable_if_t<tc::has_distance_to_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value>* = nullptr
 				>,
 			distance_to_index)(index const& idxLhs, index const& idxRhs) const& noexcept {
-				return tc::distance_to_index(*this->m_baserng, idxRhs ? *idxRhs : tc::begin_index(this->m_baserng), idxLhs ? *idxLhs : tc::begin_index(this->m_baserng)) + (idxRhs ? 0 : 1) + (idxLhs ? 0 : -1);
+				return tc::distance_to_index(this->base_range(), idxRhs ? *idxRhs : this->base_begin_index(), idxLhs ? *idxLhs : this->base_begin_index()) + (idxRhs ? 0 : 1) + (idxLhs ? 0 : -1);
 			}
 
 			STATIC_FINAL_MOD(
@@ -155,29 +132,29 @@ namespace tc {
 					std::enable_if_t<
 						tc::has_advance_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value &&
 						tc::has_decrement_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value &&
-						tc::has_equal_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value
+						tc::is_equality_comparable<SFINAE_TYPE(index)>::value
 					>* = nullptr
 				>,
 				advance_index
 			)(index& idx, typename boost::range_difference<Rng>::type d) const& noexcept -> void {
 				if (idx) {
-					tc::advance_index(*this->m_baserng,*idx, -(d-1));
-					if (tc::equal_index(*this->m_baserng,tc::begin_index(this->m_baserng), *idx)) {
+					tc::advance_index(this->base_range(),*idx, -(d-1));
+					if (this->base_begin_index() == *idx) {
 						idx = std::nullopt;
 					} else {
-						tc::decrement_index(*this->m_baserng,*idx);
+						tc::decrement_index(this->base_range(),*idx);
 					}
 				} else {
 					if (0 != d) {
 						_ASSERT(d < 0);
-						idx = tc::begin_index(this->m_baserng);
-						tc::advance_index(*this->m_baserng,*idx, -(d+1));
+						idx = this->base_begin_index();
+						tc::advance_index(this->base_range(),*idx, -(d+1));
 					}
 				}
 			}
 		public:
 			auto border_base_index(index const& idx) const& noexcept {
-				return idx ? modified(*idx, tc::increment_index(*this->m_baserng,_)) : tc::begin_index(this->m_baserng);
+				return idx ? modified(*idx, tc::increment_index(this->base_range(),_)) : this->base_begin_index();
 			}
 
 			auto element_base_index(index const& idx) const& noexcept {
@@ -187,27 +164,41 @@ namespace tc {
 		private:
 			STATIC_FINAL(middle_point)(index & idx, index const& idxEnd ) const& noexcept -> void {
 				auto idxBeginBase = border_base_index(idxEnd);
-				tc::middle_point(*this->m_baserng, idxBeginBase, border_base_index(idx));
+				tc::middle_point(this->base_range(), idxBeginBase, border_base_index(idx));
 				idx = idxBeginBase;
 			}
 		public:
 			template <typename It>
 			void take_inplace(It&& it) & noexcept {
-				tc::drop_inplace(*this->m_baserng, it.border_base());
+				tc::drop_inplace(this->base_range(), it.border_base());
 			}
 
 			template <typename It>
 			void drop_inplace(It&& it) & noexcept {
-				tc::take_inplace(*this->m_baserng, it.border_base());
+				tc::take_inplace(this->base_range(), it.border_base());
 			}
 		};
 	}
+
+	template<typename Rng>
+	struct no_adl::constexpr_size_base<tc::reverse_adaptor<Rng>, void> : tc::constexpr_size<Rng> {};
+
+	template<typename ReverseAdaptor, typename Rng>
+	struct no_adl::range_value<ReverseAdaptor, tc::reverse_adaptor<Rng, false>, tc::void_t<tc::range_value_t<Rng>>> final {
+		using type = tc::range_value_t<Rng>;
+	};
 
 	template<typename Rng>
 	auto reverse(Rng&& rng) return_ctor_noexcept(
 		reverse_adaptor< Rng >,
 		(aggregate_tag, std::forward<Rng>(rng))
 	)
-
-	DEFINE_FN( reverse )
+	
+	namespace no_adl {
+		template<typename Rng>
+		struct is_index_valid_for_move_constructed_range<tc::reverse_adaptor<Rng, true>, std::enable_if_t<std::is_lvalue_reference<Rng>::value>>: std::true_type {};
+		
+		template<typename Rng>
+		struct is_index_valid_for_move_constructed_range<tc::reverse_adaptor<Rng, true>, std::enable_if_t<!std::is_reference<Rng>::value>>: tc::is_index_valid_for_move_constructed_range<Rng> {};
+	}
 }

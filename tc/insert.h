@@ -1,14 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "meta.h"
 #include "container_traits.h"
 #include "explicit_cast.h"
@@ -17,55 +17,54 @@
 #include "container.h"
 
 #include <boost/range/iterator.hpp>
-#include <boost/next_prior.hpp>
 #include <boost/intrusive/set.hpp>
 
 namespace tc {
 	// std::set/map returns pair with bool=inserted?
 	template< typename It >
-	It && verify_inserted(std::pair<It,bool>&& pairitb) noexcept {
+	It&& verify_inserted(std::pair<It,bool>&& pairitb) noexcept {
 		_ASSERT(pairitb.second);
 		return tc_move(pairitb.first);
 	}
 
 	// std::multiset/multimap always inserts and thus returns only iterator
 	template< typename It >
-	It && verify_inserted(It&& it) noexcept {
+	It&& verify_inserted(It&& it) noexcept {
 		return std::forward<It>(it);
 	}
 
 	template< typename Cont, typename It, std::enable_if_t<!is_instance<std::multiset,Cont>::value && !is_instance<std::multimap,Cont>::value && !is_instance<boost::intrusive::multiset,Cont>::value>* = nullptr >
-	It && verify_at_upper_bound(Cont const& cont, It&& it) noexcept {
+	It&& verify_at_upper_bound(Cont const& cont, It&& it) noexcept {
 		return std::forward<It>(it);
 	}
 
 	template< typename Cont, typename It, std::enable_if_t<is_instance<std::multiset,Cont>::value || is_instance<std::multimap,Cont>::value || is_instance<boost::intrusive::multiset,Cont>::value>* = nullptr >
-	It && verify_at_upper_bound(Cont const& cont, It&& it) noexcept {
+	It&& verify_at_upper_bound(Cont const& cont, It&& it) noexcept {
 #ifdef _DEBUG
 		/* standard says: the inserted element has to be placed at upper bound */
-		auto itNext = tc::next(it);
+		auto itNext = modified(it, ++_);
 		_ASSERTDEBUG(tc::end(cont) == itNext || cont.value_comp()(*it, *itNext));
 #endif
 		return std::forward<It>(it);
 	}
 
 	template< typename Cont, typename TValue > // use extra template parameter instead of Cont::value_type to have both move and copy semantics
-	auto cont_must_insert(Cont& cont, TValue&& val) MAYTHROW {
-		return verify_inserted( verify_at_upper_bound( cont, NOBADALLOC(cont.insert(std::forward<TValue>(val))) ) );
+	auto intrusive_cont_must_insert(Cont& cont, TValue& val) MAYTHROW {
+		return verify_inserted( verify_at_upper_bound( cont, NOBADALLOC(cont.insert(val)) ) );
 	}
-
-	DEFINE_FN(insert);
-	DEFINE_FN(cont_must_insert);
 
 	template< typename Cont, typename... Args >
 	auto cont_must_emplace_before(Cont& cont, typename boost::range_iterator<Cont const>::type itHint, Args&& ... args) MAYTHROW {
-		static_assert(tc::is_safely_constructible<tc::range_value_t<Cont>, Args&& ... >::value);
+		static_assert(tc::is_explicit_castable<tc::range_value_t<Cont>, Args&& ... >::value);
 	#ifdef _CHECKS
 		auto const c=cont.size();
 	#endif
-		auto it = NOBADALLOC(cont.emplace_hint(itHint, std::forward<Args>(args)...)); // MAYTHROW
+		auto it = tc::with_lazy_explicit_cast<tc::range_value_t<Cont>>(
+			[&](auto&&... args2) MAYTHROW -> decltype(auto) { return NOBADALLOC(cont.emplace_hint(itHint, std::forward<decltype(args2)>(args2)...)); },
+			std::forward<Args>(args)...
+		); // MAYTHROW
 		_ASSERTEQUAL( cont.size(), c+1 );
-		_ASSERTEQUAL(tc::next(it), itHint);
+		_ASSERTEQUAL(modified(it, ++_), itHint);
 		return it;
 	}
 
@@ -75,7 +74,7 @@ namespace tc {
 	constexpr decltype(auto) cont_emplace_back(Cont& cont, T&& ... value) noexcept(noexcept(cont.emplace_back(std::forward<T>(value)...))) {
 		if constexpr (std::is_void<decltype(cont.emplace_back(std::forward<T>(value)...))>::value) {
 			NOBADALLOC( cont.emplace_back(std::forward<T>(value)...) ); // MAYTHROW
-			return tc_back(cont);
+			return tc::back(cont);
 		} else {
 			return NOBADALLOC( cont.emplace_back(std::forward<T>(value)...) ); // MAYTHROW
 		}
@@ -86,11 +85,11 @@ namespace tc {
 		tc::is_explicit_castable<tc::range_value_t<Cont>, T&&...>::value
 	>* = nullptr>
 	constexpr auto cont_emplace_back(Cont& cont, T&& ... value) return_decltype_MAYTHROW(
-		cont_emplace_back(cont, tc::explicit_cast<tc::range_value_t<Cont>>(std::forward<T>(value)...))
+		cont_emplace_back(cont, tc::lazy_explicit_cast<tc::range_value_t<Cont>>(std::forward<T>(value)...))
 	)
 
 	template <typename Cont, typename... T, std::enable_if_t<
-		has_mem_fn_lower_bound<Cont>::value && (0==sizeof...(T) || tc::is_safely_constructible<tc::range_value_t<Cont>, T&& ... >::value)
+		has_mem_fn_lower_bound<Cont>::value && (0==sizeof...(T) || tc::is_explicit_castable<tc::range_value_t<Cont>, T&& ... >::value)
 	>* = nullptr>
 	constexpr auto cont_emplace_back(Cont& cont, T&& ... value) return_decltype_MAYTHROW(
 		*tc::cont_must_emplace_before(cont, tc::end(cont), std::forward<T>(value)...) // tc::cont_must_emplace_before is not SFINAE friendly
@@ -102,7 +101,7 @@ namespace tc {
 	>* = nullptr>
 	decltype(auto) cont_emplace_back(Cont& cont, T0&& v0, T1&& v1, Ts&& ... vs) noexcept {
 		NOBADALLOC( cont.push_back(tc::explicit_cast<tc::range_value_t<Cont>>(std::forward<T0>(v0), std::forward<T1>(v1), std::forward<Ts>(vs)...)) );
-		return tc_back(cont);
+		return tc::back(cont);
 	}
 
 	template <typename Cont, typename T0, std::enable_if_t<
@@ -115,7 +114,7 @@ namespace tc {
 		} else {
 			NOBADALLOC( cont.push_back(tc::explicit_cast<tc::range_value_t<Cont>>(std::forward<T0>(v0))) );
 		}
-		return tc_back(cont);
+		return tc::back(cont);
 	}
 
 	template <typename Cont, std::enable_if_t<
@@ -123,12 +122,12 @@ namespace tc {
 	>* = nullptr>
 	decltype(auto) cont_emplace_back(Cont& cont) noexcept {
 		NOBADALLOC( cont.push_back(tc::range_value_t<Cont>()) );
-		return tc_back(cont);
+		return tc::back(cont);
 	}
 
 	template <typename Cont>
 	void emplace_back_by_index( Cont& cont, typename boost::range_size<Cont>::type n ) noexcept {
-		tc::cont_emplace_back( cont, MAKE_LAZY( tc_at(cont, n) ) );
+		tc::cont_emplace_back( cont, MAKE_LAZY( tc::at(cont, n) ) );
 	}
 
 	template< typename Cont, typename Rng >
@@ -145,25 +144,31 @@ namespace tc {
 		);
 	}
 
-	template< typename Cont, typename Rng >
-	void cont_must_insert_range(Cont& cont, Rng&& rng) MAYTHROW {
-		tc::for_each(
-			std::forward<Rng>(rng),
-			[&](auto&& _) MAYTHROW { tc::cont_must_insert(cont, std::forward<decltype(_)>(_)); }
-		);
-	}
-
 	template< typename Cont, typename... Args >
 	auto cont_must_emplace(Cont& cont, Args&& ... args) MAYTHROW {
 		return verify_inserted( verify_at_upper_bound(
 			cont,
-			NOBADALLOC(cont.emplace(std::forward<Args>(args)...)) // MAYTHROW
+			tc::with_lazy_explicit_cast<tc::range_value_t<Cont>>(
+				[&](auto&&... args2) MAYTHROW -> decltype(auto) { return NOBADALLOC(cont.emplace(std::forward<decltype(args2)>(args2)...)); },
+				std::forward<Args>(args)...
+			) // MAYTHROW
 		));
+	}
+
+	template< typename Cont, typename Rng >
+	void cont_must_insert_range(Cont& cont, Rng&& rng) MAYTHROW {
+		tc::for_each(
+			std::forward<Rng>(rng),
+			[&](auto&& _) MAYTHROW { tc::cont_must_emplace(cont, std::forward<decltype(_)>(_)); }
+		);
 	}
 
 	template< typename Cont, typename... Args >
 	auto cont_try_emplace(Cont& cont, Args&& ... args) MAYTHROW {
-		auto const pairitb = NOBADALLOC(cont.emplace(std::forward<Args>(args)...)); // MAYTHROW
+		auto const pairitb = tc::with_lazy_explicit_cast<tc::range_value_t<Cont>>(
+			[&](auto&&... args2) MAYTHROW -> decltype(auto) { return NOBADALLOC(cont.emplace(std::forward<decltype(args2)>(args2)...)); },
+			std::forward<Args>(args)...
+		); // MAYTHROW
 		STATICASSERTSAME(decltype(pairitb.second), bool);
 		return pairitb;
 	}

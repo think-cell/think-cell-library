@@ -1,230 +1,253 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "noncopyable.h"
 #include "type_traits.h"
 #include "casts.h"
+#include "static_polymorphism.h"
 
 #include <type_traits>
 
+MODIFY_WARNINGS_BEGIN(((disable)(4297))) // 'function' : function assumed not to throw an exception but does.
+
 namespace tc {
 	namespace no_adl {
-		template< typename T >
-		struct [[nodiscard]] storage_for_without_dtor : tc::nonmovable {
+
+		template< typename Derived, typename T >
+		struct [[nodiscard]] storage_for_base : tc::nonmovable {
+			static constexpr bool c_bIsTrivial=std::is_trivially_default_constructible<T>::value && std::is_trivially_destructible<T>::value && std::is_trivially_assignable<T, T&&>::value;
+			using this_type = storage_for_base<Derived, T>;
 		protected:
 			static_assert( tc::is_decayed< std::remove_const_t<T> >::value, "only const allowed as qualification" );
-			std::aligned_storage_t<sizeof(T),std::alignment_of<T>::value> m_buffer;
+			std::conditional_t<
+				c_bIsTrivial,
+				T, // constexpr friendly storage for trivial types, no placement new 
+				std::aligned_storage_t<sizeof(T),std::alignment_of<T>::value>
+			> m_buffer;
 		public:
-			static storage_for_without_dtor& from_content(T& t) noexcept {
-				return *reinterpret_cast<storage_for_without_dtor*>(std::addressof(t));
+			static Derived& from_content(T& t) noexcept {
+				STATICASSERTEQUAL( sizeof(storage_for_base), sizeof(T) );
+				return *tc::derived_cast<Derived>(reinterpret_cast<storage_for_base*>(std::addressof(t)));
 			}
-			template <typename = std::enable_if<!std::is_const<T>::value>>
-			static storage_for_without_dtor const& from_content(T const& t) noexcept {
-				return *reinterpret_cast<storage_for_without_dtor const*>(std::addressof(t));
+			template <typename = std::enable_if_t<!std::is_const<T>::value>>
+			static Derived const& from_content(T const& t) noexcept {
+				STATICASSERTEQUAL( sizeof(storage_for_base), sizeof(T) );
+				return *tc::derived_cast<Derived>(reinterpret_cast<storage_for_base const*>(std::addressof(t)));
 			}
-			std::remove_const_t<T>* uninitialized_addressof() noexcept {
+			std::remove_const_t<T>* uninitialized_addressof() & noexcept {
 				return reinterpret_cast< std::remove_const_t<T>*>(&m_buffer);
+			}
+			T const* uninitialized_addressof() const& noexcept {
+				return reinterpret_cast<T const*>(&m_buffer);
 			}
 			void ctor() & noexcept(std::is_nothrow_default_constructible<T>::value) {
 				// This check is not strict enough. The following struct is !std::is_trivially_default_constructible,
 				// but ctor_default does not initialize n to 0, while ctor_value does:
 				//	struct Foo {
-				//		std::string s; // has user-defined default ctor
+				//		std::basic_string<char> s; // has user-defined default ctor
 				//		int n; // has no user-defined default ctor
 				//	};
 				static_assert(!std::is_trivially_default_constructible<T>::value, "You must decide between ctor_default and ctor_value!");
 				::new (static_cast<void*>(&m_buffer)) T; // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
 			}
 			void ctor_default() & noexcept(std::is_nothrow_default_constructible<T>::value) {
-				::new (static_cast<void*>(&m_buffer)) T; // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
+				if constexpr (!c_bIsTrivial) {
+					::new (static_cast<void*>(&m_buffer)) T; // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
+				} // else do nothing, already default initialized
 			}
 			template<typename... Args> // ctor_value with non-empty argument list is useful in generic code
 			void ctor_value(Args&& ... args) & noexcept(std::is_nothrow_constructible<T, Args&&...>::value) {
-				::new (static_cast<void*>(&m_buffer)) T(std::forward<Args>(args)...); // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
+				if constexpr (c_bIsTrivial) {
+					m_buffer=T(std::forward<Args>(args)...);
+				} else {
+					::new (static_cast<void*>(&m_buffer)) T(std::forward<Args>(args)...); // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
+				}
 			}
 			template<typename First, typename... Args>
 			void ctor(First&& first, Args&& ... args) & noexcept(std::is_nothrow_constructible<T, First&&, Args&&...>::value) {
 				// In C++, new T(...) is direct initialization just like T t(...).
 				// For non-class types, only implicit conversions are considered, so it is equivalent to T t=...
 				// For class types, explicit conversions are considered, unlike for T t=...
-				::new (static_cast<void*>(&m_buffer)) T(std::forward<First>(first), std::forward<Args>(args)...); // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
+				if constexpr (c_bIsTrivial) {
+					m_buffer=T(std::forward<First>(first), std::forward<Args>(args)...);
+				} else {
+					::new (static_cast<void*>(&m_buffer)) T(std::forward<First>(first), std::forward<Args>(args)...); // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
+				}
 			}
 			T const* operator->() const& noexcept {
-				return std::addressof(**this);
+				return std::addressof(dereference());
 			}
 			T* operator->() & noexcept {
-				return std::addressof(**this);
+				return std::addressof(tc::as_mutable(dereference()));
 			}
 			T const& operator*() const& noexcept {
-				STATICASSERTEQUAL( sizeof(*this), sizeof(T) ); // no extra members, important for arrays
-				return reinterpret_cast<T const&>(m_buffer);
+				return dereference();
 			}
 			T& operator*() & noexcept {
-				return  tc::as_mutable(*(tc::as_const(*this)));
+				return tc::as_mutable(dereference());
 			}
 			T&& operator*() && noexcept {
-				return  tc_move_always(**this);
+				return tc_move_always(tc::as_mutable(dereference()));
 			}
-			void dtor() const& noexcept {
-				(**this).T::~T();
+			void dtor() & noexcept {
+				if constexpr (!c_bIsTrivial) {
+					(**this).T::~T();
+				}
+			}
+		protected:
+			STATIC_VIRTUAL(dereference);
+			STATIC_OVERRIDE(dereference)() const& -> T const& {
+				if constexpr (c_bIsTrivial) {
+					return m_buffer;
+				} else {
+					STATICASSERTEQUAL(sizeof(*this), sizeof(T)); // no extra members, important for arrays
+					return reinterpret_cast<T const&>(m_buffer);
+				}
 			}
 		};
 
-		template< typename T >
-		struct [[nodiscard]] storage_for : storage_for_without_dtor <T> {
-			template <typename S>
-			static decltype(auto) from_content(S&& t) noexcept {
-				return tc::derived_cast<storage_for>(storage_for_without_dtor<T>::from_content(std::forward<S>(t)));
+		template< typename Derived, typename T >
+		struct [[nodiscard]] storage_for_base<Derived, T&> : tc::nonmovable {
+		protected:
+			static_assert(!std::is_reference<T>::value);
+			using this_type = storage_for_base<Derived, T&>;
+			T* m_buffer;
+
+			STATIC_VIRTUAL(dereference);
+			STATIC_OVERRIDE(dereference)() const& -> T& {
+				return *m_buffer;
 			}
+		public:
+			void ctor(T& t) & noexcept {
+				m_buffer = std::addressof(t);
+			}
+
+			// reference semantics == no deep constness
+			T* operator->() const& noexcept {
+				return std::addressof(dereference());
+			}
+			T& operator*() const& noexcept {
+				return dereference();
+			}
+			void dtor() & noexcept {}
+		};
+
+		template< typename Derived, typename T >
+		struct [[nodiscard]] storage_for_base<Derived, T&&> : tc::nonmovable {
+		protected:
+			static_assert(!std::is_reference<T>::value);
+			using this_type = storage_for_base<Derived, T&&>;
+			T* m_buffer;
+
+			STATIC_VIRTUAL(dereference);
+			STATIC_OVERRIDE(dereference)() const& -> T&& {
+				return static_cast<T&&>(*m_buffer);
+			}
+		public:
+			void ctor(T&& t) & noexcept {
+				m_buffer = std::addressof(t);
+			}
+
+			T&& operator*() && noexcept {
+				return dereference();
+			}
+			void dtor() & noexcept {}
+		};
+
+		template< typename T >
+		struct [[nodiscard]] storage_for : storage_for_base<storage_for<T>, T> {
+			using this_type = storage_for<T>;
+			using Base = storage_for_base<storage_for<T>, T>;
 			
 #if defined(_DEBUG) && defined(TC_PRIVATE)
 			storage_for() noexcept {
 				tc::fill_with_dead_pattern(this->m_buffer);
 			}
 			~storage_for() noexcept {
-				check_pattern();
+				check_dead_pattern();
 			}
 
-			void ctor() & noexcept(noexcept(storage_for_without_dtor <T>::ctor())) {
-				check_pattern();
+			void ctor() & noexcept(noexcept(Base::ctor())) {
+				check_dead_pattern();
+				tc::remove_dead_pattern(this->m_buffer);
 				try {
-					storage_for_without_dtor <T>::ctor();
+					Base::ctor();
 				} catch (...) {
 					tc::fill_with_dead_pattern(this->m_buffer);
 					throw;
 				}
 			}
-			void ctor_default() & noexcept(noexcept(storage_for_without_dtor <T>::ctor_default())) {
-				check_pattern();
+			void ctor_default() & noexcept(noexcept(Base::ctor_default())) {
+				check_dead_pattern();
+				tc::remove_dead_pattern(this->m_buffer);
 				try {
-					storage_for_without_dtor <T>::ctor_default();
+					Base::ctor_default();
 				}	catch (...) {
 					tc::fill_with_dead_pattern(this->m_buffer);
 					throw;
 				}
 			}
 			template<typename... Args> // ctor_value with non-empty argument list is useful in generic code
-			void ctor_value(Args&& ... args) & noexcept(noexcept(std::declval<storage_for_without_dtor<T>&>().ctor_value(std::forward<Args>(args)...))) {
-				check_pattern();
+			void ctor_value(Args&& ... args) & noexcept(noexcept(std::declval<Base&>().ctor_value(std::forward<Args>(args)...))) {
+				check_dead_pattern();
+				tc::remove_dead_pattern(this->m_buffer);
 				try {
-					storage_for_without_dtor <T>::ctor_value(std::forward<Args>(args)...);
+					Base::ctor_value(std::forward<Args>(args)...);
 				} catch (...) {
 					tc::fill_with_dead_pattern(this->m_buffer);
 					throw;
 				}
 			}
 			template<typename First, typename... Args>
-			void ctor(First&& first, Args&& ... args) & noexcept(noexcept(storage_for_without_dtor <T>::ctor(std::forward<First>(first), std::forward<Args>(args)...))) {
-				check_pattern();
+			void ctor(First&& first, Args&& ... args) & noexcept(noexcept(Base::ctor(std::forward<First>(first), std::forward<Args>(args)...))) {
+				check_dead_pattern();
+				tc::remove_dead_pattern(this->m_buffer);
 				try {
-					storage_for_without_dtor <T>::ctor(std::forward<First>(first), std::forward<Args>(args)...);
+					Base::ctor(std::forward<First>(first), std::forward<Args>(args)...);
 				} catch (...) {
 					tc::fill_with_dead_pattern(this->m_buffer);
 					throw;
 				}
 			}
-			void dtor() const& noexcept {
-				storage_for_without_dtor <T>::dtor();
-				tc::fill_with_dead_pattern(tc::as_mutable(this->m_buffer));
+			void dtor() & noexcept {
+				_ASSERTDEBUG(!tc::has_dead_pattern(this->m_buffer));
+				Base::dtor();
+				tc::fill_with_dead_pattern(this->m_buffer);
 			}
 
 		private:
-			void check_pattern() const& noexcept {
+			void check_dead_pattern() const& noexcept {
 				// RT#12004: g_mtxSharedHeap's destructor fails this check in the Excel insider build 16.0.6568.2036
 				// because this version does not realease all its locks on CTCAddInModule so that tc::shared_heap::shutdown()
 				// and thus g_mtxSharedHeap.dtor() are never called. This build appears to be broken. It throws and does
 				// not handle 0xC0000008 (An invalid handle was specified) while closing even without think-cell installed.
 				// I could not reproduce the error in the next Excel insider build 16.0.6701.1008. -Edgar 2016-03-14
-				tc::assert_dead_pattern(this->m_buffer);
-			}
-#endif
-		};
-
-
-		template< typename T >
-		struct [[nodiscard]] storage_for_without_dtor<T&> : tc::nonmovable {
-		protected:
-			static_assert(!std::is_reference<T>::value);
-			T* m_pt;
-		public:
-			void ctor(T& t) & noexcept {
-				m_pt=std::addressof(t);
+				_ASSERTDEBUG(tc::has_dead_pattern(this->m_buffer));
 			}
 
-			// referenece semantics == no deep constness
-			T* operator->() const& noexcept {
-				return m_pt;
-			}
-			T& operator*() const& noexcept {
-				return *m_pt;
-			}
-			void dtor() const& noexcept {}
-		};
-
-		template< typename T >
-		struct [[nodiscard]] storage_for<T&> : storage_for_without_dtor <T&> {
-#if defined(_DEBUG) && defined(TC_PRIVATE)
-			storage_for() noexcept {
-				this->m_pt=nullptr;
-			}
-			~storage_for() noexcept {
-				_ASSERTDEBUG(!this->m_pt);
-			}
-			void ctor(T& t) & noexcept {
-				_ASSERTDEBUG(!this->m_pt);
-				storage_for_without_dtor <T&>::ctor(t);
-			}
-			void dtor() & noexcept {
-				_ASSERTDEBUG(this->m_pt);
-				storage_for_without_dtor <T&>::dtor();
-				this->m_pt=nullptr;
+			STATIC_FINAL(dereference)() const& -> decltype(auto) {
+				_ASSERTDEBUG(!tc::has_dead_pattern(this->m_buffer));
+				return Base::STATIC_VIRTUAL_METHOD_NAME(dereference)();
 			}
 #endif
 		};
 
 		template< typename T >
-		struct [[nodiscard]] storage_for_without_dtor<T&&> : tc::nonmovable {
-		protected:
-			static_assert(!std::is_reference<T>::value);
-			T* m_pt;
-		public:
-			void ctor(T&& t) & noexcept {
-				m_pt=std::addressof(t);
-			}
-
-			T&& operator*() && noexcept {
-				return static_cast<T&&>(*m_pt);
-			}
-			void dtor() const& noexcept {}
+		struct [[nodiscard]] storage_for_without_dtor : storage_for_base<storage_for_without_dtor<T>, T>{
 		};
 
 		template< typename T >
-		struct [[nodiscard]] storage_for<T&&> : storage_for_without_dtor <T&&> {
-#if defined(_DEBUG) && defined(TC_PRIVATE)
-			storage_for() noexcept {
-				this->m_pt=nullptr;
-			}
-			~storage_for() noexcept {
-				_ASSERTDEBUG(!this->m_pt);
-			}
-			void ctor(T&& t) & noexcept {
-				_ASSERTDEBUG(!this->m_pt);
-				storage_for_without_dtor<T&&>::ctor(tc_move(t));
-			}
-			void dtor() & noexcept {
-				_ASSERTDEBUG(this->m_pt);
-				storage_for_without_dtor<T&&>::dtor();
-				this->m_pt=nullptr;
-			}
-#endif
+		// TODO: inline into derived class
+		struct [[nodiscard]] storage_for_dtor_at_end_of_scope : storage_for<T> {
+			~storage_for_dtor_at_end_of_scope() { this->dtor(); }
 		};
 
 		template< typename T >
@@ -248,7 +271,10 @@ namespace tc {
 	using no_adl::storage_for_without_dtor;
 	using no_adl::storage_for;
 	using no_adl::scoped_constructor;
+	using no_adl::storage_for_dtor_at_end_of_scope;
 }
+
+MODIFY_WARNINGS_END
 
 #ifdef __clang__
 

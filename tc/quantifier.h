@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -13,6 +13,8 @@
 #include "for_each.h"
 #include "find.h"
 #include "compare.h"
+#include "invoke.h"
+#include "any_accu.h"
 #include <utility>
 
 /////////////////////////////////////////////
@@ -20,26 +22,14 @@
 
 namespace tc {
 
-DEFINE_FN(bool_cast)
-
-template< typename Rng, typename Pred >
-[[nodiscard]] constexpr bool any_of(Rng&& rng, Pred&& pred) MAYTHROW {
+template< typename Rng, typename Pred = tc::identity >
+[[nodiscard]] constexpr bool any_of(Rng&& rng, Pred&& pred = Pred()) MAYTHROW {
 	return tc::find_first_if<tc::return_bool>(std::forward<Rng>(rng), std::forward<Pred>(pred));
 }
 
-template< typename Rng >
-[[nodiscard]] constexpr bool any_of(Rng&& rng) MAYTHROW {
-	return tc::any_of(std::forward<Rng>(rng), tc::fn_bool_cast());
-}
-
-template< typename Rng, typename Pred >
-[[nodiscard]] constexpr bool all_of(Rng&& rng, Pred&& pred) MAYTHROW {
+template< typename Rng, typename Pred = tc::identity >
+[[nodiscard]] constexpr bool all_of(Rng&& rng, Pred&& pred = Pred()) MAYTHROW {
 	return !tc::any_of(std::forward<Rng>(rng), tc::not_fn(std::forward<Pred>(pred)));
-}
-
-template< typename Rng >
-[[nodiscard]] constexpr bool all_of(Rng&& rng) MAYTHROW {
-	return tc::all_of(std::forward<Rng>(rng), tc::fn_bool_cast());
 }
 
 // pair is in same order as if minmax_element( ..., operator<( bool, bool ) ) would have been used.
@@ -67,6 +57,20 @@ template< typename Rng, typename Pred >
 [[nodiscard]] inline bool eager_and(std::initializer_list<tc::bool_context> ab) MAYTHROW {
 	// use initializer list instead of variadic template: initializer list guarantees evaluation in order of appearance
 	return tc::all_of(ab);
+}
+
+template< typename Rng, typename Pred >
+[[nodiscard]] bool eager_any_of(Rng&& rng, Pred pred) MAYTHROW {
+	tc::any_accu any;
+	tc::for_each(rng, [&](auto&& t) noexcept {
+		any(tc::invoke(pred, tc_move_if_owned(t)));
+	});
+	return any;
+}
+
+template< typename Rng, typename Pred >
+[[nodiscard]] bool eager_all_of(Rng&& rng, Pred&& pred) MAYTHROW {
+	return !tc::eager_any_of(std::forward<Rng>(rng), tc::not_fn(std::forward<Pred>(pred)));
 }
 
 }

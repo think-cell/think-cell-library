@@ -1,14 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "meta.h"
 #include "container_traits.h"
 #include "subrange.h"
@@ -300,7 +300,7 @@ namespace tc {
 			auto const nIndexBegin = tc::begin(m_rng) - tc::begin(cont);
 			m_orngfilter->dtor(); // erases cont tail and invalidates iterators in m_rng
 			m_orngfilter.dtor();
-			m_rng = tc::drop_first(cont, nIndexBegin);
+			m_rng = tc::begin_next<tc::return_drop>(cont, nIndexBegin);
 		}
 
 	private:
@@ -315,8 +315,8 @@ namespace tc {
 	/////////////////////////////////////////////////////
 	// filter_inplace
 
-	template<typename Cont, typename Pred>
-	void filter_inplace(Cont & cont, typename boost::range_iterator<Cont>::type it, Pred pred) noexcept {
+	template<typename Cont, typename Pred = tc::identity>
+	void filter_inplace(Cont & cont, typename boost::range_iterator<Cont>::type it, Pred pred = Pred()) noexcept {
 		for (auto const itEnd = tc::end(cont); it != itEnd; ++it) {
 			if (!tc::bool_cast(tc::invoke(pred, *it))) {
 				tc::range_filter< tc::decay_t<Cont> > rngfilter(cont, it);
@@ -333,8 +333,8 @@ namespace tc {
 		}
 	}
 
-	template<typename Cont, typename Pred>
-	void filter_inplace(Cont& cont, Pred&& pred) noexcept {
+	template<typename Cont, typename Pred = tc::identity>
+	void filter_inplace(Cont& cont, Pred&& pred = Pred()) noexcept {
 		tc::filter_inplace( cont, tc::begin(cont), std::forward<Pred>(pred) );
 	}
 

@@ -1,14 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "meta.h"
 #include "container_traits.h"
 #include "insert.h"
@@ -26,23 +26,7 @@ namespace tc {
 	// in general, do not use Cont::insert() or Cont(it, it)
 	// iterators are slower than for_each in many cases (eg. filter ranges)
 
-	namespace appender_adl {
-		DEFINE_ADL_TAG_TYPE(appender_tag);
-	}
-
 	namespace append_no_adl {
-		template< typename Cont, typename Enable=void >
-		struct has_mem_fn_appender final: std::false_type {};
-
-		template< typename Cont >
-		struct has_mem_fn_appender<Cont, tc::void_t<decltype(std::declval<Cont&>().appender())>> final: std::true_type {};
-
-		template< typename Cont, typename Enable=void >
-		struct has_adl_appender final: std::false_type {};
-
-		template< typename Cont >
-		struct has_adl_appender<Cont, decltype(appender(tc::appender_adl::appender_tag, std::declval<Cont&>()), void())> final: std::true_type {};	
-
 		template< typename TTarget, typename Rng, typename Enable=void >
 		struct is_conv_enc_needed final: std::false_type {};
 
@@ -72,10 +56,14 @@ namespace tc {
 			tc::econstructionIMPLICIT==tc::construction_restrictiveness<tc::range_value_t<Cont>, tc::range_reference_t<Rng>>::value
 		>> final: std::true_type {};
 
-		template< typename Cont >
-		struct [[nodiscard]] appender_type_no_reserve {
+		template< typename Cont, bool bReserve = has_mem_fn_reserve<Cont>::value>
+		struct [[nodiscard]] appender_type;
+
+		template< typename Cont>
+		struct [[nodiscard]] appender_type<Cont, /*bReserve*/false> {
 			using sink_value_type = tc::range_value_t<Cont>;
-			constexpr explicit appender_type_no_reserve(Cont& cont) noexcept: m_cont(cont) {}
+			using guaranteed_break_or_continue = INTEGRAL_CONSTANT(tc::continue_);
+			constexpr explicit appender_type(Cont& cont) noexcept: m_cont(cont) {}
 
 			Cont& m_cont;
 
@@ -84,225 +72,168 @@ namespace tc {
 				tc::cont_emplace_back(m_cont, std::forward<T>(t)); // MAYTHROW
 			}
 
+			// If appending random-access iterator range, use Cont::insert() to give insert the opportunity for optimizations
 			// must leave std::enable_if_t in parameter list because
 			// https://stackoverflow.com/questions/51933397/sfinae-method-completely-disables-base-classs-template-method-in-clang
 			template< typename Rng >
-			auto chunk(Rng&& rng, std::enable_if_t<is_range_insertable<Cont, Rng>::value>* = nullptr) const& noexcept(noexcept(
+			void chunk(Rng&& rng, std::enable_if_t<is_range_insertable<Cont, Rng>::value>* = nullptr) const& noexcept(noexcept(
 				m_cont.insert(tc::end(m_cont), tc::begin(rng), tc::end(rng))
 			)) {
 				NOBADALLOC(m_cont.insert(tc::end(m_cont), tc::begin(rng), tc::end(rng)));
-				return INTEGRAL_CONSTANT(tc::continue_)();
 			}
 
 			template< typename Rng >
-			auto chunk(Rng&& rng, std::enable_if_t<is_conv_enc_needed<tc::range_value_t<Cont>, Rng>::value>* = nullptr) const& return_decltype_MAYTHROW(
-				tc::for_each(tc::must_convert_enc<tc::range_value_t<Cont>>(std::forward<Rng>(rng)), *this)
+			void chunk(Rng&& rng, std::enable_if_t<is_conv_enc_needed<tc::range_value_t<Cont>, Rng>::value>* = nullptr) const& return_MAYTHROW(
+				tc::implicit_cast<void>(tc::for_each(tc::must_convert_enc<tc::range_value_t<Cont>>(std::forward<Rng>(rng)), *this))
 			)
 		};
 
 		template< typename Cont >
-		struct [[nodiscard]] appender_type /*final*/: appender_type_no_reserve<Cont> {
-			using base_ = appender_type_no_reserve<Cont>;
+		struct [[nodiscard]] appender_type<Cont, /*bReserve*/true> /*final*/: appender_type<Cont, /*bReserve*/false> {
+			using base_ = appender_type<Cont, /*bReserve*/false>;
 			using base_::base_;
-
 			using base_::chunk;
 
 			template< typename Rng, ENABLE_SFINAE, std::enable_if_t<
 				!is_conv_enc_needed<tc::range_value_t<Cont>, Rng>::value &&
-				has_mem_fn_reserve<SFINAE_TYPE(Cont)>::value &&
 				tc::has_size<Rng>::value &&
 				!is_range_insertable<Cont, Rng>::value
 			>* = nullptr>
-			constexpr auto chunk(Rng&& rng) const& MAYTHROW code_return_decltype(
-				tc::cont_reserve(this->m_cont, this->m_cont.size()+tc::size(rng));,
-				tc::for_each(std::forward<Rng>(rng), tc::base_cast</*SFINAE_TYPE to workaround clang bug*/SFINAE_TYPE(base_)>(*this))
-			)
-		};
-
-		template<typename Derived, typename Value>
-		struct [[nodiscard]] appender_type_base {
-			using sink_value_type = Value;
-
-			template<typename T, typename Derived2=Derived>
-			constexpr auto operator()(T const& val) const& return_decltype_MAYTHROW(
-				tc::derived_cast<Derived2>(*this).chunk(tc::single(val))
-			)
-
-			// must leave std::enable_if_t in parameter list because
-			// https://stackoverflow.com/questions/51933397/sfinae-method-completely-disables-base-classs-template-method-in-clang
-			template<typename Rng>
-			constexpr auto chunk(Rng&& rng, std::enable_if_t<is_conv_enc_needed<sink_value_type, Rng>::value>* = nullptr) const& return_decltype_MAYTHROW(
-				tc::for_each(tc::must_convert_enc<sink_value_type>(std::forward<Rng>(rng)), tc::derived_cast<Derived>(*this))
+			constexpr auto chunk(Rng&& rng) const& return_decltype_MAYTHROW(
+				tc::cont_reserve(this->m_cont, this->m_cont.size()+tc::size(rng)),
+				tc::implicit_cast<void>(tc::for_each(std::forward<Rng>(rng), tc::base_cast</*SFINAE_TYPE to workaround clang bug*/SFINAE_TYPE(base_)>(*this)))
 			)
 		};
 	}
 	using append_no_adl::appender_type;
-	using append_no_adl::appender_type_base;
 
-	template<typename Cont, std::enable_if_t<!tc::append_no_adl::has_mem_fn_appender<Cont>::value && !tc::append_no_adl::has_adl_appender<Cont>::value>* = nullptr>
-	constexpr auto make_appender(Cont& cont) noexcept {
-		return tc::appender_type<Cont>(cont);
+	namespace appender_default {
+		template<typename Cont>
+		constexpr auto appender_impl(Cont& cont) noexcept {
+			return tc::appender_type<Cont>(cont);
+		}
 	}
+	DEFINE_TMPL_FUNC_WITH_CUSTOMIZATIONS(appender)
 
-	template<typename Cont, std::enable_if_t<tc::append_no_adl::has_mem_fn_appender<Cont>::value>* = nullptr>
-	[[nodiscard]] constexpr auto make_appender(Cont& cont) noexcept {
-		return cont.appender();
-	}
-
-	template<typename Cont, std::enable_if_t<tc::append_no_adl::has_adl_appender<Cont>::value>* = nullptr>
-	[[nodiscard]] constexpr auto make_appender(Cont& cont) noexcept {
-		return appender(tc::appender_adl::appender_tag, cont);
-	}
+	template<typename Cont>
+	using appender_t = decltype(tc::appender(std::declval<Cont>()));
 
 	namespace no_adl {
-		template<typename Cont, typename Rng, typename Enable=void>
-		struct is_appendable_impl: std::false_type {};
-
-		template<typename Cont, typename Rng>
-		struct is_appendable_impl<Cont, Rng, decltype(tc::for_each(std::declval<Rng>(), tc::make_appender(std::declval<Cont>())), void())>: std::true_type {};
-
-		// tc::void_t<decltype()...> is not working correctly with Visual Studio 15.8.0
-		// alias is not working correctly with Visual Studio 15.8.0
 		template<typename Cont, typename... Rng>
-		struct is_appendable: std::conjunction<no_adl::is_appendable_impl<Cont, Rng>...> {};
+		// Hard error, if concat or appender fails.
+		// Also maybe hard error, inside has_for_each, if range evaluation not sfinae-friendly.
+		// true, false, otherwise
+		struct is_appendable : std::bool_constant<tc::has_for_each<decltype(tc::concat(std::declval<Rng>()...)), tc::appender_t<Cont>>::value> {};
 	}
 	using no_adl::is_appendable;
 
-	namespace append_detail {
+	// Disallow 0 == sizeof...(Rngs), so that overload taking single argument tc::tuple<Cont, Rng...> is rejected
+	template< typename RangeReturn = tc::return_void, typename Cont, typename... Rngs, std::enable_if_t<std::conjunction<
+		std::bool_constant<0 < sizeof...(Rngs)>,
+		tc::is_appendable<Cont&, Rngs...>
+	>::value>* = nullptr >
+	constexpr decltype(auto) append(Cont&& cont, Rngs&&... rngs) MAYTHROW {
+		static_assert( !std::is_const<Cont>::value, "Cannot append to const container" );
+		static_assert( !tc::is_range_with_iterators<Cont>::value || std::is_lvalue_reference<Cont>::value, "Append to rvalue intentional?" );
 
-		template<typename Cont, typename Rng0, typename ... Rng>
-		constexpr void append_impl(Cont& cont, Rng0&& rng0, Rng&& ... rng) noexcept(noexcept(
-			tc::for_each(tc::concat(std::forward<Rng0>(rng0), std::forward<Rng>(rng)...), tc::make_appender(cont))
-		)) {
-			tc::for_each(tc::concat(std::forward<Rng0>(rng0), std::forward<Rng>(rng)...), tc::make_appender(cont));
-		}
-	}
+		if constexpr( !tc::is_range_with_iterators<Cont>::value || (
+			std::is_same<RangeReturn, tc::return_void>::value && 
+			noexcept(tc::for_each(tc::concat(std::forward<Rngs>(rngs)...), tc::appender(cont)))
+		) ) {
+			static_assert( std::is_same<RangeReturn, tc::return_void>::value, "RangeReturn not supported, if appending to stream." );
 
-	// append for target containers without reserve() member:
-	// just run a for_each over the input
-	// assume iterators are stable to get iterator to first inserted element
-	template< template<typename> class RangeReturn = tc::return_void, typename Cont, typename... Rng, std::enable_if_t<tc::is_appendable<Cont&, Rng&&...>::value && tc::is_range_with_iterators<Cont>::value && !has_mem_fn_reserve<Cont>::value>* = nullptr >
-	constexpr decltype(auto) append(Cont& cont, Rng&&... rng) MAYTHROW {
-		std::optional<typename boost::range_iterator<Cont>::type> oit;
-		if (!tc::empty(cont)) {
-			oit = tc::end_prev(cont);
-		}
-
-		return try_cleanup([&]() noexcept(noexcept(
-			append_detail::append_impl(cont, std::forward<Rng>(rng)...)
-		) && noexcept(
-			RangeReturn<Cont&>::pack_border(
-				oit ? tc::next(tc::end_prev(cont)) : tc::begin(cont), // Avoid *oit because *oit is not marked noexcept, even though it won't throw
-				cont
-			)
-		)) {
-			append_detail::append_impl(cont, std::forward<Rng>(rng)...); // MAYTHROW
-			return RangeReturn<Cont&>::pack_border(
-				oit ? tc::next(*oit) : tc::begin(cont),
-				cont
-			);
-		}, [&]() noexcept {
-			tc::take_inplace(cont, oit ? tc::next(*oit) : tc::begin(cont));
-		});
-	}
-
-	// append for target containers with reserve() member.
-	// If appending random-access iterator range, use Cont::insert() to give insert the opportunity for optimizations
-	template< template<typename> class RangeReturn = tc::return_void, typename Cont, typename... Rng, std::enable_if_t<tc::is_appendable<Cont&, Rng&&...>::value && tc::is_range_with_iterators<Cont>::value && has_mem_fn_reserve<Cont>::value>* = nullptr >
-	decltype(auto) append(Cont& cont, Rng&&... rng) MAYTHROW {
-		auto const nOffset = cont.size();
-		try {
-			append_detail::append_impl(cont, std::forward<Rng>(rng)...);
-			return RangeReturn<Cont&>::pack_border(
-				tc::begin_next(cont,nOffset),
-				cont
-			);
-		} catch(...) {
-			tc::take_first_inplace(cont, nOffset);
-			throw;
-		}
-	}
-
-	// append for non-range cont
-	template< typename Cont, typename... Rng, std::enable_if_t<tc::is_appendable<Cont&, Rng&&...>::value && !tc::is_range_with_iterators<Cont>::value>* = nullptr >
-	constexpr void append(Cont&& cont, Rng&&... rng) MAYTHROW {
-		append_detail::append_impl(cont, std::forward<Rng>(rng)...);
-	}
-
-	namespace no_adl {
-		template<typename TTarget>
-		struct SConversions<TTarget, std::enable_if_t<has_mem_fn_push_back<TTarget>::value || has_mem_fn_emplace_back<TTarget>::value>> final {
-		private:
-			template<typename Rng0, typename... RngN>
-			using use_ctor=std::integral_constant<bool,
-				tc::is_base_of<TTarget, tc::remove_cvref_t<Rng0> >::value &&
-				(
-					0==sizeof...(RngN) ||
-				 	(!std::is_reference<Rng0>::value && !std::is_const<Rng0>::value)
-				)
-			>;
-
-		public:
-			template<typename... T, std::enable_if_t<tc::is_safely_constructible<TTarget, tc::aggregate_tag_t, T&&...>::value>* = nullptr>
-			static TTarget fn(tc::aggregate_tag_t, T&&... t) MAYTHROW {
-				return TTarget(tc::aggregate_tag, std::forward<T&&>(t)...);
-			}
-
-			template<
-				typename Rng0,
-				typename... RngN,
-				std::enable_if_t<use_ctor<Rng0,RngN...>::value>* = nullptr,
-				std::enable_if_t<tc::is_appendable<TTarget&, RngN&&...>::value>* = nullptr
-			>
-			static TTarget fn(Rng0&& rng0, RngN&&... rngN) MAYTHROW {
-				if constexpr(0<sizeof...(RngN)) {
-					TTarget cont=std::forward<Rng0>(rng0);
- 					tc::append(cont, std::forward<RngN>(rngN)...);
-					return cont;
-				} else {
-					return std::forward<Rng0>(rng0);
+			tc::for_each(tc::concat(std::forward<Rngs>(rngs)...), tc::appender(cont));
+		} else if constexpr( tc::is_random_access_range<Cont>::value || has_mem_fn_reserve<Cont>::value ) {
+			auto const nOffset = tc::size_raw(cont);
+			try {
+				tc::for_each(tc::concat(std::forward<Rngs>(rngs)...), tc::appender(cont));
+				if constexpr( !std::is_same<RangeReturn, tc::return_void>::value ) {
+					return RangeReturn::pack_border(
+						tc::begin_next<tc::return_border>(cont, nOffset),
+						cont
+					);
 				}
+			} catch (...) {
+				tc::take_first_inplace(cont, nOffset);
+				throw;
 			}
-
-			template<
-				typename Rng0,
-				typename... RngN,
-				std::enable_if_t<!use_ctor<Rng0,RngN...>::value>* = nullptr,
-				std::enable_if_t<tc::is_appendable<TTarget&, Rng0&&, RngN&&...>::value>* = nullptr
-			>
-			static TTarget fn(Rng0&& rng0, RngN&&... rngN) MAYTHROW {
-				TTarget cont;
- 				tc::append(cont, std::forward<Rng0>(rng0), std::forward<RngN>(rngN)...);
-				return cont;
+		} else {
+			// assume iterators are stable to get iterator to first inserted element
+			auto const it = tc::back<tc::return_element_or_null>(cont);
+			auto FirstAppendedElement = [&]() noexcept {
+				return it ? modified(it, ++_) : tc::begin(cont);
+			};
+			try {
+				tc::for_each(tc::concat(std::forward<Rngs>(rngs)...), tc::appender(cont)); // MAYTHROW
+				if constexpr( !std::is_same<RangeReturn, tc::return_void>::value ) {
+					return RangeReturn::pack_border(FirstAppendedElement(), cont);
+				}
+			} catch (...) {
+				tc::take_inplace(cont, FirstAppendedElement());
+				throw;
 			}
-		};
+		}
 	}
 
-	template< typename Rng >
-	[[nodiscard]] auto make_vector(Rng&& rng) MAYTHROW {
-		return tc::explicit_cast<tc::vector<tc::range_value_t<Rng>>>(std::forward<Rng>(rng));
+	namespace explicit_convert_to_container_detail {
+		template<typename TTarget, typename Rng0, typename... RngN>
+		using use_ctor=std::integral_constant<bool,
+			tc::is_base_of<TTarget, tc::remove_cvref_t<Rng0> >::value &&
+			(
+				0==sizeof...(RngN) ||
+			 	(!std::is_reference<Rng0>::value && !std::is_const<Rng0>::value)
+			)
+		>;
+	}
+
+	namespace explicit_convert_adl {
+		template<
+			typename TTarget,
+			typename Rng0, typename... RngN,
+			std::enable_if_t<has_mem_fn_push_back<TTarget>::value || has_mem_fn_emplace_back<TTarget>::value>* = nullptr,
+			std::enable_if_t<explicit_convert_to_container_detail::use_ctor<TTarget, Rng0, RngN...>::value>* = nullptr,
+			std::enable_if_t<tc::is_appendable<TTarget&, RngN...>::value>* = nullptr
+		>
+		TTarget explicit_convert_impl(adl_tag_t, tc::type::identity<TTarget>, Rng0&& rng0, RngN&&... rngN) MAYTHROW {
+			if constexpr(0<sizeof...(RngN)) {
+				TTarget cont=std::forward<Rng0>(rng0);
+ 				tc::append(cont, std::forward<RngN>(rngN)...);
+				return cont;
+			} else {
+				return std::forward<Rng0>(rng0);
+			}
+		}
+
+		template<
+			typename TTarget,
+			typename Rng0, typename... RngN,
+			std::enable_if_t<has_mem_fn_push_back<TTarget>::value || has_mem_fn_emplace_back<TTarget>::value>* = nullptr,
+			std::enable_if_t<!explicit_convert_to_container_detail::use_ctor<TTarget, Rng0, RngN...>::value>* = nullptr,
+			std::enable_if_t<tc::is_appendable<TTarget&, Rng0, RngN...>::value>* = nullptr
+		>
+		TTarget explicit_convert_impl(adl_tag_t, tc::type::identity<TTarget>, Rng0&& rng0, RngN&&... rngN) MAYTHROW {
+			TTarget cont;
+ 			tc::append(cont, std::forward<Rng0>(rng0), std::forward<RngN>(rngN)...);
+			return cont;
+		}
 	}
 
 	template< typename... Rng >
 	[[nodiscard]] auto make_vector(Rng&&... rng) MAYTHROW {
-		return make_vector(tc::concat(std::forward<Rng>(rng)...));
+		static_assert(0 < sizeof...(Rng));
+		return tc::explicit_cast<tc::vector<tc::range_value_t<decltype(tc::concat(std::forward<Rng>(rng)...))>>>(std::forward<Rng>(rng)...);
 	}
 
-	DEFINE_FN(make_vector);
-
-	template< typename Rng >
-	[[nodiscard]] auto make_str(Rng&& rng) MAYTHROW {
-		return tc::explicit_cast<std::basic_string<tc::range_value_t<Rng>>>(std::forward<Rng>(rng));
+	template< typename Char, typename... Rng >
+	[[nodiscard]] auto make_str(Rng&&... rng) MAYTHROW {
+		static_assert(0 < sizeof...(Rng));
+		return tc::explicit_cast<std::basic_string<Char>>(std::forward<Rng>(rng)...);
 	}
 
 	template< typename... Rng >
 	[[nodiscard]] auto make_str(Rng&&... rng) MAYTHROW {
-		return make_str(tc::concat(std::forward<Rng>(rng)...));
-	}
-
-	template< typename Char, typename ... Rng >
-	[[nodiscard]] auto make_str(Rng&& ... rng) MAYTHROW {
-		return tc::explicit_cast<std::basic_string<Char>>(std::forward<Rng>(rng)...);
+		static_assert(0 < sizeof...(Rng));
+		return tc::make_str<tc::range_value_t<decltype(tc::concat(std::forward<Rng>(rng)...))>>(std::forward<Rng>(rng)...);
 	}
 
 	template< typename T, typename Rng >

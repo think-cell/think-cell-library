@@ -1,14 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 
 #include <algorithm>
 
@@ -31,36 +31,40 @@ namespace tc {
 		}
 	}
 
-	template< typename T >
-	void renew(T& t) noexcept {
-		static_assert(!std::is_trivially_default_constructible<T>::value, "You must decide between ctor_default and ctor_value!");
-		tc::dtor(t);
-		::new (static_cast<void*>(std::addressof(t))) T; // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
+	namespace renew_detail {
+		template <typename T, typename... Args>
+		constexpr void renew(T& t, Args&&... args) noexcept {
+			if constexpr (std::is_trivially_constructible<T, Args...>::value && std::is_trivially_move_assignable<T>::value && std::is_trivially_destructible<T>::value) {
+				t = T(std::forward<Args>(args)...);
+			} else {
+				tc::dtor(t);
+				// In C++, new T(...) is direct initialization just like T t(...).
+				// For non-class types, only implicit conversions are considered, so it is equivalent to T t=...
+				// For class types, explicit conversions are considered, unlike for T t=...
+				::new (static_cast<void*>(std::addressof(t))) T(std::forward<Args>(args)...); // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
+			}
+		}
 	}
 
 	template< typename T >
 	void renew_default(T& t) noexcept {
-		// static_assert( std::is_nothrow_default_constructible<T>::value );
+		static_assert( std::is_nothrow_default_constructible<T>::value );
 		tc::dtor(t);
 		::new (static_cast<void*>(std::addressof(t))) T; // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
 	}
 
-	template< typename T, typename... Args > // ctor_value with non-empty argument list is useful in generic code
-	void renew_value(T& t, Args&& ... args) noexcept	{
-		// static_assert( std::is_nothrow_default_constructible<T>::value );
-		tc::dtor(t);
-		::new (static_cast<void*>(std::addressof(t))) T(std::forward<Args>(args)...); // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
+	template< typename T > // ctor_value with non-empty argument list is useful in generic code
+	constexpr void renew_value(T& t) noexcept	{
+		static_assert( std::is_nothrow_constructible<T>::value );
+		renew_detail::renew(t);
 	}
 
-	template<typename T, typename First, typename... Args>
-	void renew(T& t, First&& first, Args&& ... args) noexcept {
-		// static_assert( std::is_nothrow_constructible<T, First&&, Args&& ...>::value );
-		tc::dtor(t);
-		// In C++, new T(...) is direct initialization just like T t(...).
-		// For non-class types, only implicit conversions are considered, so it is equivalent to T t=...
-		// For class types, explicit conversions are considered, unlike for T t=...
-		::new (static_cast<void*>(std::addressof(t))) T(std::forward<First>(first), std::forward<Args>(args)...); // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
+	template< typename T, typename... Args >
+	constexpr void renew(T& t, Args&&... args) noexcept	{
+		static_assert(!std::is_trivially_default_constructible<T>::value || 0 < sizeof...(Args), "You must decide between ctor_default and ctor_value!");
+		renew_detail::renew(t, std::forward<Args>(args)...);
 	}
+
 }
 
 // Sean Parent says that assignment should correspond to implicit construction, not explicit construction

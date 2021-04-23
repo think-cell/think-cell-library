@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -36,8 +36,8 @@ UNITTESTDEF(zip_range_adaptor_test) {
 
 		auto rng = tc::zip(vecn,vecn2);
 
-		_ASSERTEQUAL(std::get<0>(*tc::begin(rng)), 1);
-		_ASSERTEQUAL(std::addressof(std::get<1>(*tc::begin(rng))),std::addressof(vecn2[0]));
+		_ASSERTEQUAL(tc::get<0>(*tc::begin(rng)), 1);
+		_ASSERTEQUAL(std::addressof(tc::get<1>(*tc::begin(rng))),std::addressof(vecn2[0]));
 
 		auto it = tc::begin(vecn);
 		auto it2 = tc::begin(vecn2);
@@ -80,7 +80,7 @@ UNITTESTDEF(merge_ranges_with_unique_range_2) {
 	tc::cont_emplace_back(vecvecn2, std::initializer_list<int>{101,102,103,104,105,106,107,108,109});
 	tc::cont_emplace_back(vecvecn2, std::initializer_list<int>{110,111,112});
 
-	auto lesspred = tc::projected(tc::fn_less(), fn_std_get<0>());
+	auto lesspred = tc::projected(tc::fn_less(), TC_FN(tc::get<0>));
 
 	int n=0;
 	int nTotal=0;
@@ -98,7 +98,7 @@ UNITTESTDEF(merge_ranges_with_unique_range_2) {
 					);
 				}
 			),
-			tc::projected_front(lesspred)
+			tc::projected(lesspred, TC_FN(tc::front))
 		),
 		[&](auto rng) noexcept {
 			tc::for_each(

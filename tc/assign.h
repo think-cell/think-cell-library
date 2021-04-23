@@ -1,16 +1,17 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 #include "explicit_cast.h"
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "functors.h"
 #include "return_decltype.h"
+#include "variant.h" // our customized operator== may not be found by ADL in tc::equal_to
 #ifndef __EMSCRIPTEN__
 #include <atomic>
 #endif
@@ -173,9 +174,9 @@ using no_adl::fn_less_equal;
 /////////////////////////////////////////////////////////////////////
 // assign
 
-template< typename Var, typename Val, typename Better >
-constexpr auto assign_better( Var&& var, Val&& val, Better better ) noexcept {
-	return tc::make_overload<bool>(
+template< typename Better, typename Var, typename Val  >
+constexpr auto assign_better( Better better, Var&& var, Val&& val ) noexcept {
+	return tc::make_overload(
 		[&](std::true_type b) noexcept {
 			static_assert( tc::is_safely_assignable<Var&&, Val&&>::value );
 			std::forward<Var>(var) = std::forward<Val>(val);
@@ -198,12 +199,12 @@ constexpr auto assign_better( Var&& var, Val&& val, Better better ) noexcept {
 
 template< typename Var, typename Val >
 constexpr bool change( Var&& var, Val&& val ) noexcept {
-	return tc::assign_better( std::forward<Var>(var), std::forward<Val>(val), [](auto const& val_, auto const& var_) noexcept { return !tc::equal_to(var_, val_); } ); // var==val, not val==var
+	return tc::assign_better( [](auto const& val_, auto const& var_) noexcept { return !tc::equal_to(var_, val_); }, std::forward<Var>(var), std::forward<Val>(val) ); // var==val, not val==var
 }
 
 #ifndef __EMSCRIPTEN__
-template< typename Var, typename Val, typename Better >
-bool assign_better( std::atomic<Var>& var, Val&& val, Better better ) noexcept {
+template< typename Better, typename Var, typename Val >
+bool assign_better( Better better, std::atomic<Var>& var, Val&& val ) noexcept {
 	Var varOld=var;
 	_ASSERTINITIALIZED( varOld );
 	while( better(tc::as_const(VERIFYINITIALIZED(val)), tc::as_const(varOld)) ) {
@@ -212,8 +213,8 @@ bool assign_better( std::atomic<Var>& var, Val&& val, Better better ) noexcept {
 	return false;
 }
 
-template< typename Var, typename Val, typename Better >
-bool assign_better( std::atomic<Var>&& var, Val&& val, Better better ) noexcept =delete; // make passing rvalue ref an error
+template< typename Better, typename Var, typename Val0, typename... Val >
+bool assign_better( Better better, std::atomic<Var>&& var, Val0&& val0, Val&&... val ) noexcept =delete; // make passing rvalue ref an error
 
 template< typename Var, typename Val >
 bool change( std::atomic<Var> & var, Val&& val ) noexcept {
@@ -225,14 +226,21 @@ template< typename Var, typename Val >
 bool change( std::atomic<Var>&& var, Val&& val ) noexcept; // make passing rvalue ref a linker error
 #endif // __EMSCRIPTEN__
 
-template< typename Var, typename Val >
-constexpr bool assign_max( Var&& var, Val&& val ) noexcept {
-	return tc::assign_better( std::forward<Var>(var), std::forward<Val>(val), tc::fn_greater() ); // use operator< for comparison just like tc::min/max
+template< typename Better, typename Var, typename... Val, std::enable_if_t<1<sizeof...(Val)>* = nullptr >
+constexpr bool assign_better( Better better, Var&& var, Val&&... val) noexcept {
+	bool b=false;
+	static_cast<void>(std::initializer_list<bool>{(b=(tc::assign_better(better, var, std::forward<Val>(val)) || b))...});
+	return b;
 }
 
-template< typename Var, typename Val >
-constexpr bool assign_min( Var&& var, Val&& val ) noexcept {
-	return tc::assign_better( std::forward<Var>(var), std::forward<Val>(val), tc::fn_less() );
+template< typename Var, typename Val0, typename... Val >
+constexpr bool assign_max( Var&& var, Val0&& val0, Val&&... val ) noexcept {
+	return tc::assign_better( tc::fn_greater(), std::forward<Var>(var), std::forward<Val0>(val0), std::forward<Val>(val)... ); // use operator< for comparison just like tc::min/max
+}
+
+template< typename Var, typename Val0, typename... Val>
+constexpr bool assign_min( Var&& var, Val0&& val0, Val&&... val ) noexcept {
+	return tc::assign_better( tc::fn_less(), std::forward<Var>(var), std::forward<Val0>(val0), std::forward<Val>(val)... );
 }
 
 template<typename Var, typename Val>
@@ -251,8 +259,8 @@ DEFINE_FN( assign_min );
 
 template< typename Better >
 [[nodiscard]] auto fn_assign_better(Better better) {
-	return [better=tc_move(better)](auto&& var, auto&& val) noexcept {
-		return tc::assign_better(tc_move_if_owned(var), tc_move_if_owned(val), better);
+	return [better=tc_move(better)](auto&& var, auto&& val0, auto&&... val) noexcept {
+		return tc::assign_better(better, tc_move_if_owned(var), tc_move_if_owned(val0), tc_move_if_owned(val)...);
 	};
 }
 

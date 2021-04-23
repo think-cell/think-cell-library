@@ -1,14 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "range_fwd.h"
 #include "range_adaptor.h"
 #include "meta.h"
@@ -18,7 +18,7 @@
 
 namespace tc {
 
-	namespace no_adl {
+	namespace union_adaptor_adl {
 
 		template<
 			typename Comp,
@@ -31,10 +31,10 @@ namespace tc {
 		template<typename Comp, typename Rng0, typename Rng1>
 		struct [[nodiscard]] union_adaptor<Comp, Rng0, Rng1, false>
 		{
-			std::tuple<
-				reference_or_value< Rng0 >,
-				reference_or_value< Rng1 >
-			> m_baserng;
+			tc::tuple<
+				tc::range_adaptor_base_range< Rng0 >,
+				tc::range_adaptor_base_range< Rng1 >
+			> m_tupleadaptbaserng;
 
 		protected:
 			Comp m_comp;
@@ -42,64 +42,46 @@ namespace tc {
 		public:
 			template<typename Rhs0, typename Rhs1, typename Comp2>
 			explicit union_adaptor(Rhs0&& rhs0, Rhs1&& rhs1, Comp2&& comp) noexcept
-				: m_baserng(
-					reference_or_value< Rng0 >(aggregate_tag, std::forward<Rhs0>(rhs0)),
-					reference_or_value< Rng1 >(aggregate_tag, std::forward<Rhs1>(rhs1))
-				),
+				: m_tupleadaptbaserng{{
+					{{aggregate_tag, std::forward<Rhs0>(rhs0)}},
+					{{aggregate_tag, std::forward<Rhs1>(rhs1)}}
+				}},
 				m_comp(std::forward<Comp2>(comp))
 			{}
 
 		private:
-			template<typename Func>
+			template<typename Sink>
 			struct FForwardFirstArgOnly final {
-				Func& m_func;
-
-				explicit FForwardFirstArgOnly(Func& func) noexcept : m_func(func)
-				{}
+				Sink const& m_sink;
 
 				template<typename T0, typename T1>
 				auto operator()(T0&& arg0, T1&&) const {
-					return tc::continue_if_not_break(m_func, std::forward<T0>(arg0));
+					return tc::continue_if_not_break(m_sink, std::forward<T0>(arg0));
 				}
-
 			};
 
 		public:
-			template< typename Func >
-			auto operator()(Func func) const/* no & */ MAYTHROW
-			{
+			template<typename Self, typename Sink, std::enable_if_t<tc::is_base_of_decayed<union_adaptor, Self>::value>* = nullptr>
+			friend auto for_each_impl(Self&& self, Sink const sink) MAYTHROW {
 				return tc::interleave_2(
-					*std::get<0>(m_baserng),
-					*std::get<1>(m_baserng),
-					m_comp,
-					std::ref(func),
-					std::ref(func),
-					FForwardFirstArgOnly<Func>(func)
+					tc::get<0>(std::forward<Self>(self).m_tupleadaptbaserng).base_range(),
+					tc::get<1>(std::forward<Self>(self).m_tupleadaptbaserng).base_range(),
+					std::forward<Self>(self).m_comp,
+					std::ref(sink),
+					std::ref(sink),
+					FForwardFirstArgOnly<Sink>{sink}
 				);
 			}
 
-			template< typename Func >
-			auto operator()(Func func) /* no & */ MAYTHROW
-			{
+			template<typename Self, typename Sink, std::enable_if_t<tc::is_base_of_decayed<union_adaptor, Self>::value>* = nullptr>
+			friend auto for_each_reverse_impl(Self&& self, Sink const sink) MAYTHROW {
 				return tc::interleave_2(
-					*std::get<0>(m_baserng),
-					*std::get<1>(m_baserng),
-					m_comp,
-					std::ref(func),
-					std::ref(func),
-					FForwardFirstArgOnly<Func>(func)
-				);
-			}
-
-			template<typename This, typename Func>
-			static auto enumerate_reversed(This&& rngThis, Func&& func) MAYTHROW {
-				return tc::interleave_2(
-					tc::reverse(*std::get<0>(std::forward<This>(rngThis).m_baserng)),
-					tc::reverse(*std::get<1>(std::forward<This>(rngThis).m_baserng)),
-					/*comp*/[&](auto const& lhs, auto const& rhs) noexcept { return -rngThis.m_comp(lhs, rhs); },
-					std::ref(func),
-					std::ref(func),
-					FForwardFirstArgOnly<Func>(func)
+					tc::reverse(tc::get<0>(std::forward<Self>(self).m_tupleadaptbaserng).base_range()),
+					tc::reverse(tc::get<1>(std::forward<Self>(self).m_tupleadaptbaserng).base_range()),
+					/*comp*/[&](auto const& lhs, auto const& rhs) noexcept { return -self.m_comp(lhs, rhs); },
+					std::ref(sink),
+					std::ref(sink),
+					FForwardFirstArgOnly<Sink>{sink}
 				);
 			}
 		};
@@ -108,19 +90,23 @@ namespace tc {
 			typename Index0,
 			typename Index1
 		>
-		struct union_adaptor_index {
+		struct union_adaptor_index : tc::equality_comparable<union_adaptor_index<Index0, Index1>> {
 			template<typename... Args>
 			union_adaptor_index(Args... args) noexcept
-				: m_tplindex(std::forward<Args>(args)...)
+				: m_tplindex{std::forward<Args>(args)...}
 			{}
 
 			template<typename... Args>
 			union_adaptor_index(tc::order order, Args... args) noexcept
-				: m_tplindex(std::forward<Args>(args)...)
+				: m_tplindex{std::forward<Args>(args)...}
 				, m_order(order)
 			{}
 
-			std::tuple<Index0, Index1> m_tplindex;
+			friend bool operator==(union_adaptor_index const& lhs, union_adaptor_index const& rhs) noexcept {
+				return EQUAL_MEMBERS(m_tplindex);
+			}
+
+			tc::tuple<Index0, Index1> m_tplindex;
 			tc::order m_order;
 		};
 
@@ -147,13 +133,10 @@ namespace tc {
 			using this_type = union_adaptor;
 
 		public:
-			using index = typename union_adaptor::index;
+			using typename this_type::range_iterator_from_index::index;
+			using union_adaptor<Comp, Rng0, Rng1, false>::union_adaptor;
 
-			template<typename Rhs0, typename Rhs1, typename Comp2>
-			explicit union_adaptor(Rhs0&& rhs0, Rhs1&& rhs1, Comp2&& comp) noexcept
-				: union_adaptor<Comp2, Rng0, Rng1, false>(std::forward<Rhs0>(rhs0), std::forward<Rhs1>(rhs1), std::forward<Comp2>(comp))
-			{}
-
+			static constexpr bool c_bHasStashingIndex=tc::has_stashing_index<std::remove_reference_t<Rng0>>::value || tc::has_stashing_index<std::remove_reference_t<Rng1>>::value;
 		private:
 			void find_order(index& idx) const& noexcept {
 				if (at_end_index_fwd<0>(idx)) {
@@ -167,42 +150,37 @@ namespace tc {
 
 			template<int N, typename Index>
 			auto get_idx(Index&& index) & return_decltype_noexcept(
-				std::get<N>(index.m_tplindex)
+				tc::get<N>(index.m_tplindex)
 			)
 
 			template<int N, typename Index>
 			auto get_idx(Index&& index) const& return_decltype_noexcept(
-				std::get<N>(index.m_tplindex)
+				tc::get<N>(index.m_tplindex)
 			)
 
 			template<int N>
 			void increment_index_fwd(index& idx) const& noexcept {
-				tc::increment_index(*std::get<N>(this->m_baserng),get_idx<N>(idx));
+				tc::increment_index(tc::get<N>(this->m_tupleadaptbaserng).base_range(), get_idx<N>(idx));
 			}
 
 			template<int N>
 			void decrement_index_fwd(index& idx) const& noexcept {
-				tc::decrement_index(*std::get<N>(this->m_baserng),get_idx<N>(idx));
+				tc::decrement_index(tc::get<N>(this->m_tupleadaptbaserng).base_range(), get_idx<N>(idx));
 			}
 
 			template<int N>
 			bool at_end_index_fwd(index const& idx) const& noexcept {
-				return tc::at_end_index(*std::get<N>(this->m_baserng),get_idx<N>(idx));
+				return tc::at_end_index(tc::get<N>(this->m_tupleadaptbaserng).base_range(), get_idx<N>(idx));
 			}
 
 			template<int N>
 			bool at_begin_index(index const& idx) const& noexcept {
-				return tc::equal_index(*std::get<N>(this->m_baserng), get_idx<N>(idx), tc::begin_index(std::get<N>(this->m_baserng)));
-			}
-
-			template<int N>
-			bool equal_index_fwd(index const& lhs, index const& rhs) const& noexcept {
-				return tc::equal_index(*std::get<N>(this->m_baserng), get_idx<N>(lhs), get_idx<N>(rhs));
+				return get_idx<N>(idx) == tc::get<N>(this->m_tupleadaptbaserng).base_begin_index();
 			}
 
 			template<int N>
 			auto dereference_index_fwd(index const& idx) const& return_decltype_MAYTHROW(
-				tc::dereference_index(*std::get<N>(this->m_baserng), this->get_idx<N>(idx))
+				tc::dereference_index(tc::get<N>(this->m_tupleadaptbaserng).base_range(), this->get_idx<N>(idx))
 			)
 
 			STATIC_FINAL(at_end_index)(index const& idx) const& noexcept -> bool {
@@ -210,7 +188,7 @@ namespace tc {
 			}
 
 			STATIC_FINAL(begin_index)() const& noexcept -> index {
-				index idx(tc::begin_index(std::get<0>(this->m_baserng)), tc::begin_index(std::get<1>(this->m_baserng)));
+				index idx(tc::get<0>(this->m_tupleadaptbaserng).base_begin_index(), tc::get<1>(this->m_tupleadaptbaserng).base_begin_index());
 				find_order(idx);
 				return idx;
 			}
@@ -220,13 +198,8 @@ namespace tc {
 			}
 
 			STATIC_FINAL(end_index)() const& noexcept -> index {
-				index idx(tc::order::less, tc::end_index(std::get<0>(this->m_baserng)), tc::end_index(std::get<1>(this->m_baserng)));
+				index idx(tc::order::less, tc::get<0>(this->m_tupleadaptbaserng).base_end_index(), tc::get<1>(this->m_tupleadaptbaserng).base_end_index());
 				return idx;
-			}
-
-			STATIC_FINAL(equal_index)(index const& idxLhs, index const& idxRhs) const& noexcept -> bool {
-				return equal_index_fwd<0>(idxLhs, idxRhs) &&
-					equal_index_fwd<1>(idxLhs, idxRhs);
 			}
 
 			STATIC_FINAL(increment_index)(index& idx) const& noexcept -> void {
@@ -274,17 +247,17 @@ namespace tc {
 
 			// partition_point would be a more efficient customization point
 			STATIC_FINAL(middle_point)(index& idx, index const& idxEnd) const& noexcept -> void {
-				if (equal_index_fwd<0>(idx, idxEnd)) {
-					tc::middle_point(*std::get<1>(this->m_baserng), get_idx<1>(idx), get_idx<1>(idxEnd));
+				if (get_idx<0>(idx) == get_idx<0>(idxEnd)) {
+					tc::middle_point(tc::get<1>(this->m_tupleadaptbaserng).base_range(), get_idx<1>(idx), get_idx<1>(idxEnd));
 					idx.m_order = tc::order::greater;
 				} else {
 					auto idx0Begin = get_idx<0>(idx);
-					tc::middle_point(*std::get<0>(this->m_baserng), get_idx<0>(idx), get_idx<0>(idxEnd));
+					tc::middle_point(tc::get<0>(this->m_tupleadaptbaserng).base_range(), get_idx<0>(idx), get_idx<0>(idxEnd));
 					auto&& ref0 = dereference_index_fwd<0>(idx);
 					get_idx<1>(idx) = tc::iterator2index(
 						tc::lower_bound(
-							tc::make_iterator(*std::get<1>(tc::as_mutable(this->m_baserng)), get_idx<1>(idx)),
-							tc::make_iterator(*std::get<1>(tc::as_mutable(this->m_baserng)), get_idx<1>(idxEnd)),
+							tc::make_iterator(tc::get<1>(tc::as_mutable(this->m_tupleadaptbaserng)).base_range(), get_idx<1>(idx)),
+							tc::make_iterator(tc::get<1>(tc::as_mutable(this->m_tupleadaptbaserng)).base_range(), get_idx<1>(idxEnd)),
 							ref0,
 							tc::greaterfrom3way([&](auto const& _1, auto const& _2) noexcept { return this->m_comp(_2, _1); })
 						)
@@ -301,10 +274,10 @@ namespace tc {
 						if (tc::order::equal == idx.m_order) {
 							auto idx0 = get_idx<0>(idx);
 							typename boost::range_size<Rng0>::type n = 0;
-							while (!tc::equal_index(*std::get<0>(this->m_baserng), idx0Begin, idx0)) {
-								tc::decrement_index(*std::get<0>(this->m_baserng), idx0);
+							while (idx0Begin != idx0) {
+								tc::decrement_index(tc::get<0>(this->m_tupleadaptbaserng).base_range(), idx0);
 
-								if (tc::order::equal != this->m_comp(tc::dereference_index(*std::get<0>(this->m_baserng), idx0), ref1)) {
+								if (tc::order::equal != this->m_comp(tc::dereference_index(tc::get<0>(this->m_tupleadaptbaserng).base_range(), idx0), ref1)) {
 									break;
 								}
 								++n;
@@ -324,14 +297,18 @@ namespace tc {
 			}
 		};
 	}
+	using union_adaptor_adl::union_adaptor;
 
-	using no_adl::union_adaptor;
+	template<typename UnionAdaptor, typename Comp, typename Rng0, typename Rng1>
+	struct no_adl::range_value<UnionAdaptor, union_adaptor<Comp, Rng0, Rng1, false>, tc::void_t<tc::common_range_value_t<Rng0, Rng1>>> final {
+		using type = tc::common_range_value_t<Rng0, Rng1>;
+	};
 
 	template<typename Comp, typename Rng0, typename Rng1>
 	[[nodiscard]] auto split_union(subrange<union_adaptor<Comp, Rng0, Rng1> &> const& rngsubunion) return_decltype_NOEXCEPT( // make_tuple is noexcept(false); the rest of this should only throw bad_alloc
-		std::make_tuple(
-			tc::slice(*std::get<0>(rngsubunion.base_range().m_baserng), std::get<0>(rngsubunion.begin_index().m_tplindex), std::get<0>(rngsubunion.end_index().m_tplindex)),
-			tc::slice(*std::get<1>(rngsubunion.base_range().m_baserng), std::get<1>(rngsubunion.begin_index().m_tplindex), std::get<1>(rngsubunion.end_index().m_tplindex))
+		tc::make_tuple(
+			tc::slice(tc::get<0>(rngsubunion.base_range().m_tupleadaptbaserng).base_range(), tc::get<0>(rngsubunion.begin_index().m_tplindex), tc::get<0>(rngsubunion.end_index().m_tplindex)),
+			tc::slice(tc::get<1>(rngsubunion.base_range().m_tupleadaptbaserng).base_range(), tc::get<1>(rngsubunion.begin_index().m_tplindex), tc::get<1>(rngsubunion.end_index().m_tplindex))
 		)
 	)
 

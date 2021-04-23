@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -54,6 +54,38 @@ namespace tc {
 	generator_range_mock<Value_type> make_generator_range( tc::vector<Value_type> const& v ) noexcept {
 		return generator_range_mock<Value_type>(v);
 	}
+	
+	//--------------------------------------------------------------------------------------------------------------------------
+	// chunk_range
+	// convert range to range of chunks
+
+	namespace no_adl {
+		template<typename RngChunk, typename Sink>
+		struct chunk_range_sink {
+			Sink& m_sink;
+
+			template<typename T>
+			auto operator()(T&& t) const& noexcept { return chunk(tc::single(std::forward<T>(t))); }
+			auto chunk(RngChunk rng) const& noexcept { return m_sink(static_cast<RngChunk&&>(rng)); }
+		};
+
+		template<typename RngChunk, typename Rng>
+		struct chunk_range_adaptor {
+			tc::reference_or_value<Rng> m_baserng;
+			using value_type = RngChunk;
+
+			template<typename Sink>
+			auto operator()(Sink sink) const& noexcept {
+				return tc::for_each(*m_baserng, chunk_range_sink<RngChunk, Sink&>{sink});
+			}
+		};
+	}
+
+	template<typename RngChunk, typename Rng>
+	no_adl::chunk_range_adaptor<RngChunk, Rng> chunk_range(Rng&& rng) noexcept {
+		return {tc::make_reference_or_value(std::forward<Rng>(rng))};
+	}
+
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------
@@ -113,7 +145,7 @@ namespace tc {
 	}
 
 	template<typename Rng>
-	std::string dbg_print_rng(Rng&& rng, std::size_t max_elems = 50) noexcept {
+	std::basic_string<char> dbg_print_rng(Rng&& rng, std::size_t max_elems = 50) noexcept {
 
 		std::stringstream os;
 		os << "[";

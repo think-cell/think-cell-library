@@ -1,14 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "generic_macros.h"
 #include <type_traits>
 #include <boost/preprocessor/variadic/to_seq.hpp>
@@ -30,7 +30,7 @@ namespace tc {
 		void ambiguous_if_equality_comparable(Lhs const&, Rhs const&) noexcept; // function call will be ambigous if (at least) one of Lhs or Rhs derives from (at least one) instance of equality_comparable
 
 		template<typename Derived> // template to preserve empty base class optimization, if first member of Derived is also equality_comparable. Also avoids warning C4584 in case of multiple inheritance.
-		struct equality_comparable {
+		struct TC_EMPTY_BASES equality_comparable {
 			template <typename Lhs, typename Rhs>
 			friend typename std::enable_if_t<
 				std::is_base_of<equality_comparable, Lhs>::value || std::is_base_of<equality_comparable, Rhs>::value, int
@@ -57,4 +57,4 @@ namespace tc {
 }
 
 #define EQUAL_MEMBER_IMPL(member) (lhs.member == rhs.member)
-#define EQUAL_MEMBERS(...) (PP_DELIMIT_TRANSFORMED_SEQ(EQUAL_MEMBER_IMPL, &&, BOOST_PP_VARIADIC_TO_SEQ(__VA_ARGS__)))
+#define EQUAL_MEMBERS(...) (TC_PP_DELIMIT_TRANSFORMED_SEQ(EQUAL_MEMBER_IMPL, &&, BOOST_PP_VARIADIC_TO_SEQ(__VA_ARGS__)))

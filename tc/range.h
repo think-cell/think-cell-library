@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -19,7 +19,7 @@
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 
 #include "meta.h"
 #include "for_each.h"
@@ -38,8 +38,6 @@
 #include "reference_or_value.h"
 
 namespace tc{
-	DEFINE_FN2(tc::size, fn_size); // Prevent ADL of std::size (C++17)
-	DEFINE_FN( strlen )
 	DEFINE_FN( equal );
 }
 //-----------------------------------------------------------------------------------------------------------------------------

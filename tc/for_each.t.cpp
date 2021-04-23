@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -9,6 +9,16 @@
 #include "range.h"
 #include "range.t.h"
 #include "ref.h"
+
+STATICASSERTEQUAL(tc_internal_continue_if_not_break(tc::break_), tc::break_);
+STATICASSERTEQUAL(tc_internal_continue_if_not_break(tc::continue_), tc::continue_);
+STATICASSERTSAME((decltype(tc_internal_continue_if_not_break(tc::break_))), (tc::break_or_continue));
+STATICASSERTSAME((decltype(tc_internal_continue_if_not_break(tc::continue_))), (tc::break_or_continue));
+STATICASSERTSAME((decltype(tc_internal_continue_if_not_break(INTEGRAL_CONSTANT(tc::break_)()))), (INTEGRAL_CONSTANT(tc::break_)));
+STATICASSERTSAME((decltype(tc_internal_continue_if_not_break(INTEGRAL_CONSTANT(tc::continue_)()))), (INTEGRAL_CONSTANT(tc::continue_)));
+STATICASSERTSAME((decltype(tc_internal_continue_if_not_break(23))), (INTEGRAL_CONSTANT(tc::continue_)));
+STATICASSERTSAME((decltype(tc_internal_continue_if_not_break(void()))), (INTEGRAL_CONSTANT(tc::continue_)));
+
 
 //---- for_each ---------------------------------------------------------------------------------------------------------------
 namespace {
@@ -193,19 +203,19 @@ UNITTESTDEF(for_each_adjacent_tuple_deref) {
 		std::array<int,3> m_n;
 
 		lr_overloads() noexcept {
-			m_n[0] = 0;
-			m_n[1] = 0;
-			m_n[2] = 0;
+			tc::at(m_n, 0) = 0;
+			tc::at(m_n, 1) = 0;
+			tc::at(m_n, 2) = 0;
 		}
 
-		void operator()(int const&, int const&, int const&) & noexcept { ++m_n[0];}
-		void operator()(int&&, int const&, int const&) & noexcept { ++m_n[1]; }
-		void operator()(int&&, int&&, int&&) & noexcept { ++m_n[2]; }
+		void operator()(int const&, int const&, int const&) & noexcept { ++tc::at(m_n, 0);}
+		void operator()(int&&, int const&, int const&) & noexcept { ++tc::at(m_n, 1); }
+		void operator()(int&&, int&&, int&&) & noexcept { ++tc::at(m_n, 2); }
 	};
 
 	tc::vector<int> vecn{0,0,0,0,0};
-	tc::for_each_adjacent_tuple<3>(
-		vecn,
+	tc::for_each(
+		tc::adjacent_tuples<3>(vecn),
 		[](int& n0, int& n1, int& n2) noexcept {
 			++n0;
 			++n1;
@@ -215,14 +225,16 @@ UNITTESTDEF(for_each_adjacent_tuple_deref) {
 
 	TEST_RANGE_EQUAL(
 		vecn,
-		MAKE_CONSTEXPR_ARRAY(1,2,3,2,1)
+		as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,2,1))
 	);
 
 	int nTransforms = 0;
-	tc::for_each_adjacent_tuple<3>(
-		tc::transform(
-			vecn,
-			[&](int n) noexcept {++nTransforms; return n;}
+	tc::for_each(
+		tc::adjacent_tuples<3>(
+			tc::transform(
+				vecn,
+				[&](int n) noexcept {++nTransforms; return n;}
+			)
 		),
 		[](int n0, int n1, int n2) noexcept {
 			++n0;
@@ -234,22 +246,24 @@ UNITTESTDEF(for_each_adjacent_tuple_deref) {
 
 	{
 		lr_overloads overloads;
-		tc::for_each_adjacent_tuple<3>(
-			vecn,
+		tc::for_each(
+			tc::adjacent_tuples<3>(vecn),
 			std::ref(overloads)
 		);
 
-		TEST_RANGE_EQUAL(overloads.m_n, MAKE_CONSTEXPR_ARRAY(3,0,0));
+		TEST_RANGE_EQUAL(overloads.m_n, as_constexpr(tc::make_array(tc::aggregate_tag, 3,0,0)));
 	}
 
 	{
 		lr_overloads overloads;
-		tc::for_each_adjacent_tuple<3>(
-			tc::transform(vecn, [](int n) noexcept {return n;}),
+		tc::for_each(
+			tc::adjacent_tuples<3>(
+				tc::transform(vecn, [](int n) noexcept {return n;})
+			),
 			std::ref(overloads)
 		);
 
-		TEST_RANGE_EQUAL(overloads.m_n, MAKE_CONSTEXPR_ARRAY(0,2,1));
+		TEST_RANGE_EQUAL(overloads.m_n, as_constexpr(tc::make_array(tc::aggregate_tag, 0,2,1)));
 	}
 }
 

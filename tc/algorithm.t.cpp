@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -70,8 +70,8 @@ UNITTESTDEF( sort_accumulate_each_unique_range_2 ) {
 			[](SValAccu& lhs, SValAccu const& rhs) noexcept { lhs.m_accu+=rhs.m_accu; }
 		);
 		TEST_EQUAL( 1, vec.size() );
-		TEST_EQUAL( 1, tc_front(vec).m_val );
-		TEST_EQUAL( 5, tc_front(vec).m_accu );
+		TEST_EQUAL( 1, tc::front(vec).m_val );
+		TEST_EQUAL( 5, tc::front(vec).m_accu );
 	}
 }
 
@@ -180,13 +180,13 @@ UNITTESTDEF(find_closest_if) {
 
 UNITTESTDEF(rangefilter_on_subrange) {
 	tc::vector<int> vecn={2,3,3,0, /*rngn starts here*/ 3,4,5,6,4,5,6,7};
-	auto rngn=tc::drop_first(vecn, 4);
+	auto rngn=tc::begin_next<tc::return_drop>(vecn, 4);
 
 	{
 		tc::sort_unique_inplace(rngn); // uses range_filter<tc::subrange<tc::vector<int>&> > internally
 		int const anExpected[]={2,3,3,0, /*rngn starts here*/ 3,4,5,6,7};
 		_ASSERT(tc::equal(vecn, anExpected));
-		_ASSERTEQUAL(tc::begin(rngn), tc::begin_next(vecn,4));
+		_ASSERTEQUAL(tc::begin(rngn), tc::begin_next<tc::return_border>(vecn,4));
 		_ASSERTEQUAL(tc::end(rngn), tc::end(vecn));
 	}
 
@@ -206,7 +206,7 @@ UNITTESTDEF(rangefilter_on_subrange) {
 		}
 		int const anExpected[]={2,3,3,0, /*rngn starts here*/};
 		_ASSERT(tc::equal(vecn, anExpected));
-		_ASSERTEQUAL(tc::begin(rngn), tc::begin_next(vecn,4));
+		_ASSERTEQUAL(tc::begin(rngn), tc::begin_next<tc::return_border>(vecn,4));
 		_ASSERTEQUAL(tc::end(rngn), tc::end(vecn));
 	}
 }
@@ -218,8 +218,8 @@ UNITTESTDEF(is_strictly_sorted){
 }
 
 UNITTESTDEF(remove_inplace_parser) {
-	std::string input = "0123<font>4567<font10><font11><font12>89<font14><font";
-	tc::remove_inplace(input, tc::lit("<font") > *(tc::char_<char> - tc::lit('>')) > tc::lit('>'));
+	std::basic_string<char> input = "0123<font>4567<font10><font11><font12>89<font14><font";
+	tc::remove_inplace(input, tc::asciilit("<font") > *(tc::char_<char> - tc::asciilit(">")) > tc::asciilit(">"));
 	_ASSERTEQUAL(input, "0123456789<font");
 }
 
@@ -229,7 +229,7 @@ UNITTESTDEF(Naryinterleave) {
 	auto const vecnBCopy = vecnB;
 	tc::vector<int> const vecnC({-100,1000});
 
-	tc::vector<int> vecnResult = tc::make_vector(tc::concat(vecnA, vecnB, vecnC));
+	tc::vector<int> vecnResult = tc::make_vector(vecnA, vecnB, vecnC);
 	tc::sort_inplace(vecnResult);
 	auto itResult = tc::begin(vecnResult);
 
@@ -269,7 +269,7 @@ UNITTESTDEF(NaryinterleaveBreak) {
 	auto const vecnBCopy = vecnB;
 	tc::vector<int> const vecnC({ -100,1000 });
 
-	tc::vector<int> vecnResult = tc::make_vector(tc::concat(vecnA, vecnB, vecnC));
+	tc::vector<int> vecnResult = tc::make_vector(vecnA, vecnB, vecnC);
 	tc::sort_inplace(vecnResult);
 	auto itResult = tc::begin(vecnResult);
 
@@ -313,11 +313,11 @@ UNITTESTDEF(plurality_element_test) {
 	auto const str3 = "a";
 	_ASSERTEQUAL(tc::begin(str3),tc::plurality_element<tc::return_element>(str3));
 	int an[] = {1,2,3,4,3,4,3,5,6};
-	_ASSERTEQUAL(std::make_optional(4), tc::plurality_element<tc::return_value_or_none>(tc::filter(an, [](auto n) noexcept { return n % 2 == 0; })));
+	_ASSERTEQUAL(std::optional(4), tc::plurality_element<tc::return_value_or_none>(tc::filter(an, [](auto n) noexcept { return n % 2 == 0; })));
 }
 
-static_assert(std::is_move_constructible<decltype(tc::sort(std::declval<std::string const&>()))>::value);
-static_assert(!std::is_move_constructible<decltype(tc::sort(std::declval<std::string>()))>::value);
+static_assert(std::is_move_constructible<decltype(tc::sort(std::declval<std::basic_string<char> const&>()))>::value);
+static_assert(!std::is_move_constructible<decltype(tc::sort(std::declval<std::basic_string<char>>()))>::value);
 static_assert(std::is_move_constructible<decltype(tc::sort(std::declval<tc::vector<int> const&>()))>::value);
 static_assert(std::is_move_constructible<decltype(tc::sort(std::declval<tc::vector<int>>()))>::value);
 
@@ -332,24 +332,25 @@ UNITTESTDEF(sort_test) {
 	_ASSERT(tc::equal(rngpairnnSorted, vecpairnn2));
 }
 
+#ifdef __clang__ // remove if std::sort is constexpr in xcode
 UNITTESTDEF(constexpr_sort_test) {
 	std::mt19937 gen; // same sequence of numbers each time for reproducibility
 	std::uniform_int_distribution<> dist(0, 63);
 
 	auto Test = [](auto rngn) noexcept {
 		auto vecn = tc::explicit_cast<tc::vector<int>>(rngn);
-		_ASSERTEQUAL(modified(vecn, tc::sort_inplace(_)), modified(vecn, tc::constexpr_sort_inplace(_)));
+		_ASSERTEQUAL(modified(vecn, tc::sort_inplace(_)), modified(vecn, tc::constexpr_sort_inplace_detail::constexpr_sort_inplace(tc::begin(_), tc::end(_), tc::fn_less())));
 	};
 
 	for( int i = 0; i < 17; ++i ) {
-		Test(tc::take_first([&](auto sink) noexcept { for(;;) RETURN_IF_BREAK( tc::continue_if_not_break(sink, dist(gen)) ); }, dist(gen)));
+		Test(tc::begin_next<tc::return_take>([&](auto sink) noexcept { for(;;) RETURN_IF_BREAK( tc::continue_if_not_break(sink, dist(gen)) ); }, dist(gen)));
 		Test(tc::iota(0, i));
 		Test(tc::reverse(tc::iota(0, i)));
-		Test(tc::repeat_n(0, i));
+		Test(tc::repeat_n(i, 0));
 		for( int j = 0; j < 7; ++j) {
-			Test(tc::join(tc::repeat_n(tc::iota(0, j), i)));
+			Test(tc::join(tc::repeat_n(i, tc::iota(0, j))));
 		}
 	}
 }
-
+#endif
 }

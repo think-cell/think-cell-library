@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -102,5 +102,35 @@ UNITTESTDEF( equal_generator_pred ) {
 	_ASSERT(!tc::equal(g123, v123, ofByOne));
 }
 
+UNITTESTDEF( variadic_assign_better ) {
+	int nVar = 5;
+	bool b=tc::assign_better(tc::fn_less(), nVar, 6, 5, 9);
+	_ASSERT(!b);
+	_ASSERTEQUAL(nVar, 5);
+	b=tc::assign_better(tc::fn_less(), nVar, 3);
+	_ASSERT(b);
+	_ASSERTEQUAL(nVar, 3);
+	b=tc::assign_better(tc::fn_less(), nVar, 5, 2, 8, 0);
+	_ASSERT(b);
+	_ASSERTEQUAL(nVar, 0);
 }
 
+namespace no_adl {
+	template<typename Better, typename List, typename=void>
+	struct has_assign_better_impl final: std::false_type {};
+
+	template<typename Better, typename Var, typename... Val>
+	struct has_assign_better_impl<Better, tc::type::list<Var, Val...>, tc::void_t<decltype(tc::assign_better(std::declval<Better>(), std::declval<Var>(), std::declval<Val>()...))>> final: std::true_type {};
+
+	template<typename Better, typename... T>
+	using has_assign_better = has_assign_better_impl<Better, tc::type::list<T...>>;
+}
+#ifndef __EMSCRIPTEN__
+static_assert(!no_adl::has_assign_better<tc::fn_less, std::atomic<int>, int>::value);
+static_assert(!no_adl::has_assign_better<tc::fn_less, std::atomic<int>, int, int>::value);
+static_assert(no_adl::has_assign_better<tc::fn_less, std::atomic<int>&, int>::value);
+static_assert(no_adl::has_assign_better<tc::fn_less, std::atomic<int>&, int, int>::value);
+#endif
+static_assert(no_adl::has_assign_better<tc::fn_less, int&, int>::value);
+static_assert(no_adl::has_assign_better<tc::fn_less, int&, int, int>::value);
+}

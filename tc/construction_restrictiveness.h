@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -43,7 +43,7 @@ namespace tc {
 		}
 
 		namespace no_adl {
-			// MSVC 15.8 compilation fails if this is an alias template instead of a class template.
+			// MSVC up to 16.9 compilation fails if this is an alias template instead of a class template.
 			template<typename TTarget, typename... Args>
 			struct construction_restrictiveness : std::integral_constant<tc::econstruction_t, construction_restrictiveness_detail::get_construction_restrictiveness<TTarget, Args...>()> {};
 		}

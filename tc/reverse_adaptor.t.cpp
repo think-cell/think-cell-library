@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -12,10 +12,10 @@
 #include "reverse_adaptor.h"
 
 UNITTESTDEF(tc_reverse_random_access) {
-	TEST_RANGE_EQUAL(MAKE_CONSTEXPR_ARRAY(1,2,3), tc::reverse(MAKE_CONSTEXPR_ARRAY(3,2,1)));
+	TEST_RANGE_EQUAL(as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)), tc::reverse(as_constexpr(tc::make_array(tc::aggregate_tag, 3,2,1))));
 
 	// test iterators:
-	auto rng = MAKE_CONSTEXPR_ARRAY(1,2,3);
+	auto rng = as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3));
 	auto revrng = tc::reverse(rng);
 	auto it = tc::begin(revrng);
 	_ASSERTEQUAL(*it++, 3);
@@ -64,14 +64,14 @@ UNITTESTDEF(tc_reverse_bidirectional) {
 	_ASSERTEQUAL(*it++, 1);
 	_ASSERTEQUAL(tc::end(rngrev), it);
 
-	TEST_RANGE_EQUAL(tc::reverse(rng), MAKE_CONSTEXPR_ARRAY(3,2,1));
+	TEST_RANGE_EQUAL(tc::reverse(rng), as_constexpr(tc::make_array(tc::aggregate_tag, 3,2,1)));
 	TEST_RANGE_EQUAL(tc::reverse(tc::reverse(rng)), rng);
 }
 
 UNITTESTDEF(tc_reverse_base_bound) {
 	std::list<int> rng{1,2,3,4};
 	auto rngreverse = tc::reverse(rng);
-	auto it = tc::next(tc::next(tc::begin(rngreverse)));
+	auto it = modified(modified(tc::begin(rngreverse), ++_), ++_);
 	TEST_RANGE_EQUAL(
 		tc::reverse(tc::take(rngreverse,it)),
 		tc::drop(rng, it.border_base())

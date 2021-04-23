@@ -1,14 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "container.h"
 #include "cont_reserve.h"
 #include "insert.h"
@@ -85,15 +85,15 @@ namespace tc {
 	template<typename T, std::size_t N, typename Rng>
 	bool cont_change(T (&a)[N], Rng const& rng) noexcept {
 		auto it = tc::begin(rng);
-		bool bChanged = false;
+		tc::any_accu anyChanged;
 		for(std::size_t i=0; i<N; ++i) {
 			_ASSERT(it != tc::end(rng));
-			bChanged = tc::change(a[i], *it) || bChanged;
+			anyChanged(tc::change(a[i], *it));
 			++it;
 		}
 
 		_ASSERTEQUAL(it, tc::end(rng));
-		return bChanged;
+		return anyChanged;
 	}
 
 	template<typename Cont, typename Rng, typename Flag>

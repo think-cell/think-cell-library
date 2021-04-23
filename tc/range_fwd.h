@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -22,7 +22,7 @@ namespace tc {
 	using no_adl::is_range_with_iterators;
 
 	namespace no_adl {
-		template<typename It, typename ConstIt>
+		template<typename It>
 		struct iterator_base;
 	}
 	using no_adl::iterator_base;
@@ -45,11 +45,13 @@ namespace tc {
 	}
 	using no_adl::filter_adaptor;
 
-	template<typename Rng, typename Pred>
-	filter_adaptor<tc::decay_t<Pred>, Rng> filter(Rng&& rng, Pred&& pred) noexcept;
+	namespace no_adl {
+		struct identity;
+	}
+	using no_adl::identity;
 
 	namespace no_adl {
-		template< typename Rng, typename Enable=void >
+		template< typename Rng>
 		struct make_subrange_result;
 	}
 	template<typename Rng>
@@ -65,11 +67,11 @@ namespace tc {
 		bool m_b;
 	};
 
-	namespace no_adl {
+	namespace reverse_adaptor_adl {
 		template<typename Rng, bool HasIterators = is_range_with_iterators<Rng>::value>
 		struct reverse_adaptor;
 	}
-	using no_adl::reverse_adaptor;
+	using reverse_adaptor_adl::reverse_adaptor;
 
 	template<typename Rng>
 	reverse_adaptor<Rng> reverse(Rng&& rng) noexcept;

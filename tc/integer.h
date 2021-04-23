@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -17,14 +17,13 @@
 #pragma clang diagnostic ignored "-Wconversion"
 #pragma clang diagnostic ignored "-Wcomma"
 #else
-#pragma warning(push)
-#pragma warning( disable: 4459 ) // declaration hides global declaration
+MODIFY_WARNINGS_BEGIN(((disable)(4459))) // declaration hides global declaration
 #endif
 #include <boost/multiprecision/cpp_int.hpp>
 #ifdef __clang__
 #pragma clang diagnostic pop
 #else
-#pragma warning(pop)
+MODIFY_WARNINGS_END
 #endif
 
 namespace tc {
@@ -86,7 +85,7 @@ namespace tc {
 	};
 
 	template< typename Lhs, typename Rhs, std::enable_if_t<
-		tc::is_actual_integer<Lhs>::value &&
+		tc::is_integral<Lhs>::value &&
 		tc::is_actual_integer<Rhs>::value &&
 		!std::is_signed<Lhs>::value
 	>* = nullptr>
@@ -96,7 +95,7 @@ namespace tc {
 	}
 
 	template< typename Lhs, typename Rhs, std::enable_if_t<
-		tc::is_actual_integer<Lhs>::value &&
+		tc::is_integral<Lhs>::value &&
 		tc::is_actual_integer<Rhs>::value &&
 		!std::is_signed<Lhs>::value
 	>* = nullptr>

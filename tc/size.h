@@ -1,14 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "container_traits.h"
 #include "explicit_cast.h"
 #include "integer.h"
@@ -28,13 +28,8 @@ namespace tc {
 	}
 	using size_proxy_adl::size_proxy;
 
-	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template< typename T >
-	[[nodiscard]] constexpr std::enable_if_t<!tc::is_actual_integer<T>::value, T > make_size_proxy(T t) noexcept;
-
-	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
-	template< typename T >
-	[[nodiscard]] constexpr std::enable_if_t< tc::is_actual_integer<T>::value, size_proxy<T> > make_size_proxy(T t) noexcept;
+	[[nodiscard]] constexpr auto make_size_proxy(T t) noexcept;
 
 	////////////////////////////////
 	// tc::size_proxy in ADL barrier
@@ -58,7 +53,7 @@ namespace tc {
 
 			template<typename S>
 			constexpr explicit size_proxy(size_proxy<S> const& other) noexcept
-				: m_t(tc::explicit_cast<T>(other.m_t))
+				: MEMBER_INIT_CAST( m_t, other.m_t )
 			{
 				AssertInvariant();
 			}
@@ -125,25 +120,25 @@ namespace tc {
 		template< \
 			typename Lhs, typename Rhs, \
 			std::enable_if_t<tc::is_actual_integer<Rhs>::value >* = nullptr \
-		> auto operator op( size_proxy<Lhs> const& lhs, Rhs const& rhs ) \
+		> constexpr auto operator op( size_proxy<Lhs> const& lhs, Rhs const& rhs ) \
 		return_decltype_MAYTHROW( \
 			make_size_proxy( lhs.m_t op rhs ) \
 		) \
 		template< \
 			typename Lhs, typename Rhs, \
 			std::enable_if_t<tc::is_actual_arithmetic<Lhs>::value >* = nullptr \
-		> auto operator op( Lhs const& lhs, size_proxy<Rhs> const& rhs ) \
+		> constexpr auto operator op( Lhs const& lhs, size_proxy<Rhs> const& rhs ) \
 		return_decltype_MAYTHROW( \
 			tc::explicit_cast<Lhs>(lhs op rhs.m_t) \
 		) \
 		template< \
 			typename Lhs, typename Rhs, \
 			std::enable_if_t<!tc::is_actual_arithmetic<Lhs>::value >* = nullptr \
-		> auto operator op( Lhs const& lhs, size_proxy<Rhs> const& rhs ) \
+		> constexpr auto operator op( Lhs const& lhs, size_proxy<Rhs> const& rhs ) \
 		return_decltype_MAYTHROW( \
 			lhs op rhs.m_t \
 		) \
-		template< typename Lhs, typename Rhs > auto operator op( size_proxy<Lhs> const& lhs, size_proxy<Rhs> const& rhs ) \
+		template< typename Lhs, typename Rhs > constexpr auto operator op( size_proxy<Lhs> const& lhs, size_proxy<Rhs> const& rhs ) \
 		return_decltype_MAYTHROW( \
 			make_size_proxy( lhs.m_t op rhs.m_t ) \
 		)
@@ -158,12 +153,12 @@ namespace tc {
 #pragma push_macro("assign_operator_size_proxy")
 #define assign_operator_size_proxy( assign_op, op ) \
 		template< typename Lhs, typename Rhs, std::enable_if_t< std::is_integral<Lhs>::value >* = nullptr > \
-		Lhs& operator assign_op ( Lhs& lhs, size_proxy<Rhs> const& rhs ) noexcept { \
+		constexpr Lhs& operator assign_op ( Lhs& lhs, size_proxy<Rhs> const& rhs ) noexcept { \
 			lhs=tc:: op (tc::as_const(lhs),rhs.m_t); \
 			return lhs; \
 		} \
 		template< typename Lhs, typename Rhs, std::enable_if_t< !std::is_integral<Lhs>::value >* = nullptr > \
-		Lhs& operator assign_op ( Lhs& lhs, size_proxy<Rhs> const& rhs ) noexcept { \
+		constexpr Lhs& operator assign_op ( Lhs& lhs, size_proxy<Rhs> const& rhs ) noexcept { \
 			lhs assign_op rhs.m_t; \
 			return lhs; \
 		}
@@ -180,26 +175,38 @@ namespace tc {
 	}
 
 	namespace no_adl {
-		template<typename T, typename = void>
-		struct is_random_access_range final : std::false_type {};
+		template<typename Rng, typename Required, typename = void>
+		struct has_traversal final : std::false_type {};
 
-		template<typename T>
-		struct is_random_access_range<T, typename std::enable_if_t<tc::is_range_with_iterators<T>::value>> final :
-			std::is_convertible<typename boost::range_traversal<T>::type, boost::iterators::random_access_traversal_tag>
+		template<typename Rng, typename Required>
+		struct has_traversal<Rng, Required, typename std::enable_if_t<tc::is_range_with_iterators<Rng>::value>> final
+			: std::is_convertible<typename boost::range_traversal<Rng>::type, Required>
 		{};
 	}
-	using no_adl::is_random_access_range;
 
-	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
+	template<typename Rng>
+	using is_bidirectional_range = no_adl::has_traversal<Rng, boost::iterators::bidirectional_traversal_tag>;
+	template<typename Rng>
+	using is_random_access_range = no_adl::has_traversal<Rng, boost::iterators::random_access_traversal_tag>;
+
 	template< typename T >
-	constexpr std::enable_if_t<!tc::is_actual_integer<T>::value, T > make_size_proxy(T t) noexcept {
-		return t;
+	[[nodiscard]] constexpr auto make_size_proxy(T t) noexcept {
+		if constexpr( tc::is_actual_integer<T>::value ) {
+			return size_proxy<T>(t);
+		} else {
+			static_assert( tc::is_instance<size_proxy, T>::value );
+			return t;
+		}
 	}
 
-	// TODO: move std::enable_if_t to template argument list, doesn't work with MSVC
 	template< typename T >
-	constexpr std::enable_if_t< tc::is_actual_integer<T>::value, size_proxy<T> > make_size_proxy(T t) noexcept {
-		return size_proxy<T>(t);
+	[[nodiscard]] constexpr auto unmake_size_proxy(T t) noexcept {
+		if constexpr( tc::is_instance<size_proxy, T>::value ) {
+			return t.m_t;
+		} else {
+			static_assert( tc::is_actual_integer<T>::value );
+			return t;
+		}
 	}
 
 	namespace no_adl {
@@ -223,28 +230,6 @@ namespace tc {
 		struct common_type_decayed<T0, tc::size_proxy<T1>> : tc::common_type_decayed<tc::size_proxy<T1>, T0> {};
 	}
 
-	namespace no_adl {
-		template<typename Rng, typename>
-		struct constexpr_size_base {};
-
-		template<typename T, std::size_t N>
-		struct constexpr_size_base<T[N], void> : std::integral_constant<std::size_t, N> {
-			static_assert(!tc::is_char<T>::value);
-		};
-	}
-
-	template<typename Rng>
-	using constexpr_size = no_adl::constexpr_size_base<tc::remove_cvref_t<Rng>>;
-
-	namespace no_adl {
-		template<typename Rng, typename = void>
-		struct has_constexpr_size : std::false_type {};
-
-		template<typename Rng>
-		struct has_constexpr_size<Rng, std::void_t<typename tc::constexpr_size<Rng>::type>> : std::true_type {};
-	}
-	using no_adl::has_constexpr_size;
-
 	// tc::size() requires a range with either:
 	//  - a constexpr_size_base specialization which provide size as a compile time constant
 	//  - a size member function, which is assumed to run in O(1)
@@ -265,11 +250,18 @@ namespace tc {
 		}
 	}
 
+	template<typename T, std::size_t N, std::enable_if_t<tc::is_char<T>::value>* = nullptr>
+	[[nodiscard]] constexpr auto size_raw(T const (&ach)[N]) noexcept {
+		_ASSERTE(tc::strlen(ach)==N-1); // VERIFYEQUAL is not constexpr
+		return N-1;
+	}
+
 	template<typename T>
 	[[nodiscard]] constexpr auto size(T const& t) return_decltype_noexcept(
 		make_size_proxy(tc::size_raw(t))
 	)
 
 	TC_HAS_EXPR(size, (T), size_raw(std::declval<T>()))
+	DEFINE_FN2(tc::size_raw, fn_size_raw)
 }
 

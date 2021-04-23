@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -13,14 +13,13 @@
 #include "type_traits.h"
 #include "return_decltype.h"
 #include "equality_comparable.h"
-#include <boost/mpl/has_xxx.hpp>
 
 namespace tc {
 	////////////////////////////////////////////////////////////////////////////////////
 	// curiously recurring template patterns mapping comparison operators to compare
 	namespace no_adl {
 		template< typename T >
-		struct implements_compare_partial : public equality_comparable<T> {
+		struct TC_EMPTY_BASES implements_compare_partial : public equality_comparable<T> {
 		private:
 			using base_ = equality_comparable<T>;
 		public:
@@ -28,7 +27,7 @@ namespace tc {
 
 #pragma push_macro("DEFINE_COMPARISON_OP")
 #define DEFINE_COMPARISON_OP(op) \
-			friend bool operator op( T const& lhs, T const& rhs ) noexcept { \
+			friend constexpr bool operator op( T const& lhs, T const& rhs ) noexcept { \
 				return tc::compare( lhs, rhs ) op tc::order::equal; \
 			}
 
@@ -42,7 +41,7 @@ namespace tc {
 		};
 
 		template< typename T >
-		struct implements_compare : implements_compare_partial<T> {
+		struct TC_EMPTY_BASES implements_compare : implements_compare_partial<T> {
 		private:
 			using base_ = implements_compare_partial<T>;
 		public:

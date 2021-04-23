@@ -1,16 +1,17 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
+#include "assert_defs.h"
 #include <type_traits>
 
-#pragma warning( disable : 4521 ) // '...' : multiple copy constructors specified (happens when two ctors, one with T const&, the other with T & parameter, are defined)
+MODIFY_WARNINGS(((disable)(4521))) // '...' : multiple copy constructors specified (happens when two ctors, one with T const&, the other with T & parameter, are defined)
 
 /////////////////////////////////////////////
 // safer variants of std::move
@@ -38,4 +39,3 @@ template<typename T>
 	static_assert(!std::is_const<std::remove_reference_t<T>>::value, "Cannot move out of const.");
 	return static_cast<std::remove_reference_t<T>&&>(t);
 }
-

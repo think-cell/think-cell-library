@@ -1,14 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "range_fwd.h"
 #include "range_adaptor.h"
 #include "index_range.h"
@@ -22,6 +22,7 @@
 #include "variant.h"
 #include "quantifier.h"
 #include "empty.h"
+#include "tuple.h"
 
 namespace tc {
 	namespace no_adl {
@@ -45,70 +46,70 @@ namespace tc {
 	template<typename... Rng>
 	using concat_adaptor = concat_adaptor_adl::concat_adaptor_impl< no_adl::has_concat_iterator<tc::type::list<Rng...>>::value, Rng... >;
 
+
+	namespace no_adl {
+		template<typename Rng>
+		struct is_concat_range final: std::false_type {};
+
+		template<typename ... Rng>
+		struct is_concat_range<tc::concat_adaptor<Rng ...>> final: std::true_type {};
+	}
+	using no_adl::is_concat_range;
+
+	namespace concat_detail {
+		namespace no_adl {
+			template<typename ConcatAdaptor, typename Sink, typename = tc::remove_cvref_t<ConcatAdaptor>>
+			struct has_for_each;
+
+			template<typename ConcatAdaptor, typename Sink, typename... Rng>
+			struct has_for_each<ConcatAdaptor, Sink, tc::concat_adaptor<Rng...>> : std::bool_constant<
+				(tc::has_for_each<tc::apply_cvref_t<Rng, ConcatAdaptor>, tc::decay_t<Sink> const&>::value && ...)
+			> {};
+
+			template<typename Sink>
+			struct sink {
+				static_assert(tc::is_decayed<Sink>::value);
+				using guaranteed_break_or_continue = guaranteed_break_or_continue_t<Sink>;
+				Sink m_sink;
+
+				template<typename RngAdaptor>
+				constexpr auto operator()(RngAdaptor&& rngadaptor) const& return_MAYTHROW(
+					tc::for_each(std::forward<RngAdaptor>(rngadaptor).base_range(), m_sink)
+				)
+			};
+		}
+
+		template<typename Sink>
+		constexpr auto make_sink(Sink&& sink) noexcept { // not inline in for_each_impl because of MSVC
+			return no_adl::sink<tc::decay_t<Sink>>{std::forward<Sink>(sink)};
+		}
+	}
+
 	namespace concat_adaptor_adl {
 		template<
 			typename... Rng
 		>
-		struct [[nodiscard]] concat_adaptor_impl<false, Rng...> {
-			std::tuple<
-				tc::reference_or_value< Rng >...
-			> m_baserng;
+		struct [[nodiscard]] concat_adaptor_impl<false, Rng...>
+		{
+			static_assert(1<sizeof...(Rng)); // singleton range will be forwarded instead of packed into concat_adaptor
+		//protected: // public because for_each_impl is non-friend for _MSC_VER
+			tc::tuple<tc::range_adaptor_base_range<Rng>...> m_tupleadaptbaserng;
 
+		public:
 			template<typename... Rhs>
 			constexpr concat_adaptor_impl(tc::aggregate_tag_t, Rhs&&... rhs) noexcept
-				: m_baserng(
-					tc::reference_or_value< Rng >(tc::aggregate_tag, std::forward<Rhs>(rhs))...
-				)
+				: m_tupleadaptbaserng{{ {{tc::aggregate_tag, std::forward<Rhs>(rhs)}}... }}
 			{}
 
-			template< typename Func, typename Enable=tc::type::list<decltype(tc::for_each(*std::declval<tc::reference_or_value<Rng>&>(), std::declval<Func>()))...> >
-			auto operator()(Func func) & MAYTHROW {
-				return 
-					tc::for_each(
-						std::index_sequence_for<Rng...>(),
-						[&](auto nconstIndex) MAYTHROW {
-							return tc::for_each(*std::get<nconstIndex()>(m_baserng), func);
-						}
-					);
-			}
+			using index_seq = std::make_index_sequence<sizeof...(Rng)>;
 
-			template< typename Func, typename Enable=tc::type::list<decltype(tc::for_each(*std::declval<tc::reference_or_value<Rng> const&>(), std::declval<Func>()))...> >
-			auto operator()(Func func) const& MAYTHROW {
-				return 
-					tc::for_each(
-						std::index_sequence_for<Rng...>(),
-						[&](auto nconstIndex) MAYTHROW {
-							return tc::for_each(*std::get<nconstIndex()>(m_baserng), func);
-						}
-					);
-			}
-
-			template< typename Func, typename Enable=tc::type::list<decltype(tc::for_each(*std::declval<tc::reference_or_value<Rng>&&>(), std::declval<Func>()))...> >
-			auto operator()(Func func) && MAYTHROW {
-				return 
-					tc::for_each(
-						std::index_sequence_for<Rng...>(),
-						[&](auto nconstIndex) MAYTHROW {
-							return tc::for_each(*tc_move_always(std::get<nconstIndex()>(m_baserng)), func);
-						}
-					);
-			}
-
-			template<typename This, typename Func, std::void_t<decltype(tc::for_each(*std::declval<same_cvref_t<tc::reference_or_value<Rng>, This>>(), std::declval<Func>()))...>* = nullptr>
-			static auto enumerate_reversed(This&& rngThis, Func&& func) MAYTHROW {
-				return
-					tc::for_each(
-						std::index_sequence_for<Rng...>(),
-						[&](auto nconstIndex) MAYTHROW {
-							return tc::for_each(tc::reverse(*std::get<sizeof...(Rng) - 1 - nconstIndex()>(std::forward<This>(rngThis).m_baserng)), func);
-						}
-					);
-			}
+			template<typename ConcatRng, std::size_t... I>
+			friend constexpr auto forward_base_ranges_as_tuple(ConcatRng&& rng, std::index_sequence<I...>) noexcept;
 
 		protected:
 			template<typename IntConstant>
 			auto BaseRangeSize(IntConstant nconstIndex) const& noexcept {
-				return tc::size_raw(*std::get<nconstIndex()>(this->m_baserng));
+				return tc::size_raw(tc::get<nconstIndex()>(m_tupleadaptbaserng).base_range());
 			}
 		public:
 			template< ENABLE_SFINAE, std::enable_if_t<std::conjunction<tc::has_size<SFINAE_TYPE(Rng)>...>::value>* = nullptr >
@@ -120,16 +121,43 @@ namespace tc {
 							[&](auto nconstIndex) noexcept { return BaseRangeSize(nconstIndex); }
 						),
 						tc::explicit_cast<tc::common_type_t<decltype(tc::size_raw(std::declval<Rng>()))...>>(0),
-						fn_assign_plus()
+						tc::fn_assign_plus()
 					);
 			}
 
 			bool empty() const& noexcept {
-				return tc::all_of(m_baserng, [](auto const& rng) noexcept { return tc::empty(*rng); });
+				return tc::all_of(m_tupleadaptbaserng, [](auto const& adaptbaserng) noexcept { return tc::empty(adaptbaserng.base_range()); });
 			}
 		};
 
-		struct concat_end_index final {};
+		// Using return_decltype_MAYTHROW here and in concat_detail::no_adl::sink::operator() results
+		// in MSVC 19.15 error C1202: Recursive type or function dependency context too complex.
+		template<typename Self, typename Sink, typename std::enable_if_t<concat_detail::no_adl::has_for_each<Self, Sink>::value>* = nullptr>
+		constexpr auto for_each_impl(Self&& self, Sink&& sink) return_MAYTHROW(
+			tc::for_each(
+				std::forward<Self>(self).m_tupleadaptbaserng,
+				concat_detail::make_sink(std::forward<Sink>(sink))
+			)
+		)
+
+		template<typename Self, typename Sink, typename std::enable_if_t<tc::is_concat_range<tc::remove_cvref_t<Self>>::value>* = nullptr>
+		constexpr auto for_each_reverse_impl(Self&& self, Sink&& sink) MAYTHROW {
+			return tc::for_each(
+				tc::reverse(std::forward<Self>(self).m_tupleadaptbaserng),
+				[&](auto&& rngadaptor) MAYTHROW {
+					return tc::for_each(tc::reverse(tc_move_if_owned(rngadaptor).base_range()), sink);
+				}
+			);
+		}
+
+		template<typename ConcatRng, std::size_t... I>
+		[[nodiscard]] constexpr auto forward_base_ranges_as_tuple(ConcatRng&& rng, std::index_sequence<I...>) noexcept {
+			return tc::forward_as_tuple(tc::get<I>(std::forward<ConcatRng>(rng).m_tupleadaptbaserng).base_range()...);
+		}
+
+		struct concat_end_index final : tc::equality_comparable<concat_end_index> {
+			friend bool operator==(concat_end_index const&, concat_end_index const&) noexcept { return true; }
+		};
 
 		template<
 			typename... Rng
@@ -150,18 +178,12 @@ namespace tc {
 			using this_type = concat_adaptor_impl;
 
 		public:
-			using index = typename this_type::index;
+			using typename this_type::range_iterator_from_index::index;
+			static constexpr bool c_bHasStashingIndex=std::disjunction<tc::has_stashing_index<std::remove_reference_t<Rng>>...>::value;
 
-			using concat_adaptor_impl<false, Rng...>::m_baserng;
+			using difference_type = tc::common_type_t<typename boost::range_difference<Rng>::type...>;
 
-			using difference_type = std::ptrdiff_t ; /* TODO :tc::common_type_t<
-				boost::range_difference<Rng>::type ...
-			>;*/
-
-			template<typename... Rhs>
-			constexpr concat_adaptor_impl(tc::aggregate_tag_t, Rhs&&... rhs) noexcept
-				: concat_adaptor_impl<false, Rng...>(tc::aggregate_tag, std::forward<Rhs>(rhs)...)
-			{}
+			using concat_adaptor_impl<false, Rng...>::concat_adaptor_impl;
 
 		private:
 			template<std::size_t Index>
@@ -170,7 +192,7 @@ namespace tc {
 				if constexpr (sizeof...(Rng) == Index) {
 					return index(std::in_place_index<Index>, concat_end_index());
 				} else {
-					return index(std::in_place_index<Index>, tc::begin_index(std::get<Index>(m_baserng)));
+					return index(std::in_place_index<Index>, tc::get<Index>(this->m_tupleadaptbaserng).base_begin_index());
 				}
 			}
 
@@ -178,7 +200,7 @@ namespace tc {
 			index create_end_index(std::integral_constant<int, Index>) const& noexcept {
 				static_assert(0 <= Index);
 				static_assert(Index < sizeof...(Rng));
-				return index(std::in_place_index<Index>, tc::end_index(std::get<Index>(m_baserng)));
+				return index(std::in_place_index<Index>, tc::get<Index>(this->m_tupleadaptbaserng).base_end_index());
 			}
 
 			template<int IndexFrom>
@@ -186,7 +208,7 @@ namespace tc {
 				tc::for_each(
 					tc::make_integer_sequence<std::size_t, IndexFrom, sizeof...(Rng)>(),
 					[&](auto nconstIndex) noexcept {
-						if (tc::at_end_index( *std::get<nconstIndex()>(m_baserng), tc::get<nconstIndex()>(idx))) {
+						if (tc::at_end_index( tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(), tc::get<nconstIndex()>(idx))) {
 							idx = create_begin_index(std::integral_constant<std::size_t, nconstIndex() + 1>());
 							return tc::continue_;
 						} else {
@@ -216,7 +238,7 @@ namespace tc {
 
 				tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
 					[&](auto nconstIndex) noexcept { 
-						tc::increment_index(*std::get<nconstIndex()>(m_baserng),tc::get<nconstIndex()>(idx));
+						tc::increment_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(), tc::get<nconstIndex()>(idx));
 						correct_index<nconstIndex()>(idx);
 					},
 					idx.index()
@@ -229,8 +251,8 @@ namespace tc {
 					ENABLE_SFINAE BOOST_PP_COMMA()
 					std::enable_if_t<
 						std::conjunction<tc::has_decrement_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>...>::value &&
-						std::conjunction<tc::has_equal_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>...>::value &&
-						std::conjunction<tc::has_end_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>...>::value
+						std::conjunction<tc::has_end_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>...>::value &&
+						tc::is_equality_comparable<SFINAE_TYPE(index)>::value
 					>* = nullptr
 				>,
 				decrement_index
@@ -246,13 +268,13 @@ namespace tc {
 								} else {
 									auto& idxCurrent = tc::get<nconstIndex()>(idx);
 									if constexpr (0 == nconstIndex()) {
-										_ASSERT(!tc::equal_index(*std::get<0>(m_baserng),tc::begin_index(std::get<0>(m_baserng)), idxCurrent));
-									} else if (tc::equal_index(*std::get<nconstIndex()>(m_baserng),tc::begin_index(std::get<nconstIndex()>(m_baserng)), idxCurrent)) {
+										_ASSERT( tc::get<0>(this->m_tupleadaptbaserng).base_begin_index() != idxCurrent );
+									} else if (tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_begin_index() == idxCurrent) {
 										idx = create_end_index(std::integral_constant<int, nconstIndex() - 1>());
 										return tc::continue_;
 									}
 									// Remember early out above
-									tc::decrement_index(*std::get<nconstIndex()>(m_baserng),idxCurrent);
+									tc::decrement_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(), idxCurrent);
 									return tc::break_;
 								}
 							}
@@ -262,11 +284,11 @@ namespace tc {
 				);
 			}
 
-#pragma warning (suppress: 4544) // 'Func2': default template argument ignored on this template declaration
+MODIFY_WARNINGS(((suppress)(4544))) // 'Func2': default template argument ignored on this template declaration
 			STATIC_FINAL(dereference_index)(index const& idx) const& noexcept -> decltype(auto) {
 				return tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
 					[&](auto nconstIndex) noexcept  -> decltype(auto) { // return_decltype leads to ICE 
-						return tc::dereference_index(*std::get<nconstIndex()>(m_baserng),tc::get<nconstIndex()>(idx));
+						return tc::dereference_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(), tc::get<nconstIndex()>(idx));
 					},
 					idx.index()
 				);
@@ -275,30 +297,9 @@ namespace tc {
 			STATIC_FINAL(dereference_index)(index const& idx) & noexcept -> decltype(auto) {
 				return tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
 					[&](auto nconstIndex) noexcept -> decltype(auto) { // return_decltype leads to ICE 
-						return tc::dereference_index(*std::get<nconstIndex()>(m_baserng),tc::get<nconstIndex()>(idx));
+						return tc::dereference_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(), tc::get<nconstIndex()>(idx));
 					},
 					idx.index()
-				);
-			}
-
-			STATIC_FINAL_MOD(
-				template<
-					ENABLE_SFINAE BOOST_PP_COMMA()
-					std::enable_if_t<std::conjunction<tc::has_equal_index<SFINAE_TYPE(Rng)>...>::value>* = nullptr
-				>,
-				equal_index
-			)(index const& idxLhs, index const& idxRhs) const& noexcept -> bool {
-				if ( idxLhs.index() != idxRhs.index() ) return false;
-
-				return tc::invoke_with_constant<std::make_index_sequence<sizeof...(Rng)+1>>(
-					[&](auto nconstIndex) noexcept {
-						if constexpr (sizeof...(Rng) == nconstIndex()) {
-							return true;
-						} else {
-							return tc::equal_index(*std::get<nconstIndex()>(m_baserng),tc::get<nconstIndex()>(idxLhs), tc::get<nconstIndex()>(idxRhs));
-						}
-					},
-					idxLhs.index()
 				);
 			}
 
@@ -322,17 +323,30 @@ namespace tc {
 										idx = create_end_index(std::integral_constant<int, nconstIndex() - 1>());
 										return tc::continue_;
 									} else {
+										// As of Visual Studio compiler 19.15.26726, obtaining the range difference_type here as:
+										//		using range_difference_t =
+										//			typename boost::range_difference<decltype(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range())>::type;
+										// triggers a compiler error, because VS does not properly exclude false statements from compilation when using
+										// an 'if constexpr' inside a lambda, which means VS attempts to eval the type when nconstIndex==sizeof...(Rng).
+										// Breaking the evaluation of the difference_type in two steps seems to work though.
+										using range_t=decltype(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range());
 										if constexpr(0 == nconstIndex()) {
-											tc::advance_index(*std::get<nconstIndex()>(m_baserng),tc::get<nconstIndex()>(idx), d);
+											tc::advance_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(),
+												tc::get<nconstIndex()>(idx),
+												tc::explicit_cast<typename boost::range_difference<range_t>::type>(d)
+											);
 											return tc::break_;
 										} else {
-											auto dToBegin = tc::distance_to_index(*std::get<nconstIndex()>(m_baserng),
+											auto const dToBegin = tc::distance_to_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(),
 												tc::get<nconstIndex()>(idx),
-												tc::begin_index(std::get<nconstIndex()>(m_baserng))
+												tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_begin_index()
 											);
 
 											if (!(d < dToBegin)) {
-												tc::advance_index(*std::get<nconstIndex()>(m_baserng),tc::get<nconstIndex()>(idx), d);
+												tc::advance_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(),
+													tc::get<nconstIndex()>(idx),
+													tc::explicit_cast<typename boost::range_difference<range_t>::type>(d)
+												);
 												return tc::break_;
 											} else {
 												d -= dToBegin;
@@ -347,17 +361,24 @@ namespace tc {
 							tc::for_each(
 								tc::make_integer_sequence<std::size_t, nconstIndexStart(), sizeof...(Rng)>(),
 								[&](auto nconstIndex) noexcept {
+									using range_difference_t = typename boost::range_difference<decltype(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range())>::type;
 									if constexpr (nconstIndex() == sizeof...(Rng)-1) {
-										tc::advance_index(*std::get<nconstIndex()>(m_baserng),tc::get<nconstIndex()>(idx), d);
+										tc::advance_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(),
+											tc::get<nconstIndex()>(idx),
+											tc::explicit_cast<range_difference_t>(d)
+										);
 										correct_index<nconstIndex()>(idx);
 										return tc::break_;
 									} else {
-										auto dToEnd = tc::distance_to_index(*std::get<nconstIndex()>(m_baserng),
+										auto const dToEnd = tc::distance_to_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(),
 											tc::get<nconstIndex()>(idx),
-											tc::end_index(std::get<nconstIndex()>(m_baserng))
+											tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_end_index()
 										);
 										if (d < dToEnd) {
-											tc::advance_index(*std::get<nconstIndex()>(m_baserng),tc::get<nconstIndex()>(idx), d);
+											tc::advance_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(),
+												tc::get<nconstIndex()>(idx),
+												tc::explicit_cast<range_difference_t>(d)
+											);
 											return tc::break_;
 										} else {
 											d -= dToEnd;
@@ -389,7 +410,7 @@ namespace tc {
 							if constexpr (nconstIndex() == sizeof...(Rng)) {
 								return 0;
 							} else {
-								return tc::distance_to_index(*std::get<nconstIndex()>(m_baserng),tc::get<nconstIndex()>(idxLhs), tc::get<nconstIndex()>(idxRhs));
+								return tc::distance_to_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(), tc::get<nconstIndex()>(idxLhs), tc::get<nconstIndex()>(idxRhs));
 							}
 						},
 						idxLhs.index()
@@ -408,7 +429,7 @@ namespace tc {
 							),
 							tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
 								[&](auto nconstIndex) noexcept -> difference_type {
-									return tc::distance_to_index(*std::get<nconstIndex()>(m_baserng),tc::get<nconstIndex()>(lhs), tc::end_index(std::get<nconstIndex()>(m_baserng)));
+									return tc::distance_to_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(), tc::get<nconstIndex()>(lhs), tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_end_index());
 								},
 								lhs.index()
 							) + 
@@ -417,12 +438,12 @@ namespace tc {
 									if constexpr(nconstIndex() == sizeof...(Rng)) {
 										return 0;
 									} else {
-										return tc::distance_to_index(*std::get<nconstIndex()>(m_baserng),tc::begin_index(std::get<nconstIndex()>(m_baserng)), tc::get<nconstIndex()>(rhs));
+										return tc::distance_to_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(), tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_begin_index(), tc::get<nconstIndex()>(rhs));
 									}
 								},
 								rhs.index()
 							),
-							fn_assign_plus()
+							tc::fn_assign_plus()
 						);
 					};
 
@@ -446,24 +467,46 @@ namespace tc {
 		struct range_value<ConcatAdaptor, tc::concat_adaptor_adl::concat_adaptor_impl<false, Rng...>, tc::void_t<tc::common_range_value_t<Rng...>>> final {
 			using type = tc::common_range_value_t<Rng...>;
 		};
-	}
 
-	template<typename... Rng, std::enable_if_t<1<sizeof...(Rng)>* = nullptr>
-	constexpr auto concat(Rng&&... rng) noexcept {
-		return tc::concat_adaptor< std::remove_cv_t<Rng>...>(tc::aggregate_tag, std::forward<Rng>(rng)...);
-	}
-
-	template<typename Rng>
-	constexpr Rng&& concat(Rng&& rng) noexcept {
-		return std::forward<Rng>(rng);
+		template<typename... Rng>
+		struct is_index_valid_for_move_constructed_range<tc::concat_adaptor_adl::concat_adaptor_impl<true, Rng...>>
+			: std::conjunction<std::disjunction<std::is_lvalue_reference<Rng>, tc::is_index_valid_for_move_constructed_range<Rng>>...>
+		{};
 	}
 
 	namespace no_adl {
-		template<typename Rng>
-		struct is_concat_range final: std::false_type {};
+		struct fn_concat_impl final {
+			[[nodiscard]] constexpr auto operator()() const& noexcept {
+				return tc::empty_range();
+			}
 
-		template<typename ... Rng>
-		struct is_concat_range<tc::concat_adaptor<Rng ...>> final: std::true_type {};
+			template<typename Rng>
+			[[nodiscard]] constexpr decltype(auto) operator()(Rng&& rng) const& noexcept {
+				return std::forward<Rng>(rng);
+			}
+
+			template<typename... Rng, std::enable_if_t<1<sizeof...(Rng)>* = nullptr>
+			[[nodiscard]] constexpr auto operator()(Rng&&... rng) const& noexcept {
+				return tc::concat_adaptor<std::remove_cv_t<Rng>...>(tc::aggregate_tag, std::forward<Rng>(rng)...);
+			}
+		};
 	}
-	using no_adl::is_concat_range;
+
+	namespace concat_detail {
+		template<typename Rng>
+		[[nodiscard]] constexpr auto forward_range_as_tuple(Rng&& rng) noexcept {
+			if constexpr( tc::is_safely_convertible<Rng&&, tc::empty_range>::value ) {
+				return tc::tuple<>{};
+			} else if constexpr( tc::is_concat_range<tc::remove_cvref_t<Rng>>::value ) {
+				return forward_base_ranges_as_tuple(std::forward<Rng>(rng), typename tc::remove_cvref_t<Rng>::index_seq());
+			} else {
+				return tc::forward_as_tuple(std::forward<Rng>(rng));
+			}
+		}
+	}
+
+	template<typename... Rng>
+	[[nodiscard]] constexpr decltype(auto) concat(Rng&&... rng) noexcept {
+		return tc::apply(tc::no_adl::fn_concat_impl(), tc::tuple_cat(tc::concat_detail::forward_range_as_tuple(std::forward<Rng>(rng))...));
+	}
 }

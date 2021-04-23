@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -41,7 +41,7 @@ namespace {
 			tc::constexpr_size<decltype(anNative)>::value
 		);
 
-		auto rngnoncopy = tc::transform(MAKE_CONSTEXPR_ARRAY(1,2), [](int) noexcept {
+		auto rngnoncopy = tc::transform(as_constexpr(tc::make_array(tc::aggregate_tag, 1,2)), [](int) noexcept {
 			struct NonCopyNonMoveable final {
 				NonCopyNonMoveable(NonCopyNonMoveable const&) = delete;
 				NonCopyNonMoveable(NonCopyNonMoveable&&) = delete;
@@ -54,7 +54,7 @@ namespace {
 			rngnoncopy,
 			[](auto&& noncopy) noexcept {}
 		);
-		[[maybe_unused]] auto noncopy = tc_front(rngnoncopy);
+		[[maybe_unused]] auto noncopy = tc::front(rngnoncopy);
 	}
 }
 
@@ -65,18 +65,4 @@ UNITTESTDEF(vector_int_ref_need_sfinae_transform) {
 	_ASSERTEQUAL(*it++,1);
 	_ASSERTEQUAL(*it++,4);
 	_ASSERTEQUAL(*it++,9);
-}
-
-UNITTESTDEF(replace_if_prvalue_range_reference) {
-	auto pred = []( auto const ch ) noexcept {
-		return tc::find_first< tc::return_bool >( "aeiou", ch );
-	};
-	auto const rng1 = tc::replace_if("hello world!", pred, 'x');
-	auto const rng2 = tc::replace_if(tc::transform("hello world!", [](auto const ch) noexcept { return ch; }), pred, 'x');
-
-	STATICASSERTSAME(tc::range_reference_t<decltype(rng1)>, char const&);
-	STATICASSERTSAME(tc::range_reference_t<decltype(rng2)>, char);
-
-	TEST_RANGE_EQUAL(rng1, "hxllx wxrld!");
-	TEST_RANGE_EQUAL(rng2, "hxllx wxrld!");
 }

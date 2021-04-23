@@ -1,13 +1,13 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "explicit_cast.h"
 #include "for_each.h"
 #include "subrange.h"
@@ -16,6 +16,7 @@
 #include "minmax.h"
 #include "concat_adaptor.h"
 #include "repeat_n.h"
+#include "char_restrictive.h"
 
 namespace tc {
 	///////////////
@@ -30,17 +31,18 @@ namespace tc {
 
 		template< typename T, std::size_t N>
 		struct [[nodiscard]] integral_as_padded_dec_impl : protected integral_as_padded_dec_impl<T,N-1> {
+			using typename integral_as_padded_dec_impl<T,N-1>::value_type;
 			static constexpr unsigned long long c_nTenPow=integral_as_padded_dec_impl<T,N-1>::c_nTenPow*10;
 			constexpr integral_as_padded_dec_impl( T n ) noexcept : integral_as_padded_dec_impl<T,N-1>(n) {}
 
-			template<typename Sink, typename Char=tc::sink_value_or_char_t<Sink>>
+			template<typename Sink>
 			auto operator()(Sink sink) const& MAYTHROW -> tc::common_type_t<
-				decltype(tc::continue_if_not_break(std::declval<Sink&>(), std::declval<Char>())),
+				decltype(tc::continue_if_not_break(std::declval<Sink&>(), std::declval<tc::char_ascii>())),
 				decltype(std::declval<integral_as_padded_dec_impl<T,N-1> const&>()(std::declval<Sink>()))
 			> {
 				static_assert( std::is_unsigned<T>::value );
 				if( this->m_n<integral_as_padded_dec_impl::c_nTenPow ) {
-					RETURN_IF_BREAK(tc::continue_if_not_break(sink, tc::explicit_cast<Char>('0')));
+					RETURN_IF_BREAK(tc::continue_if_not_break(sink, tc::char_ascii('0')));
 				}
 				return tc::base_cast< integral_as_padded_dec_impl<T,N-1> >(*this)(tc_move(sink));
 			}
@@ -50,13 +52,14 @@ namespace tc {
 
 		template< typename T>
 		struct [[nodiscard]] integral_as_padded_dec_impl<T,1> {
+			using value_type = tc::char_ascii;
 			T m_n;
 			static constexpr unsigned long long c_nTenPow=1;
 			constexpr integral_as_padded_dec_impl( T n ) noexcept : m_n(n) {}
 
 			template<typename Sink>
 			auto operator()(Sink&& sink) const& MAYTHROW {
-				return tc::for_each(tc::ptr_begin( boost::lexical_cast< std::array<tc::sink_value_or_char_t<Sink>,50> >(m_n+0/*force integral promotion, otherwise unsigned/signed char gets printed as character*/) ), std::forward<Sink>(sink));
+				return tc::for_each(tc::transform(tc::ptr_begin( boost::lexical_cast< std::array<char,50> >(m_n+0/*force integral promotion, otherwise unsigned/signed char gets printed as character*/) ), tc::fn_explicit_cast<tc::char_ascii>()), std::forward<Sink>(sink));
 			}
 
 			constexpr bool empty() const& noexcept { return false; }
@@ -90,15 +93,17 @@ namespace tc {
 		// Wrapper to print integers as hex
 		template< typename T, unsigned int nWidth, char c_chLetterBase>
 		struct [[nodiscard]] as_hex_impl final {
+			using value_type = tc::char_ascii;
 		private:
 			typename boost::uint_t< CHAR_BIT*sizeof(T) >::exact m_n;
 		public:
 			as_hex_impl( T const& n ) noexcept : m_n(tc::bit_cast< typename boost::uint_t< CHAR_BIT*sizeof(T) >::exact >(n)) {} // print the bit pattern of anything we get
 
-			template<typename Sink, typename Char=tc::sink_value_or_char_t<Sink>>
-			auto operator()(Sink sink) const& MAYTHROW -> decltype(tc::continue_if_not_break(std::declval<Sink&>(), std::declval<Char>())) {
+			template<typename Sink>
+			auto operator()(Sink sink) const& MAYTHROW -> decltype(tc::continue_if_not_break(std::declval<Sink&>(), std::declval<tc::char_ascii>())) {
 				static_assert( 0<nWidth );
 				static_assert( nWidth<=(sizeof(m_n)*CHAR_BIT+3)/4 );
+				using return_t = decltype(tc::continue_if_not_break(std::declval<Sink&>(), std::declval<tc::char_ascii>()));
 
 				auto nShift=sizeof(m_n)*CHAR_BIT;
 				do {
@@ -106,12 +111,15 @@ namespace tc {
 				} while( nWidth*4<=nShift && 0==(m_n>>nShift) );
 				for(;;) {
 					auto const nDigit=(m_n>>nShift)&0xf;
-					RETURN_IF_BREAK(tc::continue_if_not_break(sink, tc::explicit_cast<Char>(static_cast<char>(nDigit<10 ? '0'+nDigit : c_chLetterBase+(nDigit-10)))));
-					if( 0==nShift ) break;
-					nShift-=4;
+					RETURN_IF_BREAK(tc::continue_if_not_break(sink, nDigit<10 ? tc::char_ascii('0')+nDigit : tc::char_ascii(c_chLetterBase)+(nDigit-10)));
+					if constexpr (!std::is_same<return_t, INTEGRAL_CONSTANT(tc::break_)>::value) {
+						if (0 == nShift) break;
+						nShift -= 4;
+					}
 				}
-				// TODO: if continue_if_not_break above returns INTEGRAL_CONSTANT(tc::break_), must exclude this from compilation:
-				return INTEGRAL_CONSTANT(tc::continue_)();
+				if constexpr (!std::is_same<return_t, INTEGRAL_CONSTANT(tc::break_)>::value) {
+					return INTEGRAL_CONSTANT(tc::continue_)();
+				}
 			}
 		};
 	}
@@ -166,10 +174,9 @@ namespace tc {
 			unsigned int const nDigit=*pairnit.second-tc::explicit_cast<tc::range_value_t<Rng>>('0');
 			if( 9<nDigit || (std::numeric_limits<T>::max()-static_cast<int>(nDigit))/10<pairnit.first ) break; // overflow
 			pairnit.first*=10;
-#pragma warning(push)
-#pragma warning(disable:4244) // conversion from 'const unsigned int' to 'uint16_t', possible loss of data
+MODIFY_WARNINGS_BEGIN(((disable)(4244))) // conversion from 'const unsigned int' to 'uint16_t', possible loss of data
 			pairnit.first+=nDigit;
-#pragma warning(pop)
+MODIFY_WARNINGS_END
 			++pairnit.second;
 		}
 		return pairnit;
@@ -186,14 +193,13 @@ namespace tc {
 					unsigned int const nDigit = *pairnit.second - tc::explicit_cast<tc::range_value_t<Rng>>('0');
 					if (9 < nDigit || pairnit.first < (std::numeric_limits<T>::lowest() + static_cast<int>(nDigit)) / 10) break; // underflow
 					pairnit.first *= 10;
-#pragma warning(push)
-#pragma warning(disable:4244) // conversion from 'const unsigned int' to 'uint16_t', possible loss of data
+MODIFY_WARNINGS_BEGIN(((disable)(4244))) // conversion from 'const unsigned int' to 'uint16_t', possible loss of data
 					pairnit.first -= nDigit;
-#pragma warning(pop)
+MODIFY_WARNINGS_END
 					++pairnit.second;
 				}
 			} else if (tc::explicit_cast<tc::range_value_t<Rng>>('+') == *pairnit.second) {
-				pairnit = unsigned_integer_from_string_head<T>(tc::drop_first(rng));
+				pairnit = unsigned_integer_from_string_head<T>(tc::begin_next<tc::return_drop>(rng));
 			} else {
 				pairnit = unsigned_integer_from_string_head<T>(rng);
 			}
@@ -221,21 +227,15 @@ namespace tc {
 
 	namespace no_adl {
 		template<typename Rng>
-		struct [[nodiscard]] size_prefixed_impl {
+		struct [[nodiscard]] size_prefixed_impl : private tc::range_adaptor_base_range<Rng> {
 			using value_type=unsigned char;
-
-			template<typename Rhs>
-			size_prefixed_impl(aggregate_tag_t, Rhs&& rhs) noexcept
-				: m_rng(aggregate_tag, std::forward<Rhs>(rhs))
-			{}
+			using tc::range_adaptor_base_range<Rng>::range_adaptor_base_range;
 
 			template<typename Sink>
 			void operator()(Sink&& sink) const& MAYTHROW {
 				STATICASSERTSAME(tc::sink_value_t<Sink>, unsigned char, "size_prefixed should only be used on binary sinks.");
-				tc::for_each(tc::concat(tc::as_blob(tc::implicit_cast<std::uint32_t>(tc::size(*m_rng))), tc::range_as_blob(*m_rng)), std::forward<Sink>(sink)); // THROW(tc::file_failure)
+				tc::for_each(tc::concat(tc::as_blob(tc::implicit_cast<std::uint32_t>(tc::size(this->base_range()))), tc::range_as_blob(this->base_range())), std::forward<Sink>(sink)); // THROW(tc::file_failure)
 			}
-		private:
-			tc::reference_or_value<Rng> m_rng;
 		};
 	}
 

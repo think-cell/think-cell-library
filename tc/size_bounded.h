@@ -1,14 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "container_traits.h"
 #include "size.h"
 #include "subrange.h"
@@ -31,7 +31,7 @@ namespace tc {
 		T n = 0;
 		if (0 < nBound) {
 			auto Enumerate = [&](auto const&) noexcept { return tc::continue_if(nBound!=++n); };
-			STATICASSERTSAME(tc::break_or_continue, decltype(rng(Enumerate)), "size_bounded only works with interruptible generators");
+			STATICASSERTSAME(tc::break_or_continue, decltype(tc::for_each(rng, Enumerate)), "size_bounded only works with interruptible generators");
 			tc::for_each(rng, Enumerate);
 		}
 		return n;

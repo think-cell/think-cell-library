@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -17,66 +17,133 @@
 #include "try_finally.h"
 
 namespace tc {
-	template< typename Rng, typename Func, int... i >
-	constexpr auto for_each_adjacent_tuple_impl(Rng&& rng, Func func, std::integer_sequence<int, i...>) MAYTHROW -> tc::common_type_t<INTEGRAL_CONSTANT(tc::continue_), decltype(tc::continue_if_not_break(func, *tc::begin(rng), (i, *tc::begin(rng))...))> {
-		constexpr int N= sizeof...(i)+1;
-		if (tc::size_bounded(rng, N)<N) {
-			return INTEGRAL_CONSTANT(tc::continue_)();
-		} else {
-			auto const itEnd = tc::end(rng);
-			auto it = tc::begin(rng);
-			auto ait=tc::explicit_cast<std::array<
-				tc::iterator_cache< 
-					typename boost::range_iterator<Rng>::type
-				>,
-				N
-			>>(tc::func_tag, [&](std::size_t) noexcept { return it++; });
 
-			for (;;) {
-				for (int n = 0; n<N; ++n) {
-					if (it == itEnd) {
-						return continue_if_not_break(func, *tc_move_always(ait[n]), *tc_move_always(ait[(n + i + 1) % N])...);
-					}
-					RETURN_IF_BREAK(continue_if_not_break(func, *tc_move_always(ait[n]), *ait[(n + i + 1) % N]...));
-					ait[n] = it;
-					++it;
+	namespace no_adl {
+		template<typename Rng, std::size_t N>
+		struct [[nodiscard]] adjacent_tuples_adaptor : tc::range_adaptor_base_range<Rng> {
+			static_assert( 1 < N );
+			using tc::range_adaptor_base_range<Rng>::range_adaptor_base_range;
+
+			template<typename Self, typename Sink, std::enable_if_t<tc::is_base_of_decayed<adjacent_tuples_adaptor, Self>::value>* = nullptr>
+			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
+				return internal_for_each(
+					std::forward<Self>(self),
+					std::forward<Sink>(sink),
+					std::make_index_sequence<N - (tc::is_range_with_iterators<Rng>::value ? 1 : 2)>()
+				);
+			}
+
+			template<ENABLE_SFINAE>
+			[[nodiscard]] constexpr auto size() const& noexcept -> decltype(tc::size_raw(SFINAE_VALUE(this)->base_range())) {
+				auto n = tc::size_raw(this->base_range());
+				if( n < N ) {
+					return 0;
+				} else {
+					return n - (N - 1);
 				}
 			}
-		}
+
+		private:
+			template<typename Self, typename Sink, std::size_t... i /*=0,1,...,N-2*/>
+			static constexpr auto internal_for_each(Self&& self, Sink const sink, std::index_sequence<i...>) MAYTHROW {
+				if constexpr (tc::is_range_with_iterators<Rng>::value) {
+					auto GenerateAdjacentTuples = [&]() MAYTHROW {
+						auto const itEnd = tc::end(self.base_range());
+						auto it = tc::begin(self.base_range());
+						auto ait=tc::explicit_cast<std::array<
+							tc::iterator_cache<decltype(it)>,
+							N
+						>>(tc::func_tag, [&](std::size_t) noexcept { return it++; });
+
+						for (;;) {
+							for (std::size_t n = 0; n<N; ++n) {
+								if (it == itEnd) {
+									return tc::continue_if_not_break(sink, tc::forward_as_tuple(*tc_move_always(tc::at(ait, n)), *tc_move_always(tc::at(ait, (n + i + 1) % N))...)); // MAYTHROW
+								}
+								RETURN_IF_BREAK(tc::continue_if_not_break(sink, tc::forward_as_tuple(*tc_move_always(tc::at(ait, n)), *tc::at(ait, (n + i + 1) % N)...))); // MAYTHROW
+								tc::at(ait, n) = it;
+								++it;
+							}
+						}
+					};
+					return CONDITIONAL_PRVALUE_AS_VAL(
+						tc::size_bounded(self.base_range(), N)<N,
+						INTEGRAL_CONSTANT(tc::continue_)(),
+						GenerateAdjacentTuples() // MAYTHROW
+					);
+				} else {
+					std::array<tc::storage_for<tc::range_value_t<Rng>>, N - 1> aoval;
+					std::size_t n = 0;
+					scope_exit( tc::for_each(tc::begin_next<tc::return_take>(aoval, tc::min(n, N - 1)), TC_MEM_FN(.dtor)) );
+
+					return tc::for_each(std::forward<Self>(self).base_range(), [&](auto&& u) MAYTHROW {
+						auto CallSink = [&]() MAYTHROW {
+							return tc::continue_if_not_break( // MAYTHROW
+								sink,
+								tc::forward_as_tuple(
+									tc_move_always(*tc::at(aoval, n % (N - 1))),
+									*tc::at(aoval, (n + i + 1) % (N - 1))...,
+									u
+								)
+							);
+						};
+						if (n < N - 1) {
+							tc::at(aoval, n).ctor(tc_move_if_owned(u));
+						} else {
+							RETURN_IF_BREAK( CallSink() ); // MAYTHROW
+							tc::renew(*tc::at(aoval, n % (N - 1)), tc_move_if_owned(u));
+						}
+						++n;
+						return tc::implicit_cast<tc::common_type_t<decltype(CallSink()), INTEGRAL_CONSTANT(tc::continue_)>>(INTEGRAL_CONSTANT(tc::continue_)());
+					});
+				}
+			}
+		};
+
+		template<typename Rng, std::size_t N>
+		struct constexpr_size_base<adjacent_tuples_adaptor<Rng, N>, std::void_t<typename tc::constexpr_size<Rng>::type>>
+			: std::integral_constant<std::size_t, tc::constexpr_size<Rng>::value < N ? 0 : tc::constexpr_size<Rng>::value - (N - 1)>
+		{};
+
+		template<typename AdjacentTuplesAdaptor, typename Rng, std::size_t N>
+		struct range_value<AdjacentTuplesAdaptor, adjacent_tuples_adaptor<Rng, N>, std::void_t<tc::range_value_t<tc::range_value_t<Rng>>>> final {
+			using type = tc::type::apply_t<tc::tuple, tc::type::repeat_n_t<N, tc::range_value_t<Rng>>>;
+		};
 	}
 
-	template< int N, typename Rng, typename Func, std::enable_if_t< is_range_with_iterators<Rng>::value >* =nullptr >
-	constexpr auto for_each_adjacent_tuple(Rng&& rng, Func func) MAYTHROW {
-		return for_each_adjacent_tuple_impl(std::forward<Rng>(rng), std::forward<Func>(func), std::make_integer_sequence<int,N-1>());
+	template<std::size_t N, typename Rng>
+	constexpr no_adl::adjacent_tuples_adaptor<Rng, N> adjacent_tuples(Rng&& rng) noexcept {
+		return {tc::aggregate_tag, std::forward<Rng>(rng)};
 	}
 
 	/////////////////////////////////////////////////////
-	// for_each_may_remove_current
+	// may_remove_current
 
+	namespace no_adl {
+		template<typename Rng>
+		struct [[nodiscard]] may_remove_current_impl final { // TODO VS2019: if constexpr does not work well in lambda in VS15.8.0
+			tc::reference_or_value<Rng> m_rng;
+			constexpr explicit may_remove_current_impl(Rng&& rng) noexcept: m_rng(tc::aggregate_tag, std::forward<Rng>(rng)) {}
 
-	// enable_if to ensure that removal preserves iterators would be nice, but is difficult for adapted ranges.
-	template< typename Rng, typename Func >
-	constexpr auto for_each_may_remove_current(Rng&& rng, Func func) MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, *tc::begin(rng))), INTEGRAL_CONSTANT(tc::continue_)> {
-		static_assert( !tc::range_filter_by_move_element< std::remove_reference_t<Rng> >::value );
-		auto it=tc::begin(rng);
-		auto const itEnd=tc::end(rng);
-		while( it!=itEnd ) {
-			auto const rsize = constexpr_restrict_size_decrement(rng, 0, 1);
-
-			auto bc = try_finally([&]() return_decltype_MAYTHROW(tc::continue_if_not_break(func, *it++)), [&]() noexcept {rsize.dtor();});
-
-			if constexpr (std::is_same<decltype(bc), INTEGRAL_CONSTANT(tc::break_)>::value) {
-				return INTEGRAL_CONSTANT(tc::break_)();
-			} else if constexpr (!std::is_same<decltype(bc), INTEGRAL_CONSTANT(tc::continue_)>::value) {
-				if (tc::break_ == bc) {
-					return tc::break_;
+			template<typename Func>
+			constexpr auto operator()(Func func) /* no & */ MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, *tc::begin(*m_rng))), INTEGRAL_CONSTANT(tc::continue_)> {
+				auto it=tc::begin(*m_rng);
+				auto const itEnd=tc::end(*m_rng);
+				while( it!=itEnd ) {
+					auto const rsize = constexpr_restrict_size_decrement(*m_rng, 0, 1);
+					RETURN_IF_BREAK( try_finally([&]() return_decltype_MAYTHROW(tc::continue_if_not_break(func, *it++)), [&]() noexcept {rsize.dtor();}) );
 				}
+				return INTEGRAL_CONSTANT(tc::continue_)();
 			}
-		}
-		return INTEGRAL_CONSTANT(tc::continue_)();
+		};
 	}
 
-	DEFINE_FN(for_each_may_remove_current);
+	// enable_if to ensure that removal preserves iterators would be nice, but is difficult for adapted ranges.
+	template< typename Rng >
+	[[nodiscard]] constexpr auto may_remove_current(Rng&& rng) noexcept code_return_decltype(
+		static_assert( !tc::range_filter_by_move_element< std::remove_reference_t<Rng> >::value );,
+		no_adl::may_remove_current_impl<Rng>(std::forward<Rng>(rng))
+	)
 
 	/////////////////////////////////////////////////////
 	// for_each_ordered_pair
@@ -97,72 +164,25 @@ namespace tc {
 		return INTEGRAL_CONSTANT(tc::continue_)();
 	}
 
-	template<typename Rng, typename Func, std::enable_if_t<!is_range_with_iterators<Rng>::value>* = nullptr>
-	auto for_each_adjacent_pair(Rng&& rng, Func func) MAYTHROW {
-		std::optional<tc::range_value_t<Rng>> oparam;
-		return tc::for_each( std::forward<Rng>(rng), [&](auto&& u) MAYTHROW
-			-> tc::common_type_t<decltype(tc::continue_if_not_break(
-#ifdef __clang__
-				// Apple clang 10: Using func and *oparam in lambda return type leads to ICE.
-				std::declval<Func&>(), std::declval<tc::range_value_t<Rng>>(), u
-#else
-				// MSVC 15.8: Using std::declval<Func>() and std::declval<tc::range_value_t<Rng>&>() in lambda return type leads to compilation failure.
-				func, *tc_move_always(oparam), u
-#endif
-			)), INTEGRAL_CONSTANT(tc::continue_)>
-		{
-			if (oparam) {
-				RETURN_IF_BREAK(tc::continue_if_not_break(func, *tc_move_always(oparam), u));
-			}
-			oparam.emplace(tc_move_if_owned(u));
-
-			return INTEGRAL_CONSTANT(tc::continue_)();
-		} );
-	}
-
 	template<typename Rng, typename FuncBegin, typename FuncElem, typename FuncSeparator, typename FuncEnd>
 	constexpr auto framed_for_each(Rng&& rng, FuncBegin funcBegin, FuncElem funcElement, FuncSeparator funcSeparator, FuncEnd funcEnd) MAYTHROW {
 		bool bEmpty = true;
-
-		using funcbegin_breakorcontinue_t = decltype(tc::continue_if_not_break(funcBegin));
-
-		// As of c++17, constexpr functions cannot have static variables (even if the variables are constexpr) - Clang correctly complains, but Visual Studio accepts
-		// it. However, as of Visual Studio 19.15.26726, if the variable is not static, and also used inside a lambda, Visual Studio wrongly attempts to capture it,
-		// and forbids the usage of the variable in constant expressions, effectively triggering error C2131: expression did not evaluate to a constant. As a
-		// workaround, a type is used instead.
-		using funcbegin_always_breaks = std::is_same<INTEGRAL_CONSTANT(tc::break_), funcbegin_breakorcontinue_t>;
-
-		// As of Visual Studio compiler 19.15.26726, it's not possible to explicitly specify a common return type (break or continue) for the following lambda. If
-		// provided, the compiler triggers error C2672: 'tc::for_each': no matching overloaded function found. Using auto return type deduction, instead.
-		auto breakorcontinue = tc::for_each(std::forward<Rng>(rng), [&](auto&& t) MAYTHROW {
-			if constexpr(funcbegin_always_breaks::value) {
-				return funcBegin();
-			} else {
-				using breakorcontinue_t = tc::common_type_t<
-					funcbegin_breakorcontinue_t,
-					decltype(tc::continue_if_not_break(funcSeparator)),
-					decltype(tc::continue_if_not_break(funcElement, std::forward<decltype(t)>(t)))
-				>;
-
-				if(tc::change(bEmpty, false)) {
-					RETURN_IF_BREAK(tc::implicit_cast<breakorcontinue_t>(tc::continue_if_not_break(funcBegin)));
-				} else {
-					RETURN_IF_BREAK(tc::implicit_cast<breakorcontinue_t>(tc::continue_if_not_break(funcSeparator)));
-				}
-				return tc::implicit_cast<breakorcontinue_t>(tc::continue_if_not_break(funcElement, std::forward<decltype(t)>(t)));
-			}
-		});
-
-		if constexpr(funcbegin_always_breaks::value) {
-			return breakorcontinue;
-		} else {
-			using breakorcontinue_t = tc::common_type_t<decltype(breakorcontinue), decltype(tc::continue_if_not_break(funcEnd))>;
-			if(tc::break_==breakorcontinue || bEmpty) {
-				return tc::implicit_cast<breakorcontinue_t>(breakorcontinue);
-			} else {
-				return tc::implicit_cast<breakorcontinue_t>(tc::continue_if_not_break(funcEnd));
-			}
-		}
+		return tc_break_or_continue_sequence(
+			(tc::for_each(std::forward<Rng>(rng), [&](auto&& t) MAYTHROW {
+				using T = decltype(t);
+				return tc_break_or_continue_sequence(
+					(CONDITIONAL_PRVALUE_AS_VAL(tc::change(bEmpty, false),
+						tc_internal_continue_if_not_break(funcBegin()),
+						tc_internal_continue_if_not_break(funcSeparator())
+					))
+					(tc::continue_if_not_break(funcElement, std::forward<T>(t)))
+				);
+			}))
+			(CONDITIONAL_PRVALUE_AS_VAL(!bEmpty,
+				tc_internal_continue_if_not_break(funcEnd()),
+				INTEGRAL_CONSTANT(tc::continue_)()
+			))
+		);
 	}
 
 	namespace no_adl {
@@ -248,7 +268,7 @@ namespace tc {
 		struct [[nodiscard]] make_range_impl<tc::type::list<T0, T1, T...>, std::enable_if_t<!std::conjunction<std::is_same<T0, T1>, std::is_same<T0, T>...>::value>> final {
 			static decltype(auto) fn(T0&& t0, T1&& t1, T&&... t) noexcept {
 				return tc::transform(
-					std::make_tuple(
+					tc::make_tuple(
 						tc::make_reference_or_value(std::forward<T0>(t0)),
 						tc::make_reference_or_value(std::forward<T1>(t1)),
 						tc::make_reference_or_value(std::forward<T>(t))...
@@ -271,13 +291,5 @@ namespace tc {
 	template<typename... T>
 	constexpr decltype(auto) make_range(T&&... t) noexcept {
 		return no_adl::make_range_impl<tc::type::list<T...>>::fn(std::forward<T>(t)...);
-	}
-
-	template<typename RngSep, typename... Rngs>
-	decltype(auto) concat_nonempty_separated(RngSep&& rngSep, Rngs&&... rngs) noexcept {
-		return tc::join_separated(
-			tc::filter(tc::make_range(std::forward<Rngs>(rngs)...), tc::not_fn(tc::fn_empty())),
-			std::forward<RngSep>(rngSep)
-		);
 	}
 }

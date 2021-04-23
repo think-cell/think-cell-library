@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -52,7 +52,7 @@ namespace tc
 		//   difference_type operator-(iterator const&, iterator const&)
 
 		template< typename Derived >
-		struct iterator_facade : equality_comparable<Derived> {
+		struct TC_EMPTY_BASES iterator_facade : equality_comparable<Derived> {
 			template< typename Derived_ = Derived >
 			constexpr auto operator[](typename std::iterator_traits<Derived_>::difference_type index) const& return_decltype_MAYTHROW(
 				*(derived_cast<Derived_>(*this) + index)

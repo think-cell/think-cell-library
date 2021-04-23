@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -10,11 +10,10 @@
 #include "container.h" // tc::vector
 #include "range.t.h"
 
-#pragma warning( push )
-#pragma warning( disable: 4018 )
+MODIFY_WARNINGS_BEGIN(((disable)(4018)))
 #include <boost/range/category.hpp>
 #include <boost/range/iterator_range.hpp>
-#pragma warning( pop )
+MODIFY_WARNINGS_END
 
 namespace lookup {
 	struct NoBegin final {};
@@ -88,7 +87,7 @@ UNITTESTDEF( boost_iterator_range_compat ) {
 	tc::vector<unsigned long> v = original;
 
 	TEST_init_hack(tc::vector, unsigned long, baul_exp, {6});
-	std::array<unsigned long, 1> baul; baul[0] = 6;
+	std::array<unsigned long, 1> baul; tc::front(baul) = 6;
 
 	auto mutable_range = boost::make_iterator_range(v); TEST_RANGE_LENGTH(mutable_range, 8);
 	TEST_RANGE_EQUAL(original, mutable_range);

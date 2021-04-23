@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -30,7 +30,7 @@ UNITTESTDEF( create_range ) {
 	wchar_t awch[] = L"wchar_t*";
 	wchar_t* mwch = awch; UNUSED_TEST_VARIABLE(mwch);
 
-	std::string str = "string";
+	std::basic_string<char> str = "string";
 
 	auto arr_r = tc::make_view(arr); TEST_RANGE_LENGTH(arr_r, 7);
 	auto v_r = tc::slice(v); TEST_RANGE_LENGTH(v_r, 8);

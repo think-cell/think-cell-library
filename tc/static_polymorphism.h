@@ -1,14 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 #include <type_traits>
 
 #define STATIC_VIRTUAL_METHOD_NAME( Name ) \
@@ -24,8 +24,7 @@
 	template<typename Derived_=Derived, typename... Args> \
 	Mod \
 	auto Name(Args&&... args) Decoration return_decltype_xvalue_by_ref_MAYTHROW( \
-		/* tc::derived_cast<Derived_>(*this) fails on MSVC 15.8 when evaluated as constant. */ \
-		STATIC_VIRTUAL_DISPATCH_IMPL_NAME(Name)(static_cast<Derived_ Decoration>(*tc::derived_cast<Derived_>(this)), std::forward<Args>(args)...) \
+		STATIC_VIRTUAL_DISPATCH_IMPL_NAME(Name)(static_cast<Derived_ Decoration>(tc::derived_cast<Derived_>(*this)), std::forward<Args>(args)...) \
 	)
 
 #define STATIC_VIRTUAL_FORWARD_ALL_IMPL( Mod, Name ) \

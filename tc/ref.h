@@ -1,14 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "range_fwd.h"
 #include "for_each.h"
 #include "as_lvalue.h"
@@ -74,7 +74,7 @@ namespace tc {
 		struct make_type_erased_function_ptr final {
 			tc::no_adl::type_erased_function_ptr<bNoExcept, Ret, Args...> operator()() const& noexcept {
 				return [](tc::no_adl::any_ref anyref, Args... args) noexcept(bNoExcept) -> Ret { // implicit cast of stateless lambda to function pointer
-					return anyref.get_ref<Func>()(std::forward<Args>(args)...); // MAYTHROW unless bNoExcept
+					return tc::invoke(anyref.get_ref<Func>(), std::forward<Args>(args)...); // MAYTHROW unless bNoExcept
 				};
 			}
 		};
@@ -83,7 +83,7 @@ namespace tc {
 		struct make_type_erased_function_ptr<bNoExcept, Func, void, Args...> final {
 			tc::no_adl::type_erased_function_ptr<bNoExcept, void, Args...> operator()() const& noexcept {
 				return [](tc::no_adl::any_ref anyref, Args... args) noexcept(bNoExcept) { // implicit cast of stateless lambda to function pointer
-					anyref.get_ref<Func>()(std::forward<Args>(args)...); // MAYTHROW unless bNoExcept
+					tc::invoke(anyref.get_ref<Func>(), std::forward<Args>(args)...); // MAYTHROW unless bNoExcept
 				};
 			}
 		};
@@ -92,7 +92,8 @@ namespace tc {
 		struct make_type_erased_function_ptr<bNoExcept, Func, tc::break_or_continue, Args...> final {
 			tc::no_adl::type_erased_function_ptr<bNoExcept, tc::break_or_continue, Args...> operator()() const& noexcept {
 				return [](tc::no_adl::any_ref anyref, Args... args) noexcept(bNoExcept) -> tc::break_or_continue { // implicit cast of stateless lambda to function pointer
-					return tc::continue_if_not_break(anyref.get_ref<Func>(), std::forward<Args>(args)...); // MAYTHROW unless bNoExcept
+					// Not tc::continue_if_not_break because it casts sink to const&.
+					return tc_internal_continue_if_not_break(tc::invoke(anyref.get_ref<Func>(), std::forward<Args>(args)...)); // MAYTHROW unless bNoExcept
 				};
 			}
 		};
@@ -107,9 +108,9 @@ namespace tc {
 				
 			template <typename Func, std::enable_if_t<
 				!tc::is_base_of_decayed< function_ref_base, Func >::value
-				&& std::is_invocable<std::remove_reference_t<Func>&, Args...>::value
+				&& tc::is_invocable<std::remove_reference_t<Func>&, Args...>::value
 				&& (
-					std::is_convertible<decltype(std::declval<std::remove_reference_t<Func>&>()(std::declval<Args>()...)), Ret>::value
+					std::is_convertible<decltype(tc::invoke(std::declval<std::remove_reference_t<Func>&>(), std::declval<Args>()...)), Ret>::value
 					|| std::is_same<Ret, tc::break_or_continue>::value
 					|| std::is_same<Ret, void>::value
 				)
@@ -134,7 +135,7 @@ namespace tc {
 
 		template <typename Ret, typename ...Args>
 		struct function_ref<Ret(Args...)> : private tc::no_adl::function_ref_base</*bNoExcept*/false, Ret, Args...> {
-			using base_ = tc::no_adl::function_ref_base</*bNoExcept*/false, Ret, Args...>;
+			using base_ = typename function_ref::function_ref_base;
 			using base_::base_;
 #ifndef _MSC_VER
 			using base_::operator();
@@ -148,7 +149,7 @@ namespace tc {
 
 		template <typename Ret, typename ...Args>
 		struct function_ref<Ret(Args...) noexcept> : private tc::no_adl::function_ref_base</*bNoExcept*/true, Ret, Args...> {
-			using base_ = tc::no_adl::function_ref_base</*bNoExcept*/true, Ret, Args...>;
+			using base_ = typename function_ref::function_ref_base;
 			using base_::base_;
 #ifndef _MSC_VER
 			using base_::operator();

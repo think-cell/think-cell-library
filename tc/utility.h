@@ -1,14 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 
 #include "inherit_ctors.h"
 #include "type_traits.h"
@@ -41,14 +41,6 @@ namespace tc {
 	template<typename TIndex, TIndex IdxFrom, TIndex IdxTo>
 	using make_reverse_integer_sequence = typename offset_integer_sequence_impl::offset_integer_sequence<TIndex, IdxFrom, IdxTo, /* bIncreasing */ false>::type;
 
-	namespace make_integer_sequence_test {
-		STATICASSERTSAME((tc::make_integer_sequence<int, -1, 3>),( std::integer_sequence<int, -1, 0, 1, 2>));
-		STATICASSERTSAME((tc::make_integer_sequence<int, 2, 2>), std::integer_sequence<int>);
-
-		STATICASSERTSAME((tc::make_reverse_integer_sequence<int, -1, 3>), (std::integer_sequence<int, 2, 1, 0, -1>));
-		STATICASSERTSAME((tc::make_reverse_integer_sequence<int, 2, 2>), std::integer_sequence<int>);
-	}
-
 	//////////////////////////////////////////////////////////////////////////
 	// is_contiguous_integer_sequence
 
@@ -65,29 +57,12 @@ namespace tc {
 	template<typename IntSequence>
 	using is_contiguous_integer_sequence = decltype(is_contiguous_integer_sequence_impl::is_contiguous_integer_sequence(std::declval<IntSequence>()));
 
-	namespace is_contiguous_integer_sequence_test {
-		static_assert(is_contiguous_integer_sequence<std::make_index_sequence<0>>::value);
-		static_assert(is_contiguous_integer_sequence<std::make_index_sequence<1>>::value);
-		static_assert(is_contiguous_integer_sequence<std::make_index_sequence<2>>::value);
-		static_assert(is_contiguous_integer_sequence<std::make_index_sequence<10>>::value);
-
-		static_assert(is_contiguous_integer_sequence<make_integer_sequence<int, 1, 1>>::value);
-		static_assert(is_contiguous_integer_sequence<make_integer_sequence<int, 1, 5>>::value);
-		static_assert(!is_contiguous_integer_sequence<make_reverse_integer_sequence<int, 1, 3>>::value);
-
-		static_assert(is_contiguous_integer_sequence<std::integer_sequence<int, -2, -1, 0, 1, 2, 3>>::value);
-		static_assert(!is_contiguous_integer_sequence<std::integer_sequence<int, 0, 2>>::value);
-		static_assert(!is_contiguous_integer_sequence<std::integer_sequence<int, 0, 2, 3>>::value);
-
-		static_assert(!is_contiguous_integer_sequence<int>::value);
-	}
-
 	//////////////////////////////////////////////////////////////////////////
 	// tagged_type
 
 	template<typename TTag, typename T>
 	struct tagged_type : boost::fusion::pair<TTag, T> {
-		using base_ = boost::fusion::pair<TTag, T>;
+		using base_ = typename tagged_type::pair;
 		using this_type = tagged_type<TTag, T>;
 
 		tagged_type() = default;
@@ -100,7 +75,7 @@ namespace tc {
 	//////////////////////////////////////////////////////////////////////////
 	// next
 
-	template<class T>
+	template<typename T>
 	constexpr auto next(T&& x) noexcept(noexcept(++std::declval<std::decay_t<T&&>&>()) && std::is_nothrow_copy_constructible<T>::value) {
 		auto t = std::forward<T>(x);
 		++t;
@@ -118,7 +93,7 @@ namespace tc {
 	//
 	// USAGE:
 	// tc::integral_constant<tc::break_> etc.
-	#define INTEGRAL_CONSTANT(val) std::integral_constant<tc::decay_t<decltype(val)>, val>
+	#define INTEGRAL_CONSTANT(...) std::integral_constant<tc::decay_t<decltype(__VA_ARGS__)>, __VA_ARGS__>
 
 	//////////////////////////////////////////////////////////////////////////
 	// select_nth
@@ -183,7 +158,7 @@ namespace tc_swap_impl
 
 	template<typename T>
 	constexpr void swap_impl(T& a, T& b) noexcept(noexcept(swap(a, b))) {
-		if constexpr (std::is_fundamental<T>::value || std::is_pointer<T>::value) {
+		if constexpr (std::is_trivially_copyable<T>::value && std::is_trivially_copy_assignable<T>::value && std::is_trivially_destructible<T>::value) {
 			T temp = a;
 			a = b;
 			b = temp;
@@ -208,4 +183,105 @@ namespace tc
 {
 	// Introduces a tc::swap name in a way that is invisible to ADL.
 	using tc_swap_impl::named_swap::swap;
+
+
+	// TODO C++20 : std::pair and std::tuple cannot be constexpr swapped until C++20
+	template <typename First, typename Second>
+	constexpr void swap(std::pair<First, Second>& lhs, std::pair<First, Second>& rhs ) noexcept {
+		tc::swap(lhs.first, rhs.first);
+		tc::swap(lhs.second, rhs.second);
+	}
+
+	namespace swap_tuple_impl {
+		template <typename Tuple, std::size_t... I>
+		constexpr void swap_tuple_impl(Tuple& lhs, Tuple& rhs, std::index_sequence<I...>) noexcept {
+			(tc::swap(std::get<I>(lhs), std::get<I>(rhs)), ...);
+		}
+	}
+
+	template <typename... T>
+	constexpr void swap(std::tuple<T...>& lhs, std::tuple<T...>& rhs) noexcept {
+		swap_tuple_impl::swap_tuple_impl(lhs, rhs, std::make_index_sequence<sizeof...(T)>());
+	}
+}
+
+//////////////////////////////////////////////////////////////////////////
+// as_constexpr
+
+namespace tc::as_constexpr_no_adl {
+	namespace {
+		template<typename TInit>
+		struct SValueHolder final {
+#ifndef __clang__
+			static constexpr auto value = TInit::value();
+#else
+			static constexpr auto value = TInit::value()();
+#endif
+		};
+	}
+}
+
+#if defined(__clang__) // https://bugs.llvm.org/show_bug.cgi?id=32766
+#define as_constexpr(...) \
+	([]() constexpr noexcept -> auto const& { \
+		struct SConstexprInit final { \
+			static constexpr auto value() noexcept { return []() constexpr noexcept { return __VA_ARGS__; }; } \
+		}; \
+		return tc::as_constexpr_no_adl::SValueHolder<SConstexprInit>::value; \
+	}())
+#else
+#define as_constexpr(...) \
+	([]() constexpr noexcept -> auto const& { \
+		struct SConstexprInit final { \
+			static constexpr auto value() noexcept { return __VA_ARGS__; } \
+		}; \
+		return tc::as_constexpr_no_adl::SValueHolder<SConstexprInit>::value; \
+	}())
+#endif
+
+//////////////////////////////////////////////////////////////////////////
+// cmp_equal/cmp_less/cmp_greater...
+
+namespace tc { // TODO c++20: replace these functions with std versions
+	template< class T, class U, std::enable_if_t<tc::is_actual_integer<T>::value && tc::is_actual_integer<U>::value>* = nullptr >
+	constexpr bool cmp_equal( T t, U u ) noexcept
+	{
+	    if constexpr (std::is_signed_v<T> == std::is_signed_v<U>)
+	        return t == u;
+	    else if constexpr (std::is_signed_v<T>)
+	        return t < 0 ? false : static_cast<std::make_unsigned_t<T>>(t) == u;
+	    else
+	        return u < 0 ? false : t == static_cast<std::make_unsigned_t<U>>(u);
+	}
+	 
+	template< class T, class U>
+	constexpr auto cmp_not_equal( T t, U u ) return_decltype_noexcept(
+		!cmp_equal(t, u)
+	)
+	 
+	template< class T, class U, std::enable_if_t<tc::is_actual_integer<T>::value && tc::is_actual_integer<U>::value>* = nullptr >
+	constexpr bool cmp_less( T t, U u ) noexcept
+	{
+	    if constexpr (std::is_signed_v<T> == std::is_signed_v<U>)
+	        return t < u;
+	    else if constexpr (std::is_signed_v<T>)
+	        return t < 0 ? true : static_cast<std::make_unsigned_t<T>>(t) < u;
+	    else
+	        return u < 0 ? false : t < static_cast<std::make_unsigned_t<U>>(u);
+	}
+	 
+	template< class T, class U>
+	constexpr auto cmp_greater( T t, U u ) return_decltype_noexcept(
+	    cmp_less(u, t)
+	)
+	 
+	template< class T, class U >
+	constexpr auto cmp_less_equal( T t, U u ) return_decltype_noexcept(
+	    !cmp_greater(t, u)
+	)
+	 
+	template< class T, class U >
+	constexpr auto cmp_greater_equal( T t, U u ) return_decltype_noexcept(
+	    !cmp_less(t, u)
+	)
 }

@@ -1,13 +1,13 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "assign.h"
 #include "type_traits.h"
 #include "compare.h"
@@ -27,11 +27,13 @@ namespace tc {
 	template<typename T, typename Alloc=std::allocator<T> >
 	using vector=std::vector<T,Alloc>;
 
-	// std::vector<bool>::const_refernce is bool (C++ standard)
-	template<>
-	struct decay< tc::vector<bool>::reference > {
-		using type = bool;
-	};
+	namespace no_adl {
+		// std::vector<bool>::const_refernce is bool (C++ standard)
+		template<bool bPreventSlicing>
+		struct decay< tc::vector<bool>::reference, bPreventSlicing > {
+			using type = bool;
+		};
+	}
 
 	template<typename T, typename Alloc=std::allocator<T> >
 	using simple_stack=std::stack<T, vector<T, Alloc> >;
@@ -109,4 +111,9 @@ namespace tc {
 
 	template<typename Key, typename T, typename Compare=tc::less_key, typename Alloc=std::allocator<std::pair<Key const, T>>>
 	using map=std::map<Key, T, Compare, Alloc>;
+
+	namespace no_adl {
+		BOOST_MPL_HAS_XXX_TRAIT_DEF(mapped_type)
+	}
+	using no_adl::has_mapped_type;
 }

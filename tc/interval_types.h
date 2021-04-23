@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -27,19 +27,16 @@ namespace EAlign_adl {
 }
 
 namespace tc {
-	namespace lohi_adl {
-		enum class lohi { lo, hi, end__ };
-		DEFINE_CONTIGUOUS_ENUM(lohi, lohi::lo, lohi::end__)
+	DEFINE_UNPREFIXED_ENUM(lohi, (lo)(hi))
 
+	namespace lohi_adl {
+		// support for multiplication with tc::sign
 		constexpr lohi operator-(lohi lohi_) noexcept {
-			return ~lohi_; // support for multiplication with tc::sign
+			return ~lohi_;
 		}
 	}
-	using lohi_adl::lohi;
-	inline constexpr lohi lo=lohi::lo;
-	inline constexpr lohi hi=lohi::hi;
 
-	constexpr EAlign lohi_to_ealign(lohi lohi_) noexcept {
+	[[nodiscard]] constexpr EAlign lohi_to_ealign(lohi lohi_) noexcept {
 		if( lohi::lo == lohi_ ) {
 			return ealignLOW;
 		} else {
@@ -48,7 +45,7 @@ namespace tc {
 	}
 
 	template< typename T >
-	T negate_if( bool_context b, T t ) noexcept{
+	[[nodiscard]] constexpr T negate_if( bool_context b, T t ) noexcept{
 		if(b) {
 			return -t;
 		} else{
@@ -56,11 +53,16 @@ namespace tc {
 		}
 	}
 	template< typename T >
-	T not_if( bool_context b, T t ) noexcept{
+	[[nodiscard]] constexpr T not_if( bool_context b, T t ) noexcept{
 		if(b) {
 			return ~t;
 		} else{
 			return t;
 		}
 	}
+
+	namespace interval_adl {
+		template< typename T > struct interval;
+	}
+	using interval_adl::interval;
 }

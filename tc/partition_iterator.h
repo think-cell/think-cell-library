@@ -1,19 +1,20 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "reverse_adaptor.h"
 #include "static_vector.h"
 #include "insert.h"
 
 #include <boost/iterator/transform_iterator.hpp>
+#include <boost/next_prior.hpp>
 #include <boost/range/algorithm/mismatch.hpp>
 
 #include <boost/multi_index/ordered_index.hpp>
@@ -36,14 +37,6 @@ namespace tc {
 				// TODO efficient implementation for tree iterators
 				// static_assert(!std::is_same<It, It>::value, "provide more efficient middle_point or apply linear search");
 				return itBegin;
-			}
-
-			template< typename T, typename Traversal, typename Difference >
-			boost::iterators::counting_iterator<T, Traversal, Difference>
-			middle_point(boost::iterators::counting_iterator<T, Traversal, Difference> const& itBegin, boost::iterators::counting_iterator<T, Traversal, Difference> const& itEnd) noexcept {
-				return boost::iterators::counting_iterator<T, Traversal, Difference>(
-					tc::iterator::middle_point(itBegin.base(), itEnd.base())
-				);
 			}
 
 			template< typename It, typename UnaryPred >
@@ -108,7 +101,7 @@ namespace tc {
 				};
 				TNodeVector vecpnodeBegin=PathToRoot(itBegin.get_node());
 				TNodeVector vecpnodeEnd=PathToRoot(boost::prior(itEnd).get_node());
-				_ASSERTEQUAL( tc_back(vecpnodeBegin), tc_back(vecpnodeEnd) ); // both paths terminate at the root
+				_ASSERTEQUAL( tc::back(vecpnodeBegin), tc::back(vecpnodeEnd) ); // both paths terminate at the root
 				node_type* pnodeCommon=*boost::prior( boost::mismatch(
 					tc::reverse(vecpnodeBegin),
 					tc::reverse(vecpnodeEnd)
@@ -157,9 +150,8 @@ namespace tc {
 					itEnd=tc_move(itMid);
 				}
 			}
-		#ifdef _DEBUG /* we have already found the partition point; compare result */
-			_ASSERTEQUAL(itBegin, itPartitionPoint);
-		#endif
+			// we have already found the partition point; compare result
+			_ASSERTEQUALDEBUG(itBegin, itPartitionPoint);
 			return itBegin;
 		}
 
@@ -175,7 +167,7 @@ namespace tc {
 			_ASSERT( itBegin!=itEnd );
 			--itEnd;
 			return internal_partition_point( tc_move(itBegin), tc_move(itEnd), [&pred](It it) noexcept {
-				return pred(tc::as_const(*it),tc::as_const(*tc::next(it)));
+				return pred(tc::as_const(*it),tc::as_const(*modified(it, ++_)));
 			} );
 		}
 

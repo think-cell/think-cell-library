@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -12,45 +12,37 @@
 #include "counting_range.h"
 #include "tag_type.h"
 #include "as_lvalue.h"
+#include "zip_range.h"
 
 #ifdef TC_PRIVATE
 #include "Library/Persistence/types.h"
 #endif
-#include <boost/iterator/transform_iterator.hpp>
 
 namespace tc {
 	namespace no_adl {
-		template<typename Enum>
-		struct [[nodiscard]] all_values {
-			using const_iterator = tc::counting_iterator<Enum>;
-			using iterator = const_iterator;
-			iterator begin() const& noexcept {
-				return iterator( tc::contiguous_enum<Enum>::begin() );
-			}
-			iterator end() const& noexcept {
-				return iterator( tc::contiguous_enum<Enum>::end() );
-			}
-		};
-
-		template<typename Enum>
-		struct constexpr_size_base<all_values<Enum>, void> : std::integral_constant<std::size_t, enum_count<Enum>::value> {};
-
 		template<>
-		struct [[nodiscard]] all_values<bool> {
-			using const_iterator = boost::transform_iterator< fn_static_cast<bool>, tc::counting_iterator<unsigned char> >;
-			using iterator = const_iterator;
-			iterator begin() const& noexcept {
-				return iterator( 0 );
+		struct [[nodiscard]] all_values<bool> final {
+			static auto constexpr c_rngsete = tc::transform(tc::iota(0, 2), tc::fn_static_cast<bool>());
+
+		public:
+			static constexpr auto begin() noexcept {
+				return tc::begin(c_rngsete);
 			}
-			iterator end() const& noexcept {
-				return iterator( 2 );
+			static constexpr auto end() noexcept {
+				return tc::end(c_rngsete);
+			}
+
+			using const_iterator = decltype(tc::begin(c_rngsete));
+			using iterator = const_iterator;
+
+			static constexpr std::size_t index_of(bool b) noexcept {
+				return tc::underlying_cast(b);
 			}
 		};
 
 		template<>
-		struct constexpr_size_base<all_values<bool>, void> : std::integral_constant<std::size_t, 2> {};
-	} // namespace no_adl
-	using no_adl::all_values;
+		struct constexpr_size_base<all_values<bool>> : std::integral_constant<std::size_t, 2> {};
+	}
 
 	// all_values are views
 	namespace dense_map_adl {
@@ -59,10 +51,7 @@ namespace tc {
 		struct dense_map;
 
 		template< typename Key, typename Value >
-		void LoadType( dense_map<Key, Value>& dm, CXmlReader& loadhandler ) THROW(ExLoadFail);
-
-		template< typename Key, typename Value >
-		void SaveType( dense_map<Key, Value> const& dm, CSaveHandler& savehandler) MAYTHROW;
+		void LoadType_impl( dense_map<Key, Value>& dm, CXmlReader& loadhandler ) THROW(ExLoadFail);
 #endif
 		template< typename Key, typename Value >
 		struct dense_map : tc::equality_comparable<dense_map<Key, Value>> {
@@ -73,22 +62,25 @@ namespace tc {
 			template<typename ValueOther>
 			using other_dense_map = dense_map<Key, ValueOther>;
 
-			using Array = tc::array<Value,  enum_count<Key>::value >;
+			using Array = tc::array<Value,  tc::constexpr_size<tc::all_values<Key>>::value >;
 			Array m_a;
 		public:
 			using dense_map_key_type = Key;
 
-			// ctors
-			dense_map() noexcept {}
-			dense_map(boost::container::default_init_t) noexcept : m_a(boost::container::default_init_t{}) {}
-			
-			template<typename... Args>
-			dense_map( tc::fill_tag_t, Args&&... val ) noexcept
-			: m_a(tc::fill_tag, std::forward<Args>(val)...) {} // TODO: tc::explicit_cast to support std::aray once copy elision works reliably
+			// ctors - VS compiler 19.15.26726 didn't sfinae correctly on Array, using decltype(m_a) instead
+			template<ENABLE_SFINAE, std::enable_if_t<std::is_default_constructible<SFINAE_TYPE(decltype(m_a))>::value>* = nullptr>
+			dense_map() noexcept(std::is_nothrow_default_constructible<decltype(m_a)>::value) {}
+
+			template<ENABLE_SFINAE, std::enable_if_t<std::is_constructible<SFINAE_TYPE(decltype(m_a)), boost::container::default_init_t>::value>* = nullptr>
+			explicit dense_map(boost::container::default_init_t) noexcept(std::is_nothrow_constructible<decltype(m_a), boost::container::default_init_t>::value)
+				: m_a(boost::container::default_init) {}
+
+			template<typename... Args, std::enable_if_t<0 < sizeof...(Args)>* = nullptr> // dense_map(fill_tag) could exist, but it should be explicit
+			constexpr dense_map( tc::fill_tag_t, Args&&... val ) noexcept
+			: m_a(tc::fill_tag, std::forward<Args>(val)...) {} // TODO: tc::explicit_cast to support std::array once copy elision works reliably
 
 			template<typename Rng>
-			dense_map(tc::range_tag_t, Rng&& rng) noexcept
-			: m_a(tc::explicit_cast<decltype(m_a)>(std::forward<Rng>(rng))) {}
+			dense_map(tc::range_tag_t, Rng&& rng) noexcept : MEMBER_INIT_CAST( m_a, std::forward<Rng>(rng) ) {}
 
 			// make sure forwarding ctor has at least two parameters, so no ambiguity with filling ctor and implicit copy/move ctors
 			template< typename First, typename Second, typename... Args,
@@ -107,17 +99,33 @@ namespace tc {
 				>* =nullptr
 			>
 			constexpr explicit dense_map(First&& first, Second&& second, Args&& ...args) noexcept(std::is_nothrow_constructible<Array, tc::aggregate_tag_t, First&&, Second&&, Args&&...>::value)
-			: m_a(tc::explicit_cast<decltype(m_a)>(tc::aggregate_tag, std::forward<First>(first), std::forward<Second>(second), std::forward<Args>(args)...)) {}
+				: MEMBER_INIT_CAST( m_a, tc::aggregate_tag, std::forward<First>(first), std::forward<Second>(second), std::forward<Args>(args)... )
+			{}
 
-			template< typename Func >
-			dense_map(func_tag_t, Func func) MAYTHROW
-				: m_a(tc::explicit_cast<decltype(m_a)>(tc::func_tag, [&func](std::size_t n) MAYTHROW -> Value { // force return of Value
+			template< typename FuncTag, typename Func, std::enable_if_t<std::conjunction<
+				std::is_same<FuncTag, tc::func_tag_t>,
+				tc::is_invocable<Func&, Key>
+			>::value>* = nullptr >
+			constexpr dense_map(FuncTag, Func func) MAYTHROW
+				: MEMBER_INIT_CAST( m_a, tc::func_tag, [&func](std::size_t n) MAYTHROW -> Value { // force return of Value
+					STATICASSERTSAME(decltype(tc_at_nodebug(tc::all_values<Key>(), n))&&, Key&&);
 					static_assert(
-						std::is_same<Value, decltype(func(tc::contiguous_enum<Key>::begin() + n))>::value || // guaranteed copy elision, Value does not need to be copy/move constructible
-						tc::is_safely_constructible<Value, decltype(func(tc::contiguous_enum<Key>::begin() + n))>::value
+						std::is_same<Value, decltype(func(std::declval<Key>()))>::value || // guaranteed copy elision, Value does not need to be copy/move constructible
+						tc::is_safely_constructible<Value, decltype(func(std::declval<Key>()))>::value
 					);
-					return func(tc::contiguous_enum<Key>::begin() + n);
-				}))
+					return func(tc_at_nodebug(tc::all_values<Key>(), n));
+				} )
+			{}
+
+		public:
+			template< typename FuncTag, typename Func, std::enable_if_t<std::conjunction<
+				std::is_same<FuncTag, tc::func_tag_t>,
+				std::negation<tc::is_invocable<Func&, Key>>
+			>::value>* = nullptr >
+			constexpr dense_map(FuncTag, Func func) MAYTHROW
+				: dense_map(tc::func_tag, [&](auto const key) MAYTHROW -> Value {
+					return {tc::func_tag, [&](auto const... keys) return_decltype_MAYTHROW( func(key, keys...) )};
+				})
 			{}
 
 			template< typename Value2 >
@@ -131,13 +139,18 @@ namespace tc {
 			{}
 
 			template< typename Func, typename Value2 >
-			dense_map(transform_tag_t, other_dense_map<Value2> const& mapOther, Func&& func) MAYTHROW
-				: m_a(tc::explicit_cast<decltype(m_a)>(tc::transform(mapOther.m_a, std::forward<Func>(func))))
+			constexpr dense_map(transform_tag_t, other_dense_map<Value2> const& mapOther, Func&& func) MAYTHROW
+				: MEMBER_INIT_CAST( m_a, tc::transform(mapOther.m_a, std::forward<Func>(func)) )
 			{}
 
 			template< typename Func, typename Value2 >
-			dense_map(transform_tag_t, other_dense_map<Value2>&& mapOther, Func&& func) MAYTHROW
-				: m_a(tc::explicit_cast<decltype(m_a)>(tc::transform(tc_move(mapOther.m_a), std::forward<Func>(func))))
+			constexpr dense_map(transform_tag_t, other_dense_map<Value2>&& mapOther, Func func) MAYTHROW
+				: MEMBER_INIT_CAST( m_a,
+					// TODO rvalue elements for rvalue ranges: tc::transform(tc_move(mapOther.m_a), std::forward<Func>(func))
+					tc::transform(mapOther.m_a, [&](auto& elem) MAYTHROW -> decltype(auto) {
+						return func(static_cast<Value2&&>(elem));
+					})
+				)
 			{}
 
 			DEFINE_MEMBER_TRANSFORM(other_dense_map, tc::type::deducible_identity_t, Value)
@@ -145,35 +158,35 @@ namespace tc {
 			template< typename ValuePri, typename ValueSec >
 			constexpr dense_map(Key keyPri, ValuePri&& valPri, ValueSec&& valSec) MAYTHROW :
 				dense_map(
-					tc::contiguous_enum<Key>::begin() == keyPri ? std::forward<ValuePri>(valPri) : std::forward<ValueSec>(valSec),
-					tc::contiguous_enum<Key>::begin() == keyPri ? std::forward<ValueSec>(valSec) : std::forward<ValuePri>(valPri)
+					CONDITIONAL_RVALUE_AS_REF(tc_front_nodebug(tc::all_values<Key>()) == keyPri, std::forward<ValuePri>(valPri), std::forward<ValueSec>(valSec)),
+					CONDITIONAL_RVALUE_AS_REF(tc_front_nodebug(tc::all_values<Key>()) == keyPri, std::forward<ValueSec>(valSec), std::forward<ValuePri>(valPri))
 				)
 			{}
 			template <typename Value2,
 				std::enable_if_t<tc::econstructionIMPLICIT==tc::construction_restrictiveness<Value, Value2 const&>::value>* =nullptr
 			>
-			dense_map(other_dense_map<Value2> const& mapOther) noexcept(std::is_nothrow_constructible<Value, Value2 const&>::value)
-				: m_a(tc::explicit_cast<decltype(m_a)>(mapOther.m_a))
+			constexpr dense_map(other_dense_map<Value2> const& mapOther) noexcept(std::is_nothrow_constructible<Value, Value2 const&>::value)
+				: MEMBER_INIT_CAST( m_a, mapOther.m_a )
 			{}
 
 			template <typename Value2,
 				std::enable_if_t<tc::econstructionEXPLICIT==tc::construction_restrictiveness<Value, Value2 const&>::value>* =nullptr
 			>
-			explicit dense_map(other_dense_map<Value2> const& mapOther) noexcept(std::is_nothrow_constructible<dense_map, transform_tag_t, decltype(mapOther), tc::fn_explicit_cast_with_rounding<Value>>::value)
+			constexpr explicit dense_map(other_dense_map<Value2> const& mapOther) noexcept(std::is_nothrow_constructible<dense_map, transform_tag_t, decltype(mapOther), tc::fn_explicit_cast_with_rounding<Value>>::value)
 				: dense_map(transform_tag, mapOther, tc::fn_explicit_cast_with_rounding<Value>()) // TODO: replace with tc::fn_explicit_cast as soon as geometry no longer relies on it
 			{}
 
 			template <typename Value2,
 				std::enable_if_t<tc::econstructionIMPLICIT==tc::construction_restrictiveness<Value, Value2&&>::value>* =nullptr
 			>
-			dense_map(other_dense_map<Value2>&& mapOther) noexcept(std::is_nothrow_constructible<Value, Value2&&>::value)
-				: m_a(tc::explicit_cast<decltype(m_a)>(tc_move(mapOther).m_a))
+			constexpr dense_map(other_dense_map<Value2>&& mapOther) noexcept(std::is_nothrow_constructible<Value, Value2&&>::value)
+				: MEMBER_INIT_CAST( m_a, tc_move(mapOther).m_a )
 			{}
 
 			template <typename Value2,
 				std::enable_if_t<tc::econstructionEXPLICIT==tc::construction_restrictiveness<Value, Value2&&>::value>* =nullptr
 			>
-			explicit dense_map(other_dense_map<Value2>&& mapOther) noexcept(std::is_nothrow_constructible<dense_map, transform_tag_t, decltype(tc_move(mapOther)), tc::fn_explicit_cast_with_rounding<Value>>::value)
+			constexpr explicit dense_map(other_dense_map<Value2>&& mapOther) noexcept(std::is_nothrow_constructible<dense_map, transform_tag_t, decltype(tc_move(mapOther)), tc::fn_explicit_cast_with_rounding<Value>>::value)
 				: dense_map(transform_tag, tc_move(mapOther), tc::fn_explicit_cast_with_rounding<Value>()) // TODO: replace with tc::fn_explicit_cast as soon as geometry no longer relies on it
 			{}
 
@@ -195,22 +208,44 @@ namespace tc {
 
 			// access
 			[[nodiscard]] constexpr Value& operator[](Key key) & noexcept {
-				return m_a[key-tc::contiguous_enum<Key>::begin()];
+				if constexpr (std::is_reference<Value>::value) {
+					return m_a[tc::all_values<Key>::index_of(key)];
+				} else {
+					return tc::at(m_a, tc::all_values<Key>::index_of(key));
+				}
 			}
 			[[nodiscard]] constexpr Value const& operator[](Key key) const& noexcept {
-				return m_a[key-tc::contiguous_enum<Key>::begin()];
+				if constexpr (std::is_reference<Value>::value) {
+					return m_a[tc::all_values<Key>::index_of(key)];
+				} else {
+					return tc::at(m_a, tc::all_values<Key>::index_of(key));
+				}
 			}
 			[[nodiscard]] constexpr Value&& operator[](Key key) && noexcept {
-				return tc_move(m_a)[key-tc::contiguous_enum<Key>::begin()];
+				return static_cast<Value &&>((*this)[key]);
 			}
 			[[nodiscard]] constexpr Value const&& operator[](Key key) const&& noexcept {
 				return static_cast<Value const&&>((*this)[key]);
 			}
 
-			// comparison
-			[[nodiscard]] friend bool operator==( dense_map const& lhs, dense_map const& rhs ) noexcept {
-				return EQUAL_MEMBERS(m_a);
+		private:
+			template<typename Self>
+			static constexpr auto enumerate_(Self&& self) noexcept {
+				if constexpr( std::is_move_constructible<Self>::value ) {
+					return tc::zip(tc::all_values<Key>(), std::forward<Self>(self));
+				} else {
+					static_assert( !std::is_lvalue_reference<Self>::value );
+					// Cannot static_assert(dependent_false<Self>::value) here.
+					// tc::zip(..., NonMovable()) does not compile, but this overload gets instantiated even if not used.
+				}
 			}
+
+		public:
+			RVALUE_THIS_OVERLOAD_MOVABLE_MUTABLE_REF(enumerate)
+
+			// comparison
+			template<typename Key_, typename LHS, typename RHS>
+			friend constexpr bool operator==( dense_map<Key_, LHS> const& lhs, dense_map<Key_, RHS> const& rhs ) noexcept;
 
 			// iterators
 			using iterator = typename boost::range_iterator< Array >::type;
@@ -236,11 +271,11 @@ namespace tc {
 
 #ifdef TC_PRIVATE
 			// persistence
-			friend void LoadType<>( dense_map<Key, Value>& dm, CXmlReader& loadhandler ) THROW(ExLoadFail);
-			friend void SaveType<>( dense_map<Key, Value> const& dm, CSaveHandler& savehandler) MAYTHROW;
+			friend void LoadType_impl<>( dense_map<Key, Value>& dm, CXmlReader& loadhandler ) THROW(ExLoadFail);
+			void DoSave(CSaveHandler& savehandler) const& MAYTHROW;
 
 			// error reporting
-			friend constexpr Array const& error(dense_map const& dm) noexcept {
+			friend constexpr Array const& debug_output_impl(dense_map const& dm) noexcept {
 				return dm.m_a;
 			}
 
@@ -249,133 +284,17 @@ namespace tc {
 			void hash_append_impl(HashAlgorithm& h) const& noexcept;
 
 			template<typename HashAlgorithm>
-			friend void hash_append(HashAlgorithm& h, dense_map const& dm) noexcept {
+			friend void hash_append_impl(HashAlgorithm& h, dense_map const& dm) noexcept {
 				dm.hash_append_impl(h);
 			}
 #endif
 		};
 
-		template< typename Value >
-		struct dense_map<bool,Value> : tc::equality_comparable<dense_map<bool,Value>> {
-		private:
-			template<typename KeyOther, typename ValueOther>
-			friend struct dense_map;
+		template<typename Key_, typename LHS, typename RHS>
+		[[nodiscard]] constexpr bool operator==(dense_map<Key_, LHS> const& lhs, dense_map<Key_, RHS> const& rhs) noexcept {
+			return EQUAL_MEMBERS(m_a);
+		}
 
-			template<typename ValueOther>
-			using other_dense_map = dense_map<bool, ValueOther>;
-
-			using Array = tc::array<Value,2>;
-			Array m_a;
-		public:
-			using dense_map_key_type=bool;
-
-			// ctors
-			dense_map() noexcept {}
-			dense_map(boost::container::default_init_t) noexcept : m_a(boost::container::default_init_t{}) {}
-
-			template<typename... Args>
-			dense_map( tc::fill_tag_t, Args&&... val ) noexcept
-				:	m_a(tc::explicit_cast<decltype(m_a)>(tc::fill_tag, std::forward<Args>(val)...))
-			{}
-
-			template< typename Value0, typename Value1,
-				std::enable_if_t<
-					tc::econstructionIMPLICIT == tc::elementwise_construction_restrictiveness<Value, Value0&&, Value1&&>::value
-					&& !std::is_same<tc::remove_cvref_t<Value0>, tc::fill_tag_t>::value
-				>* =nullptr
-			>
-			constexpr dense_map( Value0&& val0, Value1&& val1 ) noexcept(std::is_nothrow_constructible<Array, tc::aggregate_tag_t, Value0&&, Value1&&>::value)
-			:	m_a(tc::explicit_cast<decltype(m_a)>(tc::aggregate_tag, std::forward<Value0>(val0),std::forward<Value1>(val1)))
-			{}
-
-			template< typename Value0, typename Value1,
-				std::enable_if_t<
-					tc::econstructionEXPLICIT == tc::elementwise_construction_restrictiveness<Value, Value0&&, Value1&&>::value
-					&& !std::is_same<tc::remove_cvref_t<Value0>, tc::fill_tag_t>::value
-				>* =nullptr
-			>
-			constexpr explicit dense_map( Value0&& val0, Value1&& val1 ) noexcept(std::is_nothrow_constructible<Array, tc::aggregate_tag_t, Value0&&, Value1&&>::value)
-			:	m_a(tc::explicit_cast<decltype(m_a)>(tc::aggregate_tag,std::forward<Value0>(val0),std::forward<Value1>(val1)))
-			{}
-
-			template< typename Func >
-			dense_map(func_tag_t, Func func) noexcept
-				: m_a(tc::explicit_cast<decltype(m_a)>(tc::func_tag, [&func](std::size_t n) noexcept ->Value { // force return of Value
-					static_assert(tc::is_safely_constructible<Value, decltype(func(0!=n))>::value);
-					return func(0!=n);
-				}))
-			{}
-
-			template< typename Func, typename Value2 >
-			dense_map(transform_tag_t, other_dense_map<Value2> const& mapOther, Func&& func) MAYTHROW
-				: m_a(tc::explicit_cast<decltype(m_a)>(tc::transform(mapOther.m_a, std::forward<Func>(func))))
-			{}
-
-			DEFINE_MEMBER_TRANSFORM(other_dense_map, tc::type::deducible_identity_t, Value)
-
-			template< typename ValuePri, typename ValueSec >
-			constexpr dense_map(bool keyPri, ValuePri&& valPri, ValueSec&& valSec) noexcept :
-				dense_map(
-					keyPri ? std::forward<ValueSec>(valSec) : std::forward<ValuePri>(valPri),
-					keyPri ? std::forward<ValuePri>(valPri) : std::forward<ValueSec>(valSec)
-				)
-			{}
-
-			// access
-			[[nodiscard]] constexpr Value & operator[]( bool key ) & noexcept {
-				return m_a[key];
-			}
-			[[nodiscard]] constexpr Value const& operator[]( bool key ) const& noexcept {
-				return m_a[key];
-			}
-
-			// comparison
-			[[nodiscard]] friend bool operator==( dense_map const& lhs, dense_map const& rhs ) noexcept {
-				return EQUAL_MEMBERS(m_a);
-			}
-
-			// iterators
-			using iterator = typename boost::range_iterator< Array >::type;
-			using const_iterator = typename boost::range_iterator< Array const >::type;
-			const_iterator begin() const& noexcept {
-				return tc::begin(m_a);
-			}
-			const_iterator end() const& noexcept {
-				return tc::end(m_a);
-			}
-			iterator begin() & noexcept {
-				return tc::begin(m_a);
-			}
-			iterator end() & noexcept {
-				return tc::end(m_a);
-			}
-
-#ifdef _DEBUG
-			friend void uninitialize_impl(dense_map& dm) noexcept {
-				UNINITIALIZED(dm.m_a);
-			}
-#endif
-
-#ifdef TC_PRIVATE
-			// persistence
-			friend void LoadType<>( dense_map<bool, Value>& dm, CXmlReader& loadhandler ) THROW(ExLoadFail);
-			friend void SaveType<>( dense_map<bool, Value> const& dm, CSaveHandler& savehandler) MAYTHROW;
-			
-			// error reporting
-			friend constexpr Array const& error(dense_map const& dm) noexcept {
-				return dm.m_a;
-			}
-
-		private:
-			template<typename HashAlgorithm>
-			void hash_append_impl(HashAlgorithm& h) const& noexcept;
-
-			template<typename HashAlgorithm>
-			friend void hash_append(HashAlgorithm& h, dense_map const& dm) noexcept {
-				dm.hash_append_impl(h);
-			}
-#endif
-		};
 	} // namespace dense_map_adl
 	using dense_map_adl::dense_map;
 
@@ -387,43 +306,41 @@ namespace tc {
 	} // namespace no_adl
 
 	BOOST_MPL_HAS_XXX_TRAIT_DEF(dense_map_key_type)
-
-	template<typename Map, typename Func, std::enable_if_t<has_dense_map_key_type<std::remove_reference_t<std::remove_cv_t<Map>>>::value>* = nullptr>
-	auto map_for_each(Map && map, Func func) MAYTHROW {
-		using Key = typename std::remove_reference_t<Map>::dense_map_key_type;
-		return tc::for_each(tc::all_values<Key>(), [&](Key const key) MAYTHROW->decltype(auto) {
-			return func(key, std::forward<Map>(map)[key]);
-		});
-	}
+	
+	template <typename Map, typename T, typename Enable = void>
+	struct is_dense_map_with_key final : std::false_type {};
+	
+	template <typename Map, typename T>
+	struct is_dense_map_with_key<Map, T, std::enable_if_t<tc::has_dense_map_key_type<Map>::value>> final
+		: std::bool_constant<std::is_same<typename Map::dense_map_key_type, T>::value>
+	{};
 
 	////////////////////
 	// special RangeReturns for dense_maps
 
-	template< typename DenseMap >
 	struct return_element_key final {
-		using type = typename std::remove_reference_t<DenseMap>::dense_map_key_type;
 		static constexpr bool requires_iterator = true;
 
-		template<typename Ref>
-		static type pack_element(typename boost::range_iterator<DenseMap>::type it, DenseMap&& rng, Ref&&) noexcept {
-			return tc::contiguous_enum<type>::begin() + (it - tc::begin(rng));
+		template<typename It, typename DenseMap, typename... Ref>
+		static auto pack_element(It&& it, DenseMap&& rng, Ref&&...) noexcept {
+			return tc_at_nodebug(tc::all_values<typename std::remove_reference_t<DenseMap>::dense_map_key_type>(), it - tc::begin(rng));
 		}
-		static type pack_no_element(DenseMap&&) noexcept {
+		template<typename DenseMap>
+		static auto pack_no_element(DenseMap&&) noexcept {
 			_ASSERTFALSE;
-			return tc::contiguous_enum<type>::begin();
+			return tc_front_nodebug(tc::all_values<typename std::remove_reference_t<DenseMap>::dense_map_key_type>());
 		}
 	};
 
-	template< typename DenseMap >
 	struct return_element_key_or_none final {
-		using type = std::optional<typename std::remove_reference_t<DenseMap>::dense_map_key_type>;
 		static constexpr bool requires_iterator = true;
 
-		template<typename Ref>
-		static type pack_element(typename boost::range_iterator<DenseMap>::type it, DenseMap&& rng, Ref&&) noexcept {
-			return tc::contiguous_enum<typename std::remove_reference_t<DenseMap>::dense_map_key_type>::begin() + (it - tc::begin(rng));
+		template<typename It, typename DenseMap, typename... Ref>
+		static std::optional<typename std::remove_reference_t<DenseMap>::dense_map_key_type> pack_element(It&& it, DenseMap&& rng, Ref&&...) noexcept {
+			return tc_at_nodebug(tc::all_values<typename std::remove_reference_t<DenseMap>::dense_map_key_type>(), it - tc::begin(rng));
 		}
-		static type pack_no_element(DenseMap&&) noexcept {
+		template<typename DenseMap>
+		static std::optional<typename std::remove_reference_t<DenseMap>::dense_map_key_type> pack_no_element(DenseMap&&) noexcept {
 			return std::nullopt;
 		}
 	};
@@ -452,26 +369,19 @@ namespace tc {
 		{};
 	}
 
-	template <typename Key, typename Value>
-	struct decay<tc::dense_map<Key, Value>> {
-		using type = tc::dense_map<Key, tc::decay_t<Value>>;
-	};
-
-	template <typename Enum, typename Func>
+	template <typename Key, typename Func>
 	[[nodiscard]] auto make_dense_map(tc::func_tag_t, Func&& func) return_ctor_MAYTHROW(
-		tc::dense_map<Enum BOOST_PP_COMMA() tc::decay_t<decltype(tc::as_lvalue(tc::decay_copy(func))(tc::contiguous_enum<Enum>::begin()))>>, ( tc::func_tag, std::forward<Func>(func) )
+		tc::dense_map<Key BOOST_PP_COMMA() tc::decay_t<decltype(tc::as_lvalue(tc::decay_copy(func))(tc_front_nodebug(tc::all_values<Key>())))>>, ( tc::func_tag, std::forward<Func>(func) )
 	)
 
-	template <typename Enum, typename T = no_adl::deduce_tag, typename... Ts, std::enable_if_t<!std::is_reference<T>::value>* = nullptr>
+	template <typename Key, /*always deduce Ts, otherwise use dense_map<Key, T>*/int = 0, typename... Ts>
 	[[nodiscard]] constexpr auto make_dense_map(tc::fill_tag_t, Ts&&... ts) noexcept {
-		static_assert(!std::is_reference<typename no_adl::delayed_deduce<T, Ts...>::type>::value);
-		return tc::dense_map<Enum, typename no_adl::delayed_deduce<T, Ts...>::type>(tc::fill_tag, std::forward<Ts>(ts)...);
+		return tc::dense_map<Key, tc::common_type_t<Ts...>>(tc::fill_tag, std::forward<Ts>(ts)...);
 	}
 
-	template <typename Enum, typename T = no_adl::deduce_tag, typename... Ts, std::enable_if_t<!std::is_reference<T>::value>* = nullptr>
+	template <typename Key, /*always deduce Ts, otherwise use dense_map<Key, T>*/int = 0, typename... Ts>
 	[[nodiscard]] constexpr auto make_dense_map(Ts&&... ts) noexcept {
-		static_assert(!std::is_reference<typename no_adl::delayed_deduce<T, Ts...>::type>::value);
-		return tc::dense_map<Enum, typename no_adl::delayed_deduce<T, Ts...>::type>(std::forward<Ts>(ts)...);
+		return tc::dense_map<Key, tc::common_type_t<Ts...>>(std::forward<Ts>(ts)...);
 	}
 
 	namespace less_key_adl {
@@ -486,9 +396,13 @@ namespace tc {
 	TC_DENSE_MAP_SUPPORT_2(class_name, tc::type::deducible_identity_t)
 
 #define TC_DENSE_MAP_SUPPORT_2(class_name, value_template) \
-	class_name() noexcept : base_(/*boost::container::default_init_t{}*/) {}; /*TODO: leave fundamental Value uninitialized*/ \
+	template <ENABLE_SFINAE, std::enable_if_t<std::is_default_constructible<SFINAE_TYPE(base_)>::value>* = nullptr> \
+	class_name() noexcept(std::is_nothrow_default_constructible<base_>::value) \
+		: base_() {} \
 	\
-	class_name(boost::container::default_init_t) noexcept : base_(boost::container::default_init_t{}) {}; /*leave fundamental Value uninitialized*/ \
+	template <ENABLE_SFINAE, std::enable_if_t<std::is_constructible<SFINAE_TYPE(base_), boost::container::default_init_t>::value>* = nullptr> \
+	explicit class_name(boost::container::default_init_t) noexcept(std::is_nothrow_constructible<base_, boost::container::default_init_t>::value) \
+		: base_(boost::container::default_init) {} \
 	\
 	/* inherit default ctor and constructors with at least two arguments from dense_map*/ \
 	template <typename A0, typename A1, typename ...Args, \
@@ -559,4 +473,20 @@ namespace tc {
 	DEFINE_MEMBER_TRANSFORM(class_name, value_template)
 
 #define TC_DENSE_MAP_SUPPORT(...) \
-	EXPAND(BOOST_PP_OVERLOAD(TC_DENSE_MAP_SUPPORT_, __VA_ARGS__)(__VA_ARGS__))
+	TC_EXPAND(BOOST_PP_OVERLOAD(TC_DENSE_MAP_SUPPORT_, __VA_ARGS__)(__VA_ARGS__))
+
+#define TC_DENSE_MAP_DEDUCTION_GUIDES_1(template_name) \
+	TC_DENSE_MAP_DEDUCTION_GUIDES_2(template_name, tc::type::deducible_identity_t)
+
+#define TC_DENSE_MAP_DEDUCTION_GUIDES_2(template_name, type_function) \
+	template< typename Arg > \
+	template_name(tc::fill_tag_t, Arg&&) -> template_name< type_function< tc::decay_t<Arg> > >; \
+	template< typename Arg, typename... Args> \
+	template_name(Arg&&, Args&&...) -> template_name< type_function< \
+		std::enable_if_t<std::conjunction< std::is_same<tc::decay_t<Arg>, tc::decay_t<Args>>... >::value, tc::decay_t<Arg>> \
+	> >; \
+	template< typename Rng > \
+	template_name(tc::range_tag_t, Rng&&) -> template_name< type_function< tc::range_value_t<Rng> > >;
+
+#define TC_DENSE_MAP_DEDUCTION_GUIDES(...) \
+	TC_EXPAND(BOOST_PP_OVERLOAD(TC_DENSE_MAP_DEDUCTION_GUIDES_, __VA_ARGS__)(__VA_ARGS__))

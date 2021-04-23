@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -28,10 +28,6 @@
 
 #include <chrono>
 #include <set>
-
-DEFINE_FN( length );
-DEFINE_FN( include );
-DEFINE_FN( include_inclusive );
 
 namespace tc {
 	// least and greatest are the values least/greatest with respect to operator< of a given type.
@@ -100,11 +96,6 @@ namespace tc {
 	>{};
 #endif
 
-	namespace interval_adl {
-		template< typename T > struct interval;
-	}
-	using interval_adl::interval;
-
 	namespace no_adl {
 		struct use_set_impl_tag_t;
 		struct use_vector_impl_tag_t;
@@ -128,7 +119,7 @@ namespace tc {
 	// TODO: consider using "nextup" and "nextdown" which are single argument C functions
 	// (but only for floats) standardized in IEEE 754-2008 revision and proposed in C TS 18661-1,2
 	template<typename T, std::enable_if_t<!std::is_floating_point<T>::value>* = nullptr>
-	void nextafter_inplace(T& t) noexcept {
+	constexpr void nextafter_inplace(T& t) noexcept {
 		++t;
 	}
 
@@ -137,10 +128,8 @@ namespace tc {
 		t = std::nextafter(t, std::numeric_limits<T>::infinity());
 	}
 
-	DEFINE_FN(nextafter_inplace);
-
 	template<typename T, std::enable_if_t<!std::is_floating_point<T>::value>* = nullptr>
-	void nextbefore_inplace(T& t) noexcept {
+	constexpr void nextbefore_inplace(T& t) noexcept {
 		--t;
 	}
 
@@ -149,32 +138,40 @@ namespace tc {
 		t = std::nextafter(t, -std::numeric_limits<T>::infinity());
 	}
 
-	DEFINE_FN(nextbefore_inplace);
-
 	template<typename T1, typename T2>
-	[[nodiscard]] interval<tc::common_type_t<T1, T2>> make_interval_sort(T1&& t1, T2&& t2) noexcept;
+	[[nodiscard]] constexpr interval<tc::common_type_t<T1, T2>> make_interval_sort(T1&& t1, T2&& t2) noexcept;
+
+	namespace interval_detail::no_adl {
+		struct swap_if_negative_scalar final : tc::no_prepost_scalar_operation {
+			template<typename T, typename Scalar>
+			static void post(tc::interval<T>& intvl, Scalar const& scalar) {
+				if( scalar < tc::explicit_cast<Scalar>(0) ) intvl.swap();
+			}
+		};
+	}
 
 	namespace interval_adl {
 		template<typename T>
-		struct
-#ifdef _MSC_VER
-			__declspec(empty_bases)
-#endif
-		interval : tc::dense_map<tc::lohi, T>,
+		struct interval
+			: tc::dense_map<tc::lohi, T>
+			,
 #ifdef TC_PRIVATE
-			PersistentTypeT<
+			  PersistentTypeT<
 #endif
-			tc::arithmetic< tc::orable< tc::andable< > > 
+				tc::scalar_multipliable<
+					tc::scalar_dividable<
+						tc::scalar_addable<tc::scalar_subtractable<>>,
+						/*nTransformDepth*/0,
+						tc::assert_positive_scalar /* swap lo/hi for negative scalar? */
+					>,
+					/*nTransformDepth*/0,
+					interval_detail::no_adl::swap_if_negative_scalar
+				>
 #ifdef TC_PRIVATE
-			>
+			> 
 #endif
-		> {
+		{
 		private:
-#ifdef TC_PRIVATE
-			using TPersistentBase = PersistentTypeT<
-				tc::arithmetic< tc::orable< tc::andable< > > >
-			>;
-#endif
 			using newT = tc::decay_t<T>;
 			using difference_type = typename std::conditional_t<
 				tc::has_minus<T>::value
@@ -183,20 +180,14 @@ namespace tc {
 			>::type;
 
 		public:
-			using base_ = tc::dense_map<tc::lohi, T>;
+			using base_ = typename interval::dense_map;
 
 			TC_DENSE_MAP_SUPPORT(interval)
 
 			template< typename Func > 
-			[[nodiscard]] auto transform_sort(Func func) const& MAYTHROW {
+			[[nodiscard]] constexpr auto transform_sort(Func func) const& MAYTHROW {
 				// _ASSERT( !((*this)[tc::hi] < (*this)[tc::lo]) ); // see comments for AssertSameOrder(...) below
 				return tc::make_interval_sort( func((*this)[tc::lo]), func((*this)[tc::hi]) );
-			}
-
-			template< typename Func >
-			auto for_each(Func func) & MAYTHROW {
-				RETURN_IF_BREAK( tc::continue_if_not_break(func, (*this)[tc::lo]) );
-				return tc::continue_if_not_break(func, (*this)[tc::hi]);
 			}
 
 		private:
@@ -217,7 +208,7 @@ namespace tc {
 			}
 
 			template< bool bGeneralized, typename TPos, typename TExtent >
-			static interval<T> centered_interval_impl(TPos&& pos, TExtent&& extent) noexcept {
+			static constexpr interval<T> centered_interval_impl(TPos&& pos, TExtent&& extent) noexcept {
 				STATICASSERTSAME(tc::decay_t<TExtent>, difference_type, "Ambiguous interpretation: convert the base position or the provided extent, so that their types match");
 				// make use of the precondition center(a + c, b + c) = c + center(a, b)
 				auto begin = std::forward<TPos>(pos) - tc::internal_lower_half<bGeneralized>(extent);
@@ -235,13 +226,13 @@ namespace tc {
 			}
 
 			template< bool bGeneralized, typename TPos, typename TExtent >
-			[[nodiscard]] static interval<T> centered_interval(TPos&& pos, TExtent&& extent) noexcept 
+			[[nodiscard]] static constexpr interval<T> centered_interval(TPos&& pos, TExtent&& extent) noexcept 
 			{
 				return centered_interval_impl<bGeneralized>(std::forward<TPos>(pos), std::forward<TExtent>(extent));
 			}
 
 			template< typename TPos, typename TExtent >
-			[[nodiscard]] static interval<T> from_extent( TPos&& pos, TExtent&& extent, EAlign ealign ) noexcept
+			[[nodiscard]] static constexpr interval<T> from_extent( TPos&& pos, TExtent&& extent, EAlign ealign ) noexcept
 			{
 				switch_no_default(ealign) {
 					case ealignLOW: {
@@ -257,20 +248,20 @@ namespace tc {
 			}
 
 			template< typename TExtent >
-			void expand(TExtent&& extent) & noexcept {
+			constexpr void expand(TExtent&& extent) & noexcept {
 				(*this)[tc::lo] -= extent;
 				(*this)[tc::hi] += std::forward<TExtent>(extent);
 			}
 
 			template< typename TExtent >
-			void expand_to(TExtent&& extent) {
+			constexpr void expand_to(TExtent&& extent) {
 				*this = interval<newT>::template centered_interval</*bGeneralized*/true>(tc::internal_midpoint</*bGeneralized*/true>((*this)[tc::lo], (*this)[tc::hi]), std::forward<TExtent>(extent));
 			}
 
-			void expand_to_integer() & noexcept {
+			constexpr void expand_to_integer() & noexcept {
 				static_assert(std::is_floating_point<T>::value);
 				// Rounding an empty interval may make it non-empty, which might not be intended.
-				_ASSERT(!empty());
+				_ASSERTE(!empty());
 				(*this)[tc::lo] = std::floor((*this)[tc::lo]);
 				(*this)[tc::hi] = std::ceil((*this)[tc::hi]);
 			}
@@ -282,12 +273,12 @@ namespace tc {
 			[[nodiscard]] interval<TTarget> expanding_cast_inclusive() const& noexcept;
 
 			template< typename TExtent >
-			void expand_length(TExtent&& extent) & noexcept {
+			constexpr void expand_length(TExtent&& extent) & noexcept {
 				expand_to(length() + std::forward<TExtent>(extent));
 			}
 
 			template< typename TExtent >
-			void ensure_length(TExtent&& extent) & noexcept {
+			constexpr void ensure_length(TExtent&& extent) & noexcept {
 				if (length() < extent) {
 					expand_to(std::forward<TExtent>(extent));
 				}
@@ -297,16 +288,16 @@ namespace tc {
 				tc::swap((*this)[tc::lo], (*this)[tc::hi]);
 			}
 
-			[[nodiscard]] bool empty() const& noexcept {
+			[[nodiscard]] constexpr bool empty() const& noexcept {
 				return !( (*this)[tc::lo] < (*this)[tc::hi] );
 			}
 
-			[[nodiscard]] bool empty_inclusive() const& noexcept {
+			[[nodiscard]] constexpr bool empty_inclusive() const& noexcept {
 				return (*this)[tc::hi] < (*this)[tc::lo];
 			}
 
-			[[nodiscard]] difference_type distance(T const& t) const& noexcept {
-				_ASSERT( !empty_inclusive() );
+			[[nodiscard]] constexpr difference_type distance(T const& t) const& noexcept {
+				_ASSERTE( !empty_inclusive() );
 				if( t < (*this)[tc::lo] ) {
 					return (*this)[tc::lo] - t;
 				} else if( (*this)[tc::hi] < t ) {
@@ -317,7 +308,7 @@ namespace tc {
 			}
 
 			template<typename T2>
-			[[nodiscard]] tc::common_reference_xvalue_as_ref_t<T2&&, T const&> clamp_inclusive(T2&& t) const& noexcept {
+			[[nodiscard]] constexpr tc::common_reference_xvalue_as_ref_t<T2&&, T const&> clamp_inclusive(T2&& t) const& noexcept {
 				_ASSERT( !empty_inclusive() );
 				// static_cast necessary because T& does not implicitly convert to common_reference_t<T&, T&&> == T const&&
 				using result_t=tc::common_reference_xvalue_as_ref_t<T2&&, T const&>;
@@ -331,7 +322,7 @@ namespace tc {
 			}
 
 			template<typename T2>
-			[[nodiscard]] tc::common_reference_xvalue_as_ref_t<T2&&, T&&> clamp_inclusive(T2&& t) && noexcept {
+			[[nodiscard]] constexpr tc::common_reference_xvalue_as_ref_t<T2&&, T&&> clamp_inclusive(T2&& t) && noexcept {
 				_ASSERT( !empty_inclusive() );
 				// static_cast necessary because T& does not implicitly convert to common_reference_t<T&, T&&> == T const&&
 				using result_t=tc::common_reference_xvalue_as_ref_t<T2&&, T&&>;
@@ -348,7 +339,7 @@ namespace tc {
 			[[nodiscard]] tc::common_reference_xvalue_as_ref_t<T2&&, T const&&> clamp_inclusive( T2&& t ) const&& noexcept=delete;
 
 			template<typename T2>
-			[[nodiscard]] tc::common_type_t<T, T2&&> clamp_exclusive(T2&& t) const& noexcept {
+			[[nodiscard]] constexpr tc::common_type_t<T, T2&&> clamp_exclusive(T2&& t) const& noexcept {
 #ifdef TC_PRIVATE
 				static_assert(
 					!tc::is_floating_point_or_chrono_like <tc::decay_t<T2>>::value,
@@ -363,38 +354,38 @@ namespace tc {
 			}
 
 			template<typename S>
-			[[nodiscard]] T const& closest_boundary( S const& s ) const& noexcept {
-				_ASSERT( !empty_inclusive() );
+			[[nodiscard]] constexpr T const& closest_boundary( S const& s ) const& noexcept {
+				_ASSERTE( !empty_inclusive() );
 				return (*this)[tc::not_if(s < midpoint(), tc::hi)];
 			}
 
 			template<typename S>
-			[[nodiscard]] T const& farthest_boundary( S const& s ) const& noexcept {
-				_ASSERT( !empty_inclusive() );
+			[[nodiscard]] constexpr T const& farthest_boundary( S const& s ) const& noexcept {
+				_ASSERTE( !empty_inclusive() );
 				return (*this)[tc::not_if(s < midpoint(), tc::lo)];
 			}
 
 			template<typename S>
-			[[nodiscard]] T const& opposite_boundary(S const& s) const& noexcept {
+			[[nodiscard]] constexpr T const& opposite_boundary(S const& s) const& noexcept {
 				if ((*this)[tc::lo] == s) {
 					return (*this)[tc::hi];
 				} else {
-					_ASSERT((*this)[tc::hi] == s);
+					_ASSERTE((*this)[tc::hi] == s);
 					return (*this)[tc::lo];
 				}
 			}
 
-			[[nodiscard]] newT midpoint() const& noexcept {
+			[[nodiscard]] constexpr newT midpoint() const& noexcept {
 				return tc::midpoint((*this)[tc::lo], (*this)[tc::hi]);
 			}
 
-			[[nodiscard]] decltype(auto) length() const& noexcept {
+			[[nodiscard]] constexpr decltype(auto) length() const& noexcept {
 				// overflows with EmptyInterval()
-#pragma warning (suppress : 4552) // '-': operator has no effect; expected operator with side-effect
+MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected operator with side-effect
 				return (*this)[tc::hi] - (*this)[tc::lo];
 			}
 
-			[[nodiscard]] difference_type saturated_length() const& noexcept {
+			[[nodiscard]] constexpr difference_type saturated_length() const& noexcept {
 				// This should also work for unsigned integers (returning length clamped to [0..max]), but this probably wouldn't be an intended behavior
 				static_assert(tc::is_actual_integer<T>::value && std::is_signed<T>::value);
 				return (*this)[tc::lo] < 0
@@ -403,8 +394,8 @@ namespace tc {
 			}
 
 			//returns a value X such that modified(intvl, _.ensure_length(this->length())).contains(*this + X)
-			[[nodiscard]] difference_type OffsetToFit(interval<T> const& intvl) const& noexcept {
-				_ASSERT( !empty_inclusive() ); // intvl.begin==intvl.end is treated like intvl very small
+			[[nodiscard]] constexpr difference_type OffsetToFit(interval<T> const& intvl) const& noexcept {
+				_ASSERTE( !empty_inclusive() ); // intvl.begin==intvl.end is treated like intvl very small
 				if( (*this)[tc::lo] < intvl[tc::lo] ) {
 					auto t=intvl[tc::lo]-(*this)[tc::lo];
 					if( intvl[tc::hi] < (*this)[tc::hi]+t ) {
@@ -420,26 +411,26 @@ namespace tc {
 					}
 					return t;
 				} else {
-					return tc::explicit_cast<difference_type>(0);
+					RETURN_CAST( 0 );
 				}
 			}
 
-			void FitInsideOf(interval<T> const& intvl) & noexcept {
+			constexpr void FitInsideOf(interval<T> const& intvl) & noexcept {
 				auto_cref(tLength, length());
 				if(!(tLength < intvl.length())) {
 					*this = intvl;
 				} else if((*this)[tc::lo] < intvl[tc::lo]) {
 					(*this)[tc::hi]=intvl[tc::lo]+tLength;
 					(*this)[tc::lo]=intvl[tc::lo];
-					_ASSERT(!(intvl[tc::hi]<(*this)[tc::hi]));
+					_ASSERTE(!(intvl[tc::hi]<(*this)[tc::hi]));
 				} else if(intvl[tc::hi] < (*this)[tc::hi]) {
 					(*this)[tc::lo]=intvl[tc::hi]-tLength;
 					(*this)[tc::hi]=intvl[tc::hi];
-					_ASSERT(!((*this)[tc::lo]<intvl[tc::lo]));
+					_ASSERTE(!((*this)[tc::lo]<intvl[tc::lo]));
 				}
 			}
 
-			[[nodiscard]] newT Val(EAlign ealign) const& noexcept {
+			[[nodiscard]] constexpr newT Val(EAlign ealign) const& noexcept {
 				switch_no_default(ealign) {
 					case ealignLOW:
 						return (*this)[tc::lo];
@@ -456,18 +447,29 @@ namespace tc {
 			}
 
 			template<typename U>
-			[[nodiscard]] bool contains( interval<U> const& intvl ) const& noexcept {
-				return intvl.empty() || !( intvl[tc::lo]<(*this)[tc::lo] || (*this)[tc::hi]<intvl[tc::hi] );
+			[[nodiscard]] constexpr bool naive_contains( interval<U> const& intvl ) const& noexcept {
+				// no special treatment for empty or inverse intervals
+				return !( intvl[tc::lo]<(*this)[tc::lo] || (*this)[tc::hi]<intvl[tc::hi] );
+			}
+
+			template<typename U>
+			[[nodiscard]] constexpr bool contains( interval<U> const& intvl ) const& noexcept {
+				return intvl.empty() || naive_contains(intvl);
 			}
 
 			template<typename S> 
-			[[nodiscard]] bool contains(S const& t) const& noexcept {
+			[[nodiscard]] constexpr bool contains(S const& t) const& noexcept {
 				return !(t<(*this)[tc::lo]) && t<(*this)[tc::hi];
 			}
 
 			template<typename S> 
-			[[nodiscard]] bool contains_inclusive(S const& t) const& noexcept {
+			[[nodiscard]] constexpr bool contains_inclusive(S const& t) const& noexcept {
 				return !(t<(*this)[tc::lo] || (*this)[tc::hi]<t);
+			}
+
+			template<typename S>
+			[[nodiscard]] constexpr bool contains_exclusive(S const& t) const& noexcept {
+				return (*this)[tc::lo] < t && t < (*this)[tc::hi];
 			}
 
 			template<typename SetOrVectorImpl>
@@ -478,7 +480,7 @@ namespace tc {
 			}
 
 			template<typename S> 
-			[[nodiscard]] bool intersects(interval<S> const& intvl) const& noexcept {
+			[[nodiscard]] constexpr bool intersects(interval<S> const& intvl) const& noexcept {
 				bool const bLhsEndFirst= (*this)[tc::hi]<intvl[tc::hi];
 				if( (*this)[tc::lo]<intvl[tc::lo] ) {
 					return ( bLhsEndFirst ? intvl[tc::lo] < (*this)[tc::hi] : intvl[tc::lo] < intvl[tc::hi] );
@@ -488,113 +490,101 @@ namespace tc {
 			}
 
 			template<typename S> 
-			[[nodiscard]] bool naive_intersects(interval<S> const& intvl) const& noexcept {
+			[[nodiscard]] constexpr bool naive_intersects(interval<S> const& intvl) const& noexcept {
 				// no special treatment for empty or inverse intervals
 				return (*this)[tc::lo] < intvl[tc::hi] && intvl[tc::lo] < (*this)[tc::hi];
 			}
 
-			interval<T>& operator&=(interval<T> const& intvl) & noexcept {
-				tc::assign_max( (*this)[tc::lo], intvl[tc::lo] );
-				tc::assign_min( (*this)[tc::hi], intvl[tc::hi] );
+			template<typename Rhs, std::enable_if_t<tc::is_instance_or_derived<tc::interval, Rhs>::value>* = nullptr>
+			constexpr interval<T>& operator&=(Rhs&& rhs) & noexcept {
+				static_assert(
+					std::is_same<newT, tc::range_value_t<Rhs>>::value,
+					"Are you sure you want to intersect intervals of different types? "
+					"Consider interval<T>::FullInterval() != interval<U>::FullInterval(). "
+					"Use implicit_cast to enable the operation."
+				);
+				tc::assign_max( (*this)[tc::lo], std::forward<Rhs>(rhs)[tc::lo] );
+				tc::assign_min( (*this)[tc::hi], std::forward<Rhs>(rhs)[tc::hi] );
 				return *this;
 			}
 
-			void CanonicalEmpty() & noexcept {
+			constexpr void CanonicalEmpty() & noexcept {
 				if (empty()) {
 					*this = EmptyInterval();
 				}
 			}
 
-			void include(newT t) & noexcept {
-				_ASSERT( EmptyInterval()==*this || !empty() );
+			template<typename U>
+			constexpr void include(U&& u) & noexcept {
+				static_assert( tc::is_safely_convertible<U&&, newT>::value );
+				_ASSERTE( EmptyInterval()==*this || !empty() );
+				newT t = std::forward<U>(u);
 				tc::assign_min( (*this)[tc::lo], t );
 				tc::nextafter_inplace(t);
-				tc::assign_max( (*this)[tc::hi], t );
+				tc::assign_max( (*this)[tc::hi], tc_move(t) );
 			}
 
-			void include_inclusive(newT const& t) & noexcept {
-				_ASSERT( EmptyInterval()==*this || !empty_inclusive() );
-				tc::assign_min( (*this)[tc::lo], t );
-				tc::assign_max( (*this)[tc::hi], t );
+			template<typename U>
+			constexpr void include_inclusive(U&& u) & noexcept {
+				_ASSERTE( EmptyInterval()==*this || !empty_inclusive() );
+				tc::assign_min( (*this)[tc::lo], u );
+				tc::assign_max( (*this)[tc::hi], std::forward<U>(u) );
 			}
 
-			interval<T>& operator|=(interval<T> const& intvl) & noexcept {
+			template<typename Rhs, std::enable_if_t<tc::is_instance_or_derived<tc::interval, Rhs>::value>* = nullptr>
+			constexpr interval<T>& operator|=(Rhs&& rhs) & noexcept {
+				static_assert(
+					std::is_same<newT, tc::range_value_t<Rhs>>::value,
+					"Are you sure you want to take the union of intervals of different types? "
+					"Consider interval<T>::EmptyInterval() != interval<U>::EmptyInterval(). "
+					"Use implicit_cast to enable the operation."
+				);
 				_ASSERTDEBUG( EmptyInterval()==*this || !empty_inclusive() );
-				_ASSERTDEBUG( EmptyInterval()==intvl || !intvl.empty_inclusive() );
-				tc::assign_min( (*this)[tc::lo], intvl[tc::lo] );
-				tc::assign_max( (*this)[tc::hi], intvl[tc::hi] );
+				_ASSERTDEBUG( rhs.EmptyInterval()==rhs || !rhs.empty_inclusive() );
+				tc::assign_min( (*this)[tc::lo], std::forward<Rhs>(rhs)[tc::lo] );
+				tc::assign_max( (*this)[tc::hi], std::forward<Rhs>(rhs)[tc::hi] );
 				return *this;
 			}
-			template<typename S, std::enable_if_t<tc::generic_operator_helper::has_compound_addable<T&, S const&>::value>* = nullptr>
-			interval<T>& operator+=(S const& t) & noexcept {
-				_ASSERTDEBUG(tc::implicit_cast<void const*>(std::addressof((*this)[tc::lo])) != tc::implicit_cast<void const*>(std::addressof(t)));
-				(*this)[tc::lo]+=t;
-				(*this)[tc::hi]+=t;
-				return *this;
-			}
-
-			template<typename S, std::enable_if_t<tc::generic_operator_helper::has_compound_subtractable<T&, S const&>::value>* = nullptr>
-			interval<T>& operator-=(S const& t) & noexcept {
-				_ASSERTDEBUG(tc::implicit_cast<void const*>(std::addressof((*this)[tc::lo])) != tc::implicit_cast<void const*>(std::addressof(t)));
-				(*this)[tc::lo]-=t;
-				(*this)[tc::hi]-=t;
-				return *this;
-			}
-
-			template< typename S, std::enable_if_t<std::is_arithmetic<S>::value && tc::generic_operator_helper::has_compound_multipliable<T&, S const&>::value>* = nullptr>
-			interval<T>& operator*=(S const& t) & noexcept {
-				_ASSERTDEBUG(tc::implicit_cast<void const*>(std::addressof((*this)[tc::lo])) != tc::implicit_cast<void const*>(std::addressof(t)));
-				(*this)[tc::lo]*=t;
-				(*this)[tc::hi]*=t;
-				if (t < 0) {
-					swap();
-				}
-				return *this;
-			}
-
-			template< typename S, std::enable_if_t<std::is_arithmetic<S>::value && tc::generic_operator_helper::has_compound_dividable<T&, S const&>::value>* = nullptr>
-			interval<T>& operator/=(S const& t) & noexcept {
-				_ASSERT(0 < t); // What is the meaning of negative divisor? Swap (*this)[tc::lo]/(*this)[tc::hi]?
-				(*this)[tc::lo]=tc::scale_div((*this)[tc::lo],t);
-				(*this)[tc::hi]=tc::scale_div((*this)[tc::hi],t);
-				return *this;
-			}
-
-			[[nodiscard]] interval<newT> operator-() const& noexcept {
+			[[nodiscard]] constexpr interval<newT> operator-() const& noexcept {
 				interval<newT> copy=*this;
 				copy.negate();
 				return copy;
 			}
 
-			void negate() & noexcept {
+			constexpr void negate() & noexcept {
 				-tc::inplace((*this)[tc::lo]);
 				-tc::inplace((*this)[tc::hi]);
 				swap();
 			}
 
-			[[nodiscard]] auto range() const& noexcept {
+			[[nodiscard]] constexpr auto range() const& noexcept {
 				// tc::iota does not support end < begin. So for such empty ranges, we need to return tc::iota(begin, begin)
 				return tc::iota( (*this)[tc::lo], tc::max((*this)[tc::lo], (*this)[tc::hi]) );
 			}
 
-			[[nodiscard]] static interval<newT> EmptyInterval() noexcept { // neutral element for operator|
+			[[nodiscard]] static constexpr interval<newT> EmptyInterval() noexcept { // neutral element for operator|
 				return interval<newT>( tc::compare_traits<newT>::greatest(), tc::compare_traits<newT>::least() );
 			}
 
-			[[nodiscard]] static interval<newT> FullInterval() noexcept { // neutral element for operator&
+			[[nodiscard]] static constexpr interval<newT> FullInterval() noexcept { // neutral element for operator&
 				return interval<newT>( tc::compare_traits<newT>::least(), tc::compare_traits<newT>::greatest() );
 			}
 
 #ifdef TC_PRIVATE
 		private:
 			void LoadTypeImpl(CXmlReader& loadhandler) & THROW(ExLoadFail);
-			friend void LoadType(interval& intvl, CXmlReader& loadhandler) THROW(ExLoadFail) {
+			friend void LoadType_impl(interval& intvl, CXmlReader& loadhandler) THROW(ExLoadFail) {
 				intvl.LoadTypeImpl(loadhandler); // THROW(ExLoadFail)
 			}
-			LOADMETHODDECL( TPersistentBase )
-			SAVESTRUCTDECL( interval )
+			LOADMETHODDECL( typename interval::PersistentType )
+			SAVEMETHODDECL;
 #endif
 		};
+
+		TC_DENSE_MAP_DEDUCTION_GUIDES(interval)
+
+		template< typename Arg, typename Arg2>
+		interval(tc::lohi lohi, Arg&&, Arg2&&) -> interval< std::enable_if_t<std::is_same<tc::decay_t<Arg>, tc::decay_t<Arg2>>::value, tc::decay_t<Arg>>	>;
 
 		template<typename T>
 		template<typename TTarget>
@@ -612,12 +602,12 @@ namespace tc {
 			_ASSERT(!empty()); // Rounding an empty interval may make it non-empty, which might not be intended.
 			return expanding_cast_inclusive<TTarget>();
 		}
-	}
 
-	template<typename T>
-	struct decay< tc::interval<T> > {
-		using type = tc::interval< tc::decay_t<T> >;
-	};
+		template<typename T>
+		[[nodiscard]] constexpr tc::enumset<T> operator~(tc::interval<T> const& intvl) noexcept {
+			return ~tc::enumset<T>(intvl);
+		}
+	}
 
 // In addition to intervals where the values of .begin and .end represent definite geometric positions in a 1-dimenional, ordered universe modelled by T, we use
 // interval<T> for ordered pairs of T where values form abstract positions in a more general sense, e.g., interval< Ref<CGridline> >.
@@ -666,7 +656,7 @@ namespace tc {
 	)
 
 	template<typename T1, typename T2>
-	[[nodiscard]] interval< tc::common_type_t< T1, T2 > > make_interval_sort(T1&& t1, T2&& t2) noexcept {
+	[[nodiscard]] constexpr interval< tc::common_type_t< T1, T2 > > make_interval_sort(T1&& t1, T2&& t2) noexcept {
 		tc::assert_not_isnan(t1);
 		tc::assert_not_isnan(t2);
 		if( t2 < t1 ) {
@@ -677,7 +667,7 @@ namespace tc {
 	}
 
 	template<typename T, typename Extent>
-	[[nodiscard]] auto make_interval(T&& pos, Extent&& extent, EAlign ealign)
+	[[nodiscard]] constexpr auto make_interval(T&& pos, Extent&& extent, EAlign ealign)
 		return_decltype_noexcept( interval< tc::decay_t<T> >::from_extent(std::forward<T>(pos), std::forward<Extent>(extent), ealign) )
 	
 	template<typename T, typename Extent>
@@ -685,55 +675,97 @@ namespace tc {
 		return_decltype_noexcept( interval< tc::decay_t<T> >::from_extent(std::forward<T>(pos), std::forward<Extent>(extent), lohi) )
 
 	template<typename T, typename Extent>
-	[[nodiscard]] auto make_centered_interval(T&& pos, Extent&& extent)
+	[[nodiscard]] constexpr auto make_centered_interval(T&& pos, Extent&& extent)
 		return_decltype_noexcept(interval< tc::decay_t<T> >::template centered_interval</*bGeneralized*/false>(std::forward<T>(pos), std::forward<Extent>(extent) ) )
 
 	template<typename Func>
-	[[nodiscard]] auto make_interval_func(Func func)
-		return_decltype_MAYTHROW(make_interval(func(tc::lo), func(tc::hi)))
+	[[nodiscard]] constexpr auto make_interval_func(Func func)
+		return_decltype_MAYTHROW(tc::make_interval(func(tc::lo), func(tc::hi)))
 
 	template<typename T>
-	[[nodiscard]] auto make_singleton_interval(T&& value) noexcept {
+	[[nodiscard]] constexpr auto make_singleton_interval(T&& value) noexcept {
 		return interval<tc::decay_t<T>>(std::forward<T>(value), modified(value, tc::nextafter_inplace(_)));
 	}
 
 	template<typename T>
-	[[nodiscard]] auto make_empty_interval(T&& value)
-		return_decltype_MAYTHROW(make_interval(std::forward<T>(value), tc::decay_copy(value)))
+	[[nodiscard]] constexpr auto make_empty_interval(T&& value)
+		return_decltype_MAYTHROW(tc::make_interval(std::forward<T>(value), tc::decay_copy(value)))
+
+	namespace interval_adl {
+		template<typename Lhs, typename Rhs, std::enable_if_t<
+			tc::is_instance_or_derived<interval, Lhs>::value &&
+			tc::is_instance_or_derived<interval, Rhs>::value
+		>* = nullptr>
+		[[nodiscard]] constexpr auto operator&(Lhs&& lhs, Rhs&& rhs) noexcept {
+			static_assert(
+				std::is_same<tc::range_value_t<Lhs>, tc::range_value_t<Rhs>>::value,
+				"Are you sure you want to intersect intervals of different types? "
+				"Consider interval<T>::FullInterval() != interval<U>::FullInterval(). "
+				"Use implicit_cast to enable the operation."
+			);
+			return tc::make_interval(
+				tc::max(std::forward<Lhs>(lhs)[tc::lo], std::forward<Rhs>(rhs)[tc::lo]),
+				tc::min(std::forward<Lhs>(lhs)[tc::hi], std::forward<Rhs>(rhs)[tc::hi])
+			);
+		}
+
+		template<typename Lhs, typename Rhs, std::enable_if_t<
+			tc::is_instance_or_derived<interval, Lhs>::value &&
+			tc::is_instance_or_derived<interval, Rhs>::value
+		>* = nullptr>
+		[[nodiscard]] constexpr auto operator|(Lhs&& lhs, Rhs&& rhs) noexcept {
+			static_assert(
+				std::is_same<tc::range_value_t<Lhs>, tc::range_value_t<Rhs>>::value,
+				"Are you sure you want to take the union of intervals of different types? "
+				"Consider interval<T>::EmptyInterval() != interval<U>::EmptyInterval(). "
+				"Use implicit_cast to enable the operation."
+			);
+			_ASSERTE( tc::interval<tc::range_value_t<Lhs>>::EmptyInterval()==lhs || !lhs.empty_inclusive() );
+			_ASSERTE( tc::interval<tc::range_value_t<Rhs>>::EmptyInterval()==rhs || !rhs.empty_inclusive() );
+			return tc::make_interval(
+				tc::min(std::forward<Lhs>(lhs)[tc::lo], std::forward<Rhs>(rhs)[tc::lo]),
+				tc::max(std::forward<Lhs>(lhs)[tc::hi], std::forward<Rhs>(rhs)[tc::hi])
+			);
+		}
+	}
 
 	template< typename T, typename Rng >
-	[[nodiscard]] interval<T> bound_interval( Rng const& rngintvl ) noexcept {
-		return tc::accumulate(rngintvl, interval<T>::EmptyInterval(), fn_assign_bit_or());
+	[[nodiscard]] constexpr interval<T> bound_interval( Rng const& rngintvl ) noexcept {
+		return tc::accumulate(rngintvl, interval<T>::EmptyInterval(), tc::fn_assign_bit_or());
+	}
+
+	template<typename Rng, typename Pred>
+	[[nodiscard]] constexpr auto minmax_interval(Rng&& rng, Pred const& pred) noexcept {
+		std::optional<tc::interval<tc::range_value_t<Rng>>> ointvlMinMax;
+		tc::for_each(std::forward<Rng>(rng), [&](auto&& t) noexcept {
+			if(!ointvlMinMax) {
+				ointvlMinMax.emplace(t, t);
+			} else if(!tc::assign_better(pred, (*ointvlMinMax)[tc::lo], tc_move_if_owned(t))) {
+				tc::assign_better(tc::not_fn(pred), (*ointvlMinMax)[tc::hi], tc_move_if_owned(t));
+			}
+		});
+		return *VERIFY(tc_move(ointvlMinMax));
 	}
 
 	template<typename Rng>
-	[[nodiscard]] auto minmax_interval(Rng&& rng) noexcept {
-		auto pairit = tc::minmax_element(rng);
-		return tc::make_interval(*pairit.first, *pairit.second);
+	[[nodiscard]] constexpr auto minmax_interval(Rng&& rng) noexcept {
+		return tc::minmax_interval(std::forward<Rng>(rng), fn_less());
 	}
-	
-	template<typename Rng, typename Pred>
-	[[nodiscard]] auto minmax_interval(Rng&& rng, Pred&& pred) noexcept {
-		auto pairit = tc::minmax_element(rng, pred);
-		return tc::make_interval(*pairit.first, *pairit.second);
-	}
-	
+
 	template<typename Rng>
 	[[nodiscard]] auto minmax_interval_elements(Rng&& rng) noexcept {
 		auto pairit = tc::minmax_element(rng);
 		return tc::make_interval(pairit.first, pairit.second);
 	}
-	
-	DEFINE_FN(make_interval);
 
 	template<typename T>
 	bool empty(interval<T> const&) noexcept = delete;
 
 	template< typename Rng, typename T >
-	[[nodiscard]] auto slice_by_interval(Rng&& rng, tc::interval<T> const& intvl) return_decltype_MAYTHROW(
+	[[nodiscard]] constexpr auto slice_by_interval(Rng&& rng, tc::interval<T> const& intvl) return_decltype_MAYTHROW(
 		tc::slice(std::forward<Rng>(rng),
-			tc::begin_next(rng, tc::explicit_cast<typename boost::range_size<std::remove_reference_t<Rng>>::type>(intvl[tc::lo])),
-			tc::begin_next(rng, tc::explicit_cast<typename boost::range_size<std::remove_reference_t<Rng>>::type>(intvl[tc::hi]))
+			tc::begin_next<tc::return_border>(rng, tc::explicit_cast<typename boost::range_size<std::remove_reference_t<Rng>>::type>(intvl[tc::lo])),
+			tc::begin_next<tc::return_border>(rng, tc::explicit_cast<typename boost::range_size<std::remove_reference_t<Rng>>::type>(intvl[tc::hi]))
 		)
 	)
 
@@ -745,6 +777,8 @@ namespace tc {
 	using no_adl::linear_interval_transform;
 
 	template<typename T> linear_interval_transform<T> scale_and_shift_transform(T const& scale, T const& shift) noexcept;
+	template<typename Src, typename Dst>
+	linear_interval_transform<Src, Dst> cast_and_shift_transform(Dst const& shift) noexcept;
 
 	namespace no_adl {
 		template<typename Src, typename Dst>
@@ -765,8 +799,19 @@ namespace tc {
 			}
 
 			friend linear_interval_transform<Src> tc::scale_and_shift_transform<Src>(Src const&, Src const&) noexcept;
-
+			friend linear_interval_transform<Src, Dst> tc::cast_and_shift_transform<Src,Dst>(Dst const& shift) noexcept;
 		public:
+			
+			template <typename OtherSrc, typename OtherDst>
+			friend struct linear_interval_transform;
+			template <typename OtherSrc, typename OtherDst>
+			explicit linear_interval_transform(linear_interval_transform<OtherSrc,OtherDst> const& func) noexcept
+				: MEMBER_INIT_CAST( m_srcmDen, func.m_srcmDen )
+				, MEMBER_INIT_CAST( m_srcnPre, func.m_srcnPre )
+				, MEMBER_INIT_CAST( m_dstmNum, func.m_dstmNum )
+				, MEMBER_INIT_CAST( m_dstnPost, func.m_dstnPost )
+			{}
+
 			linear_interval_transform(tc::interval<Src> const& intvlsrc, tc::interval<Dst> const& intvldst) noexcept
 				: linear_interval_transform(intvlsrc.length(), intvlsrc[tc::lo], intvldst.length(), intvldst[tc::lo])
 			{}
@@ -777,12 +822,12 @@ namespace tc {
 				} else {
 					// In case of 0 == m_srcmDen, the inclusive source interval is a single point.
 					// The operations is well-defined if, 
-					_ASSERT( 0 == m_dstmNum );	// Inclusive destination interval is a single point as well, and
+					_ASSERTEQUAL( m_dstmNum, 0 ); // Inclusive destination interval is a single point as well, and
 					_ASSERTEQUAL( src, m_srcnPre ); // the argument is the single source interval point.
 					return m_dstnPost;
 				}
 			}
-
+			
 			[[nodiscard]] linear_interval_transform<Dst, Src> inverted() const& noexcept {
 				return {m_dstmNum, m_dstnPost, m_srcmDen, m_srcnPre};
 			}
@@ -800,6 +845,11 @@ namespace tc {
 	template<typename T>
 	linear_interval_transform<T> shift_transform(T const& shift) noexcept {
 		return scale_and_shift_transform(tc::implicit_cast<T>(1), shift);
+	}
+
+	template<typename Src, typename Dst>
+	linear_interval_transform<Src, Dst> cast_and_shift_transform(Dst const& shift) noexcept {
+		return {1, 0, 1, shift};
 	}
 
 	namespace no_adl {
@@ -901,7 +951,7 @@ namespace tc {
 
 			TInterval bound_interval() const& noexcept {
 				_ASSERT(!empty());
-				return TInterval(tc_front(*this)[tc::lo], tc_back(*this)[tc::hi]);
+				return TInterval(tc::front(*this)[tc::lo], tc::back(*this)[tc::hi]);
 			}
 
 			interval_set& operator|=(TInterval const& interval) & noexcept {
@@ -977,7 +1027,7 @@ namespace tc {
 			}
 
 			void erase(T const& t) & noexcept {
-				erase(TInterval(t, tc::next(t)));
+				erase(TInterval(t, modified(t, ++_)));
 			}
 
 			bool intersects(TInterval const& intvl) const& noexcept {
@@ -1324,9 +1374,10 @@ namespace tc {
 				return m_cont.lower_bound( intvl );
 			}
 
-			template <template<typename> class RangeReturn = tc::return_border, typename K>
+			template <typename RangeReturn = tc::return_border, typename K>
 			decltype(auto) upper_bound(K const& k) const& noexcept {
-				return RangeReturn<interval_set const&>::pack_border(m_cont.upper_bound(k), *this);
+				static_assert( RangeReturn::allowed_if_always_has_border );
+				return RangeReturn::pack_border(m_cont.upper_bound(k), *this);
 			}
 
 			iterator begin() & noexcept {
@@ -1342,7 +1393,30 @@ namespace tc {
 			}
 
 			T accumulated_length() const& noexcept {
-				return tc::accumulate( tc::transform( m_cont, mem_fn_length() ), tc::implicit_cast<T>(0), fn_assign_plus() );
+				return tc::accumulate( tc::transform( m_cont, TC_MEM_FN(.length) ), tc::implicit_cast<T>(0), tc::fn_assign_plus() );
+			}
+		};
+	}
+
+	template<typename RngIntvl>
+	[[nodiscard]] auto ordered_overlapping_intervals(RngIntvl&& rngintvl) noexcept {
+		return [rngintvl=tc::make_reference_or_value(std::forward<decltype(rngintvl)>(rngintvl))](auto func) noexcept {
+			if(!tc::empty(*rngintvl)) {
+				_ASSERTDEBUG(tc::is_sorted(*rngintvl, tc::projected(tc::fn_less(), [](auto const& intvl) noexcept { return intvl[tc::lo]; })));
+				auto itintvlOverlapBegin=tc::begin(*rngintvl);
+				auto itintvlLastOverlap=itintvlOverlapBegin;
+				tc::for_each(tc::make_range_of_iterators(tc::begin_next<tc::return_drop>(*rngintvl)), [&](auto const& itintvlCurr) noexcept {
+					auto_cref(intvlLastOverlap, *itintvlLastOverlap);
+					auto_cref(intvlCurr, *itintvlCurr);
+					if(intvlLastOverlap[tc::hi] < intvlCurr[tc::lo]) {
+						func(tc::slice(*rngintvl, itintvlOverlapBegin, itintvlCurr));
+						itintvlOverlapBegin=itintvlCurr;
+						itintvlLastOverlap=itintvlCurr;
+					} else if(intvlLastOverlap[tc::hi] < intvlCurr[tc::hi]) {
+						itintvlLastOverlap=itintvlCurr;
+					}
+				});
+				func(tc::drop(*rngintvl, itintvlOverlapBegin));
 			}
 		};
 	}

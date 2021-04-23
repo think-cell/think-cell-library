@@ -1,14 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "meta.h"
 #include "minmax.h"
 #include "empty.h"
@@ -41,7 +41,7 @@ namespace tc {
 
 	template< typename Cont >
 	auto safe_cont_erase( Cont& cont, typename boost::range_iterator<Cont const>::type it ) noexcept {
-		auto vt=tc::decay_copy(std::move(*it)); // *it may be const&
+		[[maybe_unused]] auto vt=tc::decay_copy(std::move(*it)); // *it may be const&
 		return cont.erase(it);
 	}
 
@@ -90,6 +90,6 @@ namespace tc {
 		if( cont.size()<=n ) {
 			cont_extend( cont, n+1, std::forward<Args>(args)...);
 		}
-		return tc_at(cont,n);
+		return tc::at(cont,n);
 	}
 }

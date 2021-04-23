@@ -1,14 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 
 #include "return_decltype.h"
 #include "tag_type.h"
@@ -68,6 +68,11 @@ namespace tc {
 					m_asrcidx[i] = srcidx;
 				}
 			}
+		};
+
+		template<>
+		struct expanded_argument_source_indices_value<0> final {
+			constexpr explicit expanded_argument_source_indices_value(std::size_t const /*anExpandedCount*/[]) noexcept {};
 		};
 
 		template<std::size_t... nExpandedCount>
@@ -160,10 +165,10 @@ namespace tc {
 	// is_invocable
 	namespace invoke_no_adl {
 		template <typename, typename Func, typename... Args>
-		struct is_invocable final : std::false_type {};
+		struct is_invocable /*final*/ : std::false_type {};
 
 		template <typename Func, typename... Args>
-		struct is_invocable<tc::void_t<decltype(tc::invoke(std::declval<Func>(), std::declval<Args>()...))>, Func, Args...> final : std::true_type {};
+		struct is_invocable<tc::void_t<decltype(tc::invoke(std::declval<Func>(), std::declval<Args>()...))>, Func, Args...> /*final*/ : std::true_type {};
 	}
 	template <typename Func, typename... Args>
 	using is_invocable = invoke_no_adl::is_invocable<void, Func, Args...>;

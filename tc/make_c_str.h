@@ -1,14 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "generic_macros.h"
 #include "append.h"
 
@@ -28,13 +28,15 @@ namespace tc {
 		struct [[nodiscard]] make_c_str_impl final {
 			explicit make_c_str_impl(Str&& str) noexcept: m_str(std::forward<Str>(str)) {}
 
-			operator bool() noexcept = delete;
-
-			operator Char const*() const /*no &*/ noexcept {
+			// We don't want make_c_str_impl to be able to implicitly cast to bool. Deleting operator bool() won't work because
+			// a deleted function is still considered in overload resolution and will cause ambiguity between foo(bool) and foo(char const*).
+			template<typename T, std::enable_if_t<std::is_same<T, Char const*>::value>* = nullptr>
+			operator T() const /*no &*/ noexcept {
 				return tc::as_c_str(m_str);
 			}
 
-			operator Char*() /*no &*/ noexcept {
+			template<typename T, std::enable_if_t<std::is_same<T, Char*>::value>* = nullptr>
+			operator T() /*no &*/ noexcept {
 				return tc::as_c_str(m_str);
 			}
 			
@@ -60,10 +62,10 @@ namespace tc {
 		return tc::no_adl::make_c_str_impl<Char const, Rng0>(std::forward<Rng0>(rng0));
 	}
 
-	template< typename Rng0, std::enable_if_t<tc::has_as_c_str<Rng0>::value>* = nullptr >
-	auto make_c_str(Rng0&& rng0) noexcept {
-		return tc::make_c_str<std::remove_cv_t<typename std::pointer_traits<decltype(tc::as_c_str(std::declval<Rng0>()))>::element_type>>(std::forward<Rng0>(rng0));
-	}
+	template< typename Rng0 >
+	auto make_c_str(Rng0&& rng0) return_decltype_noexcept(
+		tc::make_c_str<std::remove_cv_t<typename std::pointer_traits<decltype(tc::as_c_str(std::declval<Rng0>()))>::element_type>>(std::forward<Rng0>(rng0))
+	)
 
 	template< typename Char, typename Rng0, typename ... Rng >
 	auto make_c_str(Rng0&& rng0, Rng&& ... rng) MAYTHROW {
@@ -82,10 +84,10 @@ namespace tc {
 		return tc::no_adl::make_c_str_impl<Char, Rng0>(std::forward<Rng0>(rng0));
 	}
 
-	template< typename Rng0, std::enable_if_t<tc::has_as_c_str<Rng0>::value>* = nullptr >
-	auto make_mutable_c_str(Rng0&& rng0) noexcept {
-		return tc::make_mutable_c_str<std::remove_cv_t<typename std::pointer_traits<decltype(tc::as_c_str(std::declval<Rng0>()))>::element_type>>(std::forward<Rng0>(rng0));
-	}
+	template< typename Rng0 >
+	auto make_mutable_c_str(Rng0&& rng0) return_decltype_noexcept(
+		tc::make_mutable_c_str<std::remove_cv_t<typename std::pointer_traits<decltype(tc::as_c_str(std::declval<Rng0>()))>::element_type>>(std::forward<Rng0>(rng0))
+	)
 
 	template< typename Char, typename Rng0, typename ... Rng >
 	auto make_mutable_c_str(Rng0&& rng0, Rng&& ... rng) MAYTHROW {

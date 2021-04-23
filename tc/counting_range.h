@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -10,22 +10,6 @@
 
 #include "subrange.h"
 #include "return_decltype.h"
-
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wshorten-64-to-32"
-#else
-#pragma warning( push )
-#pragma warning( disable: 4244 )
-#endif
-#include <boost/iterator/counting_iterator.hpp>
-#ifdef __clang__
-#pragma clang diagnostic pop
-#else
-#pragma warning( pop )
-#endif
-
-#include <boost/mpl/identity.hpp>
 
 // By default, boost uses long long as counting_iterator<int>::difference_type,
 // which generates C4244 level 1 compiler warnings when cast back to int.
@@ -67,7 +51,7 @@ namespace tc {
 			using difference_type = typename std::conditional_t<
 				has_subtract<T>::value,
 				delayed_iterator_difference_type<T>,
-				boost::mpl::identity<std::ptrdiff_t>
+				tc::type::identity<std::ptrdiff_t>
 			>::type;
 
 			using value_type = T;
@@ -109,8 +93,7 @@ namespace tc {
 				return *this;
 			}
 
-#pragma warning(push)
-#pragma warning(disable:4244) // conversion possibly loses data; e.g. if T is an integral type smaller than int (so difference_type is int).
+MODIFY_WARNINGS_BEGIN(((disable)(4244))) // conversion possibly loses data; e.g. if T is an integral type smaller than int (so difference_type is int).
 			template < ENABLE_SFINAE, typename T_ = T, tc::decay_t<decltype(std::declval<SFINAE_TYPE(T&)>() += std::declval<difference_type &>())>* = nullptr >
 			friend constexpr counting_iterator& operator +=(SFINAE_TYPE(counting_iterator&) it, difference_type n) noexcept(noexcept(
 				it.value += n
@@ -118,7 +101,7 @@ namespace tc {
 				it.value += n;
 				return it;
 			}
-#pragma warning(pop)
+MODIFY_WARNINGS_END
 
 			// iterator_facade's operator[] will not work for counting_iterator - it tries to return a dangling rvalue reference. This function returns by value.
 			template < ENABLE_SFINAE, tc::decay_t<decltype(std::declval<SFINAE_TYPE(counting_iterator &)>() += std::declval<difference_type &>())>* = nullptr >
@@ -133,13 +116,23 @@ namespace tc {
 			}
 		};
 
-		template<typename T>
-		constexpr auto operator -(counting_iterator<T> const& a, counting_iterator<T> const& b) return_decltype_NOEXCEPT( // NOEXCEPT() for e.g. counting_iterator<std::vector<T>::iterator>
+		template<typename T, std::enable_if_t<!std::is_unsigned<T>::value>* = nullptr>
+		constexpr auto operator -(counting_iterator<T> const& a, counting_iterator<T> const& b) return_decltype_NOEXCEPT( // NOEXCEPT() for e.g. counting_iterator<tc::vector<T>::iterator>
 			tc::signed_cast(*a - *b)
+		)
+
+		template<typename T, std::enable_if_t<std::is_unsigned<T>::value>* = nullptr>
+		constexpr auto operator -(counting_iterator<T> const& a, counting_iterator<T> const& b) return_decltype_noexcept(
+			tc::signed_cast(*a) - tc::signed_cast(*b)
 		)
 	}
 
 	using counting_iterator_adl::counting_iterator;
+
+	namespace no_adl {
+		template <typename T>
+		struct is_stashing_element<tc::counting_iterator<T>> : std::true_type {};
+	}
 
 	template<typename TBegin, typename TEnd>
 	[[nodiscard]] constexpr auto iota(TBegin const& tBegin, TEnd const& tEnd) noexcept {
@@ -180,4 +173,26 @@ namespace tc {
 	template<typename Rng>
 	constexpr auto make_range_of_iterators(Rng&& rng)
 		return_ctor_noexcept( no_adl::range_of_elements< Rng >, (aggregate_tag, std::forward<Rng>(rng)) )
+
+	namespace no_adl {
+		template<typename Enum>
+		struct [[nodiscard]] all_values final {
+			using const_iterator = tc::counting_iterator<Enum>;
+			using iterator = const_iterator;
+			static constexpr iterator begin() noexcept {
+				return iterator( tc::contiguous_enum<Enum>::begin() );
+			}
+			static constexpr iterator end() noexcept {
+				return iterator( tc::contiguous_enum<Enum>::end() );
+			}
+
+			static constexpr std::size_t index_of(Enum e) noexcept {
+				return e - tc::contiguous_enum<Enum>::begin();
+			}
+		};
+
+		template<typename Enum>
+		struct constexpr_size_base<all_values<Enum>> : std::integral_constant<std::size_t, enum_count<Enum>::value> {};
+	}
+	using no_adl::all_values;
 }

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -60,26 +60,23 @@ namespace tc {
 			{}
 
 			template< typename Func >
-			auto operator()(Func func) const& MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, tc_front(tc_front(*m_baserng)))), INTEGRAL_CONSTANT(tc::continue_)> {
+			auto operator()(Func func) const& MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, tc::front(tc::front(*m_baserng)))), INTEGRAL_CONSTANT(tc::continue_)> {
 				auto vecrngrng = tc::make_vector(
 					tc::transform(
 						*m_baserng,
-						tc::fn_make_view()
+						TC_FN(tc::make_view)
 					)
 				);
 
-				for (;;) {
-					auto it = tc::best_element<tc::return_element_or_null>(
-						tc::as_lvalue(tc::filter( // as_lvalue -> yield non-const iterator
-							vecrngrng,
-							tc::not_fn(tc::fn_empty())
-						)),
-						projected_front(m_pred)
-					).element_base();
-
-					if (!it) break;
-
-					RETURN_IF_BREAK(tc::continue_if_not_break(func, tc_front(*it)));
+				while (auto it = tc::best_element<tc::return_element_or_null>(
+					m_pred,
+					tc::as_lvalue(tc::filter( // as_lvalue -> yield non-const iterator
+						vecrngrng,
+						tc::not_fn(TC_FN(tc::empty))
+					)),
+					TC_FN(tc::front)
+				).element_base() ) {
+					RETURN_IF_BREAK(tc::continue_if_not_break(func, tc::front(*it)));
 					tc::drop_first_inplace(*it);
 				}
 				return INTEGRAL_CONSTANT(tc::continue_)();

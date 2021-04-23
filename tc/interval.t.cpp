@@ -1,19 +1,20 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
+#include "interval.h"
+
 #include "range.t.h"
 #if TC_PRIVATE
-#include "Library/ErrorReporting/util/_DateTime.h"
+#include "Library/HeaderOnly/chrono.h"
 #endif
 #include "round.h"
 
-#include "interval.h"
-
+STATICASSERTEQUAL( sizeof(tc::interval<int>), sizeof(int) * 2 );
 
 UNITTESTDEF(interval_center) {
 

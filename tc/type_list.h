@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -46,12 +46,19 @@ namespace tc {
 				using type = Func<Lhs, Rhs>;
 			};
 
+			template<template<typename...> typename Func, typename Rhs>
+			struct rcurry final {
+				template<typename Lhs>
+				using type = Func<Lhs, Rhs>;
+			};
+
 			template<typename T>
 			struct identity {
 				using type = T;
 			};
 		}
 		using no_adl::curry;
+		using no_adl::rcurry;
 		using no_adl::identity;
 
 		template<typename T>
@@ -160,16 +167,16 @@ namespace tc {
 				using type = list<T0, T...>;
 			};
 
-			template<typename List, template<typename...> class Pred>
+			template<typename List, template<typename...> typename Pred>
 			struct partition;
 
-			template<template<typename...> class Pred>
+			template<template<typename...> typename Pred>
 			struct partition<list<>, Pred> final {
 				using true_part = list<>;
 				using false_part = list<>;
 			};
 
-			template<typename T0, typename... T, template<typename...> class Pred>
+			template<typename T0, typename... T, template<typename...> typename Pred>
 			struct partition<list<T0, T...>, Pred> final {
 			private:
 				using tail_partition = partition<list<T...>, Pred>;
@@ -189,7 +196,7 @@ namespace tc {
 				using false_part = typename pair::second_type;
 			};
 
-			template<typename List, template<typename...> class Pred>
+			template<typename List, template<typename...> typename Pred>
 			struct filter final {
 				using type = typename partition<List, Pred>::true_part;
 			};
@@ -201,7 +208,7 @@ namespace tc {
 		template<typename List, typename T>
 		using push_front_t = typename push_front<List, T>::type;
 
-		template<typename List, template<typename...> class Pred>
+		template<typename List, template<typename...> typename Pred>
 		using filter_t = typename filter<List, Pred>::type;
 
 		namespace find_unique_if_result {
@@ -222,15 +229,15 @@ namespace tc {
 		};
 
 		namespace no_adl {
-			template<typename List, template<typename...> class Pred, std::size_t I>
+			template<typename List, template<typename...> typename Pred, std::size_t I>
 			struct find_unique_if_impl;
 
-			template<template<typename...> class Pred, std::size_t I>
+			template<template<typename...> typename Pred, std::size_t I>
 			struct find_unique_if_impl<list<>, Pred, I> final {
 				using result_type = find_unique_if_result::type_not_found;
 			};
 
-			template<typename T0, typename... T, template<typename...> class Pred, std::size_t I>
+			template<typename T0, typename... T, template<typename...> typename Pred, std::size_t I>
 			struct find_unique_if_impl<list<T0, T...>, Pred, I> final {
 				using tail_result_type = typename find_unique_if_impl<list<T...>, Pred, I+1>::result_type;
 				using pred = Pred<T0>;
@@ -246,59 +253,59 @@ namespace tc {
 			};
 		}
 
-		template<typename List, template<typename...> class Pred>
+		template<typename List, template<typename...> typename Pred>
 		using find_unique_if = typename no_adl::find_unique_if_impl<List, Pred, 0>::result_type;
 
-		template<typename List, template<typename...> class Pred>
+		template<typename List, template<typename...> typename Pred>
 		using find_unique_if_t = typename find_unique_if<List, Pred>::type;
 
 		template<typename List, typename T>
 		using find_unique = find_unique_if<List, curry<std::is_same, T>::template type>;
 
 		namespace no_adl {
-			template<typename List, template<typename...> class Pred>
+			template<typename List, template<typename...> typename Pred>
 			struct all_of;
 
-			template<typename... T, template<typename...> class Pred>
+			template<typename... T, template<typename...> typename Pred>
 			struct all_of<list<T...>, Pred> final : std::conjunction<Pred<T>...> {};
 		}
 		using no_adl::all_of;
 
 		namespace no_adl {
-			template<typename List, template<typename...> class Pred>
+			template<typename List, template<typename...> typename Pred>
 			struct any_of;
 
-			template<typename... T, template<typename...> class Pred>
+			template<typename... T, template<typename...> typename Pred>
 			struct any_of<list<T...>, Pred> final: std::disjunction<Pred<T>...> {};
 		}
 		using no_adl::any_of;
 
 		namespace no_adl {
-			template<typename List, template<typename...> class F, typename Enable=void>
+			template<typename List, template<typename...> typename F, typename Enable=void>
 			struct transform;
 
-			template<typename... T, template<typename...> class F>
+			template<typename... T, template<typename...> typename F>
 			struct transform<list<T...>, F, tc::void_t<list<F<T>...>>> final {
 				using type = list<F<T>...>;
 			};
 		}
 		using no_adl::transform;
 
-		template<typename List, template<typename...> class F>
+		template<typename List, template<typename...> typename F>
 		using transform_t = typename transform<List, F>::type;
 
 		namespace no_adl {
-			template<template<typename...> class F, typename List>
+			template<template<typename...> typename F, typename List, typename = void>
 			struct apply;
 
-			template<template<typename...> class F, typename... T>
-			struct apply<F, list<T...>> final {
+			template<template<typename...> typename F, typename... T>
+			struct apply<F, list<T...>, std::void_t<F<T...>>> final {
 				using type = F<T...>;
 			};
 		}
 		using no_adl::apply;
 
-		template<template<typename...> class F, typename List>
+		template<template<typename...> typename F, typename List>
 		using apply_t = typename apply<F, List>::type;
 
 		namespace no_adl {
@@ -373,5 +380,51 @@ namespace tc {
 
 		template<typename List, std::size_t N=1>
 		using drop_last_t = take_first_t<List, size<List>::value-N>;
+
+		namespace no_adl {
+			template<typename... Lists>
+			struct cartesian_product;
+		}
+		template<typename... Lists>
+		using cartesian_product_t = typename no_adl::cartesian_product<Lists...>::type;
+
+		namespace no_adl {
+			template<>
+			struct cartesian_product<> final {
+				using type = list<list<>>;
+			};
+
+			template<typename List, typename... Lists>
+			struct cartesian_product<List, Lists...> final {
+			private:
+				template<typename T>
+				using product_for_element = transform_t<cartesian_product_t<Lists...>, rcurry<push_front_t, T>::template type>;
+			public:
+				using type = join_t<transform_t<List, product_for_element>>;
+			};
+		}
+
+		namespace no_adl {
+			template<std::size_t N, typename T>
+			struct repeat_n;
+		}
+
+		template<std::size_t N, typename T>
+		using repeat_n_t = typename no_adl::repeat_n<N, T>::type;
+
+		namespace no_adl {
+			template<typename T>
+			struct repeat_n<0, T> {
+				using type = list<>;
+			};
+			template<typename T>
+			struct repeat_n<1, T> {
+				using type = list<T>;
+			};
+			template<std::size_t N, typename T>
+			struct repeat_n {
+				using type = concat_t<repeat_n_t<(N + 1) / 2, T>, repeat_n_t<N / 2, T>>;
+			};
+		}
 	}
 }

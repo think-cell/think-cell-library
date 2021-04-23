@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -70,6 +70,11 @@ namespace tc {
 				return *this;
 			}
 		};
+
+		template <typename T, bool bPreventSlicing>
+		struct decay<no_adl::type<T>, bPreventSlicing> {
+			using type=tc::decay_t<T, bPreventSlicing>; // recursive
+		};
 	}
 
 	template<typename T>
@@ -80,11 +85,6 @@ namespace tc {
 		static type construct(same_cvref_t<unsigned char,T>* pb) noexcept {
 			return type(pb);
 		}
-	};
-
-	template <typename T>
-	struct decay<no_adl::type<T>> {
-		using type=typename tc::decay<T>::type; // recursive
 	};
 
 	template<typename T>

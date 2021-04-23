@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -11,11 +11,14 @@
 #include "assign.h"
 #include "return_decltype.h"
 #include "enum.h"
+#include "find.h"
 #include "functors.h"
 #include "invoke.h"
+#include "template_func.h"
+#include "transform.h"
 
 namespace tc {
-	DEFINE_SCOPED_ENUM(order,BOOST_PP_EMPTY(),(less)(equal)(greater))
+	DEFINE_SCOPED_ENUM_WITH_OFFSET(order,BOOST_PP_EMPTY(), -1,(less)(equal)(greater))
 
 	namespace order_adl {
 		inline order operator-(order ord) noexcept {
@@ -27,37 +30,32 @@ namespace tc {
 	// specialization for wchar_t in MSVC does not have has_quiet_NAN:
 	// std::enable_if_t<std::numeric_limits<T>::has_quiet_NAN || std::numeric_limits<T>::has_signaling_NAN >
 	template<typename T, std::enable_if_t<std::is_floating_point<T>::value>* = nullptr>
-	void assert_not_isnan(T const& t) noexcept {
+	constexpr void assert_not_isnan(T const& t) noexcept {
 		_ASSERTDEBUG( !std::isnan(t) );
 	}
 
 	// specialization for wchar_t in MSVC does not have has_quiet_NAN:
 	// std::enable_if_t<!(std::numeric_limits<T>::has_quiet_NAN || std::numeric_limits<T>::has_signaling_NAN) >
 	template<typename T, std::enable_if_t<!std::is_floating_point<T>::value>* = nullptr>
-	void assert_not_isnan(T const& t) noexcept {}
-}
-
-// not inside tc namespace, so that compare below has no chance seeing tc::compare
-namespace tc_compare_impl {
-	template< typename Lhs, typename Rhs >
-	tc::order compare( Lhs const& lhs, Rhs const& rhs ) noexcept {
-		tc::assert_not_isnan(lhs);
-		tc::assert_not_isnan(rhs);
-		if( lhs < rhs ) return tc::order::less;
-		else if ( rhs < lhs ) return  tc::order::greater;
-		else return tc::order::equal;
-	}
-	template< typename Lhs, typename Rhs >
-	tc::order compare_impl( Lhs const& lhs, Rhs const& rhs ) noexcept {
-		return compare( lhs, rhs );
-	}
+	constexpr void assert_not_isnan(T const& t) noexcept {}
 }
 
 namespace tc {
-	template< typename Lhs, typename Rhs >
-	[[nodiscard]] tc::order compare( Lhs const& lhs, Rhs const& rhs ) noexcept {
-		return ::tc_compare_impl::compare_impl(lhs,rhs);
+	namespace compare_default {
+		template< typename Lhs, typename Rhs, typename Enable1=decltype(std::declval<Lhs const&>() < std::declval<Rhs const&>()), typename Enable2=decltype(std::declval<Rhs const&>() < std::declval<Lhs const&>()) >
+		[[nodiscard]] constexpr tc::order compare_impl( Lhs const& lhs, Rhs const& rhs ) noexcept {
+			tc::assert_not_isnan(lhs);
+			tc::assert_not_isnan(rhs);
+			if( lhs < rhs ) return tc::order::less;
+			else if ( rhs < lhs ) return  tc::order::greater;
+			else return tc::order::equal;
+		}
 	}
+
+	DEFINE_TMPL_FUNC_WITH_CUSTOMIZATIONS(compare)
+	DEFINE_FN(compare);
+
+	TC_HAS_EXPR(compare, (T)(U), tc::compare(std::declval<T>(), std::declval<U>()))
 
 	//////////////////////////////////////////////////////////////
 	// macros for implementing compare on compound types
@@ -67,11 +65,17 @@ namespace tc {
 		if ( tc::order::equal!=order ) return order; \
 	}
 
-	#define COMPARE_EXPR_BASE(fcompare, lhs, rhs, expr) \
+	// auto&& triggers internal error for VS2017
+	// decltype((lhs)) triggers internal error for VS2019 16.8.0 preview 3.0
+	#define COMPARE_EXPR_BASE2(fcompare, lhs, rhs, expr) \
 		(fcompare)( \
-			[&](decltype((lhs)) _) return_decltype_xvalue_by_val_MAYTHROW( VERIFYINITIALIZED(expr) )(VERIFYINITIALIZED(lhs)), \
-			[&](decltype((rhs)) _) return_decltype_xvalue_by_val_MAYTHROW( VERIFYINITIALIZED(expr) )(VERIFYINITIALIZED(rhs)) \
+			[&](auto&& _) return_decltype_xvalue_by_val_MAYTHROW(expr)(lhs), \
+			[&](auto&& _) return_decltype_xvalue_by_val_MAYTHROW(expr)(rhs) \
 		)
+
+	#define COMPARE_EXPR_BASE(fcompare, lhs, rhs, expr) COMPARE_EXPR_BASE2(TC_FWD(fcompare), VERIFYINITIALIZED(lhs), VERIFYINITIALIZED(rhs), VERIFYINITIALIZED(expr))
+
+	#define CONSTEXPR_COMPARE_EXPR(expr) RETURN_IF_NOT_EQUAL( COMPARE_EXPR_BASE2(tc::compare, lhs, rhs, expr) )
 
 	#define COMPARE_EXPR( expr ) RETURN_IF_NOT_EQUAL( COMPARE_EXPR_BASE(tc::compare, lhs, rhs, expr) )
 	#define COMPARE_EXPR_REVERSE( expr ) RETURN_IF_NOT_EQUAL( COMPARE_EXPR_BASE(tc::compare, rhs, lhs, expr) )
@@ -105,9 +109,16 @@ namespace tc {
 	///////////////////////////////////////////////////////////
 	// compare on specific types
 
+	template<typename Rng>
+	[[nodiscard]] constexpr tc::order lexicographical_compare_3way(Rng const& rng) noexcept {
+		return tc::find_first_if<tc::return_value_or_default>(rng, [](tc::order const order) {
+			return tc::order::equal != order;
+		});
+	}
+
 	namespace lexicographical_compare_3way_detail {
-		template< bool bNoPrefix, typename Lhs, typename Rhs >
-		tc::order lexicographical_compare_3way_impl( Lhs const& lhs, Rhs const& rhs ) noexcept {
+		template< bool bNoPrefix, typename Lhs, typename Rhs, typename FnCompare >
+		constexpr tc::order lexicographical_compare_3way_impl( Lhs const& lhs, Rhs const& rhs, FnCompare fnCompare) noexcept {
 			auto itLhs=tc::begin( lhs );
 			auto const itLhsEnd=tc::end( lhs );
 			auto itRhs=tc::begin( rhs );
@@ -116,7 +127,7 @@ namespace tc {
 			// same as std::lexicographical_compare_3way(itLhs, itLhsEnd, itRhs, itRhsEnd), except for using compare instead of operator<
 			for(;;) {
 				if( itLhs==itLhsEnd ) {
-					_ASSERT(!bNoPrefix || itRhs==itRhsEnd);
+					_ASSERTE(!bNoPrefix || itRhs==itRhsEnd);
 					if( itRhs==itRhsEnd ) { // lhs shorter than rhs, thus <
 						return tc::order::equal;
 					} else {
@@ -124,55 +135,55 @@ namespace tc {
 					}
 				}
 				if( itRhs==itRhsEnd ) {
-					_ASSERT(!bNoPrefix);
+					_ASSERTE(!bNoPrefix);
 					return tc::order::greater; // rhs shorter than lhs, thus >
 				}
-				RETURN_IF_NOT_EQUAL( tc::compare( *itLhs, *itRhs ) );
+				RETURN_IF_NOT_EQUAL( fnCompare( *itLhs, *itRhs ) );
 				++itLhs;
 				++itRhs;
 			}
 		}
 	}
 
-	template< typename Lhs, typename Rhs >
-	[[nodiscard]] tc::order lexicographical_compare_3way(Lhs const& lhs, Rhs const& rhs) noexcept {
-		return lexicographical_compare_3way_detail::lexicographical_compare_3way_impl</*bNoPrefix*/false>(lhs, rhs);
+	template< typename Lhs, typename Rhs, typename FnCompare = tc::fn_compare >
+	[[nodiscard]] constexpr tc::order lexicographical_compare_3way(Lhs const& lhs, Rhs const& rhs, FnCompare&& fnCompare = FnCompare()) noexcept {
+		return lexicographical_compare_3way_detail::lexicographical_compare_3way_impl</*bNoPrefix*/false>(lhs, rhs, std::forward<FnCompare>(fnCompare));
 	}
-	template< typename Lhs, typename Rhs >
-	[[nodiscard]] tc::order lexicographical_compare_3way_noprefix(Lhs const& lhs, Rhs const& rhs) noexcept {
-		return lexicographical_compare_3way_detail::lexicographical_compare_3way_impl</*bNoPrefix*/true>(lhs, rhs);
+	template< typename Lhs, typename Rhs, typename FnCompare = tc::fn_compare >
+	[[nodiscard]] constexpr tc::order lexicographical_compare_3way_noprefix(Lhs const& lhs, Rhs const& rhs, FnCompare&& fnCompare = FnCompare()) noexcept {
+		return lexicographical_compare_3way_detail::lexicographical_compare_3way_impl</*bNoPrefix*/true>(lhs, rhs, std::forward<FnCompare>(fnCompare));
 	}
 
 	DEFINE_FN( lexicographical_compare_3way );
 	DEFINE_FN( lexicographical_compare_3way_noprefix );
 
-	template< typename LFirst, typename LSecond, typename RFirst, typename RSecond >
-	[[nodiscard]] tc::order compare( std::pair<LFirst, LSecond> const& lhs, std::pair<RFirst, RSecond> const& rhs ) noexcept {
-		COMPARE_EXPR( _.first );
-		COMPARE_EXPR( _.second );
-		return tc::order::equal;
-	}
+	namespace compare_adl {
+		template< typename LFirst, typename LSecond, typename RFirst, typename RSecond >
+		[[nodiscard]] tc::order compare_impl( adl_tag_t, std::pair<LFirst, LSecond> const& lhs, std::pair<RFirst, RSecond> const& rhs ) noexcept {
+			COMPARE_EXPR( _.first );
+			COMPARE_EXPR( _.second );
+			return tc::order::equal;
+		}
 
-	// keep in tc namespace to prevent overloading of this case of compare
-	template< typename Elem, typename Alloc, typename Rhs >
-	[[nodiscard]] tc::order compare( std::vector< Elem, Alloc > const& lhs, Rhs const& rhs ) noexcept {
-		return tc::lexicographical_compare_3way( lhs, rhs );
-	}
+		// keep in tc namespace to prevent overloading of this case of compare
+		template< typename Elem, typename Alloc, typename Rhs >
+		[[nodiscard]] tc::order compare_impl( adl_tag_t, std::vector< Elem, Alloc > const& lhs, Rhs const& rhs ) noexcept {
+			return tc::lexicographical_compare_3way( lhs, rhs );
+		}
 
-	// keep in tc namespace to prevent overloading of this case of compare
-	template< typename Elem, typename Alloc, typename Rhs >
-	[[nodiscard]] tc::order compare( std::basic_string< Elem, std::char_traits<Elem>, Alloc > const& lhs, Rhs const& rhs ) noexcept {
-		// should be the same as lhs.compare(rhs) which is only implemented for decltype(lhs)==Rhs
-		return tc::lexicographical_compare_3way( lhs, rhs );
-	}
+		// keep in tc namespace to prevent overloading of this case of compare
+		template< typename Elem, typename Alloc, typename Rhs >
+		[[nodiscard]] tc::order compare_impl( adl_tag_t, std::basic_string< Elem, std::char_traits<Elem>, Alloc > const& lhs, Rhs const& rhs ) noexcept {
+			// should be the same as lhs.compare(rhs) which is only implemented for decltype(lhs)==Rhs
+			return tc::lexicographical_compare_3way( lhs, rhs );
+		}
 
-	// keep in tc namespace to prevent overloading of this case of compare
-	template< typename T, std::size_t N, typename Rhs >
-	[[nodiscard]] tc::order compare( std::array< T, N > const& lhs, Rhs const& rhs ) noexcept {
-		return tc::lexicographical_compare_3way( lhs, rhs );
+		// keep in tc namespace to prevent overloading of this case of compare
+		template< typename T, std::size_t N, typename Rhs >
+		[[nodiscard]] tc::order compare_impl( adl_tag_t, std::array< T, N > const& lhs, Rhs const& rhs ) noexcept {
+			return tc::lexicographical_compare_3way( lhs, rhs );
+		}
 	}
-
-	DEFINE_FN( compare );
 
 	namespace no_adl {
 		// Function pointers have disadvantages over function objects, in particular when being aggregated in wrapper objects:
@@ -196,6 +207,35 @@ namespace tc {
 	}
 	using no_adl::verify_functor_t;
 
+	namespace no_adl {
+		template <typename FuncSecond, typename FuncFirst>
+		struct [[nodiscard]] chained_impl final {
+			tc::verify_functor_t<tc::decay_t<FuncSecond>> m_funcSecond;
+			tc::verify_functor_t<tc::decay_t<FuncFirst>> m_funcFirst;
+
+			template <typename... Args>
+			constexpr auto operator()(Args&&... args) const& MAYTHROW -> tc::transform_return_t<
+				FuncSecond,
+				decltype(tc::invoke(m_funcSecond, tc::invoke(m_funcFirst, std::forward<Args>(args)...))),
+				decltype(tc::invoke(m_funcFirst, std::forward<Args>(args)...))
+			> {
+				return tc::invoke(m_funcSecond, tc::invoke(m_funcFirst, std::forward<Args>(args)...));
+			}
+
+			constexpr auto inverted() const& MAYTHROW {
+				return chained_impl<decltype(m_funcFirst.inverted()), decltype(m_funcSecond.inverted())>{
+					m_funcFirst.inverted(),
+					m_funcSecond.inverted()
+				};
+			}
+		};
+	}
+
+	template <typename FuncSecond, typename FuncFirst>
+	constexpr auto chained(FuncSecond&& funcSecond, FuncFirst&& funcFirst) noexcept {
+		return no_adl::chained_impl<FuncSecond, FuncFirst>{std::forward<FuncSecond>(funcSecond), std::forward<FuncFirst>(funcFirst)};
+	}
+
 	///////////////////////////////////
 	// argument-wise transformation
 
@@ -216,61 +256,44 @@ namespace tc {
 				return m_func(tc::invoke(m_transform, std::forward<Args>(args))...);
 			}
 		};
-
-		// special case: tc_front is a macro
-		template< typename Func>
-		struct [[nodiscard]] projected_front_impl final
-		{
-		public:
-			tc::verify_functor_t<tc::decay_t<Func>> m_func;
-
-		public:
-			template< typename ...Args >
-			auto operator()(Args&& ... args) const& return_decltype_MAYTHROW(
-				m_func( tc_front( std::forward<Args>(args) )... )
-			)
-		};
-
 	}
 
 	template< typename Func, typename Transform >
-	constexpr auto projected(Func&& func, Transform&& transform) noexcept -> no_adl::projected_impl<Func, Transform> {
-		// Using return_ctor_noexcept here causes an internal compiler error in MSVC 2017 when compiling TCCrmPortal
-		return no_adl::projected_impl<Func, Transform>{ std::forward<Func>(func), std::forward<Transform>(transform) };
+	constexpr decltype(auto) projected(Func&& func, Transform&& transform) noexcept {
+		if constexpr( std::is_same<tc::decay_t<Transform>, tc::identity>::value ) {
+			return std::forward<Func>(func);
+		} else {
+			return no_adl::projected_impl<Func, Transform>{ std::forward<Func>(func), std::forward<Transform>(transform) };
+		}
 	}
-
-	template< typename Func>
-	auto projected_front(Func&& func) return_ctor_noexcept(
-		no_adl::projected_front_impl<Func>,{ std::forward<Func>(func) }
-	)
 
 	///////////////////////////////////
 	// not_fn, will be available in c++17
 
 	namespace no_adl {
-		template<class F>
+		template<typename F>
 		struct [[nodiscard]] not_fn_t {
 			F f;
-			template<class... Args>
+			template<typename... Args>
 			constexpr auto operator()(Args&&... args) &
 				return_decltype_MAYTHROW(!f(std::forward<Args>(args)...))
  
 			// cv-qualified overload for QoI
-			template<class... Args>
+			template<typename... Args>
 			constexpr auto operator()(Args&&... args) const&
 				return_decltype_MAYTHROW(!f(std::forward<Args>(args)...))
  
-			template<class... Args>
+			template<typename... Args>
 			constexpr auto operator()(Args&&... args) &&
 				return_decltype_MAYTHROW(!tc_move(f)(std::forward<Args>(args)...))
 
-			template<class... Args>
+			template<typename... Args>
 			constexpr auto operator()(Args&&... args) const&&
 				return_decltype_MAYTHROW(!static_cast<F const&&>(f)(std::forward<Args>(args)...))
 		};
 	}
  
-	template<class F>
+	template<typename F>
 	constexpr auto not_fn(F&& f) return_ctor_noexcept(no_adl::not_fn_t<tc::decay_t<F>>, { std::forward<F>(f) })
 
 	////////////////////////////////
@@ -284,9 +307,9 @@ namespace tc {
 		public:
 			F2wayFrom3way() noexcept = default; // default-constructible if m_fnCompare is default-constructible, practical for using as STL container comparator template parameter
 
-			explicit F2wayFrom3way( FCompare&& fnCompare ) noexcept : m_fnCompare(std::forward<FCompare>(fnCompare)) {}
+			constexpr explicit F2wayFrom3way( FCompare&& fnCompare ) noexcept : m_fnCompare(std::forward<FCompare>(fnCompare)) {}
 
-			template< typename Lhs, typename Rhs > bool operator()( Lhs&& lhs, Rhs&& rhs ) const& noexcept {
+			template< typename Lhs, typename Rhs > constexpr bool operator()( Lhs&& lhs, Rhs&& rhs ) const& noexcept {
 				return tc::base_cast<Base>(*this)(m_fnCompare(std::forward<Lhs>(lhs), std::forward<Rhs>(rhs)), tc::order::equal);
 			}
 			using is_transparent = void;
@@ -295,17 +318,45 @@ namespace tc {
 	using no_adl::F2wayFrom3way;
 
 	template< typename FCompare>
-	F2wayFrom3way<FCompare, tc::fn_less> lessfrom3way( FCompare&& fnCompare ) noexcept {
+	constexpr F2wayFrom3way<FCompare, tc::fn_less> lessfrom3way( FCompare&& fnCompare ) noexcept {
 		return F2wayFrom3way<FCompare, tc::fn_less>( std::forward<FCompare>(fnCompare) );
 	}
 
 	template< typename FCompare>
-	F2wayFrom3way<FCompare, tc::fn_greater> greaterfrom3way( FCompare&& fnCompare ) noexcept {
+	constexpr F2wayFrom3way<FCompare, tc::fn_greater> greaterfrom3way( FCompare&& fnCompare ) noexcept {
 		return F2wayFrom3way<FCompare, tc::fn_greater>( std::forward<FCompare>(fnCompare) );
 	}
 
 	template< typename FCompare>
-	F2wayFrom3way<FCompare, tc::fn_equal_to> equalfrom3way( FCompare&& fnCompare ) noexcept {
+	constexpr F2wayFrom3way<FCompare, tc::fn_equal_to> equalfrom3way( FCompare&& fnCompare ) noexcept {
 		return F2wayFrom3way<FCompare, tc::fn_equal_to>( std::forward<FCompare>(fnCompare) );
+	}
+
+	namespace tuple_adl {
+		template<typename... T, typename... U>
+		constexpr tc::order compare_impl(tc::tuple<T...> const& lhs, tc::tuple<U...> const& rhs) noexcept {
+			STATICASSERTEQUAL(sizeof...(T), sizeof...(U));
+			return tc::lexicographical_compare_3way(
+				tc::generator_range_value<tc::order>(tc::transform(std::index_sequence_for<T...>(), [&](auto nconstIndex) noexcept {
+					return tc::compare(tc::get<nconstIndex()>(lhs), tc::get<nconstIndex()>(rhs));
+				}))
+			);
+		}
+
+#pragma push_macro("DEFINE_COMPARISON_OP")
+#define DEFINE_COMPARISON_OP(op) \
+		template<typename... T, typename... U, std::enable_if_t<std::conjunction<tc::has_compare<T, U>...>::value>* = nullptr> \
+		constexpr bool operator op(tc::tuple<T...> const& lhs, tc::tuple<U...> const& rhs) noexcept { \
+			return compare_impl(lhs, rhs) op tc::order::equal; \
+		}
+
+		DEFINE_COMPARISON_OP(<)
+		DEFINE_COMPARISON_OP(<=)
+		// prefer < over > and <= over >= in our code
+#if 0
+		DEFINE_COMPARISON_OP(>)
+		DEFINE_COMPARISON_OP(>=)
+#endif
+#pragma pop_macro("DEFINE_COMPARISON_OP")
 	}
 } // namespace tc

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -33,7 +33,7 @@ namespace tc {
 
 			template<typename A1, std::enable_if_t<tc::econstructionEXPLICIT==tc::construction_restrictiveness<T, A1&&>::value>* = nullptr>
 			explicit derivable_wrapper(A1&& a1) noexcept
-				: m_t(tc::explicit_cast<T>(std::forward<A1>(a1)))
+				: MEMBER_INIT_CAST( m_t, std::forward<A1>(a1) )
 			{}
 
 			operator T const&() const& noexcept {

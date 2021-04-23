@@ -1,19 +1,17 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2020 think-cell Software GmbH
+// Copyright (C) 2016-2021 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 #include "index_range.h"
-#include "range_defines.h"
+#include "assert_defs.h"
 #include "iterator_facade.h"
 
 #include <boost/iterator/detail/facade_iterator_category.hpp>
-
-#include <boost/mpl/identity.hpp>
 
 namespace tc {
 
@@ -44,7 +42,7 @@ namespace tc {
 			using difference_type = typename std::conditional_t<
 				std::is_convertible< traversal, boost::iterators::random_access_traversal_tag >::value,
 				delayed_difference_type<IndexRange>,
-				boost::mpl::identity<
+				tc::type::identity<
 					/* needed to compile interfaces relying on difference_type: */
 					std::ptrdiff_t
 				>
@@ -189,10 +187,24 @@ namespace tc {
 		template< typename T, bool bConst >
 		using conditional_const_t=std::conditional_t< bConst, T const, T >;
 
+		template<typename Reference, typename = void>
+		struct TC_EMPTY_BASES index_iterator_base {
+			using reference = Reference;
+			using value_type = void;
+		};
+
+		template<typename Reference>
+		struct TC_EMPTY_BASES index_iterator_base<Reference, tc::void_t<tc::decay_t<Reference>>> {
+			using reference = Reference;
+			using value_type = tc::decay_t<Reference>;
+		};
 
 		template<typename IndexRange, bool bConst>
 		struct index_iterator
 			: tc::iterator_facade<index_iterator<IndexRange, bConst>>
+			, index_iterator_base<
+				decltype(std::declval<conditional_const_t<IndexRange, bConst>&>().dereference_index(std::declval<index_t<IndexRange> const&>()))
+			>
 		{
 			static_assert( tc::is_decayed< IndexRange >::value );
 
@@ -202,9 +214,8 @@ namespace tc {
 
 			conditional_const_t<IndexRange, bConst>* m_pidxrng;
 
-			using index = index_t<IndexRange>;
-
 		public: // TODO private
+			using index = index_t<IndexRange>;
 			index m_idx;
 
 		private:
@@ -213,15 +224,14 @@ namespace tc {
 			using this_type = index_iterator<IndexRange, bConst>;
 
 		public:
-			using reference = decltype(std::declval<conditional_const_t<IndexRange, bConst>&>().dereference_index(std::declval<index const&>()));
-			using value_type = tc::decay_t<reference>;
 			using difference_type = typename range_traits< IndexRange >::difference_type; // should not be different for const and non-const
-			using pointer = std::remove_reference_t<reference>*;
+			using pointer = std::remove_reference_t<typename index_iterator::reference>*;
+			using iterator_category = typename boost::iterators::detail::facade_iterator_category<typename range_traits<IndexRange>::traversal, typename index_iterator::value_type, typename index_iterator::reference>::type;
+			using is_index_iterator = void;
 
-			using iterator_category = typename boost::iterators::detail::facade_iterator_category<typename range_traits<IndexRange>::traversal, value_type, reference>::type;
-
-			index_iterator() noexcept
+			constexpr index_iterator() noexcept
 				: m_pidxrng(nullptr)
+				, m_idx()
 			{}
 
 			template<bool bConstOther>
@@ -317,7 +327,7 @@ namespace tc {
 			}
 
 			template< typename IndexRange_, bool bConst1, bool bConst2,
-				std::enable_if_t<tc::has_mem_fn_equal_index<IndexRange_ const>::value>*
+				std::enable_if_t<tc::is_equality_comparable<tc::index_t<IndexRange_>>::value>*
 			>
 			friend constexpr bool operator==(index_iterator<IndexRange_, bConst1> const& itLhs, index_iterator<IndexRange_, bConst2> const& itRhs) noexcept;
 		};
@@ -328,12 +338,12 @@ namespace tc {
 		}
 
 		template< typename IndexRange_, bool bConst1, bool bConst2,
-			std::enable_if_t<tc::has_mem_fn_equal_index<IndexRange_ const>::value>* = nullptr
+			std::enable_if_t<tc::is_equality_comparable<tc::index_t<IndexRange_>>::value>* = nullptr
 		>
 		constexpr bool operator==(index_iterator<IndexRange_, bConst1> const& itLhs, index_iterator<IndexRange_, bConst2> const& itRhs) noexcept {
-			_ASSERTE(itLhs.m_pidxrng);
 			_ASSERTE(itLhs.m_pidxrng == itRhs.m_pidxrng);
-			return tc::as_const(*itLhs.m_pidxrng).equal_index(itLhs.m_idx, itRhs.m_idx);
+			_ASSERTDEBUG( itLhs.m_pidxrng || itLhs.m_idx == itRhs.m_idx );
+			return itLhs.m_idx == itRhs.m_idx;
 		}
 
 		template< typename IndexRange_, bool bConst1, bool bConst2,
@@ -350,13 +360,22 @@ namespace tc {
 	}
 	using index_iterator_impl::index_iterator;
 
-	template<typename It, std::enable_if_t<tc::is_instance3<index_iterator,std::remove_reference_t<It>>::value>* =nullptr >
-	constexpr auto iterator2index(It&& it) return_decltype_xvalue_by_ref_noexcept(
-		std::forward<It>(it).m_idx
-	)
+	namespace no_adl {
+		template <typename IndexRange, bool b>
+		struct is_stashing_element<tc::index_iterator<IndexRange,b>> : INTEGRAL_CONSTANT(IndexRange::c_bHasStashingIndex) {};
+	}
 
-	template<typename It, std::enable_if_t<!tc::is_instance3<index_iterator,std::remove_reference_t<It>>::value>* =nullptr >
+	namespace iterator2index_detail {
+		BOOST_MPL_HAS_XXX_TRAIT_DEF(is_index_iterator)
+	}
+
+	template<typename It, std::enable_if_t<!iterator2index_detail::has_is_index_iterator<std::remove_reference_t<It>>::value>* = nullptr>
 	constexpr decltype(auto) iterator2index(It&& it) noexcept {
 		return std::forward<It>(it);
 	}
+
+	template<typename It, std::enable_if_t<iterator2index_detail::has_is_index_iterator<std::remove_reference_t<It>>::value>* = nullptr>
+	constexpr auto iterator2index(It&& it) return_decltype_xvalue_by_ref_noexcept(
+		std::forward<It>(it).m_idx
+	)
 }
