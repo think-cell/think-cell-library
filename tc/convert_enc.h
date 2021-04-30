@@ -138,7 +138,7 @@ namespace tc {
 			if( 1==*onSequenceSize || (!tc::at_end_index(rng, idx) && [&]() MAYTHROW {
 				if constexpr( std::is_same<tc::char16, tc::range_value_t<Rng>>::value ) {
 					auto const ch2=tc::dereference_index(rng, idx); // MAYTHROW
-					_ASSERTEQUALDEBUG(*onSequenceSize, 2);
+					_ASSERTDEBUGEQUAL(*onSequenceSize, 2);
 					if(tc::is_continuation_codeunit(ch2)) {
 						n-=0xd800u;
 						_ASSERTDEBUG(n<0x400u);
@@ -152,7 +152,7 @@ namespace tc {
 						return true;
 					}
 				} else if constexpr(std::is_same<char, tc::range_value_t<Rng>>::value) {
-					_ASSERTANYOFDEBUG(*onSequenceSize, (2)(3)(4));
+					_ASSERTDEBUGANYOF(*onSequenceSize, (2)(3)(4));
 					n &= 0x7fu >> *onSequenceSize; // 2 -> 0x1f, 3 -> 0xf, 4 -> 0x7
 					int i=*onSequenceSize;
 					do {

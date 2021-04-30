@@ -55,6 +55,6 @@ namespace tc {
 	// Used for explicitly discarding return value from function decorated with [[nodiscard]] attribute.
 	// Also used to suppress 'unused variable' warnings, if no better option available.
 	template <typename T>
-	void discard(T&&) noexcept{}
+	constexpr void discard(T&&) noexcept{}
 }
 

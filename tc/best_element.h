@@ -33,7 +33,7 @@ namespace tc {
 		if(ait[0]==itEnd) {
 			return RangeReturn::pack_no_element(std::forward<Rng>(rng));
 		} else {
-			tc::storage_for< tc::reference_or_value<tc::range_reference_t< Rng >> > aoref[2];
+			tc::storage_for< tc::reference_or_value<decltype(*ait[0])> > aoref[2];
 			aoref[0].ctor( aggregate_tag, *ait[0] ); // MAYTHROW
 			for(;;){
 				for( int i=0; i!=2; ++i ) { // we expect the compiler to unroll this loop

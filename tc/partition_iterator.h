@@ -151,7 +151,7 @@ namespace tc {
 				}
 			}
 			// we have already found the partition point; compare result
-			_ASSERTEQUALDEBUG(itBegin, itPartitionPoint);
+			_ASSERTDEBUGEQUAL(itBegin, itPartitionPoint);
 			return itBegin;
 		}
 

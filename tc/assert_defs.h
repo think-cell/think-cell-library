@@ -52,18 +52,18 @@
 	#ifndef _ASSERTEQUAL
 		#define _ASSERTEQUAL(a, b) assert((a)==(b))
 	#endif
-	#ifndef _ASSERTEQUALDEBUG
-		#define _ASSERTEQUALDEBUG(a, b) IF_TC_DEBUG(_ASSERTEQUAL(a, b))
+	#ifndef _ASSERTDEBUGEQUAL
+		#define _ASSERTDEBUGEQUAL(a, b) IF_TC_DEBUG(_ASSERTEQUAL(a, b))
 	#endif
 	#ifndef _ASSERTANYOF
 		#include <boost/preprocessor/seq/enum.hpp>
-		#define _ASSERTANYOFDEBUG(expr, values) [](auto const& e, auto const&... val) noexcept { assert( ((e == val) || ...) ); }(expr, BOOST_PP_SEQ_ENUM(TC_FWD(values)))
+		#define _ASSERTDEBUGANYOF(expr, values) [](auto const& e, auto const&... val) noexcept { assert( ((e == val) || ...) ); }(expr, BOOST_PP_SEQ_ENUM(TC_FWD(values)))
 	#endif
-	#ifndef _ASSERTANYOFDEBUG
-		#define _ASSERTANYOFDEBUG(expr, values) IF_TC_DEBUG(_ASSERTANYOF(expr, values))
+	#ifndef _ASSERTDEBUGANYOF
+		#define _ASSERTDEBUGANYOF(expr, values) IF_TC_DEBUG(_ASSERTANYOF(expr, values))
 	#endif
 	#ifndef _ASSERTINITIALIZED
-		#define _ASSERTINITIALIZED( expr ) static_cast<void>(expr)
+		#define _ASSERTINITIALIZED( expr ) tc::discard(expr)
 	#endif
 	#ifndef _ASSERTPRINT
 		#define _ASSERTPRINT( cond, ... ) assert( cond )

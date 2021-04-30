@@ -1592,9 +1592,7 @@ namespace tc {
 		tc::decay_t<decltype(func(*std::forward<T>(ot)))>
 	> {
 		if(tc::bool_cast(ot)) {
-			return std::optional<
-				tc::decay_t<decltype(func(*std::forward<T>(ot)))>
-			>(
+			RETURN_CAST(
 				std::in_place,
 				func(*std::forward<T>(ot)) // MAYTHROW
 			);

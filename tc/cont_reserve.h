@@ -86,10 +86,11 @@ namespace tc {
 	}
 
 	template< typename Cont, typename... Args >
-	[[nodiscard]] tc::range_reference_t< Cont > cont_extend_at(Cont& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type n, Args &&... args) noexcept {
+	[[nodiscard]] decltype(auto) cont_extend_at(Cont& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type n, Args &&... args) noexcept {
 		if( cont.size()<=n ) {
 			cont_extend( cont, n+1, std::forward<Args>(args)...);
 		}
+		static_assert( !tc::is_stashing_element<decltype(tc::at<tc::return_element>(cont,n))>::value );
 		return tc::at(cont,n);
 	}
 }

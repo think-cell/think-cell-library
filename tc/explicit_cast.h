@@ -141,7 +141,7 @@ namespace tc {
 		>
 		TTarget explicit_convert_impl(adl_tag_t, tc::type::identity<TTarget>, TSource src) noexcept {
 			TTarget target=static_cast<TTarget>(src);
-			_ASSERTEQUALDEBUG( target,src ); // default round-to-zero from floating point to integer is wrong most of the time, so we force rounding first
+			_ASSERTDEBUGEQUAL( target,src ); // default round-to-zero from floating point to integer is wrong most of the time, so we force rounding first
 			return target;
 
 		}
@@ -295,6 +295,9 @@ MODIFY_WARNINGS_END
 				tc::apply(tc::fn_explicit_cast<std::remove_cv_t<TTarget>>(), tc_move(m_tuple))
 			)
 		};
+
+		template <typename TTarget, typename... Args>
+		struct is_value_safely_constructible<TTarget, lazy_explicit_cast<TTarget, Args...>&&> : std::true_type {};
 	}
 
 	template<typename T, typename... Args>
@@ -307,7 +310,7 @@ MODIFY_WARNINGS_END
 			template<typename... Args>
 			struct [[nodiscard]] return_cast_impl final : tc::nonmovable {
 				tc::tuple<Args&&...> m_tuple;
-				template<typename TTarget>
+				template<typename TTarget, std::enable_if_t<tc::is_explicit_castable<TTarget, Args...>::value>* = nullptr>
 				constexpr operator TTarget() && return_MAYTHROW(
 					tc::apply(tc::fn_explicit_cast<std::remove_cv_t<TTarget>>(), tc_move(m_tuple))
 				)
@@ -320,7 +323,17 @@ MODIFY_WARNINGS_END
 		}
 	}
 
-	#define RETURN_CAST(...) return std::move(tc::return_cast_detail::return_cast(__VA_ARGS__))
+#ifdef __clang__
+	#define RETURN_CAST(...) \
+		_Pragma("clang diagnostic push") \
+		_Pragma("clang diagnostic ignored \"-Wpessimizing-move\"") /* moving a temporary object prevents copy elision */ \
+		return std::move(tc::return_cast_detail::return_cast(__VA_ARGS__)) \
+		_Pragma("clang diagnostic pop")
+#else
+	#define RETURN_CAST(...) \
+		return std::move(tc::return_cast_detail::return_cast(__VA_ARGS__))
+#endif
+
 	// Using decltype(this->member) ensures casting to the correct type even if member is shadowed (but disallows base classes).
 	#define MEMBER_INIT_CAST(member, ...) member(tc::explicit_cast<decltype(this->member)>(__VA_ARGS__))
 

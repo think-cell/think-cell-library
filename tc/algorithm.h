@@ -762,7 +762,7 @@ namespace tc {
 	[[nodiscard]] 
 	typename tc::size_proxy< typename boost::range_size<Cont>::type > remove_count_erase_if(Cont& cont, Pred pred) noexcept {
 		typename boost::range_size<Cont>::type count=0;
-		tc::filter_inplace( cont, [&]( tc::range_reference_t<Cont> t ) noexcept ->bool {
+		tc::filter_inplace( cont, [&]( auto&& t ) noexcept ->bool {
 			bool const b=pred(tc_move_if_owned(t));
 			count += (b ? 1 : 0);
 			return !b;

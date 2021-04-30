@@ -28,17 +28,6 @@
 //-----------------------------------------------------------------------------------------------------------------------------
 
 namespace tc {
-	/////////////////////////////////////////////
-	// same_cvref
-
-	template<typename Dst, typename Src>
-	struct same_cvref : apply_cvref<Dst, Src> {
-		STATICASSERTSAME(Dst, tc::remove_cvref_t<Dst>); // use non-cv-qualified non-reference Dst type or apply_cvref
-	};
-
-	template< typename Dst, typename Src >
-	using same_cvref_t = typename same_cvref<Dst, Src>::type;
-
 	//-------------------------------------------------------------------------------------------------------------------------
 
 	/////////////////////////////////////////////

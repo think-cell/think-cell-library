@@ -58,18 +58,18 @@ namespace tc {
 			friend void LoadType_impl<>(enumset& sete, CXmlReader& loadhandler) THROW(ExLoadFail);
 #endif
 		private:
-			using value_type = typename tc::integer<tc::constexpr_size<tc::all_values<Enum>>::value>::unsigned_;
-			DEFINE_MEMBER_AND_ACCESSORS(value_type, m_bitset);
+			using bitset_type = typename tc::integer<tc::constexpr_size<tc::all_values<Enum>>::value>::unsigned_;
+			DEFINE_MEMBER_AND_ACCESSORS(bitset_type, m_bitset);
 	
-			static constexpr value_type lsb_mask(int nDigits) noexcept {
+			static constexpr bitset_type lsb_mask(int nDigits) noexcept {
 				if (0 == nDigits) {
 					return 0;
 				} else {
 					_ASSERTE(0 < nDigits);
-					return static_cast<value_type>(-1)>>(std::numeric_limits<value_type>::digits - nDigits);
+					return static_cast<bitset_type>(-1)>>(std::numeric_limits<bitset_type>::digits - nDigits);
 				}
 			}
-			static constexpr value_type mask() noexcept {
+			static constexpr bitset_type mask() noexcept {
 				return lsb_mask(tc::constexpr_size<tc::all_values<Enum>>::value);
 			}
 			static index make_index(unsigned long nIndex) {
@@ -84,7 +84,7 @@ namespace tc {
 			constexpr enumset(enumset_from_underlying_tag_t, U bitset) noexcept : MEMBER_INIT_CAST( m_bitset, bitset ) {
 				_ASSERTE( !(m_bitset&~mask()) );
 			}
-			constexpr enumset(Enum e) noexcept : enumset(enumset_from_underlying_tag, tc::explicit_cast<value_type>(1) << tc::all_values<Enum>::index_of(e)) {}
+			constexpr enumset(Enum e) noexcept : enumset(enumset_from_underlying_tag, tc::explicit_cast<bitset_type>(1) << tc::all_values<Enum>::index_of(e)) {}
 			template<ENABLE_SFINAE>
 			constexpr enumset(tc::interval<SFINAE_TYPE(Enum)> const& intvle) noexcept
 				: enumset(enumset_from_underlying_tag,
@@ -138,7 +138,7 @@ namespace tc {
 				return 0!=m_bitset && 0==(m_bitset & (m_bitset - 1));
 			}
 	
-			template<typename T=value_type,
+			template<typename T=bitset_type,
 				std::enable_if_t<std::numeric_limits<T>::digits<=std::numeric_limits<unsigned long long>::digits>* = nullptr>
 			std::size_t size() const& noexcept {
 				return std::bitset<tc::constexpr_size<tc::all_values<Enum>>::value>(m_bitset).count();

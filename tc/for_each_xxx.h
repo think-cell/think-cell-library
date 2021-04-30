@@ -152,7 +152,7 @@ namespace tc {
 	auto for_each_ordered_pair(Rng const& rng, Func func) MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, *tc::begin(rng), *tc::begin(rng))), INTEGRAL_CONSTANT(tc::continue_)> {
 		auto const itEndRng = tc::end(rng);
 		for(auto itEnd = tc::begin(rng); itEnd != itEndRng; ++itEnd) {
-			tc::reference_or_value<tc::range_reference_t<Rng const>> ref(aggregate_tag, *itEnd);
+			auto ref = tc::make_reference_or_value(*itEnd);
 
 			RETURN_IF_BREAK(
 				tc::for_each(

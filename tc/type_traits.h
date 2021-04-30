@@ -15,6 +15,7 @@
 #include <string>
 #include <type_traits>
 #include <limits>
+#include <optional>
 #include <vector>
 #ifndef __EMSCRIPTEN__
 #include <atomic>
@@ -185,8 +186,135 @@ namespace tc {
 		static_assert(tc::is_decayed<Base>::value);
 	};
 
+
+	/////////////////////////////////////////////
+	// is_instance
+
+	namespace no_adl {
+		template<template<typename...> typename X, typename T> struct is_instance : public std::false_type {};
+		template<template<typename...> typename X, typename T> struct is_instance<X, T const> : public is_instance<X, T> {};
+		template<template<typename...> typename X, typename T> struct is_instance<X, T volatile> : public is_instance<X, T> {};
+		template<template<typename...> typename X, typename T> struct is_instance<X, T const volatile> : public is_instance<X, T> {};
+		template<template<typename...> typename X, typename... Y> struct is_instance<X, X<Y...>> : public std::true_type {
+			using arguments = tc::type::list<Y...>;
+		};
+		
+		template<template<typename, bool> typename X, typename T> struct is_instance1 : public std::false_type {};
+		template<template<typename, bool> typename X, typename T> struct is_instance1<X, T const> : public is_instance1<X, T> {};
+		template<template<typename, bool> typename X, typename T> struct is_instance1<X, T volatile> : public is_instance1<X, T> {};
+		template<template<typename, bool> typename X, typename T> struct is_instance1<X, T const volatile> : public is_instance1<X, T> {};
+		template<template<typename, bool> typename X, typename Y, bool b> struct is_instance1<X, X<Y,b>> : public std::true_type {
+			using first_argument = Y;
+			static constexpr auto second_argument = b;
+		};
+
+		template<template<typename, typename, bool> typename X, typename T> struct is_instance2 : public std::false_type {};
+		template<template<typename, typename, bool> typename X, typename T> struct is_instance2<X, T const> : public is_instance2<X, T> {};
+		template<template<typename, typename, bool> typename X, typename T> struct is_instance2<X, T volatile> : public is_instance2<X, T> {};
+		template<template<typename, typename, bool> typename X, typename T> struct is_instance2<X, T const volatile> : public is_instance2<X, T> {};
+		template<template<typename, typename, bool> typename X, typename Y1, typename Y2, bool b> struct is_instance2<X, X<Y1,Y2,b>> : public std::true_type {
+			using first_argument = Y1;
+			using second_argument = Y2;
+			static constexpr auto third_argument = b;
+		};
+
+		template<template<bool, typename...> typename X, typename T> struct is_instance_b : std::false_type {};
+		template<template<bool, typename...> typename X, bool b, typename... Y> struct is_instance_b<X, X<b, Y...>> : std::true_type {
+			static constexpr auto first_argument = b;
+			using arguments = tc::type::list<Y...>;
+		};
+	}
+	using no_adl::is_instance;
+	using no_adl::is_instance1;
+	using no_adl::is_instance2;
+	template<template<bool, typename...> typename X, typename T>
+	using is_instance_b = no_adl::is_instance_b<X, std::remove_cv_t<T>>;
+
+	/////////////////////////////////////////////
+	// is_instance_or_derived
+
+	namespace no_adl {
+		template<template<typename...> typename Template, typename... Args>
+		struct is_instance_or_derived_found : std::true_type {
+			using base_instance = Template<Args...>;
+			using arguments = tc::type::list<Args...>;
+		};
+
+		template<template<typename...> typename Template>
+		struct is_instance_or_derived_detector final {
+			template<typename... Args>
+			static is_instance_or_derived_found<Template, Args...> detector(Template<Args...>*);
+
+			static std::false_type detector(...);
+		};
+
+		template<template<typename...> typename Template, typename T>
+#ifdef _MSC_VER // MSVC has problems with decltype in some contexts. The base class list is usually fine.
+		struct is_instance_or_derived :
+#else
+		using is_instance_or_derived =
+#endif
+			decltype(
+				is_instance_or_derived_detector<Template>::detector(
+					std::declval<tc::remove_cvref_t<T>*>()
+				)
+			)
+#ifdef _MSC_VER
+		{}
+#endif
+		;
+	}
+	using no_adl::is_instance_or_derived;
+
+	/////////////////////////////////////////////
+	// apply_cvref
+
+	template<typename Dst, typename Src>
+	struct apply_cvref {
+		static_assert( std::is_same< Src, tc::remove_cvref_t<Src> >::value && !std::is_reference<Src>::value, "Src must not be cv-qualified. Check if a template specialization of apply_cvref is missing." );
+		using type = Dst;
+	};
+
+	#pragma push_macro("APPLY_CVREF_IMPL")
+	#define APPLY_CVREF_IMPL(cvref) \
+	template<typename Dst, typename Src> \
+	struct apply_cvref<Dst, Src cvref> { \
+		using type = Dst cvref; \
+	};
+
+	APPLY_CVREF_IMPL(&)
+	APPLY_CVREF_IMPL(&&)
+	APPLY_CVREF_IMPL(const&)
+	APPLY_CVREF_IMPL(const&&)
+	APPLY_CVREF_IMPL(const)
+	APPLY_CVREF_IMPL(volatile&)
+	APPLY_CVREF_IMPL(volatile&&)
+	APPLY_CVREF_IMPL(volatile)
+	APPLY_CVREF_IMPL(volatile const&)
+	APPLY_CVREF_IMPL(volatile const&&)
+	APPLY_CVREF_IMPL(volatile const)
+
+	#pragma pop_macro("APPLY_CVREF_IMPL")
+
+	template< typename Dst, typename Src >
+	using apply_cvref_t = typename apply_cvref<Dst, Src>::type;
+
+	/////////////////////////////////////////////
+	// same_cvref
+
+	template<typename Dst, typename Src>
+	struct same_cvref : apply_cvref<Dst, Src> {
+		STATICASSERTSAME(Dst, tc::remove_cvref_t<Dst>); // use non-cv-qualified non-reference Dst type or apply_cvref
+	};
+
+	template< typename Dst, typename Src >
+	using same_cvref_t = typename same_cvref<Dst, Src>::type;
+
 	//////////////////////////
 	// is_safely_convertible/assignable/constructible
+
+	template<typename TTarget, typename... Args>
+	struct is_safely_constructible;
 
 	namespace no_adl {
 		template <typename TTarget, typename ArgList, typename=void>
@@ -214,11 +342,36 @@ namespace tc {
 		{
 		};
 
+		// Restrict optional constructors
+
+		// We consider the constructor optional<TTarget>::optional(TSource&&) dubious and
+		// prefer optional<TTarget>::optional(std::in_place, TSource&&).
+		// However, it is consistent with allowing optional<TTarget>::operator=(TSource&&),
+		// which may be more effecient than optional::emplace and is used in constructs like
+		// tc::change(otarget, source).
+		template <typename TTarget, typename TSource, typename TSourceNocvref = tc::remove_cvref_t<TSource>>
+		struct is_optional_safely_constructible : tc::is_safely_constructible<TTarget, TSource> {};
+
+		template <typename TTarget, typename Nullopt>
+		struct is_optional_safely_constructible<TTarget, /*TSource*/Nullopt, /*TSourceNocvref*/std::nullopt_t> : std::true_type {};
+
+		template <typename TTarget, typename Optional, typename T>
+		struct is_optional_safely_constructible<TTarget, /*TSource*/Optional, /*TSourceNocvref*/std::optional<T>>
+			: tc::is_safely_constructible<TTarget, tc::same_cvref_t<T, Optional>>
+		{};
+
+		template <typename T, typename Arg0, typename... Args>
+		struct is_class_safely_constructible<std::optional<T>, tc::type::list<Arg0, Args...>> final : std::conditional_t<
+			std::is_same<tc::remove_cvref_t<Arg0>, std::in_place_t>::value,
+			tc::is_safely_constructible<T, Args...>,
+			std::conjunction<std::bool_constant<0 == sizeof...(Args)>, is_optional_safely_constructible<T, Arg0>>
+		> {};
+
 		template <typename TTarget, typename ArgList, typename=void>
-		struct is_value_safely_constructible : std::false_type {};
+		struct is_value_safely_constructible_base : std::false_type {};
 
 		template <typename TTarget, typename Arg0, typename... Args>
-		struct is_value_safely_constructible<TTarget, tc::type::list<Arg0, Args...>, std::enable_if_t<std::is_class<TTarget>::value>> final
+		struct is_value_safely_constructible_base<TTarget, tc::type::list<Arg0, Args...>, std::enable_if_t<std::is_class<TTarget>::value>>
 			// prevent slicing
 			: std::integral_constant<
 				bool,
@@ -231,12 +384,12 @@ namespace tc {
 
 		// default construction of classes is ok
 		template <typename TTarget>
-		struct is_value_safely_constructible<TTarget, tc::type::list<>, std::enable_if_t<std::is_class<TTarget>::value>> final : std::true_type {
+		struct is_value_safely_constructible_base<TTarget, tc::type::list<>, std::enable_if_t<std::is_class<TTarget>::value>> : std::true_type {
 			static_assert(!std::is_reference<TTarget>::value);
 		};
 
 		template <typename TTarget, typename TSource>
-		struct is_value_safely_constructible<TTarget, tc::type::list<TSource>, std::enable_if_t<std::is_union<TTarget>::value>> final
+		struct is_value_safely_constructible_base<TTarget, tc::type::list<TSource>, std::enable_if_t<std::is_union<TTarget>::value>>
 			// allow classes to control their convertibility to unions, we have conversion to CURRENCY somewhere
 			: std::integral_constant<
 				bool,
@@ -303,7 +456,7 @@ MODIFY_WARNINGS_END
 		};
 	
 		template <typename TTarget, typename TSource>
-		struct is_value_safely_constructible<TTarget, tc::type::list<TSource>, std::enable_if_t<std::is_arithmetic<TTarget>::value>> final
+		struct is_value_safely_constructible_base<TTarget, tc::type::list<TSource>, std::enable_if_t<std::is_arithmetic<TTarget>::value>>
 			// disable unwanted arithmetic conversions
 			: std::integral_constant<
 				bool,
@@ -322,16 +475,19 @@ MODIFY_WARNINGS_END
 #endif
 
 		template <typename TTarget, typename TSource>
-		struct is_value_safely_constructible<TTarget, tc::type::list<TSource>, std::enable_if_t<std::is_enum<TTarget>::value || std::is_pointer<TTarget>::value || std::is_member_pointer<TTarget>::value || std::is_same<TTarget,std::nullptr_t>::value
+		struct is_value_safely_constructible_base<TTarget, tc::type::list<TSource>, std::enable_if_t<std::is_enum<TTarget>::value || std::is_pointer<TTarget>::value || std::is_member_pointer<TTarget>::value || std::is_same<TTarget,std::nullptr_t>::value
 #ifdef TC_MAC
 			|| is_objc_block<TTarget>::value
 #endif
-		>> final
+		>>
 			// std::is_constructible does the right thing for enums, pointers, and std::nullptr_t
 			: std::true_type
 		{
 			static_assert(!std::is_reference<TTarget>::value);
 		};
+
+		template <typename TTarget, typename... Args>
+		struct is_value_safely_constructible final : is_value_safely_constructible_base<TTarget, tc::type::list<Args...>> {}; // Has customizations
 	}
 
 	// Disable unwanted conversions despite true==std::is_convertible<TSource, TTarget>::value
@@ -374,7 +530,7 @@ MODIFY_WARNINGS_END
 						>::value
 					)
 				)
-				: no_adl::is_value_safely_constructible<std::remove_cv_t<TTarget>, tc::type::list<TSource>>::value
+				: no_adl::is_value_safely_constructible<std::remove_cv_t<TTarget>, TSource>::value
 			)
 		>
 	{};
@@ -410,7 +566,7 @@ MODIFY_WARNINGS_END
 			bool,
 			decltype(is_implicitly_constructible_detail::return_implicit_uniform_construction_from<TTarget, Args...>(0))::value &&
 			std::is_class<TTarget>::value &&
-			no_adl::is_value_safely_constructible<std::remove_cv_t<TTarget>, tc::type::list<Args...>>::value
+			no_adl::is_value_safely_constructible<std::remove_cv_t<TTarget>, Args...>::value
 		>
 	{
 		static_assert(1 != sizeof...(Args));
@@ -428,7 +584,7 @@ MODIFY_WARNINGS_END
 			//	 a const reference using uniform initialization with multiple arguments would bind the reference to a temporary,
 			//   which we do not allow,
 			// - non-reference types may be std::is_constructible from zero arguments. We do not want this for native types like int.
-			std::is_class<TTarget>::value && std::is_constructible<TTarget, Args...>::value && no_adl::is_value_safely_constructible<std::remove_cv_t<TTarget>, tc::type::list<Args...>>::value
+			std::is_class<TTarget>::value && std::is_constructible<TTarget, Args...>::value && no_adl::is_value_safely_constructible<std::remove_cv_t<TTarget>, Args...>::value
 		>
 	{
 		static_assert(1 != sizeof...(Args));
@@ -442,7 +598,7 @@ MODIFY_WARNINGS_END
 			? tc::is_safely_convertible<TSource, TTarget>::value
 			: std::is_constructible<TTarget, TSource>::value
 				&& (
-					no_adl::is_value_safely_constructible<std::remove_cv_t<TTarget>, tc::type::list<TSource>>::value
+					no_adl::is_value_safely_constructible<std::remove_cv_t<TTarget>, TSource>::value
 					|| (std::is_floating_point<std::remove_cv_t<TTarget>>::value && std::is_floating_point<tc::remove_cvref_t<TSource>>::value)
 			)
 		>
@@ -453,7 +609,7 @@ MODIFY_WARNINGS_END
 		: std::integral_constant<
 			bool,
 			std::is_assignable<TTarget, TSource>::value
-			&& no_adl::is_value_safely_constructible<std::remove_reference_t<TTarget>, tc::type::list<TSource>>::value
+			&& no_adl::is_value_safely_constructible<std::remove_reference_t<TTarget>, TSource>::value
 		>
 	{};
 }
@@ -771,115 +927,6 @@ namespace tc {
 #define SFINAE_VALUE(...) \
 	(SFINAE_TYPE(void)(), __VA_ARGS__)
 #endif
-
-	/////////////////////////////////////////////
-	// is_instance
-
-	namespace no_adl {
-		template<template<typename...> typename X, typename T> struct is_instance : public std::false_type {};
-		template<template<typename...> typename X, typename T> struct is_instance<X, T const> : public is_instance<X, T> {};
-		template<template<typename...> typename X, typename T> struct is_instance<X, T volatile> : public is_instance<X, T> {};
-		template<template<typename...> typename X, typename T> struct is_instance<X, T const volatile> : public is_instance<X, T> {};
-		template<template<typename...> typename X, typename... Y> struct is_instance<X, X<Y...>> : public std::true_type {
-			using arguments = tc::type::list<Y...>;
-		};
-		
-		template<template<typename, bool> typename X, typename T> struct is_instance1 : public std::false_type {};
-		template<template<typename, bool> typename X, typename T> struct is_instance1<X, T const> : public is_instance1<X, T> {};
-		template<template<typename, bool> typename X, typename T> struct is_instance1<X, T volatile> : public is_instance1<X, T> {};
-		template<template<typename, bool> typename X, typename T> struct is_instance1<X, T const volatile> : public is_instance1<X, T> {};
-		template<template<typename, bool> typename X, typename Y, bool b> struct is_instance1<X, X<Y,b>> : public std::true_type {
-			using first_argument = Y;
-			static constexpr auto second_argument = b;
-		};
-
-		template<template<typename, typename, bool> typename X, typename T> struct is_instance2 : public std::false_type {};
-		template<template<typename, typename, bool> typename X, typename T> struct is_instance2<X, T const> : public is_instance2<X, T> {};
-		template<template<typename, typename, bool> typename X, typename T> struct is_instance2<X, T volatile> : public is_instance2<X, T> {};
-		template<template<typename, typename, bool> typename X, typename T> struct is_instance2<X, T const volatile> : public is_instance2<X, T> {};
-		template<template<typename, typename, bool> typename X, typename Y1, typename Y2, bool b> struct is_instance2<X, X<Y1,Y2,b>> : public std::true_type {
-			using first_argument = Y1;
-			using second_argument = Y2;
-			static constexpr auto third_argument = b;
-		};
-
-		template<template<bool, typename...> typename X, typename T> struct is_instance_b : std::false_type {};
-		template<template<bool, typename...> typename X, bool b, typename... Y> struct is_instance_b<X, X<b, Y...>> : std::true_type {
-			static constexpr auto first_argument = b;
-			using arguments = tc::type::list<Y...>;
-		};
-	}
-	using no_adl::is_instance;
-	using no_adl::is_instance1;
-	using no_adl::is_instance2;
-	template<template<bool, typename...> typename X, typename T>
-	using is_instance_b = no_adl::is_instance_b<X, std::remove_cv_t<T>>;
-
-	namespace no_adl {
-		template<template<typename...> typename Template, typename... Args>
-		struct is_instance_or_derived_found : std::true_type {
-			using base_instance = Template<Args...>;
-			using arguments = tc::type::list<Args...>;
-		};
-
-		template<template<typename...> typename Template>
-		struct is_instance_or_derived_detector final {
-			template<typename... Args>
-			static is_instance_or_derived_found<Template, Args...> detector(Template<Args...>*);
-
-			static std::false_type detector(...);
-		};
-
-		template<template<typename...> typename Template, typename T>
-#ifdef _MSC_VER // MSVC has problems with decltype in some contexts. The base class list is usually fine.
-		struct is_instance_or_derived :
-#else
-		using is_instance_or_derived =
-#endif
-			decltype(
-				is_instance_or_derived_detector<Template>::detector(
-					std::declval<tc::remove_cvref_t<T>*>()
-				)
-			)
-#ifdef _MSC_VER
-		{}
-#endif
-		;
-	}
-	using no_adl::is_instance_or_derived;
-
-	/////////////////////////////////////////////
-	// apply_cvref
-
-	template<typename Dst, typename Src>
-	struct apply_cvref {
-		static_assert( std::is_same< Src, tc::remove_cvref_t<Src> >::value && !std::is_reference<Src>::value, "Src must not be cv-qualified. Check if a template specialization of apply_cvref is missing." );
-		using type = Dst;
-	};
-
-	#pragma push_macro("APPLY_CVREF_IMPL")
-	#define APPLY_CVREF_IMPL(cvref) \
-	template<typename Dst, typename Src> \
-	struct apply_cvref<Dst, Src cvref> { \
-		using type = Dst cvref; \
-	};
-
-	APPLY_CVREF_IMPL(&)
-	APPLY_CVREF_IMPL(&&)
-	APPLY_CVREF_IMPL(const&)
-	APPLY_CVREF_IMPL(const&&)
-	APPLY_CVREF_IMPL(const)
-	APPLY_CVREF_IMPL(volatile&)
-	APPLY_CVREF_IMPL(volatile&&)
-	APPLY_CVREF_IMPL(volatile)
-	APPLY_CVREF_IMPL(volatile const&)
-	APPLY_CVREF_IMPL(volatile const&&)
-	APPLY_CVREF_IMPL(volatile const)
-
-	#pragma pop_macro("APPLY_CVREF_IMPL")
-
-	template< typename Dst, typename Src >
-	using apply_cvref_t = typename apply_cvref<Dst, Src>::type;
 
 	namespace no_adl {
 		template<typename F>
