@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        config: [release, debug]
+
+        include:
+          - config: release
+            cpp_flags: -O3
+          - config: debug
+            cpp_flags: -g -O0 -D_DEBUG
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: get boost library
+        run: sudo apt-get install libboost-dev
+
+      - name: compile example
+        run: clang++ range.example.cpp -std=c++2a ${{matrix.cpp_flags}} -o example
+
+      - name: run example
+        run: ./example

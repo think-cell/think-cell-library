@@ -1,3 +1,5 @@
+![CI](https://github.com/think-cell/range/workflows/CI/badge.svg)
+
 think-cell public library
 =========================
 
