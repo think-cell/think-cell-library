@@ -1,8 +1,12 @@
-name: CI
+name: macos-10.15
 
 on:
   push:
+    branches:
+      - main
   pull_request:
+    branches:
+      - main
 
 jobs:
   build:
@@ -17,16 +21,16 @@ jobs:
           - config: debug
             cpp_flags: -g -O0 -D_DEBUG
 
-    runs-on: ubuntu-latest
+    runs-on: macos-10.15
 
     steps:
       - uses: actions/checkout@v2
 
       - name: get boost library
-        run: sudo apt-get install libboost-dev
+        run: brew install boost
 
       - name: compile example
-        run: clang++ range.example.cpp -std=c++2a ${{matrix.cpp_flags}} -o example
+        run: clang++ range.example.cpp -std=c++2a ${{matrix.cpp_flags}} -o example -v
 
       - name: run example
         run: ./example

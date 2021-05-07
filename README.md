@@ -1,4 +1,6 @@
-![CI](https://github.com/think-cell/range/workflows/CI/badge.svg)
+![ubuntu-20.04](https://github.com/think-cell/range/workflows/ubuntu-20.04/badge.svg?branch=main)
+![macos-10.15](https://github.com/think-cell/range/workflows/macos-10.15/badge.svg?branch=main)
+
 
 think-cell public library
 =========================
@@ -31,7 +33,7 @@ You need to have boost installed (we tested with [1.75.0](https://www.boost.org/
 ##### Visual C++ 19.28 (Visual Studio 2019 16.9)
 * `/std:c++latest`
 
-##### clang Apple LLVM 12.0.0 (Xcode 12.0)
+##### clang (*10.0.0* and *Apple LLVM 12.0.0*)
 * `-std=c++2a`
 
 `range.example.cpp` provides a good entry point to get started quickly. If you want to see more examples, there are some unit tests in `tc/*.t.cpp`.
