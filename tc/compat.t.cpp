@@ -1,14 +1,19 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2021 think-cell Software GmbH
+// Copyright (C) 2016-2022 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
-#include "range.h"
-#include "container.h" // tc::vector
-#include "range.t.h"
+#include "base/assert_defs.h"
+#include "unittest.h"
+#include "container/container.h" // tc::vector
+#include "container/insert.h"
+#include "range/filter_adaptor.h"
+
+
+#include <array>
 
 MODIFY_WARNINGS_BEGIN(((disable)(4018)))
 #include <boost/range/category.hpp>
@@ -22,7 +27,7 @@ namespace lookup {
 namespace {
 	using HasStdBegin = tc::vector<int>;
 	using HasNoBegin = lookup::NoBegin;
-	using HasBoostBegin = boost::iterator_range< boost::range_iterator<std::array<unsigned long,1> const>::type >;
+	using HasBoostBegin = boost::iterator_range< tc::iterator_t<std::array<unsigned long,1> const> >;
 
 	STATIC_ASSERT(tc::is_range_with_iterators<HasStdBegin>::value);
 	STATIC_ASSERT(tc::is_range_with_iterators<HasBoostBegin>::value);
@@ -32,7 +37,6 @@ namespace {
 		template <typename T>
 		struct wrapped final {
 			explicit wrapped(T const& t) noexcept : m_t(t) {}
-			wrapped(wrapped<T> const& t) noexcept : m_t(t.m_t) {}
 			T getT() const& noexcept { return m_t; }
 
 			T m_t;
@@ -92,7 +96,7 @@ UNITTESTDEF( boost_iterator_range_compat ) {
 	auto mutable_range = boost::make_iterator_range(v); TEST_RANGE_LENGTH(mutable_range, 8);
 	TEST_RANGE_EQUAL(original, mutable_range);
 
-	boost::iterator_range< boost::range_iterator<std::array<unsigned long,1> const>::type > const baul_r = boost::make_iterator_range(baul);
+	boost::iterator_range< tc::iterator_t<std::array<unsigned long,1> const> > const baul_r = boost::make_iterator_range(baul);
 
 	STATIC_ASSERT(tc::is_range_with_iterators<decltype(baul)>::value);
 

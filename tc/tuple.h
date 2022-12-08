@@ -1,33 +1,52 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2021 think-cell Software GmbH
+// Copyright (C) 2016-2022 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "invoke.h"
+#include "base/invoke.h"
+#include "base/tc_move.h"
 
 namespace tc {
 	// std::tuple from Microsofts STL is using a recursive implementation which is very slow.
 	// We use the same technique to implement tuple as libc++, but omit all constructors
 	// (std::tuple has 18 constructors and 14 are conditionally explicit) and use an almost
 	// trivial get implementation (at the expense of not being able to do the empty base optimization).
-	namespace tuple_adl {
-		// tc::tuple must not derive from T, because that would make tc::tuple<T> convertible to T.
-		// Even private inheritance is not a viable option, because these conversions are still considered during
-		// overload resolution and cause unexpected template instantiations.
-		// The C++20 [[no_unique_address]] attribute will enable the empty base optimization for this implementation.
+	namespace tuple_member_adl {
+		template<std::size_t n, typename T, bool bEmpty = tc::is_empty<T>::value>
+		struct tuple_member;
+
 		template<std::size_t n, typename T>
-		struct tuple_member { T m_t; };
+		struct tuple_member<n, T, /*bEmpty*/false> { T m_t; };
+
+		template<std::size_t n, typename T>
+		struct TC_EMPTY_BASES tuple_member<n, T, /*bEmpty*/true> {
+			tuple_member() = default;
+			constexpr tuple_member(T) noexcept {}
+		};
+
+		template<std::size_t n, typename T>
+		struct tuple_member<n, T&, /*bEmpty*/false> {
+			T& m_t;
+
+			constexpr tuple_member(T& t) noexcept : m_t(t) {}
+			constexpr tuple_member(tuple_member const&) noexcept = default;
+			constexpr void operator=(tuple_member const& src) /*no &*/ noexcept requires std::is_assignable<T&, T&>::value {
+				m_t = src.m_t;
+			}
+		};
+
+		// Do not provide tuple_member<n, T&&>::operator=(tuple_member &&/const&) for now, i.e., they are implicitly deleted.
 
 		// Structured bindings use adl lookup
 #pragma push_macro("GET_IMPL")
 #define GET_IMPL(param1, param2, cvref) \
 		template<param1, param2> \
-		[[nodiscard]] constexpr auto get(tuple_member<n, T> cvref elem) noexcept -> T cvref { \
+		[[nodiscard]] constexpr auto get(tuple_member<n, T, /*bEmpty*/false> cvref elem) noexcept -> T cvref { \
 			return static_cast<T cvref>(elem.m_t); \
 		}
 
@@ -39,10 +58,14 @@ namespace tc {
 		GET_IMPL(typename T, std::size_t n, &&)
 		GET_IMPL(typename T, std::size_t n, const&)
 		GET_IMPL(typename T, std::size_t n, const&&)
-		// no volatile overloads, like std::get
+		// no volatile overloads, like std::get(std::tuple)
 #pragma pop_macro("GET_IMPL")
+
+		template<std::size_t n, typename T>
+		constexpr T get(tuple_member<n, T, /*bEmpty*/true>) noexcept { return {}; }
+		template<typename T, std::size_t n>
+		constexpr T get(tuple_member<n, T, /*bEmpty*/true>) noexcept { return {}; }
 	}
-	using tuple_adl::get;
 
 	namespace tuple_adl {
 		template<typename IndexSeq, typename... T>
@@ -59,22 +82,20 @@ namespace tc {
 		};
 
 		template<std::size_t... n, typename... T>
-		struct tc_tuple_impl<std::index_sequence<n...>, T...> : tuple_member<n, T>... {
+		struct tc_tuple_impl<std::index_sequence<n...>, T...> : tuple_member_adl::tuple_member<n, T>... {
 			// We use std::remove_reference_t<Tuple>::tc_tuple_impl::size to restrict the argument Tuple&& to be tc::tuple in overloads found via adl.
 			static constexpr std::size_t size = sizeof...(T);
 
-			template<ENABLE_SFINAE, typename Src, std::enable_if_t<std::tuple_size<tc::remove_cvref_t<Src>>::value == sizeof...(T)>* = nullptr>
+			template<ENABLE_SFINAE, typename Src> requires (std::tuple_size<std::remove_cvref_t<Src>>::value == sizeof...(T))
 			constexpr auto/*=void, returning tuple& may turn xvalue into lvalue*/ operator=(Src&& src) /*no &*/ return_decltype_MAYTHROW(
-				(void(tc::get<n>(*SFINAE_VALUE(this)) = /*adl*/get<n>(std::forward<Src>(src))), ...) // assignment MAYTHROW
+				(void(tc::get<n>(*SFINAE_VALUE(this)) = tc::get<n>(std::forward<Src>(src))), ...) // assignment MAYTHROW
 			)
 
 #pragma push_macro("DEFINE_CONVERSION_OPERATOR")
 #define DEFINE_CONVERSION_OPERATOR(cvref) \
-			template<typename... U, std::enable_if_t< \
-				std::conjunction<tc::is_safely_convertible<T cvref, U>...>::value \
-			>* = nullptr> \
-			operator tuple<U...>() cvref noexcept(std::conjunction<std::is_nothrow_constructible<U, T cvref>...>::value) { \
-				return {{ {{tc::get<n>(static_cast<tc_tuple_impl cvref>(*this))}}... }}; \
+			template<typename... U> requires (tc::is_safely_convertible<T cvref, U>::value && ...) \
+			constexpr operator tuple<U...>() cvref noexcept(std::conjunction<std::is_nothrow_constructible<U, T cvref>...>::value) { \
+				return {{ {tc::get<n>(static_cast<tc_tuple_impl cvref>(*this))}... }}; \
 			}
 
 			DEFINE_CONVERSION_OPERATOR(&)
@@ -87,11 +108,6 @@ namespace tc {
 		template<std::size_t... n, typename... T, typename... U>
 		[[nodiscard]] constexpr bool operator==(tc_tuple_impl<std::index_sequence<n...>, T...> const& lhs, tc_tuple_impl<std::index_sequence<n...>, U...> const& rhs) noexcept {
 			return ((tc::get<n>(lhs) == tc::get<n>(rhs)) && ...);
-		}
-
-		template<typename IndexSeq, typename... T, typename... U>
-		[[nodiscard]] constexpr bool operator!=(tc_tuple_impl<IndexSeq, T...> const& lhs, tc_tuple_impl<IndexSeq, U...> const& rhs) noexcept {
-			return !(lhs == rhs);
 		}
 
 		template<std::size_t... n, typename... T>
@@ -111,34 +127,23 @@ namespace tc {
 	}
 	using tuple_adl::tuple;
 
-	// Hook tc::invoke
-	namespace invoke_no_adl {
-		template<typename ArgTuple, typename... Elems>
-		struct expanded<ArgTuple, tc::tuple<Elems...>> final {
-			using arguments = tc::type::list<tc::apply_cvref_t<Elems, ArgTuple>...>;
-
-			template<std::size_t I>
-			static constexpr decltype(auto) select(ArgTuple&& arg) noexcept {
-				return tc::get<I>(std::forward<ArgTuple>(arg));
-			}
-		};
-	}
+	template<typename T>
+	using unwrap_ref_decay_t = typename std::unwrap_reference<tc::decay_t<T>>::type;
 
 	// Provide supporting functions that come with std::tuple.
 	template<typename... T>
-	[[nodiscard]] constexpr tc::tuple<tc::decay_t<T>...> make_tuple(T&&... t) MAYTHROW {
-		// std::make_tuple uses std::decay_t + std::reference_wrapper<T> to T&
-		return {{ {T{std::forward<T>(t)}}... }};
+	[[nodiscard]] constexpr tc::tuple<tc::unwrap_ref_decay_t<T>...> make_tuple(T&&... t) MAYTHROW {
+		return {{ {tc::unwrap_ref_decay_t<T>(std::forward<T>(t))}... }};
 	}
 
 	template<typename... T>
 	[[nodiscard]] constexpr tc::tuple<T&&...> forward_as_tuple(T&&... t) noexcept {
-		return {{ {{std::forward<T>(t)}}... }};
+		return {{ {std::forward<T>(t)}... }};
 	}
 
 	template<typename... T>
 	[[nodiscard]] constexpr tc::tuple<T&...> tie(T&... t) noexcept {
-		return {{ {{t}}... }};
+		return {{ {t}... }};
 	}
 
 	template<typename F, typename... Tuple>
@@ -174,12 +179,12 @@ namespace tc {
 
 	namespace tuple_detail {
 		template<std::size_t I, typename... Tuple>
-		auto zip_get(Tuple&&... tuple) noexcept {
+		constexpr auto zip_get(Tuple&&... tuple) noexcept {
 			return tc::forward_as_tuple(tc::get<I>(std::forward<Tuple>(tuple))...);
 		}
 
 		template<std::size_t... I, typename... Tuple>
-		auto zip_impl(std::index_sequence<I...>, Tuple&&... tuple) noexcept {
+		constexpr auto zip_impl(std::index_sequence<I...>, Tuple&&... tuple) noexcept {
 			return tc::make_tuple(
 				tuple_detail::zip_get<I>(std::forward<Tuple>(tuple)...)...
 			);
@@ -200,21 +205,17 @@ namespace tc {
 
 	namespace tuple_detail {
 		template<std::size_t n, typename T>
-		T std_tuple_element_impl(tuple_adl::tuple_member<n, T> const&); // declaration only
+		T std_tuple_element_impl(tuple_member_adl::tuple_member<n, T> const&); // declaration only
 	}
 }
 
 namespace std {
 	// Structured bindings use std::tuple_size and std::tuple_element
 	template<typename... T>
-	struct tuple_size<tc::tuple<T...>> : INTEGRAL_CONSTANT(sizeof...(T)) {};
+	struct tuple_size<tc::tuple<T...>> : tc::constant<sizeof...(T)> {};
 
 	template<std::size_t n, typename... T>
 	struct tuple_element<n, tc::tuple<T...>> {
 		using type = decltype(tc::tuple_detail::std_tuple_element_impl<n>(std::declval<tc::tuple<T...>>()));
 	};
 }
-
-// Enable unqualified get<...> for tc::tuple and std::pair in C++17. The correct overload is found via ADL.
-// Needed in generic context where both can appear.
-template<typename...> void get(tc::define_fn_dummy_t) = delete;

@@ -1,14 +1,16 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2021 think-cell Software GmbH
+// Copyright (C) 2016-2022 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
-#include "range.h"
-#include "container.h" // tc::vector
-#include "range.t.h"
+#include "base/assert_defs.h"
+#include "unittest.h"
+#include "container/container.h" // tc::vector
+#include "range/filter_adaptor.h"
+#include "range/transform_adaptor.h"
 
 namespace {
 	static_assert(!tc::is_range_with_iterators<int>::value, "has..._iterator reports that int has an iterator");
@@ -48,8 +50,8 @@ UNITTESTDEF( filter_const_filter_test ) {
 
 	auto fr = tc::filter(v, [](int const i) noexcept { return i % 2 == 0; });
 
-	boost::ignore_unused( tc::filter(tc::as_const(fr), [](int const i) noexcept { return i % 2 == 0; }) );
-	boost::ignore_unused( tc::filter(fr, [](int const i) noexcept { return i % 2 == 0; }) );
+	tc::discard( tc::filter(tc::as_const(fr), [](int const i) noexcept { return i % 2 == 0; }) );
+	tc::discard( tc::filter(fr, [](int const i) noexcept { return i % 2 == 0; }) );
 }
 
 UNITTESTDEF( filter_filter_const_test ) {
@@ -58,9 +60,9 @@ UNITTESTDEF( filter_filter_const_test ) {
 
 	auto frc = tc::filter(tc::as_const(v), [](int const i) noexcept { return i % 2 == 0; });
 
-	boost::ignore_unused( tc::filter(frc, [](int const i) noexcept { return i % 2 == 0; }) );
-	boost::ignore_unused( tc::filter(tc::as_const(frc), [](int const i) noexcept { return i % 2 == 0; }) );
-	boost::ignore_unused( tc::filter(tc::filter(tc::as_const(v), [](int const i) noexcept { return i % 2 == 0; }), [](int const i) noexcept { return i % 2 == 0; }) );
+	tc::discard( tc::filter(frc, [](int const i) noexcept { return i % 2 == 0; }) );
+	tc::discard( tc::filter(tc::as_const(frc), [](int const i) noexcept { return i % 2 == 0; }) );
+	tc::discard( tc::filter(tc::filter(tc::as_const(v), [](int const i) noexcept { return i % 2 == 0; }), [](int const i) noexcept { return i % 2 == 0; }) );
 }
 
 UNITTESTDEF( transform_const_transform_test ) {
@@ -69,8 +71,8 @@ UNITTESTDEF( transform_const_transform_test ) {
 
 	auto tr = tc::transform(v, [](int const i) noexcept { return i * 2; });
 
-	boost::ignore_unused( tc::transform(tc::as_const(tr), [](int const i) noexcept { return i * 2; }) );
-	boost::ignore_unused( tc::transform(tr, [](int const i) noexcept { return i * 2; }) );
+	tc::discard( tc::transform(tc::as_const(tr), [](int const i) noexcept { return i * 2; }) );
+	tc::discard( tc::transform(tr, [](int const i) noexcept { return i * 2; }) );
 }
 
 UNITTESTDEF( transform_transform_const_test ) {
@@ -79,8 +81,8 @@ UNITTESTDEF( transform_transform_const_test ) {
 
 	auto trc = tc::transform(tc::as_const(v), [](int const i) noexcept { return i * 2; });
 
-	boost::ignore_unused( tc::transform(trc, [](int const i) noexcept { return i * 2; }) );
-	boost::ignore_unused( tc::transform(tc::transform(tc::as_const(v), [](int const i) noexcept { return i * 2; }), [](int const i) noexcept { return i * 2; }) );
+	tc::discard( tc::transform(trc, [](int const i) noexcept { return i * 2; }) );
+	tc::discard( tc::transform(tc::transform(tc::as_const(v), [](int const i) noexcept { return i * 2; }), [](int const i) noexcept { return i * 2; }) );
 
 }
 
@@ -93,8 +95,8 @@ UNITTESTDEF( transform_const_filter_test ) {
 
 	auto tr = tc::filter(v, [](int const i) noexcept { return i % 2 == 0; });
 
-	boost::ignore_unused( tc::transform(tc::as_const(tr), [](int const i) noexcept { return i * 2; }) );
-	boost::ignore_unused( tc::transform(tr, [](int const i) noexcept { return i * 2; }) );
+	tc::discard( tc::transform(tc::as_const(tr), [](int const i) noexcept { return i * 2; }) );
+	tc::discard( tc::transform(tr, [](int const i) noexcept { return i * 2; }) );
 }
 
 //-----------------------------------------------------------------------------------------------------------------------------

@@ -1,18 +1,19 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2021 think-cell Software GmbH
+// Copyright (C) 2016-2022 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
+#include "base/assert_defs.h"
+#include "unittest.h"
 #include "interval.h"
+#include "algorithm/round.h"
 
-#include "range.t.h"
 #if TC_PRIVATE
 #include "Library/HeaderOnly/chrono.h"
 #endif
-#include "round.h"
 
 STATICASSERTEQUAL( sizeof(tc::interval<int>), sizeof(int) * 2 );
 
@@ -20,7 +21,7 @@ UNITTESTDEF(interval_center) {
 
 	{
 		auto TestCenterContained=[](auto low, auto high, auto center) noexcept {
-			auto const intvl = tc::make_interval(std::forward<decltype(low)>(low), std::forward<decltype(high)>(high));
+			auto const intvl = tc::make_interval(tc_move_if_owned(low), tc_move_if_owned(high));
 			_ASSERTEQUAL( intvl.midpoint(), center );
 			_ASSERT( intvl.empty() || intvl.contains(intvl.midpoint()) ); // The empty interval contains nothing, not even its center
 		};
@@ -157,4 +158,53 @@ UNITTESTDEF(linear_invert) {
 
 UNITTESTDEF(minmax_interval) {
 	_ASSERTEQUAL(tc::minmax_interval(tc::vector<int>{1,2,3}), tc::make_interval(1,3));
+}
+
+UNITTESTDEF(linear_interval_transform) {
+	auto const Test = [](auto srcLo, auto srcHi, auto dstLo, auto dstHi, auto... pairsrcdst) noexcept {
+		tc::linear_interval_transform const intvltrans(tc::interval(srcLo, srcHi), tc::interval(dstLo, dstHi));
+		tc::for_each(
+			tc::forward_as_tuple(
+				// check exactness
+				std::make_pair(srcLo, dstLo),
+				std::make_pair(srcHi, dstHi),
+				pairsrcdst...
+			),
+			[&](auto const src, auto const dst) noexcept {
+				_ASSERTEQUAL( intvltrans(src), dst );
+				// check monotonicity
+				if ( srcLo != srcHi ) {
+					if( dstLo == dstHi ) {
+						_ASSERTEQUAL( intvltrans(modified(src, tc::nextafter_inplace(_))), dst );
+						_ASSERTEQUAL( intvltrans(modified(src, tc::nextbefore_inplace(_))), dst );
+					} else if( srcLo < srcHi == dstLo < dstHi ) {
+						_ASSERT( dst <= intvltrans(modified(src, tc::nextafter_inplace(_))) );
+						_ASSERT( intvltrans(modified(src, tc::nextbefore_inplace(_))) <= dst );
+					} else {
+						_ASSERT( intvltrans(modified(src, tc::nextafter_inplace(_))) <= dst );
+						_ASSERT( dst <= intvltrans(modified(src, tc::nextbefore_inplace(_))) );
+					}
+				}
+			}
+		);
+	};
+
+	// int -> int
+	Test(0, 0, 0, 0);
+	Test(0, 3, 1, 1);
+	Test(0, 3, -100, -200, std::make_pair(-1, -67), std::make_pair(1, -133), std::make_pair(2, -167), std::make_pair(4, -233));
+
+	// int -> double
+	Test(0, 3, 1.0, 1.0);
+	Test(0, 3, 0.0, 1.0, std::make_pair(1, tc::fdiv(1, 3)), std::make_pair(2, 1 - tc::fdiv(1, 3)));
+	Test(0, 4, -1.0, -2.0, std::make_pair(-1, -0.75), std::make_pair(1, -1.25), std::make_pair(2, -1.5), std::make_pair(3, -1.75), std::make_pair(5, -2.25));
+
+	// double -> int
+	Test(0.0, 1.0, 0, 0);
+	Test(0.0, 1.0, 0, 4, std::make_pair(0.25, 1), std::make_pair(0.5, 2), std::make_pair(0.75, 3));
+
+	// double -> double
+	Test(0.0, 1.0, 0.0, 0.0, std::make_pair(1e308, 0.0));
+	Test(-1.0, 1.0, -1.0, -2.0, std::make_pair(-0.5, -1.25), std::make_pair(0.0, -1.5), std::make_pair(0.5, -1.75), std::make_pair(2.0, -2.5), std::make_pair(3.0, -3));
+	Test(1e-20, 1e20, 1e30, -1e-20);
 }

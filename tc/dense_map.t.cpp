@@ -1,17 +1,18 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2021 think-cell Software GmbH
+// Copyright (C) 2016-2022 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
-#include "range.t.h"
+#include "base/assert_defs.h"
+#include "unittest.h"
 #include "dense_map.h"
 #include "enumset.h"
 
-static_assert(!std::is_convertible<tc::array<int,10>, tc::array<int, 9>>::value);
-static_assert(!std::is_convertible<tc::array<int,9>, tc::array<int, 10>>::value);
+static_assert(!std::is_convertible<tc::array<int&,10>, tc::array<int&, 9>>::value);
+static_assert(!std::is_convertible<tc::array<int&,9>, tc::array<int&, 10>>::value);
 
 DEFINE_ENUM(
 	MyEnum,
@@ -39,11 +40,7 @@ UNITTESTDEF(dense_map_with_non_moveable_type) {
 		"Is  move constructible"
 	);
 
-	tc::array<
-		tc::array<NonCopyNonMoveable,2>,
-		2
-	> asanoncopy(tc::fill_tag, tc::fill_tag, 17);
-
+	[[maybe_unused]] auto const asanoncopy = tc::explicit_cast<std::array<std::array<NonCopyNonMoveable, 2>, 2>>(tc::fill_tag, tc::fill_tag, 17);
 
 	tc::dense_map<
 		MyEnum,
@@ -113,4 +110,51 @@ UNITTESTDEF(test_dense_map_transform_move) {
 		return n;
 	});
 	_ASSERT(tc::equal(dm, tc::iota(1, 3)));
+}
+
+UNITTESTDEF(test_make_array_from_range) {
+	constexpr int an0[] = {1, 2};
+	constexpr auto an1 = tc::make_array(an0);
+	static_assert(tc::equal(an0, an1));
+	constexpr int an2[] ={1, 2, 3, 4, 5};
+	constexpr auto an3 = tc::make_array(an2);
+	static_assert(tc::equal(an2, an3));
+	constexpr int an4[] ={1};
+	constexpr auto an5 = tc::make_array(an4);
+	static_assert(tc::equal(an4, an5));
+
+	static_assert(tc::equal(an0, tc::make_array<2>(tc::make_generator_range(an0))));
+}
+
+UNITTESTDEF(test_dense_map_with_ordering_key) {
+	constexpr tc::dense_map<std::strong_ordering, int> dm1(1,2,3);
+	static_assert(dm1[std::strong_ordering::less] == 1);
+	static_assert(dm1[std::strong_ordering::equivalent] == 2);
+	static_assert(dm1[std::strong_ordering::equal] == 2);
+	static_assert(dm1[std::strong_ordering::greater] == 3);
+	static_assert(tc::equal(dm1, tc::iota(1, 4)));
+
+	constexpr tc::dense_map<std::weak_ordering, int> dm2(1,2,3);
+	static_assert(dm2[std::weak_ordering::less] == 1);
+	static_assert(dm2[std::weak_ordering::equivalent] == 2);
+	static_assert(dm2[std::weak_ordering::greater] == 3);
+	static_assert(tc::equal(dm2, tc::iota(1, 4)));
+
+	constexpr tc::dense_map<std::partial_ordering, int> dm3(1,2,3,4);
+	static_assert(dm3[std::partial_ordering::less] == 1);
+	static_assert(dm3[std::partial_ordering::equivalent] == 2);
+	static_assert(dm3[std::partial_ordering::greater] == 3);
+	static_assert(dm3[std::partial_ordering::unordered] == 4);
+	static_assert(tc::equal(dm3, tc::iota(1, 5)));
+}
+
+UNITTESTDEF(dense_map_tuple) {
+	using T = tc::tuple<bool, MyEnum>;
+	static constexpr tc::dense_map<T, int> dm(1,2,3,4);
+	_ASSERTEQUAL((dm[T{false, myenumONE}]), 1);
+	_ASSERTEQUAL((dm[T{false, myenumTWO}]), 2);
+	_ASSERTEQUAL((dm[T{true, myenumONE}]), 3);
+	_ASSERTEQUAL((dm[T{true, myenumTWO}]), 4);
+	static_assert(tc::equal(dm, tc::iota(1, 5)));
+	_ASSERT(tc::equal(tc::all_values<T>(), tc::make_array(tc::aggregate_tag, T{false, myenumONE}, T{false, myenumTWO}, T{true, myenumONE}, T{true, myenumTWO})));
 }

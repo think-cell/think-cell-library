@@ -1,35 +1,67 @@
 <?xml version="1.0" encoding="utf-8"?> 
 <AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+	<Type Name="tc::array_adl::array&lt;*,*&gt;">
+		<Expand>
+			<IndexListItems>
+				<Size>$T2</Size>
+				<ValueNode>*m_a[$i]</ValueNode>
+			</IndexListItems>
+		</Expand>
+	</Type>
+
 	<Type Name="tc::dense_map_adl::dense_map&lt;*,*&gt;">
 		<DisplayString>dense_map</DisplayString>
 		<Expand>
-			<ExpandedItem>m_a.m_a</ExpandedItem>
+			<CustomListItems Condition="m_a.m_a[0]" Optional="true">
+				<Variable Name="index" InitialValue="0" />
+				<Size>sizeof(m_a)/sizeof(void*)</Size>
+				<Loop>
+					<Item Name="[{($T1)((int)tc::no_adl::all_values&lt;$T1&gt;::_natvis_begin + index),en}]">m_a[index]</Item>
+					<Exec>++index</Exec>
+				</Loop>
+			</CustomListItems>
+			<CustomListItems>
+				<Variable Name="index" InitialValue="0" />
+				<Size>sizeof(m_a)/sizeof(m_a[0])</Size>
+				<Loop>
+					<Item Name="[{($T1)((int)tc::no_adl::all_values&lt;$T1&gt;::_natvis_begin + index),en}]">m_a[index]</Item>
+					<Exec>++index</Exec>
+				</Loop>
+			</CustomListItems>
+		</Expand>
+	</Type>
+
+	<Type Name="tc::interval_adl::interval&lt;*&gt;">
+		<DisplayString>interval ({m_a[0]}, {m_a[1]})</DisplayString>
+		<Expand>
+			<Item Name="begin">m_a[0]</Item>
+			<Item Name="end">m_a[1]</Item>
 		</Expand>
 	</Type>
 
 	<Type Name="tc::geo::vec_adl::vec&lt;*&gt;">
-		<DisplayString>vec ({m_a.m_a[0]}, {m_a.m_a[1]})</DisplayString>
+		<DisplayString>vec ({m_a[0]}, {m_a[1]})</DisplayString>
 		<Expand>
-			<Item Name="x">m_a.m_a[0]</Item>
-			<Item Name="y">m_a.m_a[1]</Item>
+			<Item Name="x">m_a[0]</Item>
+			<Item Name="y">m_a[1]</Item>
 		</Expand>
 	</Type>
 
 	<Type Name="tc::geo::point_adl::point&lt;*&gt;">
-		<DisplayString>point ({m_a.m_a[0]}, {m_a.m_a[1]})</DisplayString>
+		<DisplayString>point ({m_a[0]}, {m_a[1]})</DisplayString>
 		<Expand>
-			<Item Name="x">m_a.m_a[0]</Item>
-			<Item Name="y">m_a.m_a[1]</Item>
+			<Item Name="x">m_a[0]</Item>
+			<Item Name="y">m_a[1]</Item>
 		</Expand>
 	</Type>
 
 	<Type Name="tc::geo::rect_adl::rect&lt;*&gt;">
-		<DisplayString>rect ({m_a.m_a[0].m_a.m_a[0]}, {m_a.m_a[1].m_a.m_a[0]})..({m_a.m_a[0].m_a.m_a[1]}, {m_a.m_a[1].m_a.m_a[1]}) [{m_a.m_a[0].m_a.m_a[1] - m_a.m_a[0].m_a.m_a[0]}x{m_a.m_a[1].m_a.m_a[1] - m_a.m_a[1].m_a.m_a[0]}] </DisplayString>
+		<DisplayString>rect ({m_a[0].m_a[0]}, {m_a[1].m_a[0]})..({m_a[0].m_a[1]}, {m_a[1].m_a[1]}) [{m_a[0].m_a[1] - m_a[0].m_a[0]}x{m_a[1].m_a[1] - m_a[1].m_a[0]}] </DisplayString>
 		<Expand>
-			<Item Name="left"> m_a.m_a[0].m_a.m_a[0] </Item>
-			<Item Name="top"> m_a.m_a[1].m_a.m_a[0] </Item>
-			<Item Name="right"> m_a.m_a[0].m_a.m_a[1] </Item>
-			<Item Name="bottom"> m_a.m_a[1].m_a.m_a[1] </Item>
+			<Item Name="left"> m_a[0].m_a[0] </Item>
+			<Item Name="top"> m_a[1].m_a[0] </Item>
+			<Item Name="right"> m_a[0].m_a[1] </Item>
+			<Item Name="bottom"> m_a[1].m_a[1] </Item>
 		</Expand>
 	</Type>
 
