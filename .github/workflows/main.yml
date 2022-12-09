@@ -1,0 +1,53 @@
+name: CI
+
+# Controls when the action will run. Triggers the workflow on push or pull request
+# events.
+on:
+  push:
+  pull_request:
+
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+jobs:
+  # This workflow contains a single job called "build"
+  build:
+    # Build on multiple systems: https://docs.github.com/en/actions/configuring-and-managing-workflows/configuring-a-workflow#configuring-a-build-matrix
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-12]
+        config: [release, debug]
+
+        include:
+          - config: release
+            cpp_flags: -O3 -I$GITHUB_WORKSPACE/boost_1_75_0/
+          - config: debug
+            cpp_flags: -g -O0 -D_DEBUG -I$GITHUB_WORKSPACE/boost_1_75_0/
+
+    # The type of runner that the job will run on
+    runs-on: ${{ matrix.os }}
+
+    # Steps represent a sequence of tasks that will be executed as part of the job
+    steps:
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v2
+
+    - name: Setup Boost 1.75.0
+      shell: bash
+      run: |
+        curl -L https://boostorg.jfrog.io/artifactory/main/release/1.75.0/source/boost_1_75_0.zip --output boost_1_75_0.zip
+        unzip -q boost_1_75_0.zip
+
+    - name: Compile with Clang 14
+      run: clang++ range.example.cpp -std=c++2a ${{matrix.cpp_flags}} -o example_clang -v
+
+    - name: Run example
+      run: ./example_clang
+
+    - name: Get GCC 12 
+      run: brew install gcc@12
+
+    - name: Compile with GCC
+      run: g++-12 range.example.cpp -std=c++2b ${{matrix.cpp_flags}} -o example_gcc -v
+
+    - name: Run example
+      run: ./example_gcc
