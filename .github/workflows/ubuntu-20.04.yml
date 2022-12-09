@@ -34,7 +34,7 @@ jobs:
         run: sudo apt-get install libboost-dev
 
       - name: compile example
-        run: gcc-12++ range.example.cpp -std=c++2b ${{matrix.cpp_flags}} -o example -v
+        run: c++ range.example.cpp -std=c++2b ${{matrix.cpp_flags}} -o example -v
 
       - name: run example
         run: ./example
