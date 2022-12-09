@@ -30,7 +30,7 @@ jobs:
     # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
     - uses: actions/checkout@v2
 
-    - name: Setup Boost 1.75.0
+    - name: Setup Boost
       run: brew install boost
 
     - name: Install cmake
@@ -46,7 +46,7 @@ jobs:
       run: cmake --build build
 
     - name: Run tests
-      run: cmake --build build --target tests
+      run: cmake --build build --target test
 
     - name: CMake configure for GCC 12
       run: cmake -S . -B buildgcc -D CMAKE_C_COMPILER=gcc-12 -D CMAKE_CXX_COMPILER=g++-12
@@ -55,4 +55,4 @@ jobs:
       run: cmake --build buildgcc
 
     - name: Run tests
-      run: cmake --build buildgcc --target tests
+      run: cmake --build buildgcc --target test
