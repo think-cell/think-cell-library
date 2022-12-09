@@ -11,6 +11,7 @@
 #include "noncopyable.h"
 #include "has_xxx.h"
 #include "type_traits_fwd.h"
+#include <atomic>
 
 #define tc_inplace(expr) \
 	(expr)=VERIFYINITIALIZED(expr)

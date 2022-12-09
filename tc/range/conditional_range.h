@@ -126,6 +126,7 @@ namespace tc {
 		(aggregate_tag, n, std::forward<FuncRng>(funcrng)...)
 	)
 
+#if defined(__clang__) || defined(_MSC_VER) // gcc internal compiler error
 	template<typename... FuncRng>
 	auto select_range(int n, FuncRng&&... funcrng) return_decltype_xvalue_by_ref_MAYTHROW(
 		tc::select_range_impl(tc::constant<tc::has_common_reference_xvalue_as_ref<decltype(std::forward<FuncRng>(funcrng)())...>>(), n, std::forward<FuncRng>(funcrng)...)
@@ -135,6 +136,7 @@ namespace tc {
 	auto conditional_range(tc::bool_context b, FuncRngTrue&& funcrngTrue, FuncRngFalse&& funcrngFalse) return_decltype_xvalue_by_ref_MAYTHROW(
 		tc::select_range(b ? 0 : 1, std::forward<FuncRngTrue>(funcrngTrue), std::forward<FuncRngFalse>(funcrngFalse))
 	)
+#endif
 
 	template<typename FuncRngTrue, typename FuncRngFalse>
 	constexpr auto conditional_range(tc::constant<true>, FuncRngTrue funcrngTrue, FuncRngFalse&& /*funcrngFalse*/) return_decltype_xvalue_by_ref_MAYTHROW(
@@ -172,6 +174,7 @@ namespace tc {
 		);
 	}
 
+#if defined(__clang__) || defined(_MSC_VER) // gcc internal compiler error
 	namespace switch_range_detail {
 		template<typename Enum, typename FuncRng, std::size_t... I>
 		auto switch_range_impl(Enum const& e, FuncRng&& funcRng, std::index_sequence<I...>) noexcept {
@@ -188,4 +191,5 @@ namespace tc {
 	auto switch_range(Enum const& e, FuncRng&&... funcrng) noexcept {
 		return switch_range_detail::switch_range_impl(e, tc::make_overload(std::forward<FuncRng>(funcrng)...), std::make_index_sequence<tc::constexpr_size<tc::all_values<Enum>>::value>());
 	}
+#endif
 }

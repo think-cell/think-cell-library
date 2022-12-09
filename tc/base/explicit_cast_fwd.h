@@ -11,6 +11,7 @@
 #include "type_traits.h"
 #include "template_func.h"
 #include "return_decltype.h"
+#include <array>
 
 //////////////////////////////////////////////////////////////////
 // generic initialization and assignment between different types

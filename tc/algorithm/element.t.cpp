@@ -8,6 +8,7 @@
 
 #include "element.h"
 #include "../unittest.h"
+#include "../array.h"
 
 namespace {
 	UNITTESTDEF( front ) {

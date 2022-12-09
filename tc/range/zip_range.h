@@ -108,7 +108,9 @@ namespace tc {
 		protected:
 			tc::tuple<tc::range_adaptor_base_range<Rng>...> m_tupleadaptbaserng;
 
-		private:
+#if !defined(__clang__) && !defined(_MSC_VER) // Bug in gcc12
+		public:
+#endif		
 			static constexpr std::size_t generator_index() noexcept {
 				using PureGenerator = tc::type::find_unique_if<tc::type::list<Rng...>, is_range_without_iterators>;
 				if constexpr( PureGenerator::found ) {

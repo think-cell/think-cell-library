@@ -9,6 +9,7 @@
 #include "../base/assert_defs.h"
 #include "../unittest.h"
 #include "take_while.h"
+#include "make_range.h"
 #include "../algorithm/for_each_xxx.h"
 #include "../algorithm/append.h"
 

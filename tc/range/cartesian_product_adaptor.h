@@ -10,6 +10,8 @@
 
 #include "../base/const_forward.h"
 #include "../algorithm/accumulate.h"
+#include "../algorithm/find.h"
+#include "subrange.h"
 
 namespace tc {
 	namespace cartesian_product_adaptor_detail {

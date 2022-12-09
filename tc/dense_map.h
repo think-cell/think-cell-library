@@ -147,7 +147,7 @@ namespace tc {
 #endif
 		template< typename Key, typename Value >
 		struct dense_map {
-			static constexpr tc::all_values<Key> c_rngkey;
+			static constexpr tc::all_values<Key> c_rngkey{};
 		private:
 			template<typename KeyOther, typename ValueOther>
 			friend struct dense_map;

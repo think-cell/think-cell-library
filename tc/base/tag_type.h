@@ -11,6 +11,8 @@
 #include <boost/preprocessor/facilities/is_empty.hpp>
 #include <boost/preprocessor/logical/not.hpp>
 
+#include <type_traits>
+
 #define DERIVE_FROM_BASE_TAG(...) : __VA_ARGS__##_t
 
 #define DEFINE_TAG_TYPE_STRUCT(tag_name, base_tag_name, derivable) \

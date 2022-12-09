@@ -347,16 +347,16 @@ namespace tc {
 
 MODIFY_WARNINGS_END
 
-#ifdef __clang__
+#ifdef _MSC_VER
 
-#define scoped_construct_0(var) tc::scoped_constructor< decltype((var)) > UNIQUE_IDENTIFIER((var));
-#define scoped_construct_1(var, ...) tc::scoped_constructor< decltype((var)) > UNIQUE_IDENTIFIER((var), __VA_ARGS__ );
-
-#define scoped_construct(...) \
-	BOOST_PP_CAT(scoped_construct_, BOOST_PP_GREATER(BOOST_PP_VARIADIC_SIZE(__VA_ARGS__), 1))(__VA_ARGS__)
+# define scoped_construct(var, ...) tc::scoped_constructor< decltype((var)) > UNIQUE_IDENTIFIER((var), __VA_ARGS__ );
 
 #else
 
-#define scoped_construct(var, ...) tc::scoped_constructor< decltype((var)) > UNIQUE_IDENTIFIER((var), __VA_ARGS__ );
+# define scoped_construct_0(var) tc::scoped_constructor< decltype((var)) > UNIQUE_IDENTIFIER((var));
+# define scoped_construct_1(var, ...) tc::scoped_constructor< decltype((var)) > UNIQUE_IDENTIFIER((var), __VA_ARGS__ );
+
+# define scoped_construct(...) \
+	BOOST_PP_CAT(scoped_construct_, BOOST_PP_GREATER(BOOST_PP_VARIADIC_SIZE(__VA_ARGS__), 1))(__VA_ARGS__)
 
 #endif

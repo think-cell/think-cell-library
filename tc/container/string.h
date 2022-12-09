@@ -8,6 +8,7 @@
 
 #pragma once
 #include <string>
+#include "../base/type_traits.h"
 
 namespace tc {
 	namespace no_adl {

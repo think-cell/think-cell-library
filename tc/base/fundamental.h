@@ -14,7 +14,7 @@
 #include <cstdint>
 #include <limits>
 
-#ifndef __clang__
+#ifdef _MSC_VER
 	#define MODIFY_WARNING_HELPER(r, data, subseq) __pragma( warning( BOOST_PP_SEQ_ELEM(0, subseq): BOOST_PP_SEQ_ELEM(1, subseq) ) )
 	#define MODIFY_WARNINGS(seq) BOOST_PP_SEQ_FOR_EACH(MODIFY_WARNING_HELPER, _, seq)
 	#define MODIFY_WARNINGS_BEGIN(seq) \

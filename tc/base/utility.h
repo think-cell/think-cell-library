@@ -87,8 +87,9 @@ namespace tc {
 // get
 
 namespace tc_get_impl_adl { // Outside tc namespace to avoid finding tc::get leading to infinite recursion.
-#ifdef _MSC_VER
+#ifndef __clang__
 	// Suppress unqualified lookup, because of https://developercommunity.visualstudio.com/t/vc-unqualified-lookup-finds-function-in-unrelated/1570914
+	// GCC 12 also crashes here
 	template<typename T> void get() = delete;
 	template<std::size_t I> void get() = delete;
 #endif

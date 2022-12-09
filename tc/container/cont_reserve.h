@@ -13,6 +13,7 @@
 #include "../algorithm/minmax.h"
 #include "../algorithm/empty.h"
 #include "../algorithm/filter_inplace.h"
+#include "../algorithm/element.h"
 
 namespace tc {
 

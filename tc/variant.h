@@ -297,10 +297,7 @@ template<typename... Ts, typename TRhs> requires tc::is_variant_equality_compara
 
 static_assert( std::is_move_constructible< std::variant<int, double, tc::string<char>> >::value );
 static_assert( std::is_move_assignable< std::variant<int, double, tc::string<char>> >::value );
-
-#ifdef __clang__
 static_assert( std::is_nothrow_move_constructible< std::variant<int, double, tc::string<char>> >::value );
-#endif
 
 #define tc_if_holds_else_value(var, val, type, ...) ([&](auto* p) MAYTHROW -> decltype(auto) { \
 	auto const f=[&](auto& _) MAYTHROW -> decltype(auto) { return (__VA_ARGS__); }; \

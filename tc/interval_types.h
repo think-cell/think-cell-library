@@ -10,6 +10,7 @@
 
 #include "base/enum.h"
 #include "base/inplace.h"
+#include "base/modified.h"
 
 //////////////////////////////////////
 // EAlign

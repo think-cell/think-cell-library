@@ -2,56 +2,63 @@
 
 #include "../range/subrange.h"
 #include "../range/filter_adaptor.h"
+#include "../range/iota_range.h"
+#include "../container/container.h"
+#include "empty.h"
+#include "element.h"
+#include "filter_inplace.h"
 
 #include <boost/range/algorithm/heap_algorithm.hpp>
 
 namespace tc {
 	namespace no_adl {
+		
+		template<typename RngRng>
+		using RangeView = decltype(*std::declval<tc::iterator_t<RngRng const&>>());
+
+		template<typename RngRng, bool bHasStashingElement = tc::is_stashing_element<tc::iterator_t<RngRng const&>>::value>
+		struct SIteratorView;
+		
+		template<typename RngRng>
+		struct SIteratorView<RngRng, false> : std::conditional_t<std::is_lvalue_reference<RangeView<RngRng>>::value, tc::copyable, tc::noncopyable>
+		{
+			static_assert( tc::is_index_valid_for_move_constructed_range<RangeView<RngRng>>::value );
+
+			explicit SIteratorView(tc::iterator_t<RngRng const&> const& itrng) noexcept
+				: m_rng(tc::aggregate_tag, *itrng)
+				, m_idx(tc::begin_index(*m_rng))
+			{}
+
+			void increment_index() & noexcept {
+				tc::increment_index(*m_rng, m_idx);
+			}
+
+			bool empty() const& noexcept {
+				return tc::at_end_index(*m_rng, m_idx);
+			}
+
+			auto dereference() const& ->decltype(auto) {
+				return tc::dereference_index(*m_rng, m_idx);
+			}
+		private:
+			tc::reference_or_value<RangeView<RngRng>> m_rng;
+			tc::index_t<std::remove_reference_t<decltype(*m_rng)>> m_idx;
+		};
+
+		template<typename RngRng>
+		struct SIteratorView<RngRng, true> // Stashing iterator
+			: private tc::iterator_t<RngRng const&>
+			, public SIteratorView<RngRng, false>
+		{
+			explicit SIteratorView(tc::iterator_t<RngRng const&> itrng) noexcept
+				: tc::iterator_t<RngRng const&>(tc_move(itrng))
+				, SIteratorView<RngRng, false>(tc::base_cast<tc::iterator_t<RngRng const&>>(*this))
+			{}
+		};
+		
 		template<typename RngRng>
 		struct interleave_ranges_index {
-			template<bool bHasStashingElement = tc::is_stashing_element<tc::iterator_t<RngRng const&>>::value>
-			struct SIteratorView;
-
-			using RangeView = decltype(*std::declval<tc::iterator_t<RngRng const&>>());
-
-			template<>
-			struct SIteratorView<false> : std::conditional_t<std::is_lvalue_reference<RangeView>::value, tc::copyable, tc::noncopyable>
-			{
-				static_assert( tc::is_index_valid_for_move_constructed_range<RangeView>::value );
-
-				explicit SIteratorView(tc::iterator_t<RngRng const&> const& itrng) noexcept
-					: m_rng(tc::aggregate_tag, *itrng)
-					, m_idx(tc::begin_index(*m_rng))
-				{}
-
-				void increment_index() & noexcept {
-					tc::increment_index(*m_rng, m_idx);
-				}
-
-				bool empty() const& noexcept {
-					return tc::at_end_index(*m_rng, m_idx);
-				}
-
-				auto dereference() const& ->decltype(auto) {
-					return tc::dereference_index(*m_rng, m_idx);
-				}
-			private:
-				tc::reference_or_value<RangeView> m_rng;
-				tc::index_t<std::remove_reference_t<decltype(*m_rng)>> m_idx;
-			};
-
-			template<>
-			struct SIteratorView<true> // Stashing iterator
-				: private tc::iterator_t<RngRng const&>
-				, public SIteratorView<false>
-			{
-				explicit SIteratorView(tc::iterator_t<RngRng const&> itrng) noexcept
-					: tc::iterator_t<RngRng const&>(tc_move(itrng))
-					, SIteratorView<false>(tc::base_cast<tc::iterator_t<RngRng const&>>(*this))
-				{}
-			};
-
-			tc::vector<SIteratorView<>> m_vecview;
+			tc::vector<SIteratorView<RngRng>> m_vecview;
 			std::size_t m_nLast;
 
 			static_assert(!tc::is_stashing_element<tc::iterator_t<RngRng const&>>::value || std::is_copy_constructible<tc::iterator_t<RngRng const&>>::value);

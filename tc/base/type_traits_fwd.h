@@ -34,10 +34,10 @@ namespace tc::static_assert_impl {
 		static TC_CONSTEVAL_PCH_WORKAROUND void test() {
 			// assert is inside a function so __FUNCSIG__ can be used to include template parameters in error message
 			static_assert(n1 == n2,
-#ifdef __clang__
-				"values not equal: see template parameters in error log" // __PRETTY_FUNCTION__ is similar to __FUNCSIG__ but is not a string literal
-#else
+#ifdef _MSC_VER
 				"STATICASSERTEQUAL failed: " __FUNCSIG__
+#else
+				"values not equal: see template parameters in error log" // __PRETTY_FUNCTION__ is similar to __FUNCSIG__ but is not a string literal
 #endif
 			);
 		}
@@ -48,7 +48,7 @@ namespace tc::static_assert_impl {
 		static TC_CONSTEVAL_PCH_WORKAROUND void test() {
 			// assert is inside a function so __FUNCSIG__ can be used to include template parameters in error message
 			static_assert(std::is_same<T1, T2>::value
-#ifndef __clang__
+#ifdef _MSC_VER
 				// clang's default message in this case contains the non-matching type parameters
 				, "STATICASSERTSAME failed: " __FUNCSIG__
 #endif
@@ -104,11 +104,9 @@ namespace tc {
 		};
 
 		DECAY_ARRAY_IMPL(BOOST_PP_EMPTY())
-#if defined(__clang__) || 190023725<=_MSC_FULL_VER
 		DECAY_ARRAY_IMPL(const)
 		DECAY_ARRAY_IMPL(volatile)
 		DECAY_ARRAY_IMPL(const volatile)
-#endif
 #pragma pop_macro("DECAY_ARRAY_IMPL")
 
 		template<typename T, bool bPreventSlicing>

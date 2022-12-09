@@ -87,7 +87,7 @@ namespace tc {
 				return *this;
 			}
 
-			template<typename U> requires std::is_same<T, U>::value || is_char_and_interval_is_in_range<U, T, c_tFirst, c_tLast>::value
+			template<typename U> requires std::is_same<T, U>::value || is_char_and_interval_is_in_range<std::remove_cv_t<U>, T, c_tFirst, c_tLast>::value
 			constexpr operator U() const& noexcept {
 				return m_t;
 			}

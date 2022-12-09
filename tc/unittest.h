@@ -119,8 +119,7 @@ namespace tc {
 	}
 
 	template<typename Rng>
-	tc::string<char> dbg_print_rng(Rng&& rng, std::size_t max_elems = 50) noexcept {
-
+	auto dbg_print_rng(Rng&& rng, std::size_t max_elems = 50) noexcept {
 		std::stringstream os;
 		os << "[";
 		for_each(rng, std::ref(tc::as_lvalue(detail::print_elem<std::stringstream>(os, max_elems))) );

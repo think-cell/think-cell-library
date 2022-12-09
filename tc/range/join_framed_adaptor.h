@@ -10,6 +10,7 @@
 
 #include "empty_range.h"
 #include "../algorithm/for_each.h"
+#include "../algorithm/empty.h"
 #include "../base/reference_or_value.h"
 
 namespace tc {

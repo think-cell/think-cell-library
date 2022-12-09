@@ -206,6 +206,7 @@ namespace tc {
 	namespace no_adl {
 		template<typename... F>
 		struct [[nodiscard]] TC_EMPTY_BASES overload : tc::decay_t<F>... {
+			using tc::decay_t<F>::operator()...;
 			constexpr overload(F&&... f) noexcept : tc::decay_t<F>(std::forward<F>(f))... {}
 		};
 	}
