@@ -36,7 +36,7 @@ jobs:
     - name: Install cmake
       run: brew install cmake
 
-   - name: Get GCC 12 
+    - name: Get GCC 12 
       run: brew install gcc@12
 
     - name: CMake configure for Clang 14
