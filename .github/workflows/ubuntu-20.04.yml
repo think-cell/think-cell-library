@@ -25,12 +25,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v2
-
+      - name: Install GCC 12
+        uses: egor-tensin/setup-gcc@v1
+        with: 
+            version: 12
+            
       - name: get boost library
         run: sudo apt-get install libboost-dev
 
       - name: compile example
-        run: clang++ range.example.cpp -std=c++2a ${{matrix.cpp_flags}} -o example -v
+        run: gcc-12++ range.example.cpp -std=c++2b ${{matrix.cpp_flags}} -o example -v
 
       - name: run example
         run: ./example
