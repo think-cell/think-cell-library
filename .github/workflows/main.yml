@@ -13,17 +13,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-12]
+        compiler: [clang, gcc]
         config: [release, debug]
 
-        include:
-          - config: release
-            cpp_flags: -O3
-          - config: debug
-            cpp_flags: -g -O0 -D_DEBUG
-
     # The type of runner that the job will run on
-    runs-on: ${{ matrix.os }}
+    runs-on: macos-12
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
@@ -33,26 +27,24 @@ jobs:
     - name: Setup Boost
       run: brew install boost
 
-    - name: Install cmake
-      run: brew install cmake
-
-    - name: Get GCC 12 
-      run: brew install gcc@12
-
-    - name: CMake configure for Clang 14
+    - name: CMake configure
+      if: matrix.compiler=="clang" && matrix.config=="debug"
       run: cmake -S . -B build
-    
-    - name: Compile with Clang
+
+    - name: CMake configure
+      if: matrix.compiler=="clang" && matrix.config=="release"
+      run: cmake -S . -B build -D CMAKE_BUILD_TYPE=Release
+
+    - name: CMake configure
+      if: matrix.compiler=="gcc" && matrix.config=="debug"
+      run: cmake -S . -B build -D CMAKE_C_COMPILER=gcc-12 -D CMAKE_CXX_COMPILER=g++-12
+            
+    - name: CMake configure
+      if: matrix.compiler=="gcc" && matrix.config=="release"
+      run: cmake -S . -B build -D CMAKE_C_COMPILER=gcc-12 -D CMAKE_CXX_COMPILER=g++-12 -D CMAKE_BUILD_TYPE=Release
+
+    - name: Compile
       run: cmake --build build
 
-    - name: Run tests
+    - name: Run
       run: cmake --build build --target test
-
-    - name: CMake configure for GCC 12
-      run: cmake -S . -B buildgcc -D CMAKE_C_COMPILER=gcc-12 -D CMAKE_CXX_COMPILER=g++-12
-    
-    - name: Compile with GCC
-      run: cmake --build buildgcc
-
-    - name: Run tests
-      run: cmake --build buildgcc --target test

@@ -1,5 +1,4 @@
-![ubuntu-20.04](https://github.com/think-cell/range/workflows/ubuntu-20.04/badge.svg?branch=main)
-![macos-10.15](https://github.com/think-cell/range/workflows/macos-10.15/badge.svg?branch=main)
+[![CI](https://github.com/think-cell/range/actions/workflows/main.yml/badge.svg)](https://github.com/think-cell/range/actions/workflows/main.yml)
 
 
 think-cell public library
@@ -17,6 +16,8 @@ Clean and expressive code makes reasoning about it - and thus further progress -
 
 This library has been made publicly available as an example of modern C++ coding techniques and as a source of inspiration for other library writers. And of course because we are proud of it!
 
+The documentation is currently lacking and we are working on that. We will publish usage examples on our new [developer blog](https://www.think-cell.com/devblog) and will merge them into the library as comments. 
+
 -------------
 Contributions
 -------------
@@ -33,7 +34,10 @@ You need to have boost installed (we tested with [1.75.0](https://www.boost.org/
 ##### Visual C++ 19.28 (Visual Studio 2019 16.9)
 * `/std:c++latest`
 
-##### clang (*10.0.0* and *Apple LLVM 12.0.0*)
+##### clang (*13.0.0* and *Apple LLVM 14.0.0*)
+* `-std=c++2a`
+
+##### gcc 12
 * `-std=c++2a`
 
 `range.example.cpp` provides a good entry point to get started quickly. If you want to see more examples, there are some unit tests in `tc/*.t.cpp`.
