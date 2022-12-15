@@ -33,7 +33,7 @@ You need to have boost installed (we tested with [1.75.0](https://www.boost.org/
 ##### Visual C++ 19.28 (Visual Studio 2019 16.9)
 * `/std:c++latest`
 
-##### clang (*10.0.0* and *Apple LLVM 12.0.0*)
+##### clang (*10.0.0* and *Apple LLVM 12.0.0*, or *clang 13* but not clang 11)
 * `-std=c++2a`
 
 `range.example.cpp` provides a good entry point to get started quickly. If you want to see more examples, there are some unit tests in `tc/*.t.cpp`.
