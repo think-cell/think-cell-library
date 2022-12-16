@@ -9,7 +9,7 @@ project(
 set(CMAKE_CXX_STANDARD 20)
 
 # cmake -S . -B build -DBoost_INCLUDE_DIR=C:\Libraries\boost_1_79_0/ -DBoost_LIBRARY_DIR=C:\Libraries\boost_1_79_0/
-find_package(Boost 1.79 REQUIRED)
+find_package(Boost 1.75 REQUIRED)
 
 # Generate one cpp file per header
 file(
