@@ -28,19 +28,19 @@ jobs:
       run: brew install boost
 
     - name: CMake configure
-      if: matrix.compiler=="clang" && matrix.config=="debug"
+      if: matrix.compiler == 'clang' && matrix.config == 'debug'
       run: cmake -S . -B build
 
     - name: CMake configure
-      if: matrix.compiler=="clang" && matrix.config=="release"
+      if: matrix.compiler == 'clang' && matrix.config == 'release'
       run: cmake -S . -B build -D CMAKE_BUILD_TYPE=Release
 
     - name: CMake configure
-      if: matrix.compiler=="gcc" && matrix.config=="debug"
+      if: matrix.compiler == 'gcc' && matrix.config == 'debug'
       run: cmake -S . -B build -D CMAKE_C_COMPILER=gcc-12 -D CMAKE_CXX_COMPILER=g++-12
             
     - name: CMake configure
-      if: matrix.compiler=="gcc" && matrix.config=="release"
+      if: matrix.compiler == 'gcc' && matrix.config == 'release'
       run: cmake -S . -B build -D CMAKE_C_COMPILER=gcc-12 -D CMAKE_CXX_COMPILER=g++-12 -D CMAKE_BUILD_TYPE=Release
 
     - name: Compile
