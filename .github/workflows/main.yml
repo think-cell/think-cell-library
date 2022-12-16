@@ -13,35 +13,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        compiler: [clang, gcc]
+        os: [macos-12, ubuntu-22.04]
         config: [release, debug]
 
     # The type of runner that the job will run on
-    runs-on: macos-12
+    runs-on: ${{ matrix.os }}
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
     # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
     - uses: actions/checkout@v2
-
-    - name: Setup Boost
-      run: brew install boost
-
-    - name: CMake configure
-      if: matrix.compiler == 'clang' && matrix.config == 'debug'
-      run: cmake -S . -B build
-
-    - name: CMake configure
-      if: matrix.compiler == 'clang' && matrix.config == 'release'
-      run: cmake -S . -B build -D CMAKE_BUILD_TYPE=Release
+    
+    - name: Setup Boost 1.75.0
+      shell: bash
+      run: |
+        curl -L https://boostorg.jfrog.io/artifactory/main/release/1.75.0/source/boost_1_75_0.zip --output boost_1_75_0.zip
+        unzip -q boost_1_75_0.zip
 
     - name: CMake configure
-      if: matrix.compiler == 'gcc' && matrix.config == 'debug'
-      run: cmake -S . -B build -D CMAKE_C_COMPILER=gcc-12 -D CMAKE_CXX_COMPILER=g++-12
-            
+      if: matrix.config == 'debug'
+      run: cmake -S . -B build -DBoost_INCLUDE_DIR=$GITHUB_WORKSPACE/boost_1_75_0/ -DBoost_LIBRARY_DIR=$GITHUB_WORKSPACE/boost_1_75_0/
+
     - name: CMake configure
-      if: matrix.compiler == 'gcc' && matrix.config == 'release'
-      run: cmake -S . -B build -D CMAKE_C_COMPILER=gcc-12 -D CMAKE_CXX_COMPILER=g++-12 -D CMAKE_BUILD_TYPE=Release
+      if: matrix.config == 'release'
+      run: cmake -S . -B build -D CMAKE_BUILD_TYPE=Release -DBoost_INCLUDE_DIR=$GITHUB_WORKSPACE/boost_1_75_0/ -DBoost_LIBRARY_DIR=$GITHUB_WORKSPACE/boost_1_75_0/
 
     - name: Compile
       run: cmake --build build
