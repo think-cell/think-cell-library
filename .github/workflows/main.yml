@@ -32,11 +32,11 @@ jobs:
 
     - name: CMake configure
       if: matrix.config == 'debug'
-      run: cmake -S . -B build -DBoost_INCLUDE_DIR=$GITHUB_WORKSPACE/boost_1_75_0/ -DBoost_LIBRARY_DIR=$GITHUB_WORKSPACE/boost_1_75_0/ -G Ninja
+      run: cmake -S . -B build -DBoost_INCLUDE_DIR=$GITHUB_WORKSPACE/boost_1_75_0/ -DBoost_LIBRARY_DIR=$GITHUB_WORKSPACE/boost_1_75_0/
 
     - name: CMake configure
       if: matrix.config == 'release'
-      run: cmake -S . -B build -D CMAKE_BUILD_TYPE=Release -DBoost_INCLUDE_DIR=$GITHUB_WORKSPACE/boost_1_75_0/ -DBoost_LIBRARY_DIR=$GITHUB_WORKSPACE/boost_1_75_0/ -G Ninja
+      run: cmake -S . -B build -D CMAKE_BUILD_TYPE=Release -DBoost_INCLUDE_DIR=$GITHUB_WORKSPACE/boost_1_75_0/ -DBoost_LIBRARY_DIR=$GITHUB_WORKSPACE/boost_1_75_0/
 
     - name: Compile
       run: cmake --build build
