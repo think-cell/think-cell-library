@@ -123,7 +123,13 @@ UNITTESTDEF(test_make_array_from_range) {
 	constexpr auto an5 = tc::make_array(an4);
 	static_assert(tc::equal(an4, an5));
 
-	static_assert(tc::equal(an0, tc::make_array<2>(tc::make_generator_range(an0))));
+#if defined(__clang__) || defined(_MSC_VER)
+	static_assert(
+#else // Fixed in GCC 13: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=92505
+	_ASSERT(
+#endif
+		tc::equal(an0, tc::make_array<2>(tc::make_generator_range(an0)))
+	);
 }
 
 UNITTESTDEF(test_dense_map_with_ordering_key) {

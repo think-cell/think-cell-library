@@ -19,7 +19,10 @@
 #include "../base/assign.h"
 #include "find.h"
 #include "../interval_types.h"
+#if defined(__clang__) && !defined(__cpp_lib_three_way_comparison) // three way comparison operators are not implemented for library types in Xcode13/14. TODO Xcode15
 #include "../optional.h"
+#include "../variant.h"
+#endif
 #include <boost/preprocessor/variadic/to_seq.hpp>
 #include <compare>
 #include <concepts>
@@ -179,21 +182,21 @@ namespace tc {
 	// auto&& triggers internal error for VS2017
 	// decltype((lhs)) triggers internal error for VS2019 16.8.0 preview 3.0
 	// Not using return_decltype_MAYTHROW because noexcept(noexcept(expr)) not needed and triggering ICE in MSVC 19.28.
-	#define COMPARE_EXPR_BASE(fcompare, lhs, rhs, expr) \
+	#define INTERNAL_COMPARE_EXPR(fcompare, lhs, rhs, expr) \
 		(fcompare)( \
 			([&](auto&& _) MAYTHROW -> decltype(auto) { return tc::lvalue_or_decay(VERIFYINITIALIZED(expr)); })(VERIFYINITIALIZED(lhs)), \
 			([&](auto&& _) MAYTHROW -> decltype(auto) { return tc::lvalue_or_decay(VERIFYINITIALIZED(expr)); })(VERIFYINITIALIZED(rhs)) \
 		)
 
-	#define COMPARE_EXPR( expr ) RETURN_IF_NOT_EQUAL( COMPARE_EXPR_BASE(tc::compare, lhs, rhs, expr) )
-	#define COMPARE_EXPR_REVERSE( expr ) RETURN_IF_NOT_EQUAL( COMPARE_EXPR_BASE(tc::compare, rhs, lhs, expr) )
-	#define COMPARE_EXPR_REVERSE_IF( cond, expr ) RETURN_IF_NOT_EQUAL( tc::negate_if(cond, COMPARE_EXPR_BASE(tc::compare, lhs, rhs, expr)) )
-	#define COMPARE_EXPR_TIMES_SIGN( expr, sign ) RETURN_IF_NOT_EQUAL( COMPARE_EXPR_BASE(tc::compare, lhs, rhs, expr)*(sign) )
+	#define COMPARE_EXPR( expr ) RETURN_IF_NOT_EQUAL( INTERNAL_COMPARE_EXPR(tc::compare, lhs, rhs, expr) )
+	#define COMPARE_EXPR_REVERSE( expr ) RETURN_IF_NOT_EQUAL( INTERNAL_COMPARE_EXPR(tc::compare, rhs, lhs, expr) )
+	#define COMPARE_EXPR_REVERSE_IF( cond, expr ) RETURN_IF_NOT_EQUAL( tc::negate_if(cond, INTERNAL_COMPARE_EXPR(tc::compare, lhs, rhs, expr)) )
+	#define COMPARE_EXPR_TIMES_SIGN( expr, sign ) RETURN_IF_NOT_EQUAL( INTERNAL_COMPARE_EXPR(tc::compare, lhs, rhs, expr)*(sign) )
 
-	#define COMPARE_EXPR_LEX( expr ) RETURN_IF_NOT_EQUAL( COMPARE_EXPR_BASE(tc::lexicographical_compare_3way, lhs, rhs, expr) )
-	#define COMPARE_EXPR_LEX_REVERSE( expr ) RETURN_IF_NOT_EQUAL( COMPARE_EXPR_BASE(tc::lexicographical_compare_3way, rhs, lhs, expr) )
-	#define COMPARE_EXPR_LEX_REVERSE_IF( cond, expr ) RETURN_IF_NOT_EQUAL( tc::negate_if(cond, COMPARE_EXPR_BASE(tc::lexicographical_compare_3way, lhs, rhs, expr)) )
-	#define COMPARE_EXPR_LEX_TIMES_SIGN( expr, sign ) RETURN_IF_NOT_EQUAL( COMPARE_EXPR_BASE(tc::lexicographical_compare_3way, lhs, rhs, expr)*(sign) )
+	#define COMPARE_EXPR_LEX( expr ) RETURN_IF_NOT_EQUAL( INTERNAL_COMPARE_EXPR(tc::lexicographical_compare_3way, lhs, rhs, expr) )
+	#define COMPARE_EXPR_LEX_REVERSE( expr ) RETURN_IF_NOT_EQUAL( INTERNAL_COMPARE_EXPR(tc::lexicographical_compare_3way, rhs, lhs, expr) )
+	#define COMPARE_EXPR_LEX_REVERSE_IF( cond, expr ) RETURN_IF_NOT_EQUAL( tc::negate_if(cond, INTERNAL_COMPARE_EXPR(tc::lexicographical_compare_3way, lhs, rhs, expr)) )
+	#define COMPARE_EXPR_LEX_TIMES_SIGN( expr, sign ) RETURN_IF_NOT_EQUAL( INTERNAL_COMPARE_EXPR(tc::lexicographical_compare_3way, lhs, rhs, expr)*(sign) )
 
 	#define COMPARE_BASE( basetype ) \
 		COMPARE_EXPR( tc::base_cast<basetype>(_) );
@@ -202,7 +205,7 @@ namespace tc {
 		COMPARE_EXPR( tc::explicit_cast<bool>((_.m_ ## maskmember) & (maskmember ## maskvalue)) )
 
 	#define COMPARE_ASPECT_IF_VAR( tplbb,  expr ) \
-		if (auto const tplbb = COMPARE_EXPR_BASE(TC_FN(tc::make_tuple), lhs, rhs, tc::explicit_cast<bool>(expr)); tplbb != tc::make_tuple(true,true)) { \
+		if (auto const tplbb = INTERNAL_COMPARE_EXPR(TC_FN(tc::make_tuple), lhs, rhs, tc::explicit_cast<bool>(expr)); tplbb != tc::make_tuple(true,true)) { \
 			if (tplbb == tc::make_tuple(false, true)) return std::weak_ordering::less; \
 			else if (tplbb == tc::make_tuple(true, false)) return std::weak_ordering::greater; \
 		} else \
@@ -268,7 +271,7 @@ namespace tc {
 					}
 				}
 				if( itRhs==itRhsEnd ) {
-					_ASSERTE(eprefixALLOW==eprefix);
+					_ASSERTE(eprefixFORBID!=eprefix);
 					return std::strong_ordering::greater; // rhs shorter than lhs, thus >
 				}
 				RETURN_IF_NOT_EQUAL( fnCompare( *itLhs, *itRhs ) );

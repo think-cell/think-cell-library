@@ -128,7 +128,7 @@ private:
 };
 
 struct free_id final { int operator()(inner const& in) const& noexcept { return in.id(); } };
-struct filter_stub final { template<typename T> bool operator()(T const&) const& noexcept { return true; } };
+struct filter_stub final { bool operator()(tc::unused) const& noexcept { return true; } };
 
 struct outer final {
 	tc::vector<inner> m_in;

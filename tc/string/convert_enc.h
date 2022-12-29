@@ -19,7 +19,7 @@
 
 namespace tc {
 	namespace codeunit_sequence_size_detail {
-		[[nodiscard]] /*not constexpr, relies on intrinsics*/ inline std::optional<int> codeunit_sequence_size_raw(char ch) noexcept {
+		[[nodiscard]] constexpr inline std::optional<int> codeunit_sequence_size_raw(char ch) noexcept {
 			if( auto const n=0xffu & ~tc::underlying_cast(ch); 0!=n ) { // code unit 0xff is invalid
 				switch(tc::index_of_most_significant_bit(n)) {
 					case 7: return 1;
@@ -515,9 +515,14 @@ namespace tc {
 
 	template< typename Dst, typename Src, std::enable_if_t<!tc::has_range_value<Src>::value>* = nullptr>
 	[[nodiscard]] auto may_convert_enc( Src&& src ) noexcept {
-		return tc::generator_range_output<Dst const&>([src=tc::make_reference_or_value(std::forward<Src>(src))](auto&& sink) MAYTHROW {
+		return tc::generator_range_output<Dst>([src=tc::make_reference_or_value(std::forward<Src>(src))](auto&& sink) MAYTHROW {
 			return tc::for_each(*src, no_adl::may_convert_enc_sink<decltype(sink), Dst>(tc_move_if_owned(sink)));
 		});
+	}
+
+	template<typename T>
+	[[nodiscard]] constexpr bool is_single_codeunit(T const ch) noexcept {
+		return char_in_range<T>(tc::underlying_cast(ch));
 	}
 }
 

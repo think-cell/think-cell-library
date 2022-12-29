@@ -298,8 +298,11 @@ namespace tc {
 	}
 
 	namespace range_output_t_adl {
+		template<typename... Ts>
+		auto range_output_t_impl(adl_tag_t, tc::type::list<Ts...>) -> tc::type::unique_t<tc::type::list<tc::type::identity<Ts>...>>; // declaration only
+
 		template<typename Tuple>
-		auto range_output_t_impl(adl_tag_t, Tuple&&) -> range_output_tuple_impl::type<std::tuple, Tuple&&> {} // unevaluated
+		auto range_output_t_impl(adl_tag_t, Tuple&&) -> range_output_tuple_impl::type<std::tuple, Tuple&&>; // declaration only
 	}
 
 	namespace tuple_adl {

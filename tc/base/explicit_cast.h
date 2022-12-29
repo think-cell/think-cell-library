@@ -7,14 +7,13 @@
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
-
+#include "assert_defs.h"
 #include "explicit_cast_fwd.h"
 #include "casts.h"
 #include "noncopyable.h"
-#include "../optional.h"
 #include "../tuple.h"
-#include "../container/string.h"
 #include <type_traits>
+#include <optional>
 
 namespace tc {
 	DEFINE_FN2_TMPL( explicit_cast, (typename) )
@@ -142,22 +141,7 @@ MODIFY_WARNINGS_END
 	#define RETURN_CAST/*(...)*/ \
 		return +tc::return_cast_detail::return_cast /*(__VA_ARGS__)*/
 
-	template<typename TTarget, typename TSource>
-	[[nodiscard]] constexpr decltype(auto) reluctant_explicit_cast(TSource&& src) noexcept {
-		STATICASSERTSAME(std::remove_cvref_t<TTarget>, TTarget);
-		if constexpr( tc::is_base_of_decayed<TTarget, TSource>::value ) {
-			return std::forward<TSource>(src);
-		} else {
-			return tc::explicit_cast<TTarget>(std::forward<TSource>(src));
-		}
-	}
-
 	DEFINE_FN2_TMPL( reluctant_explicit_cast, (typename) )
-
-	template<typename T>
-	[[nodiscard]] constexpr bool is_single_codeunit(T const ch) noexcept {
-		return char_in_range<T>(tc::underlying_cast(ch));
-	}
 
 	template<typename Target, typename Source>
 	[[nodiscard]] Target explicit_cast_with_rounding(Source&& src) noexcept {
@@ -215,11 +199,6 @@ MODIFY_WARNINGS_END
 				std::forward<TSource>(src)...
 			);
 		}
-	}
-
-	template<typename Lhs, typename Rhs>
-	constexpr void assign_explicit_cast(Lhs& lhs, Rhs&& rhs) noexcept {
-		lhs=tc::explicit_cast<Lhs>(std::forward<Rhs>(rhs));
 	}
 
 	template<typename T, typename... Args>

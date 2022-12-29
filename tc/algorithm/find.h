@@ -106,7 +106,7 @@ namespace tc {
 		} else {
 			auto const itEnd=tc::end(rng);
 			for( auto it=tc::begin(rng); it!=itEnd; ++it ) {
-				std::array<tc::storage_for<tc::iterator_cache<decltype(it)>>, 2> aic;
+				std::array<tc::storage_for_without_dtor<tc::iterator_cache<decltype(it)>>, 2> aic; // tc::storage_for was too slow in debug builds
 				int iFound = 0;
 				aic[iFound].ctor(it);
 				scope_exit(aic[iFound].dtor()); //iFound captured by reference
@@ -115,10 +115,10 @@ namespace tc {
 						++it;
 						if (itEnd==it) break;
 						aic[1 - iFound].ctor(it);
+						scope_exit(aic[1 - iFound].dtor());
 						if (tc::invoke(pred, tc::as_const(**aic[1 - iFound]))) {
 							iFound = 1 - iFound;
 						}
-						aic[1 - iFound].dtor();
 					}
 					
 					return RangeReturn::pack_element(

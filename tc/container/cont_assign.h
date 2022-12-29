@@ -23,30 +23,37 @@ namespace tc {
 
 	static_assert(tc::is_instance<std::vector,tc::vector<int>>::value);
 
-	template< typename Cont, typename... Rng>
-	constexpr void cont_assign(Cont&& cont, Rng&&... rng) MAYTHROW {
-		if( !std::is_constant_evaluated() ) {
-			(tc::assert_no_overlap(cont, std::forward<Rng>(rng)), ...);
-		}
-		if constexpr( has_mem_fn_clear<Cont>::value ) {
-			static_assert( std::is_lvalue_reference<Cont>::value );
-			cont.clear();
-			if constexpr (0<sizeof...(Rng)) {
-				if constexpr( has_mem_fn_lower_bound<Cont>::value || has_mem_fn_hash_function<Cont>::value ) {
-					tc::cont_must_insert_range(cont, tc::concat(std::forward<Rng>(rng)...)); // MAYTHROW
-				} else {
-					tc::append(cont, std::forward<Rng>(rng)...); // MAYTHROW
-				}
+	namespace cont_assign_default {
+		template< typename Cont, typename... Rng>
+		constexpr void cont_assign_impl(Cont&& cont, Rng&&... rng) MAYTHROW {
+			if( !std::is_constant_evaluated() ) {
+				(tc::assert_no_overlap(cont, std::forward<Rng>(rng)), ...);
 			}
-		} else {
-			auto itOut = tc::begin(cont);
-			tc::for_each(tc::concat(tc_move_if_owned(rng)...), [&](auto&& t) noexcept {
-				*itOut = tc_move_if_owned(t);
-				++itOut;
-			}); // MAYTHROW
-			_ASSERTE(tc::end(cont)==itOut);
+			if constexpr( has_mem_fn_clear<Cont>::value ) {
+				static_assert( std::is_lvalue_reference<Cont>::value );
+				cont.clear();
+				if constexpr (0<sizeof...(Rng)) {
+					if constexpr( has_mem_fn_lower_bound<Cont>::value || has_mem_fn_hash_function<Cont>::value ) {
+						tc::cont_must_insert_range(cont, tc::concat(std::forward<Rng>(rng)...)); // MAYTHROW
+					} else {
+						tc::append(cont, std::forward<Rng>(rng)...); // MAYTHROW
+					}
+				}
+			} else {
+				auto itOut = tc::begin(cont);
+#ifdef _CHECKS
+				auto const itEnd = tc::end(cont);
+#endif
+				tc::for_each(tc::concat(tc_move_if_owned(rng)...), [&](auto&& t) noexcept {
+					*VERIFYPRED(itOut, itEnd!=_) = tc_move_if_owned(t);
+					++itOut;
+				}); // MAYTHROW
+				_ASSERT(itEnd==itOut);
+			}
 		}
 	}
+
+	DEFINE_TMPL_FUNC_WITH_CUSTOMIZATIONS(cont_assign)
 
 	template<typename Cont, typename Rng>
 	void cont_change_with_or(Cont& cont, Rng const& rng, bool& flag) noexcept {

@@ -7,11 +7,12 @@
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
-#include "explicit_cast.h"
 #include "assert_defs.h"
 #include "functors.h"
 #include "return_decltype.h"
-#include "../variant.h" // our customized operator== may not be found by ADL in tc::equal_to
+#include "explicit_cast_fwd.h"
+#include "casts.h"
+#include "invoke.h"
 #ifndef __EMSCRIPTEN__
 #include <atomic>
 #endif
@@ -25,42 +26,21 @@ namespace tc {
 namespace unbounded_adl {
 	struct greatest {};
 
-	template <typename T>
-	[[nodiscard]] constexpr auto operator<(T const&, greatest) return_ctor_noexcept(tc::constant<true>, ())
-
-	template <typename T>
-	[[nodiscard]] constexpr auto operator<=(T const&, greatest) return_ctor_noexcept(tc::constant<true>, ())
-
-	template <typename T>
-	[[nodiscard]] constexpr auto operator<(greatest, T const&) return_ctor_noexcept(tc::constant<false>, ())
-
-	template <typename T>
-	[[nodiscard]] constexpr auto operator<=(greatest, T const&) return_ctor_noexcept(tc::constant<false>, ())
+	[[nodiscard]] constexpr auto operator<(tc::unused, greatest) return_ctor_noexcept(tc::constant<true>, ())
+	[[nodiscard]] constexpr auto operator<=(tc::unused, greatest) return_ctor_noexcept(tc::constant<true>, ())
+	[[nodiscard]] constexpr auto operator<(greatest, tc::unused) return_ctor_noexcept(tc::constant<false>, ())
+	[[nodiscard]] constexpr auto operator<=(greatest, tc::unused) return_ctor_noexcept(tc::constant<false>, ())
 
 	struct least {};
 
-	template <typename T>
-	[[nodiscard]] constexpr auto operator<(T const&, least) return_ctor_noexcept(tc::constant<false>, ())
+	[[nodiscard]] constexpr auto operator<(tc::unused, least) return_ctor_noexcept(tc::constant<false>, ())
+	[[nodiscard]] constexpr auto operator<=(tc::unused, least) return_ctor_noexcept(tc::constant<false>, ())
+	[[nodiscard]] constexpr auto operator<(least, tc::unused) return_ctor_noexcept(tc::constant<true>, ())
+	[[nodiscard]] constexpr auto operator<=(least, tc::unused) return_ctor_noexcept(tc::constant<true>, ())
 
-	template <typename T>
-	[[nodiscard]] constexpr auto operator<=(T const&, least) return_ctor_noexcept(tc::constant<false>, ())
-
-	template <typename T>
-	[[nodiscard]] constexpr auto operator<(least, T const&) return_ctor_noexcept(tc::constant<true>, ())
-
-	template <typename T>
-	[[nodiscard]] constexpr auto operator<=(least, T const&) return_ctor_noexcept(tc::constant<true>, ())
-
-	template <typename T>
 	[[nodiscard]] constexpr auto operator<(least, greatest) return_ctor_noexcept(tc::constant<true>, ())
-
-	template <typename T>
 	[[nodiscard]] constexpr auto operator<=(least, greatest) return_ctor_noexcept(tc::constant<true>, ())
-
-	template <typename T>
 	[[nodiscard]] constexpr auto operator<(greatest, least) return_ctor_noexcept(tc::constant<false>, ())
-
-	template <typename T>
 	[[nodiscard]] constexpr auto operator<=(greatest, least) return_ctor_noexcept(tc::constant<false>, ())
 }
 using unbounded_adl::least;
@@ -71,24 +51,27 @@ using unbounded_adl::greatest;
 // Unlike std::less<> et. al., they are special-made for comparisons, so they only use operator== and operator< with constant arguments and expect noexcept and a bool return
 // This avoids types having to support operator> and operator>=, which we do not want to use in our code.
 
-// overloadable version of operator==
-template<typename Lhs, typename Rhs> requires
-	std::is_class<Lhs>::value ||
-	std::is_class<Rhs>::value ||
-	std::is_pointer<Lhs>::value ||
-	std::is_pointer<Rhs>::value ||
-	std::is_same<std::remove_volatile_t<Lhs>, std::remove_volatile_t<Rhs>>::value
-[[nodiscard]] constexpr bool equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
-	return lhs==rhs;
+namespace equal_to_default {
+	template<typename Lhs, typename Rhs> requires
+		std::is_class<Lhs>::value ||
+		std::is_class<Rhs>::value ||
+		std::is_pointer<Lhs>::value ||
+		std::is_pointer<Rhs>::value ||
+		std::is_same<std::remove_volatile_t<Lhs>, std::remove_volatile_t<Rhs>>::value
+	[[nodiscard]] constexpr bool equal_to_impl(Lhs const& lhs, Rhs const& rhs) noexcept {
+		return lhs==rhs;
+	}
+	
+	template<typename Lhs, typename Rhs> requires
+		(!std::is_same<std::remove_volatile_t<Lhs>, std::remove_volatile_t<Rhs>>::value) &&
+		tc::is_actual_arithmetic<Lhs>::value &&
+		tc::is_actual_arithmetic<Rhs>::value
+	[[nodiscard]] constexpr bool equal_to_impl(Lhs const& lhs, Rhs const& rhs) noexcept {
+		return tc::explicit_cast<decltype(lhs+rhs)>(lhs)==tc::explicit_cast<decltype(lhs+rhs)>(rhs);
+	}
 }
 
-template<typename Lhs, typename Rhs> requires
-	(!std::is_same<std::remove_volatile_t<Lhs>, std::remove_volatile_t<Rhs>>::value) &&
-	tc::is_actual_arithmetic<Lhs>::value &&
-	tc::is_actual_arithmetic<Rhs>::value
-[[nodiscard]] constexpr bool equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
-	return tc::explicit_cast<decltype(lhs+rhs)>(lhs)==tc::explicit_cast<decltype(lhs+rhs)>(rhs);
-}
+DEFINE_TMPL_FUNC_WITH_CUSTOMIZATIONS(equal_to)
 
 // 1. at least one of the operands is a pointer,
 // 2. array-to-pointer conversions, derived-to-base pointer conversions, function pointer conversions, and qualification conversions are applied as necessary to convert both operands to the same pointer type, and the resulting pointer type is an object pointer type

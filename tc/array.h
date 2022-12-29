@@ -11,7 +11,7 @@
 #include "base/const_forward.h"
 #include "base/reference_or_value.h"
 #include "base/type_traits.h"
-#include "base/explicit_cast.h"
+#include "base/explicit_cast_fwd.h"
 #include "base/tag_type.h"
 #include "base/construction_restrictiveness.h"
 #include "algorithm/compare.h"
@@ -257,15 +257,13 @@ namespace tc {
 	//////////////////////////////////////////////////////////////
 
 	namespace no_adl {
-		struct deduce_tag;
-
 		template <typename T, typename...>
 		struct delayed_deduce final {
 			using type = T;
 		};
 
 		template <typename... Ts>
-		struct delayed_deduce<deduce_tag, Ts...> final {
+		struct delayed_deduce<tc::deduce_tag, Ts...> final {
 			using type = tc::common_type_t<Ts...>;
 		};
 	}
@@ -290,7 +288,7 @@ namespace tc {
 		tc::make_array<tc::constexpr_size<Rng>::value>(std::forward<Rng>(rng))
 	)
 
-	template <typename T = no_adl::deduce_tag, typename... Ts> requires (!std::is_reference<T>::value)
+	template <typename T = tc::deduce_tag, typename... Ts> requires (!std::is_reference<T>::value)
 	[[nodiscard]] constexpr auto make_array(tc::aggregate_tag_t, Ts&&... ts) noexcept {
 		static_assert(!std::is_reference<typename no_adl::delayed_deduce<T, Ts...>::type>::value);
 		return tc::explicit_cast<std::array<typename no_adl::delayed_deduce<T, Ts...>::type, sizeof...(Ts)>>(tc::aggregate_tag, std::forward<Ts>(ts)...);

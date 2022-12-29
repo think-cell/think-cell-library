@@ -9,6 +9,7 @@
 #pragma once
 
 #include "casts.h"
+#include "noncopyable.h"
 
 namespace tc {
 	namespace no_adl {
@@ -35,7 +36,7 @@ namespace tc {
 		track_instance_base<Derived>* track_instance_base<Derived>::c_ptib = nullptr;
 
 		template <typename Derived>
-		struct track_unique_instance : private track_instance_base<Derived> {
+		struct track_unique_instance : private track_instance_base<Derived>, tc::nonmovable {
 			friend struct track_instance_base<Derived>; // for cast to Derived
 
 			track_unique_instance() noexcept {

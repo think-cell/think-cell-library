@@ -14,7 +14,7 @@
 #include "../algorithm/append.h"
 
 UNITTESTDEF(GeneratorRangeTakeWhile) {
-	auto GeneratorRange = tc::generator_range_output<int const&>([](auto const& sink) noexcept -> tc::break_or_continue {
+	auto GeneratorRange = tc::generator_range_output<int>([](auto const& sink) noexcept -> tc::break_or_continue {
 		RETURN_IF_BREAK(tc::continue_if_not_break(sink, 1));
 		RETURN_IF_BREAK(tc::continue_if_not_break(sink, 2));
 		_ASSERTFALSE;

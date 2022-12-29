@@ -279,7 +279,7 @@ namespace tc {
 			struct all_of;
 
 			template<typename... T, template<typename...> typename Pred>
-			struct all_of<list<T...>, Pred> final : std::conjunction<Pred<T>...> {};
+			struct all_of<list<T...>, Pred> /*not final*/ : std::conjunction<Pred<T>...> {};
 		}
 		using no_adl::all_of;
 
@@ -288,7 +288,7 @@ namespace tc {
 			struct any_of;
 
 			template<typename... T, template<typename...> typename Pred>
-			struct any_of<list<T...>, Pred> final: std::disjunction<Pred<T>...> {};
+			struct any_of<list<T...>, Pred> /*not final*/: std::disjunction<Pred<T>...> {};
 		}
 		using no_adl::any_of;
 

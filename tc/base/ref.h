@@ -93,7 +93,7 @@ namespace tc {
 				&& (
 					std::is_convertible<decltype(tc::invoke(std::declval<std::remove_reference_t<Func>&>(), std::declval<Args>()...)), Ret>::value
 					|| std::is_same<Ret, tc::break_or_continue>::value
-					|| std::is_same<Ret, void>::value
+					|| std::is_void<Ret>::value
 				)
 			function_ref_base(Func&& func) noexcept
 				: m_pfuncTypeErased(tc::no_adl::make_type_erased_function_ptr<bNoExcept, std::remove_reference_t<Func>, Ret, Args...>{}())

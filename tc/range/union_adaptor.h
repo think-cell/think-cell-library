@@ -300,7 +300,7 @@ namespace tc {
 	)
 
 	template<typename Rng0, typename Rng1, typename Comp = tc::fn_compare>
-	auto union_range(Rng0&& rng0, Rng1&& rng1, Comp&& comp = Comp()) return_ctor_noexcept(
+	[[nodiscard]] auto union_range(Rng0&& rng0, Rng1&& rng1, Comp&& comp = Comp()) return_ctor_noexcept(
 		TC_FWD(union_adaptor< tc::decay_t<Comp>, Rng0, Rng1>),
 		(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1), std::forward<Comp>(comp))
 	)

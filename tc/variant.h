@@ -14,6 +14,7 @@
 #include "base/casts.h"
 #include "base/explicit_cast.h"
 #include "base/invoke_with_constant.h"
+#include "optional.h"
 #include <variant>
 
 /*
@@ -33,24 +34,40 @@
 
 namespace tc {
 	template<std::size_t I, typename Variant>
-	[[nodiscard]] constexpr auto get_if(Variant* v) return_decltype_noexcept(
-		std::get_if<I>(v)
-	)
+	[[nodiscard]] constexpr auto get_if(Variant& v) noexcept -> tc::optional<std::variant_alternative_t<I, Variant>&> {
+		if(auto pval=std::get_if<I>(std::addressof(v))) {
+			return *pval;
+		} else {
+			return std::nullopt;
+		}
+	}
 
 	template<std::size_t I, typename Variant>
-	[[nodiscard]] constexpr auto get_if(Variant& v) return_decltype_noexcept(
-		std::get_if<I>(std::addressof(v))
-	)
+	[[nodiscard]] constexpr auto get_if(Variant&& v) noexcept -> tc::optional<std::variant_alternative_t<I, Variant>&&> {
+		if(auto pval=std::get_if<I>(std::addressof(v))) {
+			return std::move(*pval);
+		} else {
+			return std::nullopt;
+		}
+	}
 
 	template<typename T, typename Variant>
-	[[nodiscard]] constexpr auto get_if(Variant* v) return_decltype_noexcept(
-		std::get_if<T>(v)
-	)
+	[[nodiscard]] constexpr auto get_if(Variant& v) noexcept -> tc::optional<std::conditional_t<std::is_const<Variant>::value, T const, T>&> {
+		if(auto pval=std::get_if<T>(std::addressof(v))) {
+			return *pval;
+		} else {
+			return std::nullopt;
+		}
+	}
 
 	template<typename T, typename Variant>
-	[[nodiscard]] constexpr auto get_if(Variant& v) return_decltype_noexcept(
-		std::get_if<T>(std::addressof(v))
-	)
+	[[nodiscard]] constexpr auto get_if(Variant&& v) noexcept -> tc::optional<std::conditional_t<std::is_const<Variant>::value, T const, T>&&> {
+		if(auto pval=std::get_if<T>(std::addressof(v))) {
+			return std::move(*pval);
+		} else {
+			return std::nullopt;
+		}
+	}
 }
 
 /*
@@ -280,28 +297,42 @@ namespace tc {
 	using no_adl::is_variant_equality_comparable_to_value;
 }
 
-template<typename... Ts, typename TRhs> requires tc::is_variant_equality_comparable_to_value<std::variant<Ts...>, TRhs>::value
-[[nodiscard]] bool operator==(std::variant<Ts...> const& lhs, TRhs const& rhs) noexcept {
-#if 0 // TODO: subrange.h cannot be included here -> move and_then into separate header
-	return tc::and_then(
-		tc::get_if<tc::type::find_unique_if<tc::type::list<Ts const&...>, tc::type::curry<tc::is_equality_comparable_with, TRhs const&>::template type>::index>(lhs),
-		[&](auto const& t) noexcept { return t==rhs; }
-	);
-#endif
-	if (auto o = tc::get_if<tc::type::find_unique_if<tc::type::list<Ts const&...>, tc::type::curry<tc::is_equality_comparable_with, TRhs const&>::template type>::index>(lhs)) {
-		return *o==rhs;
-	} else {
-		return false;
+namespace tc::variant_detail {
+	template<typename... Ts, typename TRhs> requires tc::is_variant_equality_comparable_to_value<std::variant<Ts...>, TRhs>::value
+	[[nodiscard]] bool equal_to_impl(std::variant<Ts...> const& lhs, TRhs const& rhs) noexcept {
+	#if 0 // TODO: subrange.h cannot be included here -> move and_then into separate header
+		return tc::and_then(
+			tc::get_if<tc::type::find_unique_if<tc::type::list<Ts const&...>, tc::type::curry<tc::is_equality_comparable_with, TRhs const&>::template type>::index>(lhs),
+			[&](auto const& t) noexcept { return t==rhs; }
+		);
+	#endif
+		if (auto o = tc::get_if<tc::type::find_unique_if<tc::type::list<Ts const&...>, tc::type::curry<tc::is_equality_comparable_with, TRhs const&>::template type>::index>(lhs)) {
+			return *o==rhs;
+		} else {
+			return false;
+		}
 	}
+}
+
+namespace tc::equal_to_adl {
+	template<typename... Ts, typename TRhs>
+	auto equal_to_impl(adl_tag_t, std::variant<Ts...> const& lhs, TRhs const& rhs) return_decltype_noexcept(
+		tc::variant_detail::equal_to_impl(lhs, rhs)
+	)
+
+	template<typename TLhs, typename... Ts>
+	auto equal_to_impl(adl_tag_t, TLhs const& lhs, std::variant<Ts...> const& rhs) return_decltype_noexcept(
+		tc::variant_detail::equal_to_impl(rhs, lhs)
+	)
 }
 
 static_assert( std::is_move_constructible< std::variant<int, double, tc::string<char>> >::value );
 static_assert( std::is_move_assignable< std::variant<int, double, tc::string<char>> >::value );
 static_assert( std::is_nothrow_move_constructible< std::variant<int, double, tc::string<char>> >::value );
 
-#define tc_if_holds_else_value(var, val, type, ...) ([&](auto* p) MAYTHROW -> decltype(auto) { \
+#define tc_if_holds_else_value(var, val, type, ...) ([&](auto o) MAYTHROW -> decltype(auto) { \
 	auto const f=[&](auto& _) MAYTHROW -> decltype(auto) { return (__VA_ARGS__); }; \
-	static_assert( !std::is_rvalue_reference<decltype(f(*p))>::value ); \
+	static_assert( !std::is_rvalue_reference<decltype(f(*o))>::value ); \
 	static_assert( !std::is_rvalue_reference<decltype((val))>::value ); \
-	return CONDITIONAL_PRVALUE_AS_VAL(p, f(*p), TC_FWD(val)); \
+	return CONDITIONAL_PRVALUE_AS_VAL(o, f(*o), TC_FWD(val)); \
 }(tc::get_if<type>(var)))

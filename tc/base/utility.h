@@ -122,6 +122,13 @@ namespace tc {
 	using namespace tc_get_impl;
 }
 
+namespace tc {
+	namespace no_adl {
+		struct deduce_tag;
+	}
+	using no_adl::deduce_tag;
+}
+
 //////////////////////////////////////////////////////////////////////////
 // swap
 //
@@ -298,3 +305,16 @@ namespace tc {
 
 // lazy rvalues are returned by value - avoid decltype on __VA_ARGS__, because expression usually contains lambdas
 #define MAKE_LAZY( ... ) tc::make_lazy([&](auto&&...) MAYTHROW -> decltype(auto) { return tc::lvalue_or_decay(__VA_ARGS__); })
+
+//////////////////////////////////////////////////////////////////////////
+// tc::unused
+
+namespace tc {
+	namespace no_adl {
+		struct unused final {
+			template<typename T>
+			constexpr unused(T const&) noexcept {}
+		};
+	}
+	using no_adl::unused;
+}

@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "explicit_cast.h"
+#include "explicit_cast_fwd.h"
 #include "construction_restrictiveness.h"
 
 //-----------------------------------------------------------------------------------------------------------------------------

@@ -24,7 +24,7 @@ namespace tc {
 		} else {
 			T n = 0;
 			if (0 < nBound) {
-				auto Enumerate = [&](auto const&) noexcept { return tc::continue_if(nBound!=++n); };
+				auto Enumerate = [&](tc::unused) noexcept { return tc::continue_if(nBound!=++n); };
 				STATICASSERTSAME(tc::break_or_continue, decltype(tc::for_each(rng, Enumerate)), "size_bounded only works with interruptible generators");
 				tc::for_each(rng, Enumerate);
 			}

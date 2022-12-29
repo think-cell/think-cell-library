@@ -1327,7 +1327,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 			bool intersects(interval_set<T, TInterval, OtherSetOrVectorImpl> const& intvlset ) const& noexcept {
 				bool bIntersects = false;
 				for_each_intersecting_interval(intvlset, 
-					[&]( TInterval const&, TInterval const&, TInterval const&) noexcept {
+					[&]( tc::unused, tc::unused, tc::unused) noexcept {
 						_ASSERT(!bIntersects);
 						bIntersects=true;
 						return tc::constant<tc::break_>();
@@ -1339,7 +1339,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 			interval_set<T, TInterval, SetOrVectorImpl>& operator&=( interval_set<T, TInterval, OtherSetOrVectorImpl> const& intvlset) & noexcept {
 				Cont contIntersection;
 				for_each_intersecting_interval(intvlset, 
-					[&]( TInterval const&, TInterval const&, TInterval const& intvl ) noexcept {
+					[&]( tc::unused, tc::unused, TInterval const& intvl ) noexcept {
 						tc::cont_must_emplace_before( contIntersection, tc::end(contIntersection),intvl);
 					});
 				m_cont=tc_move(contIntersection);
@@ -1417,7 +1417,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 	template<typename RngIntvl>
 	[[nodiscard]] auto ordered_overlapping_intervals(RngIntvl&& rngintvl) noexcept {
 		return ordered_overlapping_intervals_impl(
-			[](auto const& rngintvl, auto const& itBegin, auto const& itEnd, auto const& /*itMax*/) noexcept {
+			[](auto const& rngintvl, auto const& itBegin, auto const& itEnd, tc::unused /*itMax*/) noexcept {
 				return tc::slice(rngintvl, itBegin, itEnd);
 			},
 			std::forward<RngIntvl>(rngintvl)
@@ -1427,7 +1427,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 	template<typename RngIntvl, typename Project>
 	auto ordered_concatenated_intervals(RngIntvl&& rngintvl, Project project) noexcept {
 		return ordered_overlapping_intervals_impl(
-			[](auto const& /*rng*/, auto const& itBegin, auto const& /*itEnd*/, auto const& itMax) noexcept {
+			[](tc::unused /*rng*/, auto const& itBegin, tc::unused /*itEnd*/, auto const& itMax) noexcept {
 				return tc::make_interval((*itBegin.element_base())[tc::lo], (*itMax.element_base())[tc::hi]);
 			},
 			tc::transform(

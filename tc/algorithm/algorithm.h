@@ -1000,8 +1000,8 @@ namespace tc {
 	template< typename RngA, typename RngB, typename Comp, typename FuncElementA, typename FuncElementB, typename FuncElementBoth >
 	auto interleave_may_remove_current(RngA&& rngA, RngB&& rngB, Comp comp, FuncElementA fnElementA, FuncElementB fnElementB, FuncElementBoth fnElementBoth) noexcept {
 		return interleave_may_remove_current_iterator(rngA, rngB, comp,
-			[&](auto const& lhs, auto const& /*rhs*/) noexcept { return tc::invoke(fnElementA, *lhs); },
-			[&](auto const& /*lhs*/, auto const& rhs) noexcept { return tc::invoke(fnElementB, *rhs); },
+			[&](auto const& lhs, tc::unused /*rhs*/) noexcept { return tc::invoke(fnElementA, *lhs); },
+			[&](tc::unused /*lhs*/, auto const& rhs) noexcept { return tc::invoke(fnElementB, *rhs); },
 			[&](auto const& lhs, auto const& rhs) noexcept { return tc::invoke(fnElementBoth, *lhs, *rhs); }
 		);
 	}
@@ -1018,7 +1018,7 @@ namespace tc {
 			SinkAB const& m_sinkab;
 
 			template<typename A>
-			auto operator()(A&& a) const& noexcept -> tc::common_type_t<
+			auto operator()(A&& a) const& MAYTHROW -> tc::common_type_t<
 				decltype(tc::continue_if_not_break(m_sinka, std::declval<A>())),
 				decltype(tc::continue_if_not_break(m_sinkb, *m_itb)),
 				decltype(tc::continue_if_not_break(m_sinkab, std::declval<A>(), *m_itb)),
@@ -1043,7 +1043,7 @@ namespace tc {
 	}
 
 	template< typename RngA, typename RngB, typename Comp, typename SinkA, typename SinkB, typename SinkAB >
-	auto interleave_2(RngA&& rnga, RngB&& rngb, Comp const comp, SinkA const sinka, SinkB const sinkb, SinkAB const sinkab) noexcept {
+	auto interleave_2(RngA&& rnga, RngB&& rngb, Comp const comp, SinkA const sinka, SinkB const sinkb, SinkAB const sinkab) MAYTHROW {
 		auto itb=tc::begin(rngb);
 		auto endb=tc::end(rngb);
 
@@ -1065,8 +1065,7 @@ namespace tc {
 		struct SInterleaveImpl {
 			tc::decay_t<Compare> m_compare;
 
-			template<typename PairItItBest>
-			bool HasBetterElement(bool* const, PairItItBest const&) const& noexcept {
+			bool HasBetterElement(bool* const, tc::unused) const& noexcept {
 				return false;
 			}
 
@@ -1178,7 +1177,7 @@ namespace tc {
 
 	template< typename RangeReturn, typename Rng, typename T> requires (!RangeReturn::requires_iterator)
 	[[nodiscard]] constexpr decltype(auto) linear_at(Rng&& rng, T n) noexcept {
-		return tc::find_first_if<RangeReturn>(std::forward<Rng>(rng), [&](auto const&) noexcept {
+		return tc::find_first_if<RangeReturn>(std::forward<Rng>(rng), [&](tc::unused) noexcept {
 			if(0==n) {
 				return true;
 			} else {

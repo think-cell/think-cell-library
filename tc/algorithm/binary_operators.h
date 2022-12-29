@@ -186,10 +186,8 @@ namespace tc {
 		};
 
 		struct no_prepost_scalar_operation {
-			template<typename Scalar>
-			static constexpr void pre(Scalar const&) noexcept {}
-			template<typename Lhs, typename Scalar>
-			static constexpr void post(Lhs const&, Scalar const& scalar) noexcept {}
+			static constexpr void pre(tc::unused /*scalar*/) noexcept {}
+			static constexpr void post(tc::unused /*lhs*/, tc::unused /*scalar*/) noexcept {}
 		};
 
 		template<typename Pred>

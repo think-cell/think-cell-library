@@ -58,12 +58,12 @@ namespace tc {
 		//  * not a stable sort algorithm 
 		//  * not an inplace sort algorithm
 		//  * first element is generated in O(n)
-		return tc::generator_range_output<tc::range_value_t<decltype(*tc::as_const(tc::as_lvalue(tc::make_reference_or_value(std::forward<Rng>(rng)))))> const&>([
+		return tc::generator_range_output<tc::range_value_t<Rng const&>&>([
 			rng = tc::make_reference_or_value(std::forward<Rng>(rng)),
 			// std heap algorithm using less create max heap, we need min heap. Hence, we use greater.
 			greater = tc::reverse_binary_rel(less),
 			predKeep = tc::decay_copy(std::forward<PredKeep>(predKeep))
-		](auto&& sink) MAYTHROW -> tc::break_or_continue {
+		](auto&& sink) MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(sink, std::declval<tc::range_value_t<Rng const&>&>())), tc::constant<tc::continue_>> {
 			auto vec = tc::make_vector(*rng);
 			boost::range::make_heap(vec, greater);
 			while( auto const it = tc::front<tc::return_element_or_null>(vec) ) {
@@ -75,7 +75,7 @@ namespace tc {
 					tc::drop_last_inplace(vec);
 				}
 			}
-			return tc::implicit_cast<decltype(tc::continue_if_not_break(sink, tc::front(vec)))>(tc::constant<tc::continue_>());
+			return tc::constant<tc::continue_>();
 		});
 	}
 }

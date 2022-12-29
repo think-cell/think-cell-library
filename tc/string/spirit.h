@@ -235,8 +235,8 @@ namespace tc {
 			using attribute_type = T;
 			static bool const has_attribute = true;
 
-			template<typename U, typename Context>
-			bool test(U const u, Context const&) const& noexcept {
+			template<typename U>
+			bool test(U const u, tc::unused /*context*/) const& noexcept {
 				return parse_match(u);
 			}
 

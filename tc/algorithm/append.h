@@ -112,22 +112,22 @@ namespace tc {
 	concept appendable = tc::has_for_each<Rng, tc::appender_t<Cont>>::value;
 
 	// Disallow 0 == sizeof...(Rngs), so that overload taking single argument tc::tuple<Cont, Rng...> is rejected
-	template< typename RangeReturn = tc::return_void, typename Cont, tc::appendable<Cont&>... Rngs> requires (0 < sizeof...(Rngs))
-	constexpr decltype(auto) append(Cont&& cont, Rngs&&... rngs) MAYTHROW {
+	template< typename RangeReturn = tc::return_void, typename Cont, tc::appendable<Cont&> Rng>
+	constexpr decltype(auto) append(Cont&& cont, Rng&& rng) MAYTHROW {
 		static_assert( !std::is_const<Cont>::value, "Cannot append to const container" );
 		static_assert( !tc::is_range_with_iterators<Cont>::value || std::is_lvalue_reference<Cont>::value, "Append to rvalue intentional?" );
 
 		if constexpr( !tc::is_range_with_iterators<Cont>::value || (
-			std::is_same<RangeReturn, tc::return_void>::value && 
-			noexcept(tc::for_each(tc::concat(std::forward<Rngs>(rngs)...), tc::appender(cont)))
+			std::is_same<RangeReturn, tc::return_void>::value &&
+			noexcept(tc::for_each(std::forward<Rng>(rng), tc::appender(cont)))
 		) ) {
 			static_assert( std::is_same<RangeReturn, tc::return_void>::value, "RangeReturn not supported, if appending to stream." );
 
-			tc::for_each(tc::concat(std::forward<Rngs>(rngs)...), tc::appender(cont));
+			tc::for_each(std::forward<Rng>(rng), tc::appender(cont));
 		} else if constexpr( tc::is_random_access_range<Cont>::value || has_mem_fn_reserve<Cont>::value ) {
 			auto const nOffset = tc::size_raw(cont);
 			try {
-				tc::for_each(tc::concat(std::forward<Rngs>(rngs)...), tc::appender(cont));
+				tc::for_each(std::forward<Rng>(rng), tc::appender(cont));
 				if constexpr( !std::is_same<RangeReturn, tc::return_void>::value ) {
 					return RangeReturn::pack_border(
 						tc::begin_next<tc::return_border>(cont, nOffset),
@@ -145,7 +145,7 @@ namespace tc {
 				return it ? modified(it, ++_) : tc::begin(cont);
 			};
 			try {
-				tc::for_each(tc::concat(std::forward<Rngs>(rngs)...), tc::appender(cont)); // MAYTHROW
+				tc::for_each(std::forward<Rng>(rng), tc::appender(cont)); // MAYTHROW
 				if constexpr( !std::is_same<RangeReturn, tc::return_void>::value ) {
 					return RangeReturn::pack_border(FirstAppendedElement(), cont);
 				}
@@ -154,6 +154,11 @@ namespace tc {
 				throw;
 			}
 		}
+	}
+
+	template< typename RangeReturn = tc::return_void, typename Cont, tc::appendable<Cont&>... Rngs> requires (1 < sizeof...(Rngs))
+	constexpr decltype(auto) append(Cont&& cont, Rngs&&... rngs) MAYTHROW {
+		return tc::append<RangeReturn>(std::forward<Cont>(cont), tc::concat(std::forward<Rngs>(rngs)...));
 	}
 
 	namespace explicit_convert_to_container_detail {

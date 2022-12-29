@@ -74,6 +74,14 @@ namespace tc {
 	#define MSVC_WORKAROUND_THIS this
 #endif
 
+#ifdef _MSC_VER
+	// MSVC seems to mistake the .template memfn<...>(...) syntax for the beginning of a template class.
+	// Supposedly, this has been fixed in VS2019, but we still see it happening in a few places.
+	#define MSVC_TEMPLATE_WORKAROUND
+#else
+	#define MSVC_TEMPLATE_WORKAROUND template
+#endif
+
 #if WCHAR_MAX == 0xFFFF // == 2 bytes unsigned: We want tc::char16 to be unsigned. wchar_t is unsigned on MSVC, but that's implementation-specific.
 namespace tc {
 	using char16 = wchar_t;

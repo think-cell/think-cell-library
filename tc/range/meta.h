@@ -96,21 +96,6 @@ namespace tc {
 	template<typename Rng>
 	using range_output_t = typename range_output_no_adl::from_adl<Rng>::type;
 
-	namespace FuncWithOutput_adl {
-		template<typename Func, typename... T>
-		struct [[nodiscard]] FuncWithOutput : tc::decay_t<Func> {
-			friend auto range_output_t_impl(FuncWithOutput const&) -> tc::type::list<T...>; // declaration only
-		};
-
-		template<typename Func, typename... T>
-		struct [[nodiscard]] FuncWithOutput<Func, tc::type::list<T...>> : FuncWithOutput<Func, T...> {};
-	}
-
-	template<typename... T, typename Func>
-	constexpr auto generator_range_output(Func&& func) noexcept {
-		return FuncWithOutput_adl::FuncWithOutput<Func, T...>{std::forward<Func>(func)};
-	}
-
 	namespace no_adl {
 		template<typename T>
 		struct value_type_impl {

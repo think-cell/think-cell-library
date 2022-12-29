@@ -14,14 +14,12 @@
 namespace tc {
 	namespace empty_range_adl {
 		struct TC_EMPTY_BASES empty_range {
-			template< typename Func >
-			constexpr auto operator()(Func const&) const& noexcept {
+			constexpr auto operator()(tc::unused /*sink*/) const& noexcept {
 				return tc::constant<tc::continue_>();
 			}
 		};
 
-		template< typename Func >
-		constexpr auto for_each_reverse_impl(empty_range const&, Func const&) noexcept {
+		constexpr auto for_each_reverse_impl(empty_range const&, tc::unused /*sink*/) noexcept {
 			return tc::constant<tc::continue_>();
 		}
 

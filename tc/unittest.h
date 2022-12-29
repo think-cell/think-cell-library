@@ -24,7 +24,7 @@ namespace tc {
 	// create a generator range that gives the same values as the rng it takes (for testing)
 	template<typename Rng> 
 	constexpr auto make_generator_range(Rng&& rng) noexcept {
-		return tc::generator_range_output<tc::range_output_t<decltype(*tc::as_const(tc::as_lvalue(tc::make_reference_or_value(std::forward<Rng>(rng)))))>>([rng=tc::make_reference_or_value(std::forward<Rng>(rng))](auto&& sink) noexcept {
+		return tc::generator_range_output<tc::type::transform_t<tc::range_output_t<decltype(*tc::as_const(tc::as_lvalue(tc::make_reference_or_value(std::forward<Rng>(rng)))))>, std::add_rvalue_reference_t>>([rng=tc::make_reference_or_value(std::forward<Rng>(rng))](auto&& sink) noexcept {
 			return tc::for_each(*rng, tc_move_if_owned(sink));
 		});
 	}

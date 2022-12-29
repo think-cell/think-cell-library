@@ -162,6 +162,79 @@ namespace tc {
 	}
 	using generator_range_adl::generator_range_adaptor;
 
+	namespace generator_range_output_detail::no_adl {
+		template<typename Derived, typename T>
+		struct generator_range_output_sink_base {
+			STATICASSERTSAME( T, std::remove_cv_t<T>, "range output must be a reference or cv-unqualified object type" );
+
+			template<typename Derived_ = Derived>
+			constexpr auto operator()(T t) const& return_MAYTHROW(
+				tc::invoke(tc::derived_cast<Derived_>(this)->m_sink, std::forward<T>(t))
+			)
+		};
+
+		template<typename Sink, typename... T>
+		struct generator_range_output_sink : generator_range_output_sink_base<generator_range_output_sink<Sink, T...>, T>... {
+			static_assert(tc::decayed<Sink>);
+			using guaranteed_break_or_continue = guaranteed_break_or_continue_t<Sink>;
+			Sink m_sink;
+
+			template<typename Sink_>
+			constexpr generator_range_output_sink(tc::aggregate_tag_t, Sink_&& sink) noexcept : m_sink(std::forward<Sink_>(sink)) {}
+
+			using generator_range_output_sink_base<generator_range_output_sink<Sink, T...>, T>::operator()...;
+
+			// generator_range_output_sink forwards chunks without modifications.
+			// This is relevant when m_sink is a tc::contiguous_chunk_appender or tc::no_adl::with_iterator_range.
+			// To enforce consistency with operator(), we enforce all output types of a chunk to be similar to
+			// one of the declared output types.
+			template<typename U>
+			using is_valid_chunk_output = tc::constant<
+				((
+					std::is_reference<T>::value && !std::is_const<std::remove_reference_t<T>>::value
+						? std::same_as<T, U&&> // require exact match for mutable references
+						: std::same_as< // bind immutable references and prvalues from any reference to same underlying object type
+							std::remove_const_t<std::remove_reference_t<T>>,
+							std::remove_const_t<std::remove_reference_t<U>>
+						>
+				) || ...)
+			>;
+
+			template<typename Rng> requires tc::has_mem_fn_chunk<Sink const&, Rng>::value
+			constexpr auto chunk(Rng&& rng) const& noexcept(noexcept(m_sink.chunk(std::declval<Rng>()))) {
+				static_assert(
+					tc::type::all_of<tc::range_output_t<Rng>, is_valid_chunk_output>::value,
+					"The underlying range produces a type that is not declared in the generator_range_output wrapper."
+				);
+				return m_sink.chunk(std::forward<Rng>(rng));
+			}
+		};
+	}
+
+	namespace generator_range_output_adaptor_adl {
+		template<typename Rng, typename... T>
+		struct [[nodiscard]] TC_EMPTY_BASES generator_range_output_adaptor : generator_range_output_adaptor<Rng, tc::type::list<T...>> {
+			using generator_range_output_adaptor<Rng, tc::type::list<T...>>::generator_range_output_adaptor;
+		};
+
+		template<typename Rng, typename... T>
+		struct [[nodiscard]] TC_EMPTY_BASES generator_range_output_adaptor<Rng, tc::type::list<T...>> : tc::generator_range_adaptor<Rng> {
+			using generator_range_adaptor<Rng>::generator_range_adaptor;
+			friend auto range_output_t_impl(generator_range_output_adaptor const&)
+				-> tc::type::unique_t<tc::type::list<tc::remove_rvalue_reference_t<T>...>>; // declaration only
+
+			template<typename Sink>
+			constexpr auto adapted_sink(Sink&& sink, bool /*bReverse*/) const& noexcept {
+				return generator_range_output_detail::no_adl::generator_range_output_sink<tc::decay_t<Sink>, T...>(tc::aggregate_tag, std::forward<Sink>(sink));
+			}
+		};
+	}
+
+	template<typename... TypeListOrTs, typename Rng>
+	constexpr auto generator_range_output(Rng&& rng) noexcept {
+		return generator_range_output_adaptor_adl::generator_range_output_adaptor<Rng, TypeListOrTs...>(tc::aggregate_tag, std::forward<Rng>(rng));
+	}
+
 	namespace range_output_from_base_range_adl {
 		struct TC_EMPTY_BASES range_output_from_base_range {
 			template<typename Derived, std::enable_if_t<tc::is_base_of_decayed<range_output_from_base_range, Derived>::value>* = nullptr>

@@ -138,4 +138,19 @@ namespace tc {
 		};
 	}
 	using no_adl::bool_context;
+
+	template<typename TTarget, typename TSource>
+	[[nodiscard]] constexpr decltype(auto) reluctant_explicit_cast(TSource&& src) noexcept {
+		STATICASSERTSAME(std::remove_cvref_t<TTarget>, TTarget);
+		if constexpr( tc::is_base_of_decayed<TTarget, TSource>::value ) {
+			return std::forward<TSource>(src);
+		} else {
+			return tc::explicit_cast<TTarget>(std::forward<TSource>(src));
+		}
+	}
+
+	template<typename Lhs, typename Rhs>
+	constexpr void assign_explicit_cast(Lhs& lhs, Rhs&& rhs) noexcept {
+		lhs=tc::explicit_cast<Lhs>(std::forward<Rhs>(rhs));
+	}
 }

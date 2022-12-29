@@ -355,7 +355,7 @@ namespace tc {
 	}
 
 	template<typename Rng> requires tc::is_range_with_iterators<Rng>::value
-	[[nodiscard]] auto make_view(Rng&& rng) return_ctor_MAYTHROW(
+	[[nodiscard]] constexpr auto make_view(Rng&& rng) return_ctor_MAYTHROW(
 		tc::make_subrange_result_t< Rng >,
 		(std::forward<Rng>(rng))
 	)
@@ -366,7 +366,7 @@ namespace tc {
 	// slice from range + iterator pair
 	// slice from range + difference
 	template< typename Rng, typename Begin, typename End >
-	[[nodiscard]] auto slice(Rng&& rng, Begin&& begin, End&& end) return_ctor_noexcept(
+	[[nodiscard]] constexpr auto slice(Rng&& rng, Begin&& begin, End&& end) return_ctor_noexcept(
 		tc::make_subrange_result_t< Rng >,
 		(std::forward<Rng>(rng), std::forward<Begin>(begin), std::forward<End>(end))
 	)
@@ -670,8 +670,7 @@ namespace tc {
 					: m_nCount(VERIFYPRED(nCount, 0<_))
 				{}
 
-				template<typename T>
-				ETakePred take(T const&) & noexcept {
+				ETakePred take(tc::unused) & noexcept {
 					--VERIFYPRED(m_nCount, 0<_);
 					return may_continue();
 				}
@@ -1066,20 +1065,17 @@ namespace tc {
 			static constexpr bool requires_iterator = false;
 			static constexpr bool allowed_if_always_has_border = true;
 
-			template<typename It, typename Rng>
-			static constexpr void pack_border(It&&, Rng&&) noexcept {}
-			template<typename Rng, typename... OptEndIt>
-			static constexpr void pack_no_border(Rng&&, OptEndIt&&...) noexcept {}
-			template<typename It, typename Rng, typename... Ref>
-			static constexpr void pack_element(It&&, Rng&&, Ref&&...) noexcept {}
-			template<typename Rng, typename Ref>
-			static constexpr void pack_element(Ref&& ref) noexcept {}
-			template<typename Rng, typename It>
-			static constexpr void pack_view(Rng&&, It&&, It&&) noexcept {}
+			static constexpr void pack_border(tc::unused /*it*/, tc::unused /*rng*/) noexcept {}
+			static constexpr void pack_no_border(tc::unused /*rng*/) noexcept {}
+			static constexpr void pack_no_border(tc::unused /*rng*/, tc::unused /*itEnd*/) noexcept {}
+			static constexpr void pack_element(tc::unused /*it*/, tc::unused /*rng*/) noexcept {}
+			static constexpr void pack_element(tc::unused /*it*/, tc::unused /*rng*/, tc::unused /*ref*/) noexcept {}
 			template<typename Rng>
-			static constexpr void pack_no_element(Rng&&) noexcept {}
+			static constexpr void pack_element(tc::unused /*ref*/) noexcept {}
+			static constexpr void pack_no_element(tc::unused) noexcept {}
 			template<typename Rng>
 			static constexpr void pack_no_element() noexcept {}
+			static constexpr void pack_view(tc::unused /*rng*/, tc::unused /*itBegin*/, tc::unused /*itEnd*/) noexcept {}
 		};
 
 		/////////////////////////////////////
@@ -1089,40 +1085,43 @@ namespace tc {
 			static constexpr bool requires_iterator = false;
 			static constexpr bool allowed_if_always_has_border = false;
 
-			template<typename It, typename Rng, typename... Ref>
-			static constexpr bool pack_element(It&&, Rng&&, Ref&&...) noexcept {
+			static constexpr bool pack_border(tc::unused /*it*/, tc::unused /*rng*/) noexcept {
 				return true;
 			}
-			template<typename Rng, typename Ref>
-			static constexpr bool pack_element(Ref&& ref) noexcept {
+			static constexpr bool pack_no_border(tc::unused /*rng*/) noexcept {
+				return false;
+			}
+			static constexpr bool pack_no_border(tc::unused /*rng*/, tc::unused /*itEnd*/) noexcept {
+				return false;
+			}
+
+			static constexpr bool pack_element(tc::unused /*it*/, tc::unused /*rng*/) noexcept {
 				return true;
 			}
-			template<typename Rng, typename It>
-			static constexpr bool pack_view(Rng&&, It&&, It&&) noexcept {
-				return true;
-			}
-			template<typename Index, typename Rng>
-			static constexpr bool pack_element_index(Index&&, Rng&&) noexcept {
+			static constexpr bool pack_element(tc::unused /*it*/, tc::unused /*rng*/, tc::unused /*ref*/) noexcept {
 				return true;
 			}
 			template<typename Rng>
-			static constexpr bool pack_no_element(Rng&&) noexcept {
+			static constexpr bool pack_element(tc::unused /*ref*/) noexcept {
+				return true;
+			}
+			static constexpr bool pack_no_element(tc::unused) noexcept {
 				return false;
 			}
 			template<typename Rng>
 			static constexpr bool pack_no_element() noexcept {
 				return false;
 			}
-			template<typename Index, typename Rng>
-			static constexpr bool pack_no_element_index(Rng&&) noexcept {
-				return false;
-			}
-			template<typename It, typename Rng>
-			static constexpr bool pack_border(It&&, Rng&&) noexcept {
+
+			static constexpr bool pack_view(tc::unused /*rng*/, tc::unused /*itBegin*/, tc::unused /*itEnd*/) noexcept {
 				return true;
 			}
-			template<typename Rng, typename... OptEndIt>
-			static constexpr bool pack_no_border(Rng&&, OptEndIt&&...) noexcept {
+			template<typename Index, typename Rng>
+			static constexpr bool pack_element_index(tc::unused /*idx*/, tc::unused /*rng*/) noexcept {
+				return true;
+			}
+			template<typename Index>
+			static constexpr bool pack_no_element_index(tc::unused) noexcept {
 				return false;
 			}
 		};
@@ -1135,8 +1134,8 @@ namespace tc {
 		struct return_border {
 			static constexpr bool allowed_if_always_has_border = true;
 
-			template<typename It, typename Rng>
-			static constexpr tc::decay_t<It> pack_border(It&& it, Rng&& rng) noexcept {
+			template<typename It>
+			static constexpr tc::decay_t<It> pack_border(It&& it, tc::unused /*rng*/) noexcept {
 				return std::forward<It>(it);
 			}
 
@@ -1232,8 +1231,8 @@ namespace tc {
 		struct return_element {
 			static constexpr bool requires_iterator = true;
 
-			template<typename It, typename Rng, typename... Ref>
-			static constexpr tc::decay_t<It> pack_element(It&& it, Rng&& rng, Ref&&...) noexcept {
+			template<typename It, typename... Ref>
+			static constexpr tc::decay_t<It> pack_element(It&& it, tc::unused /*rng*/, Ref&&...) noexcept {
 				return std::forward<It>(it);
 			}
 
@@ -1247,8 +1246,8 @@ namespace tc {
 		struct return_element_or_null final {
 			static constexpr bool requires_iterator = true;
 
-			template<typename It, typename Rng, typename... Ref>
-			static constexpr auto pack_element(It&& it, Rng&& rng, Ref&&...) noexcept {
+			template<typename It, typename... Ref>
+			static constexpr auto pack_element(It&& it, tc::unused /*rng*/, Ref&&...) noexcept {
 				return tc::make_element(std::forward<It>(it));
 			}
 
@@ -1355,7 +1354,7 @@ namespace tc {
 			}
 			
 			template<typename Index, typename Rng>
-			static constexpr auto pack_no_element_index(Rng&&) noexcept {
+			static auto pack_no_element_index(Rng&&) noexcept {
 				_ASSERTFALSE;
 				return Index(0);
 			}
@@ -1588,8 +1587,8 @@ namespace tc {
 
 		TC_HAS_EXPR(dereference_operator, (T), *std::declval<T>())
 
-		template<typename Func, typename T>
-		constexpr auto invoke(Func&& func, T&&) return_decltype_xvalue_by_ref_MAYTHROW(
+		template<typename Func>
+		constexpr auto invoke(Func&& func, tc::unused) return_decltype_xvalue_by_ref_MAYTHROW(
 			tc::invoke(std::forward<Func>(func)) // MAYTHROW
 		)
 

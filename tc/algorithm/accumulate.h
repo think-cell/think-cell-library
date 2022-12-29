@@ -10,6 +10,7 @@
 
 #include "for_each.h"
 #include "../base/modified.h"
+#include "../optional.h"
 
 namespace tc {
 	/////////////////////////////////////////////////////

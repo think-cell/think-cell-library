@@ -310,8 +310,7 @@ struct GeneratorMutableInt {
 namespace {
 
 struct dummy_pred {
-	template<typename T>
-	bool operator()(T const&) noexcept;
+	bool operator()(tc::unused) noexcept;
 };
 
 static_assert(

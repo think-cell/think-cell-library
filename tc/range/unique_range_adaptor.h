@@ -280,7 +280,7 @@ namespace tc {
 		private:
 			using this_type = partition_range_adaptor;
 		protected:
-			STATIC_VIRTUAL(FindPartitionEnd) // (index_t<Rng>&) -> void
+			STATIC_VIRTUAL_CONSTEXPR(FindPartitionEnd) // (index_t<Rng>&) -> void
 		private:
 			STATIC_OVERRIDE_MOD(constexpr, begin_index)() const& noexcept -> tc_index {
 				auto const idxBegin = this->base_begin_index();

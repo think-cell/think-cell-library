@@ -92,10 +92,10 @@ UNITTESTDEF(filter_no_self_assignment_of_rvalues) {
 	tc::vector<S> vs{5,S{}};
 	tc::sort_accumulate_each_unique_range(
 		vs,
-		[&](auto const&, auto const&) noexcept {
+		[&](tc::unused, tc::unused) noexcept {
 			return false;
 		},
-		[&](auto&, auto const&) noexcept {
+		[&](auto&, tc::unused) noexcept {
 		}
 	);
 }
