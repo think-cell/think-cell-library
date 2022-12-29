@@ -181,7 +181,9 @@ namespace tc {
 			using Overload::Overload;
 			template<typename... Variant>
 			detail::visit_result_t<Overload, Variant...> operator()(Variant&&... v) const& MAYTHROW {
+#if defined(TC_PRIVATE) || defined(_DEBUG)
 				([&]() noexcept { _ASSERTNORETURN( !v.valueless_by_exception() ); }(), ...);
+#endif 				
 				return
 #ifdef TC_MAC
 					std::__variant_detail::__visitation::__variant::__visit_value // does not throw std::bad_variant_access, which is not supported until macOS 10.14
