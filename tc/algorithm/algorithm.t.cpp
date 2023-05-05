@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -363,11 +363,11 @@ UNITTESTDEF(constexpr_sort_test) {
 
 	auto Test = [](auto rngn) noexcept {
 		auto vecn = tc::explicit_cast<tc::vector<int>>(rngn);
-		_ASSERTEQUAL(modified(vecn, tc::sort_inplace(_)), modified(vecn, tc::constexpr_sort_inplace_detail::constexpr_sort_inplace(tc::begin(_), tc::end(_), tc::fn_less())));
+		_ASSERTEQUAL(tc_modified(vecn, tc::sort_inplace(_)), tc_modified(vecn, tc::constexpr_sort_inplace_detail::constexpr_sort_inplace(tc::begin(_), tc::end(_), tc::fn_less())));
 	};
 
 	for( int i = 0; i < 17; ++i ) {
-		Test(tc::begin_next<tc::return_take>([&](auto sink) noexcept { for(;;) RETURN_IF_BREAK( tc::continue_if_not_break(sink, dist(gen)) ); }, dist(gen)));
+		Test(tc::begin_next<tc::return_take>([&](auto sink) noexcept { for(;;) tc_yield(sink, dist(gen)); }, dist(gen)));
 		Test(tc::iota(0, i));
 		Test(tc::reverse(tc::iota(0, i)));
 		Test(tc::repeat_n(i, 0));

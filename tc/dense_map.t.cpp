@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -11,10 +11,10 @@
 #include "dense_map.h"
 #include "enumset.h"
 
-static_assert(!std::is_convertible<tc::array<int&,10>, tc::array<int&, 9>>::value);
-static_assert(!std::is_convertible<tc::array<int&,9>, tc::array<int&, 10>>::value);
+static_assert(!std::convertible_to<tc::array<int&,10>, tc::array<int&, 9>>);
+static_assert(!std::convertible_to<tc::array<int&,9>, tc::array<int&, 10>>);
 
-DEFINE_ENUM(
+TC_DEFINE_ENUM(
 	MyEnum,
 	myenum,
 	(ONE)(TWO)
@@ -74,7 +74,7 @@ UNITTESTDEF(test_dense_map_recursive_transform) {
 
 namespace {
 	constexpr tc::dense_map<MyEnum, int> an(tc::func_tag, [n = 0](auto e) mutable noexcept {
-		return n++ | tc::underlying_cast(e) << 4;
+		return n++ | tc::to_underlying(e) << 4;
 	});
 
 	static_assert( 0x00 == an[myenumONE] );
@@ -83,7 +83,7 @@ namespace {
 
 UNITTESTDEF(test_dense_map_recursive_func_tag) {
 	tc::dense_map<MyEnum, tc::dense_map<MyEnum, tc::dense_map<bool, int>>> aaan(tc::func_tag, [n = 0](auto e1, auto e2, bool b3) mutable noexcept {
-		return n++ | tc::underlying_cast(e1) << 6 | tc::underlying_cast(e2) << 5 | tc::underlying_cast(b3) << 4;
+		return n++ | tc::to_underlying(e1) << 6 | tc::to_underlying(e2) << 5 | tc::to_underlying(b3) << 4;
 	});
 
 	_ASSERTEQUAL( aaan[myenumONE][myenumONE][false], 0x00 );
@@ -123,13 +123,7 @@ UNITTESTDEF(test_make_array_from_range) {
 	constexpr auto an5 = tc::make_array(an4);
 	static_assert(tc::equal(an4, an5));
 
-#if defined(__clang__) || defined(_MSC_VER)
-	static_assert(
-#else // Fixed in GCC 13: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=92505
-	_ASSERT(
-#endif
-		tc::equal(an0, tc::make_array<2>(tc::make_generator_range(an0)))
-	);
+	GCC_WORKAROUND_STATIC_ASSERT(tc::equal(an0, tc::make_array<2>(tc::make_generator_range(an0))));
 }
 
 UNITTESTDEF(test_dense_map_with_ordering_key) {
@@ -163,4 +157,33 @@ UNITTESTDEF(dense_map_tuple) {
 	_ASSERTEQUAL((dm[T{true, myenumTWO}]), 4);
 	static_assert(tc::equal(dm, tc::iota(1, 5)));
 	_ASSERT(tc::equal(tc::all_values<T>(), tc::make_array(tc::aggregate_tag, T{false, myenumONE}, T{false, myenumTWO}, T{true, myenumONE}, T{true, myenumTWO})));
+
+	STATICASSERTSAME(decltype(tc::all_constants<MyEnum>), (tc::tuple<tc::constant<myenumONE>, tc::constant<myenumTWO>> const));
+
+#if defined(__clang__) || defined(_MSC_VER) // Fixed in GCC 13: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=92505
+	STATICASSERTSAME(decltype(tc::all_constants<tc::tuple<MyEnum, MyEnum>>), (tc::tuple<
+		tc::constant<tc::make_tuple(myenumONE, myenumONE)>,
+		tc::constant<tc::make_tuple(myenumONE, myenumTWO)>,
+		tc::constant<tc::make_tuple(myenumTWO, myenumONE)>,
+		tc::constant<tc::make_tuple(myenumTWO, myenumTWO)>
+	> const));
+#endif
+}
+
+UNITTESTDEF(dense_map_dense_map) {
+	tc::dense_map<
+		tc::dense_map<MyEnum, MyEnum>,
+		tc::dense_map<MyEnum, MyEnum>
+	> dmdm(tc::func_tag, [](auto dm) noexcept {
+		tc::reverse_inplace(dm);
+		return dm;
+	});
+	_ASSERTEQUAL(TC_FWD(dmdm[{myenumONE, myenumONE}][myenumONE]), myenumONE);
+	_ASSERTEQUAL(TC_FWD(dmdm[{myenumONE, myenumONE}][myenumTWO]), myenumONE);
+	_ASSERTEQUAL(TC_FWD(dmdm[{myenumONE, myenumTWO}][myenumONE]), myenumTWO);
+	_ASSERTEQUAL(TC_FWD(dmdm[{myenumONE, myenumTWO}][myenumTWO]), myenumONE);
+	_ASSERTEQUAL(TC_FWD(dmdm[{myenumTWO, myenumONE}][myenumONE]), myenumONE);
+	_ASSERTEQUAL(TC_FWD(dmdm[{myenumTWO, myenumONE}][myenumTWO]), myenumTWO);
+	_ASSERTEQUAL(TC_FWD(dmdm[{myenumTWO, myenumTWO}][myenumONE]), myenumTWO);
+	_ASSERTEQUAL(TC_FWD(dmdm[{myenumTWO, myenumTWO}][myenumTWO]), myenumTWO);
 }

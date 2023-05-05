@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -98,14 +98,14 @@ namespace tc {
 					}
 				};
 				TNodeVector vecpnodeBegin=PathToRoot(itBegin.get_node());
-				TNodeVector vecpnodeEnd=PathToRoot(modified(itEnd, --_).get_node());
+				TNodeVector vecpnodeEnd=PathToRoot(tc_modified(itEnd, --_).get_node());
 				_ASSERTEQUAL( tc::back(vecpnodeBegin), tc::back(vecpnodeEnd) ); // both paths terminate at the root
-				node_type* pnodeCommon=*modified( boost::mismatch(
+				node_type* pnodeCommon=*tc_modified( boost::mismatch(
 					tc::reverse(vecpnodeBegin),
 					tc::reverse(vecpnodeEnd)
 				).first, --_ ); // or second, same thing
 				#if defined(BOOST_MULTI_INDEX_ENABLE_SAFE_MODE)
-					return boost::multi_index::safe_mode::safe_iterator<boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<AugmentPolicy, NodeBase> >>(pnodeCommon, tc::make_mutable_ptr(itBegin.owner()));
+					return boost::multi_index::safe_mode::safe_iterator<boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<AugmentPolicy, NodeBase> >>(pnodeCommon, tc::as_mutable_ptr(itBegin.owner()));
 				#else
 					return boost::multi_index::detail::bidir_node_iterator<boost::multi_index::detail::ordered_index_node<AugmentPolicy, NodeBase> >(pnodeCommon);
 				#endif
@@ -165,7 +165,7 @@ namespace tc {
 			_ASSERT( itBegin!=itEnd );
 			--itEnd;
 			return internal_partition_point( tc_move(itBegin), tc_move(itEnd), [&pred](It it) noexcept {
-				return pred(tc::as_const(*it),tc::as_const(*modified(it, ++_)));
+				return pred(tc::as_const(*it),tc::as_const(*tc_modified(it, ++_)));
 			} );
 		}
 

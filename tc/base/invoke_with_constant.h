@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -10,8 +10,8 @@
 
 #include "type_traits_fwd.h"
 #include "utility.h"
-
 #include "../algorithm/size.h"
+#include "../range/iota_range.h"
 
 namespace tc {
 	namespace invoke_with_constant_impl {
@@ -77,5 +77,15 @@ namespace tc {
 				return impl_type::invoke_non_constexpr(std::forward<Func>(func), nIndex, std::forward<Args>(args)...);
 			}
 		}
+	}
+
+	template<typename Enum, typename Func, typename... Args>
+	decltype(auto) invoke_with_constant(Func func, Enum e, Args&&... args) MAYTHROW {
+		return tc::invoke_with_constant<std::make_index_sequence<tc::size(tc::all_values<Enum>())>>(
+			[&](auto constn) MAYTHROW -> decltype(auto) {
+				return tc::invoke(func, tc::constant<tc_at_nodebug(tc::all_values<Enum>(), decltype(constn)::value)>(), std::forward<Args>(args)...);
+			},
+			tc::all_values<Enum>().index_of(e)
+		);
 	}
 }

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -55,7 +55,7 @@ namespace tc {
 	DEFINE_TAG_TYPE(aggregate_tag) // tag to distinguish constructors that aggregate their single argument from templated copy constructors
 	DEFINE_TAG_TYPE(func_tag)
 
-	// DEFINE_FN(func) always defines a function void func(define_fn_dummy_t)
+	// tc_define_fn(func) always defines a function void func(define_fn_dummy_t)
 	// If that function did not exist, -> decltype( func(...) ) would not be
 	// a valid statement and clang complains about that.
 	DEFINE_TAG_TYPE(define_fn_dummy)

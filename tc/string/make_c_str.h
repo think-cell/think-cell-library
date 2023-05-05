@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -13,15 +13,13 @@
 #include "../algorithm/append.h"
 
 namespace tc {
-	TC_HAS_EXPR(as_c_str, (T), tc::as_c_str(std::declval<T>()))
-
 	namespace no_adl {
 		template< typename Char, typename Rng, typename Enable = void >
 		struct has_convertible_as_c_str final
 		: tc::constant<false> {};
 
 		template< typename Char, typename Rng >
-		struct has_convertible_as_c_str< Char, Rng, std::enable_if_t<tc::is_safely_convertible<decltype(tc::as_c_str(std::declval<Rng>())), Char*>::value> > final
+		struct has_convertible_as_c_str< Char, Rng, std::enable_if_t<tc::safely_convertible_to<decltype(tc::as_c_str(std::declval<Rng>())), Char*>> > final
 		: tc::constant<true> {};
 
 		template< typename Char, typename Str >
@@ -40,7 +38,7 @@ namespace tc {
 				return tc::as_c_str(m_str);
 			}
 			
-			operator tc::ptr_range<Char const>() const /*no &*/ noexcept {
+			operator tc::span<Char const>() const /*no &*/ noexcept {
 				return m_str;
 			}
 		private:
@@ -56,7 +54,7 @@ namespace tc {
 	//   3. Explicitly specified <Char> could be omitted if the char pointer type deduced from the first rng is convertible to destination c string
 	//   4. make_mutable_c_str(<Char>): create a value or reference holder which is castable to mutable c string
 
-	template< typename Char, typename Rng0, std::enable_if_t<tc::no_adl::has_convertible_as_c_str<Char const, Rng0>::value>* = nullptr >
+	template< typename Char, typename Rng0 > requires tc::no_adl::has_convertible_as_c_str<Char const, Rng0>::value
 	auto make_c_str(Rng0&& rng0) noexcept {
 		static_assert(tc::decayed<Char>);
 		return tc::no_adl::make_c_str_impl<Char const, Rng0>(std::forward<Rng0>(rng0));
@@ -78,7 +76,7 @@ namespace tc {
 		return tc::make_c_str<tc::range_value_t<decltype(tc::concat(std::declval<Rng0>(), std::declval<Rng>()...))>>(std::forward<Rng0>(rng0), std::forward<Rng>(rng)...);
 	}
 
-	template< typename Char, typename Rng0, std::enable_if_t<tc::no_adl::has_convertible_as_c_str<Char, Rng0>::value>* = nullptr >
+	template< typename Char, typename Rng0 > requires tc::no_adl::has_convertible_as_c_str<Char, Rng0>::value
 	auto make_mutable_c_str(Rng0&& rng0) noexcept {
 		static_assert(tc::decayed<Char>);
 		return tc::no_adl::make_c_str_impl<Char, Rng0>(std::forward<Rng0>(rng0));

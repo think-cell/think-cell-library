@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -60,9 +60,8 @@ namespace tc {
 			};
 
 		public:
-			template<typename Self, typename Sink> requires
-				tc::is_base_of_decayed<intersection_difference_adaptor, Self>::value
-				&& tc::is_range_with_iterators<Rng1>::value
+			template<tc::decayed_derived_from<intersection_difference_adaptor> Self, typename Sink> requires
+				tc::range_with_iterators<Rng1>
 			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
 				if constexpr (bIntersection) {
 					return tc::interleave_2(
@@ -85,9 +84,8 @@ namespace tc {
 				}
 			}
 
-			template<typename Self, typename Sink> requires
-				tc::is_base_of_decayed<intersection_difference_adaptor, Self>::value
-				&& tc::is_range_with_iterators<Rng0>::value && (!tc::is_range_with_iterators<Rng1>::value)
+			template<tc::decayed_derived_from<intersection_difference_adaptor> Self, typename Sink> requires
+				tc::range_with_iterators<Rng0> && (!tc::range_with_iterators<Rng1>)
 			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
 				auto const predReverse = [pred=tc::decay_copy(std::forward<Self>(self).m_comp)](auto const& lhs, auto const& rhs) noexcept {
 					return tc::negate(pred(rhs, lhs));
@@ -113,7 +111,7 @@ namespace tc {
 				}
 			}
 
-			template<typename Self, std::enable_if_t<tc::is_base_of_decayed<intersection_difference_adaptor, Self>::value>* = nullptr>
+			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, intersection_difference_adaptor>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
 			friend auto range_output_t_impl(Self&&) -> tc::range_output_t<decltype(*tc::get<0>(std::declval<Self>().m_tplbaserng))> {} // unevaluated
 		};
 	}
@@ -121,7 +119,7 @@ namespace tc {
 
 	template<bool bIntersection, typename Rng0, typename Rng1>
 	auto set_intersect_or_difference(Rng0&& rng0, Rng1&& rng1) noexcept {
-		static_assert(tc::is_instance<std::unordered_set, std::remove_reference_t<Rng1>>::value);
+		static_assert(tc::instance<std::remove_reference_t<Rng1>, std::unordered_set>);
 		return tc::filter(
 			std::forward<Rng0>(rng0),
 			[rng1_ = reference_or_value< Rng1 >(tc::aggregate_tag, std::forward<Rng1>(rng1))](auto const& element) noexcept {

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -21,35 +21,49 @@ namespace tc {
 	////////////////////////
 	// generic container algorithms
 
-	static_assert(tc::is_instance<std::vector,tc::vector<int>>::value);
+	static_assert(tc::instance<tc::vector<int>, std::vector>);
 
 	namespace cont_assign_default {
+		namespace detail {
+			template<typename Cont, typename Rng0, tc::appendable<Cont&>... Rng> requires std::same_as<std::remove_cvref_t<Cont>, Rng0> && tc::safely_assignable_from<Cont&, Rng0&&>
+			constexpr void cont_assign_impl(Cont&& cont, Rng0&& rng0, Rng&&... rng) MAYTHROW {
+				cont=std::forward<Rng0>(rng0);
+				if constexpr(0<sizeof...(Rng)) {
+					tc::append(cont, std::forward<Rng>(rng)...);
+				}
+			}
+	
+			template< typename Cont, typename... Rng>
+			constexpr void cont_assign_impl(Cont&& cont, Rng&&... rng) MAYTHROW {
+				if constexpr( has_mem_fn_clear<Cont> ) {
+					static_assert( std::is_lvalue_reference<Cont>::value );
+					cont.clear();
+					if constexpr (0<sizeof...(Rng)) {
+						if constexpr( has_mem_fn_lower_bound<Cont> || has_mem_fn_hash_function<Cont> ) {
+							tc::cont_must_insert_range(cont, tc::concat(std::forward<Rng>(rng)...)); // MAYTHROW
+						} else {
+							tc::append(cont, std::forward<Rng>(rng)...); // MAYTHROW
+						}
+					}
+				} else {
+					auto itOut = tc::begin(cont);
+#ifdef _CHECKS
+					auto const itEnd = tc::end(cont);
+#endif
+					tc::for_each(tc::concat(tc_move_if_owned(rng)...), [&](auto&& t) noexcept {
+						*VERIFYPRED(itOut, itEnd!=_) = tc_move_if_owned(t);
+						++itOut;
+					}); // MAYTHROW
+					_ASSERT(itEnd==itOut);
+				}
+			}
+		}
 		template< typename Cont, typename... Rng>
 		constexpr void cont_assign_impl(Cont&& cont, Rng&&... rng) MAYTHROW {
 			if( !std::is_constant_evaluated() ) {
 				(tc::assert_no_overlap(cont, std::forward<Rng>(rng)), ...);
 			}
-			if constexpr( has_mem_fn_clear<Cont>::value ) {
-				static_assert( std::is_lvalue_reference<Cont>::value );
-				cont.clear();
-				if constexpr (0<sizeof...(Rng)) {
-					if constexpr( has_mem_fn_lower_bound<Cont>::value || has_mem_fn_hash_function<Cont>::value ) {
-						tc::cont_must_insert_range(cont, tc::concat(std::forward<Rng>(rng)...)); // MAYTHROW
-					} else {
-						tc::append(cont, std::forward<Rng>(rng)...); // MAYTHROW
-					}
-				}
-			} else {
-				auto itOut = tc::begin(cont);
-#ifdef _CHECKS
-				auto const itEnd = tc::end(cont);
-#endif
-				tc::for_each(tc::concat(tc_move_if_owned(rng)...), [&](auto&& t) noexcept {
-					*VERIFYPRED(itOut, itEnd!=_) = tc_move_if_owned(t);
-					++itOut;
-				}); // MAYTHROW
-				_ASSERT(itEnd==itOut);
-			}
+			detail::cont_assign_impl(std::forward<Cont>(cont), std::forward<Rng>(rng)...); // MAYTHROW
 		}
 	}
 

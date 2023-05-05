@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -54,8 +54,8 @@
 		return_decltype_xvalue_by_ref_MAYTHROW( std::forward<O>(o). __VA_ARGS__ ( std::forward<__A>(__a)... ) )
 
 // When a functor must be declared in class-scope, e.g., to access a protected member function,
-// you should use DEFINE_MEM_FN instead of DEFINE_FN. 
-// DEFINE_FN always has to define a function named "void func(define_fn_dummy_t)" which may
+// you should use DEFINE_MEM_FN instead of tc_define_fn. 
+// tc_define_fn always has to define a function named "void func(define_fn_dummy_t)" which may
 // shadow inherited members named func.
 #define DEFINE_MEM_FN( func ) \
 	struct [[nodiscard]] dot_member_ ## func { \
@@ -72,7 +72,7 @@
 		DEFINE_MEM_FN_AUTO_BODY_( func ) \
 	};
 
-#define DEFINE_FN( func ) \
+#define tc_define_fn( func ) \
 	static void func(tc::define_fn_dummy_t) noexcept = delete; \
 	DEFINE_FN2( func, fn_ ## func ) \
 	DEFINE_MEM_FN( func )
@@ -127,12 +127,12 @@ namespace tc {
 namespace tc::mem_fn_adl {
 	template<typename Lambda>
 	struct TC_EMPTY_BASES wrap : Lambda {
-		static_assert( tc::is_empty<Lambda>::value );
+		static_assert( tc::empty_type<Lambda> );
 		constexpr wrap() noexcept = default;
 		constexpr explicit wrap(Lambda lambda) noexcept {}
 		// decltype(auto) forces the compiler to look into the function to determine the result type. This ensures the static_assert triggers. MSVC just crashed when returning void.
 		friend decltype(auto) returns_reference_to_argument(wrap) noexcept {
-			static_assert(tc::dependent_false<Lambda>::value, "Choose between TC_MEM_FN_XVALUE_BY_REF and TC_MEM_FN_XVALUE_BY_VAL");
+			static_assert(tc::dependent_false<Lambda>::value, "Choose between tc_mem_fn_xvalue_by_ref and tc_mem_fn_xvalue_by_val");
 		}
 	};
 
@@ -144,7 +144,7 @@ namespace tc::mem_fn_adl {
 	template<typename Lambda> wrap_xvalue_by_ref(Lambda) -> wrap_xvalue_by_ref<Lambda>;
 }
 
-// We can use TC_MEM_FN instead of std::mem_fn when the member function has multiple overloads, for example accessors.
+// We can use tc_mem_fn instead of std::mem_fn when the member function has multiple overloads, for example accessors.
 // Note: if you want to capture something in the parameter list, you should not use this macro but write your own lambda and make sure it's safe.
 
 #define TC_MEM_FN_IMPL(return_decltype_xxx, ...) \
@@ -152,18 +152,18 @@ namespace tc::mem_fn_adl {
 		tc_move_if_owned(_)__VA_ARGS__(tc_move_if_owned(args)...) \
 	)
 
-#define TC_MEM_FN(...) tc::mem_fn_adl::wrap{TC_MEM_FN_IMPL(return_decltype_MAYTHROW, __VA_ARGS__)}
-#define TC_MEM_FN_XVALUE_BY_REF(...) tc::mem_fn_adl::wrap_xvalue_by_ref{TC_MEM_FN_IMPL(return_decltype_xvalue_by_ref_MAYTHROW, __VA_ARGS__)}
-#define TC_MEM_FN_XVALUE_BY_VAL(...) tc::mem_fn_adl::wrap{TC_MEM_FN_IMPL(return_decltype_xvalue_by_val_MAYTHROW, __VA_ARGS__)}
-#define TC_FN(...) tc::mem_fn_adl::wrap_xvalue_by_ref{[](auto&&... args) return_decltype_xvalue_by_ref_MAYTHROW(__VA_ARGS__(tc_move_if_owned(args)...))}
+#define tc_mem_fn(...) tc::mem_fn_adl::wrap{TC_MEM_FN_IMPL(return_decltype_MAYTHROW, __VA_ARGS__)}
+#define tc_mem_fn_xvalue_by_ref(...) tc::mem_fn_adl::wrap_xvalue_by_ref{TC_MEM_FN_IMPL(return_decltype_xvalue_by_ref_MAYTHROW, __VA_ARGS__)}
+#define tc_mem_fn_xvalue_by_val(...) tc::mem_fn_adl::wrap{TC_MEM_FN_IMPL(return_decltype_xvalue_by_val_MAYTHROW, __VA_ARGS__)}
+#define tc_fn(...) tc::mem_fn_adl::wrap_xvalue_by_ref{[](auto&&... args) return_decltype_xvalue_by_ref_MAYTHROW(__VA_ARGS__(tc_move_if_owned(args)...))}
 
 #define TC_MEMBER_IMPL(return_decltype_xxx, ...) \
 	[](auto&& _) return_decltype_xxx(tc_move_if_owned(_)__VA_ARGS__)
 
-#define TC_MEMBER(...) tc::mem_fn_adl::wrap{TC_MEMBER_IMPL(return_decltype_noexcept, __VA_ARGS__)}
-#define TC_MEMBER_XVALUE_BY_REF(...) tc::mem_fn_adl::wrap_xvalue_by_ref{TC_MEMBER_IMPL(return_decltype_xvalue_by_ref_noexcept, __VA_ARGS__)}
-#define TC_MEMBER_XVALUE_BY_VAL(...) tc::mem_fn_adl::wrap{TC_MEMBER_IMPL(return_decltype_xvalue_by_val_noexcept, __VA_ARGS__)}
-#define TC_MEMBER_NOEXCEPT(...) tc::mem_fn_adl::wrap{TC_MEMBER_IMPL(return_decltype_NOEXCEPT, __VA_ARGS__)}
+#define tc_member(...) tc::mem_fn_adl::wrap{TC_MEMBER_IMPL(return_decltype_noexcept, __VA_ARGS__)}
+#define tc_member_xvalue_by_ref(...) tc::mem_fn_adl::wrap_xvalue_by_ref{TC_MEMBER_IMPL(return_decltype_xvalue_by_ref_noexcept, __VA_ARGS__)}
+#define tc_member_xvalue_by_val(...) tc::mem_fn_adl::wrap{TC_MEMBER_IMPL(return_decltype_xvalue_by_val_noexcept, __VA_ARGS__)}
+#define tc_member_noexcept(...) tc::mem_fn_adl::wrap{TC_MEMBER_IMPL(return_decltype_NOEXCEPT, __VA_ARGS__)}
 
 namespace tc {
 	namespace no_adl {
@@ -235,6 +235,7 @@ namespace tc {
 	INFIX_FN_( plus, + )
 	INFIX_FN_( minus, - )
 	INFIX_FN_( mul, * )
+	INFIX_FN_( logical_or, || )
 	// tc::fn_div defined in round.h
 	INFIX_FN_( assign_plus, += )
 	INFIX_FN_( assign_minus, -= )

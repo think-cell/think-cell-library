@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -16,7 +16,7 @@
 // EAlign
 
 // persistent
-DEFINE_ENUM_WITH_OFFSET(EAlign, ealign, -1,
+TC_DEFINE_ENUM_WITH_OFFSET(EAlign, ealign, -1,
 	(LOW)
 	(CENTER)
 	(HIGH)
@@ -29,7 +29,7 @@ namespace EAlign_adl {
 }
 
 namespace tc {
-	DEFINE_UNPREFIXED_ENUM(lohi, (lo)(hi))
+	TC_DEFINE_UNPREFIXED_ENUM(lohi, (lo)(hi))
 
 	namespace lohi_adl {
 		// support for multiplication with tc::sign
@@ -47,20 +47,14 @@ namespace tc {
 	}
 
 	template< typename T >
-	[[nodiscard]] constexpr T negate_if( bool_context b, T t ) noexcept{
-		if(b) {
-			return -t;
-		} else{
-			return t;
-		}
+	[[nodiscard]] constexpr T negate_if( bool_context b, T t ) noexcept {
+		if(b) -tc::inplace(t);
+		return t;
 	}
 	template< typename T >
-	[[nodiscard]] constexpr T not_if( bool_context b, T t ) noexcept{
-		if(b) {
-			return ~t;
-		} else{
-			return t;
-		}
+	[[nodiscard]] constexpr T not_if( bool_context b, T t ) noexcept {
+		if(b) ~tc::inplace(t);
+		return t;
 	}
 
 	namespace interval_adl {
@@ -68,7 +62,7 @@ namespace tc {
 	}
 	using interval_adl::interval;
 
-	DEFINE_SCOPED_ENUM(sign,/*no prefix*/,(neg)(pos))
+	TC_DEFINE_SCOPED_ENUM(sign,/*no prefix*/,(neg)(pos))
 
 	namespace sign_adl {
 		// support for multiplication with tc::sign
@@ -86,7 +80,7 @@ namespace tc {
 
 		template<typename T>
 		[[nodiscard]] constexpr tc::decay_t<T> operator*(T&& t, sign sign_) noexcept {
-			return modified( std::forward<T>(t), _ *= sign_ );
+			return tc_modified( std::forward<T>(t), _ *= sign_ );
 		}
 
 		template<tc::decayed T>

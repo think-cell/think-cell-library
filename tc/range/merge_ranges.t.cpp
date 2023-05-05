@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -87,7 +87,7 @@ UNITTESTDEF(merge_ranges_with_unique_range_2) {
 	tc::cont_emplace_back(vecvecn2, std::initializer_list<int>{113,114,115,116});
 	tc::cont_emplace_back(vecvecn2, std::initializer_list<int>{117,118});
 
-	auto lesspred = tc::projected(tc::fn_less(), TC_FN(tc::get<0>));
+	auto lesspred = tc::projected(tc::fn_less(), tc_fn(tc::get<0>));
 
 	int n=0;
 	int nTotal=0;

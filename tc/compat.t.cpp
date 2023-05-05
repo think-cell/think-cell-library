@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -29,9 +29,9 @@ namespace {
 	using HasNoBegin = lookup::NoBegin;
 	using HasBoostBegin = boost::iterator_range< tc::iterator_t<std::array<unsigned long,1> const> >;
 
-	STATIC_ASSERT(tc::is_range_with_iterators<HasStdBegin>::value);
-	STATIC_ASSERT(tc::is_range_with_iterators<HasBoostBegin>::value);
-	STATIC_ASSERT(!tc::is_range_with_iterators<HasNoBegin>::value);
+	STATIC_ASSERT(tc::range_with_iterators<HasStdBegin>);
+	STATIC_ASSERT(tc::range_with_iterators<HasBoostBegin>);
+	STATIC_ASSERT(!tc::range_with_iterators<HasNoBegin>);
 
 	struct TransFilterTest final {
 		template <typename T>
@@ -56,12 +56,12 @@ namespace {
 		// This is where it gets weird, as soon as you somehow use has_range_iterator<WlFilterdList> (here at class scope)
 		// things go crashing down, even though has_range_iterator<WlFilterdList> is perfectly fine one line later at function scope
 
-		using WlFilterdTransformedList = tc::transform_adaptor<decltype(&transf_times_100), WlFilterdList, true>; STATIC_ASSERT(tc::is_range_with_iterators<WlFilterdList>::value);
-		//using WlFilterdTransformedList = transform_adaptor<decltype(&transf_times_100), WlFilterdList, tc::is_range_with_iterators<WlFilterdList>::value>;
+		using WlFilterdTransformedList = tc::transform_adaptor<decltype(&transf_times_100), WlFilterdList, true>; STATIC_ASSERT(tc::range_with_iterators<WlFilterdList>);
+		//using WlFilterdTransformedList = transform_adaptor<decltype(&transf_times_100), WlFilterdList, tc::range_with_iterators<WlFilterdList>>;
 		//using WlFilterdTransformedList = transform_adaptor<decltype(&transf_times_100), WlFilterdList>;
 		WlFilterdTransformedList getWlFilterdTransformedList() const& noexcept {
-			STATIC_ASSERT(tc::is_range_with_iterators<WlFilterdList>::value);
-			STATIC_ASSERT(tc::is_range_with_iterators<WlFilterdTransformedList>::value);
+			STATIC_ASSERT(tc::range_with_iterators<WlFilterdList>);
+			STATIC_ASSERT(tc::range_with_iterators<WlFilterdTransformedList>);
 
 			return  tc::transform(getWlFilterdList(), &transf_times_100 );
 		}
@@ -79,7 +79,7 @@ namespace {
 UNITTESTDEF( TransFilterTest ) {
 
 	TransFilterTest t;
-	auto_cref( res, t.getWlFilterdTransformedList() );
+	tc_auto_cref( res, t.getWlFilterdTransformedList() );
 
 	UNUSED_TEST_VARIABLE(res);
 	TEST_init_hack(tc::vector, std::size_t, original, {std::size_t(300), std::size_t(500)});
@@ -98,7 +98,7 @@ UNITTESTDEF( boost_iterator_range_compat ) {
 
 	boost::iterator_range< tc::iterator_t<std::array<unsigned long,1> const> > const baul_r = boost::make_iterator_range(baul);
 
-	STATIC_ASSERT(tc::is_range_with_iterators<decltype(baul)>::value);
+	STATIC_ASSERT(tc::range_with_iterators<decltype(baul)>);
 
 	TEST_RANGE_EQUAL(baul_exp, baul_r);
 

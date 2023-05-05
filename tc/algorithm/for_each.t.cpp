@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -9,7 +9,8 @@
 #include "../base/assert_defs.h"
 #include "../unittest.h"
 #include "../base/ref.h"
-#include "../range/adjacent_tuples_adaptor.h"
+#include "../range/adjacent_adaptor.h"
+#include "../range/ordered_pairs.h"
 #include "../container/insert.h"
 #include "for_each_xxx.h"
 
@@ -118,7 +119,7 @@ UNITTESTDEF( for_each ) {
 	// call with function
 	g_mock.mock_reset(exp); tc::for_each(v, foo);
 	//g_mock.mock_reset(exp); tc::for_each(gv, foo);
-	g_mock.mock_reset(exp); tc::for_each(gv, TC_FN(foo));
+	g_mock.mock_reset(exp); tc::for_each(gv, tc_fn(foo));
 
 	//call with pointer to function
 	g_mock.mock_reset(exp); tc::for_each(v, &foo);
@@ -219,7 +220,7 @@ UNITTESTDEF(for_each_adjacent_tuple_deref) {
 
 	tc::vector<int> vecn{0,0,0,0,0};
 	tc::for_each(
-		tc::adjacent_tuples<3>(vecn),
+		tc::adjacent<3>(vecn),
 		[](int& n0, int& n1, int& n2) noexcept {
 			++n0;
 			++n1;
@@ -234,7 +235,7 @@ UNITTESTDEF(for_each_adjacent_tuple_deref) {
 
 	int nTransforms = 0;
 	tc::for_each(
-		tc::adjacent_tuples<3>(
+		tc::adjacent<3>(
 			tc::transform(
 				vecn,
 				[&](int n) noexcept {++nTransforms; return n;}
@@ -251,7 +252,7 @@ UNITTESTDEF(for_each_adjacent_tuple_deref) {
 	{
 		lr_overloads overloads;
 		tc::for_each(
-			tc::adjacent_tuples<3>(vecn),
+			tc::adjacent<3>(vecn),
 			std::ref(overloads)
 		);
 
@@ -261,7 +262,7 @@ UNITTESTDEF(for_each_adjacent_tuple_deref) {
 	{
 		lr_overloads overloads;
 		tc::for_each(
-			tc::adjacent_tuples<3>(
+			tc::adjacent<3>(
 				tc::transform(vecn, [](int n) noexcept {return n;})
 			),
 			std::ref(overloads)
@@ -271,31 +272,17 @@ UNITTESTDEF(for_each_adjacent_tuple_deref) {
 	}
 }
 
-
-UNITTESTDEF(for_each_ordered_pair) {
-	tc::vector<int> vecn{1,2,3,4};
-	tc::vector<std::pair<int, int>> vecpairnn;
-	tc::for_each_ordered_pair(
-		vecn,
-		[&](auto&& _1, auto&& _2) noexcept { tc::cont_emplace_back(vecpairnn, tc_move_if_owned(_1), tc_move_if_owned(_2)); }
-	);
-	_ASSERTEQUAL(tc::size(vecpairnn), 6);
-	_ASSERT(tc::find_unique<tc::return_bool>(vecpairnn, std::make_pair(1, 2)));
-	_ASSERT(tc::find_unique<tc::return_bool>(vecpairnn, std::make_pair(1, 3)));
-	_ASSERT(tc::find_unique<tc::return_bool>(vecpairnn, std::make_pair(1, 4)));
-	_ASSERT(tc::find_unique<tc::return_bool>(vecpairnn, std::make_pair(2, 3)));
-	_ASSERT(tc::find_unique<tc::return_bool>(vecpairnn, std::make_pair(2, 4)));
-	_ASSERT(tc::find_unique<tc::return_bool>(vecpairnn, std::make_pair(3, 4)));
-
-	tc::for_each_ordered_pair(
-		std::initializer_list<int>({}),
-		[](int, int) noexcept { _ASSERTFALSE; }
-	);
-
-	tc::for_each_ordered_pair(
-		tc::single(1),
-		[](int, int) noexcept { _ASSERTFALSE; }
-	);
+UNITTESTDEF(ordered_pairs) {
+	_ASSERT(tc::equal(
+		tc::ordered_pairs(tc::make_array(tc::aggregate_tag, 1,2,3,4)),
+		tc::make_array(tc::aggregate_tag,
+			tc::make_tuple(1, 2), tc::make_tuple(1, 3), tc::make_tuple(1, 4),
+			tc::make_tuple(2, 3), tc::make_tuple(2, 4),
+			tc::make_tuple(3, 4)
+		)
+	));
+	_ASSERT(tc::empty(tc::ordered_pairs(tc::make_empty_range<int>())));
+	_ASSERT(tc::empty(tc::ordered_pairs(tc::single(1))));
 }
 
 }

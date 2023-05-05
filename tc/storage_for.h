@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -122,14 +122,7 @@ namespace tc {
 				return tc_move_always(tc::as_mutable(dereference()));
 			}
 			constexpr void dtor() & noexcept {
-#ifdef __clang__
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdelete-non-abstract-non-virtual-dtor" // destructor called on non-final 'CFixAndSizeDragSolver' that has virtual functions but non-virtual destructor
-#endif
-				tc::dtor(tc::as_mutable(this->m_buffer));
-#ifdef __clang__
-#pragma clang diagnostic pop
-#endif
+				tc::dtor_static(tc::as_mutable(this->m_buffer));
 			}
 		protected:
 			STATIC_VIRTUAL_CONSTEXPR(dereference)

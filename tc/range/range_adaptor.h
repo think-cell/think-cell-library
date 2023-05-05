@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -22,7 +22,7 @@
 
 namespace tc {
 
-	TC_HAS_MEM_FN_XXX_TRAIT_DEF(end_index, const&);
+	TC_HAS_MEM_FN_XXX_CONCEPT_DEF(end_index, const&);
 
 	//////////////////////////////////////////////////////////
 	// range adaptors
@@ -54,6 +54,7 @@ namespace tc {
 			STATIC_VIRTUAL_CONSTEXPR(decrement_index)
 			STATIC_VIRTUAL_CONSTEXPR(dereference_index)
 			STATIC_VIRTUAL_CONSTEXPR(advance_index)
+			STATIC_VIRTUAL_CONSTEXPR(index_to_address)
 			STATIC_VIRTUAL_CONSTEXPR(distance_to_index)
 			STATIC_VIRTUAL_CONSTEXPR(middle_point)
 
@@ -64,12 +65,12 @@ namespace tc {
 			constexpr const_iterator begin() const&
 				return_MAYTHROW(make_iterator(begin_index()))
 
-			template<typename Derived_=Derived, std::enable_if_t<!has_mem_fn_end_index<Derived_>::value || !tc::is_equality_comparable<Index>::value>* = nullptr>
+			template<typename Derived_=Derived, std::enable_if_t<!has_mem_fn_end_index<Derived_> || !tc::is_equality_comparable<Index>::value>* = nullptr>
 			constexpr end_sentinel end() const& noexcept {
 				return {};
 			}
 
-			template<typename Derived_ = Derived, std::enable_if_t<has_mem_fn_end_index<Derived_>::value && tc::is_equality_comparable<Index>::value>* = nullptr>
+			template<typename Derived_ = Derived, std::enable_if_t<has_mem_fn_end_index<Derived_> && tc::is_equality_comparable<Index>::value>* = nullptr>
 			constexpr const_iterator end() const&
 				return_MAYTHROW(make_iterator(end_index()))
 
@@ -80,7 +81,7 @@ namespace tc {
 			constexpr iterator begin() &
 				return_MAYTHROW(make_iterator(begin_index()))
 
-			template<typename Derived_ = Derived, std::enable_if_t<has_mem_fn_end_index<Derived_>::value && tc::is_equality_comparable<Index>::value>* = nullptr>
+			template<typename Derived_ = Derived, std::enable_if_t<has_mem_fn_end_index<Derived_> && tc::is_equality_comparable<Index>::value>* = nullptr>
 			constexpr iterator end() &
 				return_MAYTHROW(make_iterator(end_index()))
 
@@ -89,7 +90,7 @@ namespace tc {
 
 			STATIC_OVERRIDE_MOD(
 				TC_FWD(
-					template<typename Derived_ = Derived, std::enable_if_t<has_mem_fn_end_index<Derived_>::value && tc::is_equality_comparable<Index>::value>* = nullptr>
+					template<typename Derived_ = Derived, std::enable_if_t<has_mem_fn_end_index<Derived_> && tc::is_equality_comparable<Index>::value>* = nullptr>
 					constexpr
 				),
 			at_end_index)(tc_index const& idx) const&
@@ -168,7 +169,7 @@ namespace tc {
 			STATICASSERTSAME( T, std::remove_cv_t<T>, "range output must be a reference or cv-unqualified object type" );
 
 			template<typename Derived_ = Derived>
-			constexpr auto operator()(T t) const& return_MAYTHROW(
+			constexpr auto operator()(T t) const& return_decltype_MAYTHROW(
 				tc::invoke(tc::derived_cast<Derived_>(this)->m_sink, std::forward<T>(t))
 			)
 		};
@@ -200,12 +201,8 @@ namespace tc {
 				) || ...)
 			>;
 
-			template<typename Rng> requires tc::has_mem_fn_chunk<Sink const&, Rng>::value
+			template<typename Rng> requires tc::has_mem_fn_chunk<Sink const&, Rng> && tc::type::all_of<tc::range_output_t<Rng>, is_valid_chunk_output>::value
 			constexpr auto chunk(Rng&& rng) const& noexcept(noexcept(m_sink.chunk(std::declval<Rng>()))) {
-				static_assert(
-					tc::type::all_of<tc::range_output_t<Rng>, is_valid_chunk_output>::value,
-					"The underlying range produces a type that is not declared in the generator_range_output wrapper."
-				);
 				return m_sink.chunk(std::forward<Rng>(rng));
 			}
 		};
@@ -237,7 +234,7 @@ namespace tc {
 
 	namespace range_output_from_base_range_adl {
 		struct TC_EMPTY_BASES range_output_from_base_range {
-			template<typename Derived, std::enable_if_t<tc::is_base_of_decayed<range_output_from_base_range, Derived>::value>* = nullptr>
+			template<typename Derived, std::enable_if_t<tc::decayed_derived_from<Derived, range_output_from_base_range>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
 			friend auto range_output_t_impl(Derived&&) -> tc::range_output_t<decltype(std::declval<Derived>().base_range())> {} // unevaluated
 		};
 	}
@@ -299,56 +296,96 @@ namespace tc {
 				tc::increment_index(this->base_range(),idx)
 			)
 
-			STATIC_OVERRIDE_MOD(
-				TC_FWD(template<
-					ENABLE_SFINAE,
-					std::enable_if_t<
-						tc::has_decrement_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value &&
-						boost::iterators::detail::is_traversal_at_least<MaximumTraversal, boost::iterators::bidirectional_traversal_tag>::value
-					>* = nullptr
-				> constexpr),
-				decrement_index
-			)(tc_index& idx) const& MAYTHROW -> void {
+			STATIC_OVERRIDE_MOD(constexpr, decrement_index)(tc_index& idx) const& MAYTHROW -> void
+				requires
+					tc::has_decrement_index<std::remove_reference_t<Rng>> &&
+					boost::iterators::detail::is_traversal_at_least<MaximumTraversal, boost::iterators::bidirectional_traversal_tag>::value
+			{
 				tc::decrement_index(this->base_range(),idx);
 			}
 
-			STATIC_OVERRIDE_MOD(
-				TC_FWD(template<
-					ENABLE_SFINAE,
-					std::enable_if_t<
-						tc::has_advance_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value &&
-						boost::iterators::detail::is_traversal_at_least<MaximumTraversal, boost::iterators::random_access_traversal_tag>::value
-					>* = nullptr
-				> constexpr),
-				advance_index
-			)(tc_index& idx, typename boost::range_difference<Rng>::type d) const& MAYTHROW -> void {
+			STATIC_OVERRIDE_MOD(constexpr, advance_index)(tc_index& idx, typename boost::range_difference<Rng>::type d) const& MAYTHROW -> void
+				requires
+					tc::has_advance_index<std::remove_reference_t<Rng>> &&
+					boost::iterators::detail::is_traversal_at_least<MaximumTraversal, boost::iterators::random_access_traversal_tag>::value
+			{
 				tc::advance_index(this->base_range(),idx,d);
 			}
 
-			STATIC_OVERRIDE_MOD(
-				TC_FWD(template<
-					ENABLE_SFINAE,
-					std::enable_if_t<
-						tc::has_distance_to_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value &&
-						boost::iterators::detail::is_traversal_at_least<MaximumTraversal, boost::iterators::random_access_traversal_tag>::value
-					>* = nullptr
-				> constexpr),
-				distance_to_index
-			)(tc_index const& idxLhs, tc_index const& idxRhs) const& noexcept {
+			STATIC_OVERRIDE_MOD(constexpr, index_to_address)(tc_index const& idx) & MAYTHROW
+				requires tc::has_index_to_address<std::remove_reference_t<Rng>>
+			{
+				return tc::index_to_address(this->base_range(), idx);
+			}
+			STATIC_OVERRIDE_MOD(constexpr, index_to_address)(tc_index const& idx) const& MAYTHROW
+				requires tc::has_index_to_address<std::remove_reference_t<Rng>>
+			{
+				return tc::index_to_address(this->base_range(), idx);
+			}
+
+			STATIC_OVERRIDE_MOD(constexpr, distance_to_index)(tc_index const& idxLhs, tc_index const& idxRhs) const& noexcept
+				requires
+					tc::has_distance_to_index<std::remove_reference_t<Rng>> &&
+					boost::iterators::detail::is_traversal_at_least<MaximumTraversal, boost::iterators::random_access_traversal_tag>::value
+			{
 				return tc::distance_to_index(this->base_range(),idxLhs,idxRhs);
 			}
 
-			STATIC_OVERRIDE_MOD(
-				TC_FWD(template<
-					ENABLE_SFINAE,
-					std::enable_if_t<SFINAE_VALUE(WithMiddlePoint) && tc::has_middle_point<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value>* = nullptr
-				> constexpr),
-			middle_point)( tc_index & idxBegin, tc_index const& idxEnd ) const& noexcept -> void {
+			STATIC_OVERRIDE_MOD(constexpr, middle_point)( tc_index & idxBegin, tc_index const& idxEnd ) const& noexcept -> void
+				requires WithMiddlePoint && tc::has_middle_point<std::remove_reference_t<Rng>>
+			{
 				tc::middle_point(this->base_range(),idxBegin,idxEnd);
 			}
 		};
 	}
 	using no_adl::index_range_adaptor;
+
+	namespace no_adl {
+		template<template<bool, typename...> typename AdaptorTemplate, template<typename...> typename IndexTemplate, typename... Rng>
+		struct product_index_range_adaptor
+			: AdaptorTemplate<false, Rng...>
+			, range_iterator_from_index<
+				AdaptorTemplate<true, Rng...>,
+				IndexTemplate<tc::index_t<std::remove_reference_t<Rng>>...>
+			>
+		{
+			static constexpr bool c_bHasStashingIndex=std::disjunction<tc::has_stashing_index<std::remove_reference_t<Rng>>...>::value;
+
+			using AdaptorTemplate<false, Rng...>::AdaptorTemplate;
+			using typename product_index_range_adaptor::range_iterator_from_index::tc_index;
+
+			template<typename Self>
+			static constexpr auto base_ranges(Self&& self) noexcept { // TODO C++23 deducing *this
+				return tc::tuple_transform(
+					std::forward<Self>(self).m_tupleadaptbaserng,
+					tc_mem_fn_xvalue_by_ref(.base_range)
+				);
+			}
+
+		private:
+			using Derived = AdaptorTemplate<true, Rng...>;
+			using this_type = product_index_range_adaptor;
+
+			STATIC_OVERRIDE_MOD(constexpr, dereference_index)(tc_index const& idx) const& noexcept {
+				return tc::tuple_transform(
+					tc::zip(this->m_tupleadaptbaserng, idx),
+					[](auto&& adaptbaserng, auto const& baseidx) noexcept -> decltype(auto) {
+						return tc::dereference_index(adaptbaserng.base_range(), baseidx);
+					}
+				);
+			}
+
+			STATIC_OVERRIDE_MOD(constexpr, dereference_index)(tc_index const& idx) & noexcept {
+				return tc::tuple_transform(
+					tc::zip(this->m_tupleadaptbaserng, idx),
+					[](auto&& adaptbaserng, auto const& baseidx) noexcept -> decltype(auto) {
+						return tc::dereference_index(adaptbaserng.base_range(), baseidx);
+					}
+				);
+			}
+		};
+	}
+	using no_adl::product_index_range_adaptor;
 }
 
 namespace tc::no_adl {

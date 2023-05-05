@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -15,6 +15,7 @@
 #include "return_decltype.h"
 #include "type_traits_fwd.h"
 #include "template_func.h"
+#include "explicit_cast_fwd.h"
 
 #include <boost/integer.hpp>
 #ifndef __EMSCRIPTEN__
@@ -67,14 +68,14 @@ namespace tc {
 		namespace derived_cast_internal_default {
 			template<typename To, typename From>
 			[[nodiscard]] constexpr same_cvref_t< To, From&&> derived_cast_internal_impl( tc::type::identity<To>, From&& t ) noexcept {
-				static_assert( std::is_base_of<std::remove_reference_t<From>, To>::value, "derived_cast is for downcasts only.");
-				return static_cast< same_cvref_t< To, From&&> >(t);
+				static_assert( tc::derived_from<To, std::remove_reference_t<From>>, "derived_cast is for downcasts only.");
+				return static_cast< apply_cvref_t< To, From&&> >(t);
 			}
 
 			template<typename To, typename From>
 			[[nodiscard]] constexpr same_cvref_t< To, From>* derived_cast_internal_impl( tc::type::identity<To>, From* pt ) noexcept {
-				static_assert( std::is_base_of<std::remove_pointer_t<From>, To>::value, "derived_cast is for downcasts only.");
-				return static_cast< same_cvref_t< To, From>* >(pt);
+				static_assert( tc::derived_from<To, std::remove_pointer_t<From>>, "derived_cast is for downcasts only.");
+				return static_cast< apply_cvref_t< To, From>* >(pt);
 			}
 		}
 
@@ -83,46 +84,86 @@ namespace tc {
 
 	template<typename To, typename From>
 	[[nodiscard]] constexpr decltype(auto) derived_cast(From&& t) noexcept {
+		STATICASSERTSAME(std::remove_reference_t<To>, To);
 		return tc::derived_cast_detail::derived_cast_internal(tc::type::identity<To>(), std::forward<From>(t));
 	}
 
-	//-------------------------------------------------------------------------------------------------------------------------
+	/////////////////////////////////////////////
+	// to_underlying
 
-	namespace underlying_cast_default {
-		template< typename T > requires tc::is_char<T>::value
-		[[nodiscard]] constexpr auto underlying_cast_impl(T t)
+	namespace to_underlying_default {
+		template< tc::char_type T >
+		[[nodiscard]] constexpr auto to_underlying_impl(T t)
 			return_decltype_noexcept( static_cast<typename boost::uint_t<sizeof(T)*8>::exact>(t) )
 
-		template< typename Enum > requires std::is_enum<Enum>::value
-		[[nodiscard]] constexpr std::underlying_type_t<Enum> underlying_cast_impl( Enum e ) noexcept {
-			return static_cast<std::underlying_type_t<Enum>>(e);
+		template< tc::enum_type T >
+		[[nodiscard]] constexpr auto to_underlying_impl( T e ) noexcept {
+			return static_cast<std::underlying_type_t<T>>(e);
 		}
 
 		// No implicit conversions to bool
-		template< typename T > requires std::is_same<T, bool>::value
-		[[nodiscard]] constexpr unsigned char underlying_cast_impl(T b) noexcept {
+		template< std::same_as<bool> T >
+		[[nodiscard]] constexpr auto to_underlying_impl(T b) noexcept {
 			STATICASSERTEQUAL(sizeof(bool), sizeof(unsigned char));
 			return static_cast<unsigned char>(b);
 		}
 	}
 
-	DEFINE_TMPL_FUNC_WITH_CUSTOMIZATIONS(underlying_cast)
+	DEFINE_TMPL_FUNC_WITH_CUSTOMIZATIONS(to_underlying)
+
+	template<typename T>
+	using underlying_type_t = decltype(tc::to_underlying(std::declval<T>()));
+
+	namespace from_underlying_detail {
+		namespace from_underlying_default {
+			template< tc::char_type T >
+			[[nodiscard]] constexpr auto from_underlying_impl(tc::type::identity<T>, underlying_type_t<T> t) noexcept {
+				// We don't need to do any checks, the underlying type has the same size.
+				return static_cast<T>(t);
+			}
+
+			template< tc::enum_type T >
+			[[nodiscard]] constexpr auto from_underlying_impl(tc::type::identity<T>, underlying_type_t<T> e) noexcept {
+				// We cannot do checks on arbitrary enums; there's a specialization for contiguous enums.
+				return static_cast<T>(e);
+			}
+
+			[[nodiscard]] constexpr auto from_underlying_impl(tc::type::identity<bool>, underlying_type_t<bool> b) noexcept {
+				_ASSERTANYOF(b, (0)(1));
+				return static_cast<bool>(b);
+			}
+		}
+
+		DEFINE_TMPL_FUNC_WITH_CUSTOMIZATIONS(from_underlying)
+	}
+
+	template<typename T, typename U>
+		requires tc::explicit_castable_from<tc::underlying_type_t<T>, U>
+	[[nodiscard]] constexpr T from_underlying(const U& value) return_MAYTHROW(
+		from_underlying_detail::from_underlying(tc::type::identity<T>{}, tc::explicit_cast<tc::underlying_type_t<T>>(value))
+	)
+
+	/////////////////////////////////////////////
+	// as_unsigned/signed
 
 	template< typename T >
-	[[nodiscard]] constexpr auto unsigned_cast(T t) noexcept code_return_decltype(
-		static_assert( tc::is_actual_integer<T>::value );
+	[[nodiscard]] constexpr auto as_unsigned(T t) noexcept code_return_decltype(
+		static_assert( tc::actual_integer<T> );
 		_ASSERTE( 0<=t );,
 		static_cast<std::make_unsigned_t<T>>(t)
 	)
 
 	template< typename T >
-	[[nodiscard]] constexpr std::make_signed_t<T> signed_cast(T t) noexcept {
-		static_assert( tc::is_actual_integer<T>::value );
+	[[nodiscard]] constexpr std::make_signed_t<T> as_signed(T t) noexcept {
+		static_assert( tc::actual_integer<T> );
 		if constexpr (!std::is_signed<T>::value) {
-			_ASSERTE(t <= tc::unsigned_cast(std::numeric_limits<std::make_signed_t<T>>::max()));
+			_ASSERTE(t <= tc::as_unsigned(std::numeric_limits<std::make_signed_t<T>>::max()));
 		}
 		return static_cast<std::make_signed_t<T>>(t);
 	}
+
+	/////////////////////////////////////////////
+	// const casts
 
 	MODIFY_WARNINGS_BEGIN(((disable)(4180))) // qualifier applied to function type has no meaning; ignored
 
@@ -144,12 +185,12 @@ namespace tc {
 	MODIFY_WARNINGS_END
 
 	template< typename T >
-	[[nodiscard]] constexpr T const* make_const_ptr( T const* pt ) noexcept {
+	[[nodiscard]] constexpr T const* as_const_ptr( T const* pt ) noexcept {
 		return pt;
 	}
 
 	template< typename T >
-	[[nodiscard]] constexpr T* make_mutable_ptr( T const* pt ) noexcept {
+	[[nodiscard]] constexpr T* as_mutable_ptr( T const* pt ) noexcept {
 		return const_cast<T*>(pt);
 	}
 
@@ -159,7 +200,7 @@ namespace tc {
 	template<typename Dst, typename Src>
 	[[nodiscard]] Dst* void_cast(Src* p) noexcept{
 		static_assert(std::is_void<Src>::value,"Src must be possibly qualified void*");
-		STATICASSERTSAME(std::remove_cvref_t<Dst>, Dst);
+		static_assert(!std::is_reference<Dst>::value);
 		// static_assert(!std::is_void<Dst>::value); // practical for generic code to allow it
 		return static_cast<Dst*>(p);
 	}
@@ -167,7 +208,7 @@ namespace tc {
 	template<typename Dst, typename Src>
 	[[nodiscard]] Dst const* void_cast(Src const* p) noexcept{
 		static_assert(std::is_void<Src>::value,"Src must be possibly qualified void*");
-		STATICASSERTSAME(std::remove_cvref_t<Dst>, Dst);
+		static_assert(!std::is_reference<Dst>::value);
 		// static_assert(!std::is_void<Dst>::value); // practical for generic code to allow it
 		return static_cast<Dst const*>(p);
 	}
@@ -175,7 +216,7 @@ namespace tc {
 	template<typename Dst, typename Src>
 	[[nodiscard]] Dst volatile* void_cast(Src volatile* p) noexcept{
 		static_assert(std::is_void<Src>::value,"Src must be possibly qualified void*");
-		STATICASSERTSAME(std::remove_cvref_t<Dst>, Dst);
+		static_assert(!std::is_reference<Dst>::value);
 		// static_assert(!std::is_void<Dst>::value); // practical for generic code to allow it
 		return static_cast<Dst volatile*>(p);
 	}
@@ -183,7 +224,7 @@ namespace tc {
 	template<typename Dst, typename Src>
 	[[nodiscard]] Dst volatile const* void_cast(Src volatile const* p) noexcept{
 		static_assert(std::is_void<Src>::value,"Src must be possibly qualified void*");
-		STATICASSERTSAME(std::remove_cvref_t<Dst>, Dst);
+		static_assert(!std::is_reference<Dst>::value);
 		// static_assert(!std::is_void<Dst>::value); // practical for generic code to allow it
 		return static_cast<Dst volatile const*>(p);
 	}
@@ -191,14 +232,14 @@ namespace tc {
 	/////////////////////////////////////////////
 	// implicit_cast
 
-	template<typename TTarget, typename TSource> requires (!tc::is_actual_integer<std::remove_reference_t<TSource>>::value) && tc::is_safely_convertible<TSource&&, TTarget>::value
+	template<typename TTarget, typename TSource> requires (!tc::actual_integer<std::remove_reference_t<TSource>>) && tc::safely_convertible_to<TSource&&, TTarget>
 	[[nodiscard]] constexpr TTarget implicit_cast(TSource&& src) noexcept {
 		return std::forward<TSource>(src);
 	}
 
 	// bit filed cannot bind to universal reference
 MODIFY_WARNINGS_BEGIN(((disable)(4244))) // disable warning C4244: conversion from 'int' to 'float', possible loss of data
-	template<typename TTarget, typename TSource> requires tc::is_actual_integer<TSource>::value && tc::is_safely_convertible<TSource&&, TTarget>::value
+	template<typename TTarget, typename TSource> requires tc::actual_integer<TSource> && tc::safely_convertible_to<TSource&&, TTarget>
 	[[nodiscard]] constexpr TTarget implicit_cast(TSource src) noexcept {
 		return src;
 	}
@@ -210,7 +251,7 @@ MODIFY_WARNINGS_END
 
 	template<typename TTarget, typename TSource>
 	[[nodiscard]] std::conditional_t<
-		tc::is_base_of_decayed<TTarget, TSource>::value,
+		tc::decayed_derived_from<TSource, TTarget>,
 		TSource&&,
 		TTarget
 	> reluctant_implicit_cast(TSource&& src) noexcept {
@@ -222,7 +263,7 @@ MODIFY_WARNINGS_END
 	// reluctant_static_cast
 	// Returns a reference to its argument whenever possible, otherwise performs an explicit conversion.
 
-	template<typename TTarget, typename TSource> requires tc::is_base_of_decayed<TTarget, TSource>::value
+	template<typename TTarget, tc::decayed_derived_from<TTarget> TSource>
 	[[nodiscard]] TSource&& reluctant_static_cast(TSource&& src) noexcept {
 		STATICASSERTSAME(std::remove_cvref_t<TTarget>, TTarget);
 		return std::forward<TSource>(src);
@@ -255,12 +296,12 @@ MODIFY_WARNINGS_END
 		return str.data(); // since C++ 11, performs same function as c_str()
 	}
 
-	template<typename Char> requires tc::is_char<Char>::value
+	template<tc::char_type Char>
 	[[nodiscard]] constexpr Char const* as_c_str(Char const* psz) noexcept {
 		return psz;
 	}
 
-	template<typename Char> requires tc::is_char<Char>::value
+	template<tc::char_type Char>
 	[[nodiscard]] constexpr Char* as_c_str(Char* psz) noexcept {
 		return psz;
 	}

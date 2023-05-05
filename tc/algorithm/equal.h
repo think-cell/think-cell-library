@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -32,15 +32,15 @@ namespace tc{
 	}
 
 	template<typename Lhs, typename Rhs, std::enable_if_t<!no_adl::has_parse_match<Lhs, Rhs>::value && !no_adl::has_parse_match<Rhs, Lhs>::value>* =nullptr>
-	[[nodiscard]] constexpr auto equal_to_or_parse_match(Lhs const& lhs, Rhs const& rhs) return_decltype_noexcept( tc::equal_to(lhs,rhs) )
+	[[nodiscard]] constexpr auto equal_to_or_parse_match(Lhs const& lhs, Rhs const& rhs) return_decltype_MAYTHROW( tc::equal_to(lhs,rhs) )
 
 	template<typename Lhs, typename Rhs, std::enable_if_t<no_adl::has_parse_match<Lhs, Rhs>::value && !no_adl::has_parse_match<Rhs, Lhs>::value>* =nullptr>
-	[[nodiscard]] constexpr bool equal_to_or_parse_match(Lhs const& lhs, Rhs const& rhs) noexcept { return lhs.parse_match(rhs); }
+	[[nodiscard]] constexpr auto equal_to_or_parse_match(Lhs const& lhs, Rhs const& rhs) return_decltype_MAYTHROW( tc::implicit_cast<bool>(lhs.parse_match(rhs)) )
 
 	template<typename Lhs, typename Rhs, std::enable_if_t<!no_adl::has_parse_match<Lhs, Rhs>::value && no_adl::has_parse_match<Rhs, Lhs>::value>* =nullptr>
-	[[nodiscard]] constexpr bool equal_to_or_parse_match(Lhs const& lhs, Rhs const& rhs) noexcept { return rhs.parse_match(lhs); }
+	[[nodiscard]] constexpr auto equal_to_or_parse_match(Lhs const& lhs, Rhs const& rhs) return_decltype_MAYTHROW( tc::implicit_cast<bool>(rhs.parse_match(lhs)) )
 
-	DEFINE_FN( equal_to_or_parse_match );
+	tc_define_fn( equal_to_or_parse_match );
 
 	//-------------------------------------------------------------------------------------------------------------------------
 	// equal - check whether two ranges are equal - overloaded for combinations of generator and iterator based ranges
@@ -73,7 +73,7 @@ namespace tc{
 					, m_pred(pred)
 				{}
 
-				template<typename Elem>
+				template<typename Elem> requires requires(Pred& pred, It& it, Elem const& elem) {pred(tc::as_const(*it), elem);}
 				constexpr break_or_continue operator()(Elem const& elem) const& noexcept {
 					if (m_it == m_itEnd || !tc::explicit_cast<bool>(m_pred(tc::as_const(*m_it), elem))) { return tc::break_; }
 					++m_it;
@@ -113,20 +113,21 @@ namespace tc{
 		return starts_with<RangeReturn>(std::forward<LRng>(lrng), rrng, tc::fn_equal_to_or_parse_match());
 	}
 
-	template<typename LRng, typename RRng, typename Pred> requires is_range_with_iterators<LRng>::value
+	template<tc::range_with_iterators LRng, typename RRng, typename Pred> requires
+		requires(LRng const& lrng, RRng&& rrng){equal_impl::starts_with(tc::as_lvalue(tc::begin(lrng)), tc::as_const(tc::as_lvalue(tc::end(lrng))), tc_move_if_owned(rrng), std::declval<Pred>());}
 	[[nodiscard]] constexpr bool equal(LRng const& lrng, RRng&& rrng, Pred&& pred) MAYTHROW {
 		static_assert(!equal_impl::no_adl::is_unordered_range<tc::decay_t<LRng>>::value);
-		constexpr bool bHasSize=tc::has_size<LRng>::value && tc::has_size<RRng>::value;
+		constexpr bool bHasSize=tc::has_size<LRng> && tc::has_size<RRng>;
 		if constexpr(bHasSize) {
 			if(tc::size(lrng)!=tc::size(rrng)) return false;
 		}
 		auto it = tc::begin(lrng);
-		auto_cref(itEnd, tc::end(lrng));
+		tc_auto_cref(itEnd, tc::end(lrng));
 		return equal_impl::starts_with(it,itEnd,tc_move_if_owned(rrng),std::forward<Pred>(pred)) && (bHasSize || itEnd==it); // MAYTHROW
 	}
 
-	// forward to the symetric case above
-	template<typename LRng, typename RRng, typename Pred> requires (!is_range_with_iterators< LRng >::value && is_range_with_iterators< RRng >::value)
+	// forward to the symmetric case above
+	template<typename LRng, tc::range_with_iterators RRng, typename Pred> requires (!tc::range_with_iterators< LRng >)
 	[[nodiscard]] constexpr bool equal(LRng&& lrng, RRng const& rrng, Pred pred) noexcept {
 		return tc::equal(rrng, tc_move_if_owned(lrng), equal_impl::no_adl::reverse_pred<Pred>(pred));
 	}
@@ -149,7 +150,7 @@ namespace tc{
 		tc::equal(tc_move_if_owned(lrng), tc_move_if_owned(rrng), tc::fn_equal_to_or_parse_match())
 	)
 
-	DEFINE_FN2(tc::equal, fn_equal) // no DEFINE_FN to avoid ADL
+	DEFINE_FN2(tc::equal, fn_equal) // no tc_define_fn to avoid ADL
 
 	// boost::ends_with does not work with boost::range_iterator<transform_range>::type returning by value because it has input_iterator category
 	template<typename RangeReturn, typename LRng, typename RRng, typename Pred=tc::fn_equal_to_or_parse_match>
@@ -170,14 +171,14 @@ namespace tc{
 	namespace value_equal_to_detail {
 		template<typename T>
 		concept safe_value =
-			!tc::is_range_with_iterators<T>::value ||
-			!tc::is_range_with_iterators<tc::type::only_t<typename tc::is_instance<std::optional, T>::arguments>>::value;
+			!tc::range_with_iterators<T> ||
+			!tc::range_with_iterators<tc::type::only_t<typename tc::is_instance<T, std::optional>::arguments>>;
 	}
 
 	template <typename Lhs, typename Rhs>
 	[[nodiscard]] constexpr bool value_equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
-		if constexpr( tc::is_range_with_iterators<Lhs>::value && tc::is_range_with_iterators<Rhs>::value ) {
-			STATICASSERTEQUAL( (tc::is_instance<std::optional, Lhs>::value), (tc::is_instance<std::optional, Rhs>::value) );
+		if constexpr( tc::range_with_iterators<Lhs> && tc::range_with_iterators<Rhs> ) {
+			STATICASSERTEQUAL( (tc::instance<Lhs, std::optional>), (tc::instance<Rhs, std::optional>) );
 			return tc::equal(lhs, rhs, tc::fn_equal_to());
 		} else {
 			static_assert( value_equal_to_detail::safe_value<Lhs> );

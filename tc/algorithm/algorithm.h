@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -11,7 +11,7 @@
 #include "../base/assert_defs.h"
 #include "../base/functors.h"
 #include "../base/tag_type.h"
-#include "../range/adjacent_tuples_adaptor.h"
+#include "../range/adjacent_adaptor.h"
 #include "../range/make_range.h"
 #include "../range/meta.h"
 #include "../range/join_framed_adaptor.h"
@@ -67,26 +67,26 @@
 namespace tc {
 	template< typename Rng, typename Less = tc::fn_less>
 	[[nodiscard]] constexpr bool is_strictly_sorted(Rng const& rng, Less less = Less()) noexcept {
-		return tc::all_of(tc::adjacent_tuples<2>(rng), [&](auto const& first, auto const& second) noexcept {
+		return tc::all_of(tc::adjacent<2>(rng), [&](auto const& first, auto const& second) noexcept {
 			return less(first, second);
 		});
 	}
 	template< typename Rng, typename Less = tc::fn_less>
 	[[nodiscard]] constexpr bool is_sorted(Rng const& rng, Less less = Less()) noexcept {
-		return !tc::any_of(tc::adjacent_tuples<2>(rng), [&](auto const& first, auto const& second) noexcept {
+		return !tc::any_of(tc::adjacent<2>(rng), [&](auto const& first, auto const& second) noexcept {
 			return less(second, first);
 		});
 	}
 
 	template< typename Rng, typename Equal = tc::fn_equal_to >
 	[[nodiscard]] constexpr bool all_same(Rng const& rng, Equal equal = Equal()) noexcept {
-		if constexpr( is_range_with_iterators<Rng>::value ) {
+		if constexpr( tc::range_with_iterators<Rng> ) {
 			auto const itBegin=tc::begin(rng);
 			auto const itEnd=tc::end(rng);
 			if(itBegin==itEnd) return true;
-			auto const itNext=modified(itBegin, ++_);
+			auto const itNext=tc_modified(itBegin, ++_);
 			if(itNext==itEnd) return true;
-			auto_cref( front, *itBegin );
+			tc_auto_cref( front, *itBegin );
 			return all_of(
 				tc::drop(rng, itNext),
 				[&](auto const& _) noexcept { return equal(front, _); }
@@ -109,7 +109,7 @@ namespace tc {
 
 	namespace explicit_convert_adl {
 		template<typename TTarget, typename Rng>
-			requires has_mem_fn_lower_bound<TTarget>::value || has_mem_fn_hash_function<TTarget>::value
+			requires has_mem_fn_lower_bound<TTarget> || has_mem_fn_hash_function<TTarget>
 		TTarget explicit_convert_impl(adl_tag_t, tc::type::identity<TTarget>, Rng&& rng) noexcept {
 			TTarget cont;
 			// force each element to be inserted
@@ -133,7 +133,7 @@ namespace tc {
 			while (1 < itEnd - itBegin) {
 				_ASSERTENOTIFY( ++nIterationCount <= 32 ); // Do we actually run into O(n^2) complexity?
 				auto itPartitionBegin = itBegin;
-				auto itPartitionEnd = modified(itEnd, --_);
+				auto itPartitionEnd = tc_modified(itEnd, --_);
 				// Any iterator in the interval [itBegin, itEnd - 2] works.
 				// Middle is best for sorted and reverse sorted ranges.
 				auto itPivotElement = tc::middle_point(itBegin, itPartitionEnd);
@@ -189,7 +189,7 @@ namespace tc {
 #endif
 	template<typename Rng, typename Less = tc::fn_less>
 	constexpr void sort_inplace(Rng&& rng, Less&& less = Less()) noexcept {
-		if constexpr( has_mem_fn_sort< Rng >::value) {
+		if constexpr( has_mem_fn_sort< Rng >) {
 			static_assert( std::is_lvalue_reference<Rng>::value );
 			rng.sort( std::forward<Less>(less) );
 		} else {
@@ -236,7 +236,7 @@ namespace tc {
 			explicit sorted_index_adaptor(Rng&& rng, LessOrComp lessorcomp) noexcept
 				: tc::range_adaptor_base_range<Rng>(tc::aggregate_tag, std::forward<Rng>(rng))
 			{
-				if constexpr (tc::has_size<Rng>::value) {
+				if constexpr (tc::has_size<Rng>) {
 					tc::cont_reserve(m_vecidx, tc::size(this->base_range()));
 				}
 				for(auto idx=this->base_begin_index(); !tc::at_end_index(this->base_range(), idx); tc::increment_index(this->base_range(), idx)) {
@@ -245,18 +245,18 @@ namespace tc {
 				tc::sort_inplace(
 					m_vecidx,
 					[&](auto const& idxLhs, auto const& idxRhs ) noexcept -> bool {
-						auto_cref(lhs, tc::dereference_index(this->base_range(), idxLhs));
-						auto_cref(rhs, tc::dereference_index(this->base_range(), idxRhs));
+						tc_auto_cref(lhs, tc::dereference_index(this->base_range(), idxLhs));
+						tc_auto_cref(rhs, tc::dereference_index(this->base_range(), idxRhs));
 						if constexpr (bStable) {
-							static_assert(tc::is_random_access_range<Rng>::value);
-							auto_cref(order, lessorcomp(lhs, rhs));
+							static_assert(tc::random_access_range<Rng>);
+							tc_auto_cref(order, lessorcomp(lhs, rhs));
 							static_assert(tc::is_comparison_category<std::remove_cvref_t<decltype(order)>>);
 							if(tc::is_eq(order)) {
 								return 0<tc::distance_to_index(this->base_range(), idxLhs, idxRhs);
 							} else if(std::is_lt(order)) {
 								return true;
 							} else {
-								_ASSERT(std::is_gt(order));
+								_ASSERTDEBUG(std::is_gt(order));
 								return false;
 							}
 						} else {
@@ -266,7 +266,7 @@ namespace tc {
 				);
 			}
 
-			explicit sorted_index_adaptor(sorted_index_adaptor&& rng) noexcept requires tc::is_index_valid_for_move_constructed_range<Rng>::value // reference_or_value is movable for const Rng as well
+			sorted_index_adaptor(sorted_index_adaptor&& rng) noexcept requires tc::is_index_valid_for_move_constructed_range<Rng>::value // reference_or_value is movable for const Rng as well
 				: range_adaptor_base_range<Rng>(tc_move(rng))
 				, m_vecidx(tc_move(rng).m_vecidx)
 			{
@@ -311,7 +311,6 @@ namespace tc {
 				return *tc_move(idx);
 			}
 
-			template<ENABLE_SFINAE>
 			constexpr decltype(auto) dereference_untransform(tc_index const& idx) const& noexcept {
 				return this->base_range().dereference_untransform(*idx);
 			}
@@ -387,7 +386,7 @@ namespace tc {
 		std::optional<tc::range_value_t<Rng>> oelem;
 		tc::for_each(std::forward<Rng>(rng), [&](auto&& element) noexcept {
 			if (!oelem || less(*oelem, element)) {
-				RETURN_IF_BREAK(tc::continue_if_not_break(funcStart));
+				tc_yield(funcStart);
 				tc::optional_emplace(oelem, element);
 			}
 			return tc::continue_if_not_break(funcElem,tc_move_if_owned(element));
@@ -439,7 +438,7 @@ namespace tc {
 		tc::for_each(
 			tc::transform(
 				tc::front_unique_range(cont, std::forward<Equals>(pred)),
-				TC_FN(tc::begin) // fn_boost_begin does not work, need subrange as lvalue to get non-const iterator
+				tc_fn(tc::begin) // fn_boost_begin does not work, need subrange as lvalue to get non-const iterator
 			),
 			[&](auto it) noexcept {
 				rngfilter.keep(tc_move(it));
@@ -507,7 +506,7 @@ namespace tc {
 				tc::iterator_t<decltype(rng2)>,
 				typename boost::range_size<decltype(rng2)>::type
 			>(), // value-initialized, second=0
-			tc::fn_assign_better(tc::projected(tc::fn_greater(), TC_MEMBER(.second)))
+			tc::fn_assign_better(tc::projected(tc::fn_greater(), tc_member(.second)))
 		).first );
 		return RangeReturn::pack_element(it, std::forward<Rng>(rng));
 	}
@@ -581,14 +580,14 @@ namespace tc {
 
 	template<typename Rng>
 	void assert_no_null_terminator(Rng const& rng) noexcept {
-		if constexpr( tc::is_char< tc::range_value_t<Rng const&> >::value ) {
+		if constexpr( tc::char_type< tc::range_value_t<Rng const&> > ) {
 			_ASSERT( !tc::find_first<tc::return_bool>(rng, tc::explicit_cast<tc::range_value_t<Rng const&>>('\0') ));
 		}
 	}
 
 	template<typename Rng>
 	void remove_null_terminator(Rng& rng) noexcept {
-		static_assert( tc::is_char< tc::range_value_t<decltype((rng))> >::value );
+		static_assert( tc::char_type< tc::range_value_t<decltype((rng))> > );
 		_ASSERTEQUAL( tc::back(rng), tc::explicit_cast< tc::range_value_t<decltype((rng))> >('\0') );
 		tc::drop_last_inplace(rng);
 		tc::assert_no_null_terminator(rng);
@@ -596,7 +595,7 @@ namespace tc {
 
 	template<typename Char, std::size_t N>
 	[[nodiscard]] constexpr Char const* take_null_terminated(Char const (&ach)[N]) noexcept {
-		static_assert( tc::is_char<Char>::value );
+		static_assert( tc::char_type<Char> );
 		_ASSERTDEBUG( tc::find_first<tc::return_bool>(tc::as_array(ach), Char()) );
 		return ach;
 	}
@@ -635,7 +634,7 @@ namespace tc {
 #if defined(TC_PRIVATE) && defined(_DEBUG) && !defined(__clang__)
 					1;
 				_ASSERT(nOffset+nSentinel <= tc::size(cont));
-				tc::for_each(tc::begin_next<tc::return_drop>(cont, nOffset), TC_FN(UNINITIALIZED));
+				tc::for_each(tc::begin_next<tc::return_drop>(cont, nOffset), tc_fn(UNINITIALIZED));
 #else
 					0;
 #endif
@@ -680,7 +679,7 @@ namespace tc {
 			if constexpr (std::is_same<Cont, decltype(cont)>::value) {
 				return cont;
 			} else {
-				RETURN_CAST( tc_move(cont) );
+				tc_return_cast( tc_move(cont) );
 			}
 		}
 
@@ -729,7 +728,7 @@ namespace tc {
 	template<typename Cont, typename Func>
 	[[nodiscard]] Cont get_null_terminated_buffer(Func&& func) MAYTHROW {
 		auto cont=tc::get_buffer_detail::get_buffer_allowing_nulls<Cont>(std::forward<Func>(func)); // MAYTHROW
-		static_assert( tc::is_char< tc::range_value_t<decltype((cont))> >::value );
+		static_assert( tc::char_type< tc::range_value_t<decltype((cont))> > );
 		tc::remove_null_terminator(cont);
 		return cont;
 	}
@@ -737,7 +736,7 @@ namespace tc {
 	template<typename Cont, typename Func>
 	[[nodiscard]] Cont get_buffer_may_be_null_terminated(Func&& func) MAYTHROW {
 		auto cont = tc::get_buffer_detail::get_buffer_allowing_nulls<Cont>(std::forward<Func>(func)); // MAYTHROW
-		static_assert( tc::is_char< tc::range_value_t<decltype((cont))> >::value );
+		static_assert( tc::char_type< tc::range_value_t<decltype((cont))> > );
 		tc::take_inplace(cont, tc::ends_with<tc::return_border_or_end>(cont, tc::single(tc::explicit_cast< tc::range_value_t<decltype((cont))> >('\0'))));
 		tc::assert_no_null_terminator(cont);
 		return cont;
@@ -826,7 +825,7 @@ namespace tc {
 
 	template<typename Rng>
 	void reverse_inplace(Rng&& rng) noexcept {
-		if constexpr( has_mem_fn_reverse<std::remove_reference_t<Rng>>::value ) {
+		if constexpr( has_mem_fn_reverse<std::remove_reference_t<Rng>> ) {
 			rng.reverse();
 		} else {
 			std::reverse(tc::begin(rng), tc::end(rng));
@@ -863,7 +862,7 @@ namespace tc {
 
 	template<typename Rng, typename Less=tc::fn_less>
 	[[nodiscard]] constexpr auto constexpr_sort_unique(Rng&& rng, Less&& less=Less()) noexcept {
-		return modified(
+		return tc_modified(
 			tc::make_static_vector<tc::constexpr_size<Rng>::value>(std::forward<Rng>(rng)),
 			tc::sort_unique_inplace(_, std::forward<Less>(less))
 		);
@@ -872,10 +871,12 @@ namespace tc {
 	namespace find_first_or_unique_adl {
 		template< typename RangeReturn, IF_TC_CHECKS(bool c_bCheckUnique,) typename T, T... t, typename U >
 		[[nodiscard]] constexpr decltype(auto) find_first_or_unique_impl(adl_tag_t, IF_TC_CHECKS(tc::constant<c_bCheckUnique>,) std::integer_sequence<T, t...>, U const& u) noexcept {
+#ifdef _CHECKS
 			if constexpr (c_bCheckUnique) {
 				// This assert is stronger than the usual find_unique precondition, which allows duplicates as long as they are not searched for.
 				static_assert( tc::is_strictly_sorted(tc::constexpr_sort(tc::make_array(tc::aggregate_tag, t...))) );
 			}
+#endif
 			return ((tc::equal_to(t, u)) || ...);
 		}
 	}
@@ -914,7 +915,7 @@ namespace tc {
 				return RangeReturn::pack_no_element(std::forward<Rng>(rng));
 			} else {
 		#ifdef _CHECKS
-				auto itNext = modified(it, ++_);
+				auto itNext = tc_modified(it, ++_);
 				_ASSERT( tc::end(rng)==itNext || Greater(tc::as_const(*itNext)));
 		#endif
 				return RangeReturn::pack_element(it,std::forward<Rng>(rng),tc_move_if_owned(ref));
@@ -956,9 +957,9 @@ namespace tc {
 		if( tc::begin(rng)==it ) {
 			return it;
 		} else if( tc::end(rng)==it ) {
-			return modified(it, --_);
+			return tc_modified(it, --_);
 		} else {
-			auto itPrior = modified(it, --_);
+			auto itPrior = tc_modified(it, --_);
 			return (t - *itPrior) < (*it - t) ? itPrior : it;
 		}
 	}
@@ -976,25 +977,25 @@ namespace tc {
 		if( itA==itEndA ) goto endA;
 		if( itB==itEndB ) goto endB;
 		for(;;) {
-			if(auto_cref(order, comp( tc::as_const(*itA), tc::as_const(*itB) )); std::is_lt(order)) {
-				RETURN_IF_BREAK( tc::continue_if_not_break(fnElementA, itA++, itB) );
+			if(tc_auto_cref(order, comp( tc::as_const(*itA), tc::as_const(*itB) )); std::is_lt(order)) {
+				tc_yield(fnElementA, itA++, itB);
 				if( itA==itEndA ) goto endA;
 			} else if(tc::is_eq(order)) {
-				RETURN_IF_BREAK( tc::continue_if_not_break(fnElementBoth, itA++, itB++) );
+				tc_yield(fnElementBoth, itA++, itB++);
 				if( itA==itEndA ) goto endA;
 				if( itB==itEndB ) goto endB;
 			} else {
-				_ASSERT(std::is_gt(order));
-				RETURN_IF_BREAK( tc::continue_if_not_break(fnElementB, itA, itB++) );
+				_ASSERTDEBUG(std::is_gt(order));
+				tc_yield(fnElementB, itA, itB++);
 				if( itB==itEndB ) goto endB;
 			}
 		}
 	endB:
-		while (itA != itEndA) RETURN_IF_BREAK( tc::continue_if_not_break(fnElementA, itA++, itEndB) );
-		RETURN_CAST(tc::continue_);
+		while (itA != itEndA) tc_yield(fnElementA, itA++, itEndB);
+		tc_return_cast(tc::continue_);
 	endA:
-		while(itB != itEndB) RETURN_IF_BREAK(tc::continue_if_not_break(fnElementB, itEndA, itB++) );
-		RETURN_CAST(tc::continue_);
+		while(itB != itEndB) tc_yield(fnElementB, itEndA, itB++);
+		tc_return_cast(tc::continue_);
 	}
 
 	template< typename RngA, typename RngB, typename Comp, typename FuncElementA, typename FuncElementB, typename FuncElementBoth >
@@ -1030,10 +1031,10 @@ namespace tc {
 					} else if(auto const order=tc::invoke(m_comp, tc::as_const(a), tc::as_const(*m_itb) ); std::is_lt(order)) {
 						return tc::continue_if_not_break(m_sinka, std::forward<A>(a));
 					} else if (std::is_gt(order)) {
-						RETURN_IF_BREAK(tc::continue_if_not_break(m_sinkb, *m_itb));
+						tc_yield(m_sinkb, *m_itb);
 						++m_itb;
 					} else {
-						RETURN_IF_BREAK(tc::continue_if_not_break(m_sinkab, std::forward<A>(a), *m_itb));
+						tc_yield(m_sinkab, std::forward<A>(a), *m_itb);
 						++m_itb;
 						return tc::constant<tc::continue_>();
 					}
@@ -1043,21 +1044,25 @@ namespace tc {
 	}
 
 	template< typename RngA, typename RngB, typename Comp, typename SinkA, typename SinkB, typename SinkAB >
-	auto interleave_2(RngA&& rnga, RngB&& rngb, Comp const comp, SinkA const sinka, SinkB const sinkb, SinkAB const sinkab) MAYTHROW {
+	auto interleave_2(RngA&& rnga, RngB&& rngb, Comp const comp, SinkA const sinka, SinkB const sinkb, SinkAB const sinkab) MAYTHROW -> tc::common_type_t<
+		decltype(tc::for_each(rnga,
+			std::declval<no_adl::interleave_2_sink<decltype(tc::begin(rngb)), decltype(tc::end(rngb)), Comp, SinkA, SinkB, SinkAB>>()
+		)),
+		decltype(tc::continue_if_not_break(sinkb, *tc::begin(rngb)))
+	> {
 		auto itb=tc::begin(rngb);
 		auto endb=tc::end(rngb);
 
-		auto breakorcontinue = tc::for_each(
+		tc_return_if_break(tc::for_each(
 			rnga,
 			no_adl::interleave_2_sink<decltype(itb), decltype(endb), Comp, SinkA, SinkB, SinkAB>{itb, endb, comp, sinka, sinkb, sinkab}
-		);
-		RETURN_IF_BREAK(breakorcontinue);
+		));
 
 		while (itb != endb) {
-			RETURN_IF_BREAK(tc::implicit_cast<decltype(breakorcontinue)>(tc::continue_if_not_break(sinkb, *itb)));
+			tc_yield(sinkb, *itb);
 			++itb;
 		}
-		return tc::implicit_cast<decltype(breakorcontinue)>(tc::constant<tc::continue_>());
+		return tc::constant<tc::continue_>();
 	}
 
 	namespace no_adl {
@@ -1076,21 +1081,21 @@ namespace tc {
 			>
 			bool HasBetterElement(bool* const itb, PairItItBest const& argBest, PairItIt0 const& pairitit0, Args const&... args) const& noexcept {
 				if (pairitit0.first != pairitit0.second) {
-					if(auto_cref(order, m_compare(tc::as_const(*argBest.first), tc::as_const(*pairitit0.first))); std::is_lt(order)) {
+					if(tc_auto_cref(order, m_compare(tc::as_const(*argBest.first), tc::as_const(*pairitit0.first))); std::is_lt(order)) {
 						*itb = false;
-						return HasBetterElement(modified(itb, ++_), argBest, args...);
+						return HasBetterElement(tc_modified(itb, ++_), argBest, args...);
 					} else if(tc::is_eq(order)) {
-						bool b = HasBetterElement(modified(itb, ++_), argBest, args...);
+						bool b = HasBetterElement(tc_modified(itb, ++_), argBest, args...);
 						*itb = !b;
 						return b;
 					} else {
-						_ASSERT(std::is_gt(order));
-						*itb = !HasBetterElement(modified(itb, ++_), pairitit0, args...);
+						_ASSERTDEBUG(std::is_gt(order));
+						*itb = !HasBetterElement(tc_modified(itb, ++_), pairitit0, args...);
 						return true;
 					}
 				} else {
 					*itb = false;
-					return HasBetterElement(modified(itb, ++_), argBest, args...);
+					return HasBetterElement(tc_modified(itb, ++_), argBest, args...);
 				}
 			}
 
@@ -1104,11 +1109,11 @@ namespace tc {
 			>
 			bool FindBest(bool* const itb, PairItIt0 const& pairitit0, Args const&... args) const& {
 				if (pairitit0.first != pairitit0.second) {
-					*itb = !HasBetterElement(modified(itb, ++_), pairitit0, args...);
+					*itb = !HasBetterElement(tc_modified(itb, ++_), pairitit0, args...);
 					return true;
 				} else {
 					*itb = false;
-					return FindBest(modified(itb, ++_), args...);
+					return FindBest(tc_modified(itb, ++_), args...);
 				}
 			}
 
@@ -1125,9 +1130,9 @@ namespace tc {
 				bool ab[sizeof...(PairItIt)];
 
 				while (FindBest(tc::begin(ab), pairitit...)) {
-					RETURN_IF_BREAK(tc::continue_if_not_break(func,
+					tc_yield(func,
 						std::make_pair(pairitit.first, tc::at(ab, I))...
-					));
+					);
 
 					([](auto& it, bool const b) noexcept {if (b) ++it;}(pairitit.first, tc::at(ab,I)), ...);
 				}
@@ -1169,9 +1174,9 @@ namespace tc {
 		return tc::transform( 
 			tc::filter( 
 				std::forward<Rng>(rng), 
-				TC_FN(std::holds_alternative<T>)
+				tc_fn(std::holds_alternative<T>)
 			),
-			TC_FN(tc::get<T>)
+			tc_fn(tc::get<T>)
 		);
 	}
 
@@ -1192,10 +1197,10 @@ namespace tc {
 	auto iterate(T&& t, FuncIterate&& funcIterate) noexcept {
 		return tc::generator_range_output<tc::decay_t<T> const&>([funcIterate=tc::make_reference_or_value(std::forward<FuncIterate>(funcIterate)),t_=tc::make_reference_or_value(std::forward<T>(t))](auto func) noexcept {
 			auto t = *t_;
-			RETURN_IF_BREAK(tc::continue_if_not_break(func,tc::as_const(t)));
+			tc_yield(func,tc::as_const(t));
 			for (;;) {
-				(*funcIterate)(t);
-				RETURN_IF_BREAK(tc::continue_if_not_break(func,tc::as_const(t)));
+				tc::invoke(*funcIterate, t);
+				tc_yield(func,tc::as_const(t));
 			}
 		});
 	}
@@ -1204,7 +1209,7 @@ namespace tc {
 	decltype(auto) concat_nonempty_with_separator(RngSep&& rngSep, Rngs&&... rngs) noexcept {
 		return tc::join_with_separator(
 			std::forward<RngSep>(rngSep),
-			tc::filter(tc::make_range(std::forward<Rngs>(rngs)...), std::not_fn(TC_FN(tc::empty)))
+			tc::filter(tc::make_range(std::forward<Rngs>(rngs)...), std::not_fn(tc_fn(tc::empty)))
 		);
 	}
 

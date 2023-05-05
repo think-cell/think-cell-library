@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -57,7 +57,7 @@ namespace tc::no_adl {
 	struct is_class_safely_constructible<std::basic_string<C,T,A>, Arg0, Args...> final
 		: tc::constant<
 			0==sizeof...(Args) &&
-			( std::is_class<std::remove_reference_t<Arg0>>::value || std::is_convertible<Arg0, C const*>::value )
+			( std::is_class<std::remove_reference_t<Arg0>>::value || std::convertible_to<Arg0, C const*> )
 		>
 	{
 	};
@@ -71,7 +71,7 @@ namespace tc::no_adl {
 	// tc::change(otarget, source).
 	template <typename TTarget, typename TSource, typename TSourceNocvref = std::remove_cvref_t<TSource>>
 	struct is_optional_safely_constructible : tc::constant<
-		tc::is_safely_constructible<TTarget, TSource>::value ||
+		tc::safely_constructible_from<TTarget, TSource> ||
 		( // class type might have a convert operator to std::optional
 			std::is_class<TSourceNocvref>::value &&
 			!std::is_constructible<TTarget, TSource>::value // in this case TTarget must not be constructible from the class type to avoid ambiguity
@@ -83,26 +83,30 @@ namespace tc::no_adl {
 
 	template <typename TTarget, typename Optional, typename T>
 	struct is_optional_safely_constructible<TTarget, /*TSource*/Optional, /*TSourceNocvref*/std::optional<T>>
-		: tc::is_safely_constructible<TTarget, tc::same_cvref_t<T, Optional>>
+		: tc::constant<tc::safely_constructible_from<TTarget, tc::same_cvref_t<T, Optional>>>
 	{};
 
 	template <typename T, typename Arg0, typename... Args>
 	struct is_class_safely_constructible<std::optional<T>, Arg0, Args...> final : std::conditional_t<
 		std::is_same<std::remove_cvref_t<Arg0>, std::in_place_t>::value,
-		tc::is_safely_constructible<T, Args...>,
+#ifdef __GNUC__ // workaround gcc12 internal compiler error
+		std::integral_constant<bool, tc::safely_constructible_from<T, Args...>>,	
+#else
+		tc::constant<tc::safely_constructible_from<T, Args...>>,
+#endif
 		std::conjunction<tc::constant<0 == sizeof...(Args)>, is_optional_safely_constructible<T, Arg0>>
 	> {};
 
 	template<typename TFirst, typename TSecond, typename ArgFirst, typename ArgSecond>
 	struct is_class_safely_constructible<std::pair<TFirst, TSecond>, ArgFirst, ArgSecond> final: tc::constant<
-		tc::is_safely_constructible<TFirst, ArgFirst>::value &&
-		tc::is_safely_constructible<TSecond, ArgSecond>::value
+		tc::safely_constructible_from<TFirst, ArgFirst> &&
+		tc::safely_constructible_from<TSecond, ArgSecond>
 	> {};
 
-	template<typename TFirst, typename TSecond, typename TPair> requires tc::is_instance<std::pair, std::remove_reference_t<TPair>>::value
+	template<typename TFirst, typename TSecond, typename TPair> requires tc::instance<std::remove_reference_t<TPair>, std::pair>
 	struct is_class_safely_constructible<std::pair<TFirst, TSecond>, TPair> final: tc::constant<
-		tc::is_safely_constructible<TFirst, decltype(std::get<0>(std::declval<TPair>()))>::value &&
-		tc::is_safely_constructible<TSecond, decltype(std::get<1>(std::declval<TPair>()))>::value
+		tc::safely_constructible_from<TFirst, decltype(std::get<0>(std::declval<TPair>()))> &&
+		tc::safely_constructible_from<TSecond, decltype(std::get<1>(std::declval<TPair>()))>
 	> {};
 
 
@@ -120,7 +124,7 @@ namespace tc::no_adl {
 	};
 
 	template<typename T>
-	struct common_type_decayed<T, std::nullopt_t> : std::conditional<tc::is_instance<std::optional, T>::value, T, std::optional<T>> {};
+	struct common_type_decayed<T, std::nullopt_t> : std::conditional<tc::instance<T, std::optional>, T, std::optional<T>> {};
 
 	template<typename T>
 	struct common_type_decayed<std::nullopt_t, T> : common_type_decayed<T, std::nullopt_t> {};

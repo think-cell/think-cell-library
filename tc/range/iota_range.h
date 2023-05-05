@@ -1,15 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "../base/return_decltype.h"
-#include "subrange.h"
+#include "../algorithm/element.h"
 
 // By default, boost uses long long as counting_iterator<int>::difference_type,
 // which generates C4244 level 1 compiler warnings when cast back to int.
@@ -35,8 +34,8 @@ namespace tc {
 			static_assert(tc::decayed<T>);
 
 		private:
-			using traversal = std::conditional_t<has_decrement<T>::value,
-				std::conditional_t<has_subtract<T>::value,
+			using traversal = std::conditional_t<has_decrement<T>,
+				std::conditional_t<has_subtract<T>,
 					boost::iterators::random_access_traversal_tag,
 					boost::iterators::bidirectional_traversal_tag
 				>,
@@ -49,7 +48,7 @@ namespace tc {
 
 			// Non-random-access iterators might not be subtractable, but they still need a default difference_type, which is unrelated to subtraction.
 			using difference_type = typename std::conditional_t<
-				has_subtract<T>::value,
+				has_subtract<T>,
 				delayed_iterator_difference_type<T>,
 				tc::type::identity<std::ptrdiff_t>
 			>::type;
@@ -77,29 +76,27 @@ namespace tc {
 				*a == *b
 			)
 
-			template < ENABLE_SFINAE, tc::decay_t<decltype(++std::declval<SFINAE_TYPE(T&)>())>* = nullptr >
 			constexpr counting_iterator& operator++() noexcept(noexcept(
 				++value
-			)) {
+			)) requires requires { ++std::declval<T&>(); } {
 				++value;
 				return *this;
 			}
 
-			template < ENABLE_SFINAE, tc::decay_t<decltype(--std::declval<SFINAE_TYPE(T&)>())>* = nullptr >
 			constexpr counting_iterator& operator--() noexcept(noexcept(
 				--value
-			)) {
+			)) requires requires { --std::declval<T&>(); } {
 				--value;
 				return *this;
 			}
 
+			// For iterator_facade.
 MODIFY_WARNINGS_BEGIN(((disable)(4244))) // conversion possibly loses data; e.g. if T is an integral type smaller than int (so difference_type is int).
-			template < ENABLE_SFINAE, tc::decay_t<decltype(std::declval<SFINAE_TYPE(T&)>() += std::declval<difference_type &>())>* = nullptr >
-			friend constexpr counting_iterator& operator +=(SFINAE_TYPE(counting_iterator&) it, difference_type n) noexcept(noexcept(
-				it.value += n
-			)) {
-				it.value += n;
-				return it;
+			template < ENABLE_SFINAE, tc::decay_t<decltype(std::declval<SFINAE_TYPE(T&)>() += std::declval<difference_type&>())>* = nullptr >
+			constexpr void advance(difference_type n) noexcept(noexcept(
+				value += n
+				)) {
+				value += n;
 			}
 MODIFY_WARNINGS_END
 
@@ -118,12 +115,12 @@ MODIFY_WARNINGS_END
 
 		template<typename T, std::enable_if_t<!std::is_unsigned<T>::value>* = nullptr>
 		constexpr auto operator -(counting_iterator<T> const& a, counting_iterator<T> const& b) return_decltype_NOEXCEPT( // NOEXCEPT() for e.g. counting_iterator<tc::vector<T>::iterator>
-			tc::signed_cast(*a - *b)
+			tc::as_signed(*a - *b)
 		)
 
 		template<typename T, std::enable_if_t<std::is_unsigned<T>::value>* = nullptr>
 		constexpr auto operator -(counting_iterator<T> const& a, counting_iterator<T> const& b) return_decltype_noexcept(
-			tc::signed_cast(*a) - tc::signed_cast(*b)
+			tc::as_signed(*a) - tc::as_signed(*b)
 		)
 	}
 
@@ -137,7 +134,7 @@ MODIFY_WARNINGS_END
 	template<typename TBegin, typename TEnd>
 	[[nodiscard]] constexpr auto iota(TBegin const& tBegin, TEnd const& tEnd) noexcept {
 		using T = tc::counting_iterator<tc::common_type_t<TBegin, TEnd> >;
-		if constexpr (std::is_convertible<typename boost::iterator_traversal<T>::type, boost::iterators::random_access_traversal_tag>::value) {
+		if constexpr (std::convertible_to<typename boost::iterator_traversal<T>::type, boost::iterators::random_access_traversal_tag>) {
 			_ASSERTE(!(static_cast<T>(tEnd) < static_cast<T>(tBegin)));
 		}
 		return tc::make_iterator_range(static_cast<T>(tBegin), static_cast<T>(tEnd));
@@ -189,17 +186,24 @@ MODIFY_WARNINGS_END
 		return_ctor_noexcept( no_adl::range_of_elements< Rng >, (aggregate_tag, std::forward<Rng>(rng)) )
 
 	namespace no_adl {
-		template<typename Enum>
-		struct [[nodiscard]] all_values final {
-			using const_iterator = tc::counting_iterator<Enum>;
+		template<auto first, decltype(first) last
+#ifdef _MSC_VER // MSVC 19.31 sometimes incorrectly folds iota_range_constant<EnumUnrelated(0), EnumUnrelated(7)> and iota_range_constant<Enum(0), Enum(7)>. I don't have a concise repro for this behavior.
+			, typename MsvcWorkaround = decltype(first)
+#endif
+		>
+		struct [[nodiscard]] iota_range_constant {
+			using const_iterator = tc::counting_iterator<decltype(first)>;
 			using iterator = const_iterator;
 			static constexpr iterator begin() noexcept {
-				return iterator( tc::contiguous_enum<Enum>::begin() );
+				return iterator(first);
 			}
 			static constexpr iterator end() noexcept {
-				return iterator( tc::contiguous_enum<Enum>::end() );
+				return iterator(last);
 			}
+		};
 
+		template<typename Enum>
+		struct [[nodiscard]] all_values final : iota_range_constant<tc::contiguous_enum<Enum>::begin(), tc::contiguous_enum<Enum>::end()> {
 			static constexpr std::size_t index_of(Enum e) noexcept {
 				return e - tc::contiguous_enum<Enum>::begin();
 			}
@@ -210,8 +214,29 @@ MODIFY_WARNINGS_END
 #endif
 		};
 
+		template <typename RangeReturn, IF_TC_CHECKS(typename CheckUnique,) typename Enum>
+		[[nodiscard]] constexpr decltype(auto) find_first_or_unique_impl(tc::type::identity<RangeReturn>, IF_TC_CHECKS(CheckUnique bCheckUnique,) all_values<Enum> rng, Enum e) MAYTHROW {
+			if constexpr( RangeReturn::requires_iterator ) {
+				return RangeReturn::pack_element(tc::begin(rng) + tc::explicit_cast<decltype(tc::end(rng) - tc::begin(rng))>(rng.index_of(e)), rng);
+			} else {
+				return RangeReturn::template pack_element<all_values>(e);
+			}
+		}
+
 		template<typename Enum>
-		struct constexpr_size_base<all_values<Enum>> : tc::constant<enum_count<Enum>::value> {};
+		struct constexpr_size_impl<all_values<Enum>> : tc::constant<enum_count<Enum>::value> {};
+
+		template<typename Enum>
+		struct is_index_valid_for_move_constructed_range<all_values<Enum>> : tc::constant<true> {};
 	}
+	using no_adl::iota_range_constant;
 	using no_adl::all_values;
+
+	template<typename Enum>
+	inline auto constexpr all_constants = tc::tuple_transform(
+		tc::index_sequence_as_tuple(std::make_index_sequence<tc::size(tc::all_values<Enum>())>()),
+		[](auto const constn) constexpr {
+			return tc::constant<static_cast<Enum>(tc_at_nodebug(tc::all_values<Enum>(), constn()))>();
+		}
+	);
 }

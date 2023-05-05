@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -71,10 +71,10 @@ namespace tc {
 		best(tc::fn_greater(), std::forward<Args>(args)...)
 	)
 
-	DEFINE_FN(min);
+	tc_define_fn(min);
 	tc::constant<true> returns_reference_to_argument(tc::fn_min) noexcept;
 
-	DEFINE_FN(max);
+	tc_define_fn(max);
 	tc::constant<true> returns_reference_to_argument(tc::fn_max) noexcept;
 
 	namespace no_adl {

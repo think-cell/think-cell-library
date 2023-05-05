@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -58,14 +58,12 @@ namespace equal_to_default {
 		std::is_pointer<Lhs>::value ||
 		std::is_pointer<Rhs>::value ||
 		std::is_same<std::remove_volatile_t<Lhs>, std::remove_volatile_t<Rhs>>::value
-	[[nodiscard]] constexpr bool equal_to_impl(Lhs const& lhs, Rhs const& rhs) noexcept {
-		return lhs==rhs;
-	}
+	[[nodiscard]] constexpr auto equal_to_impl(Lhs const& lhs, Rhs const& rhs) return_decltype_MAYTHROW(
+		tc::implicit_cast<bool>(lhs==rhs)
+	)
 	
-	template<typename Lhs, typename Rhs> requires
-		(!std::is_same<std::remove_volatile_t<Lhs>, std::remove_volatile_t<Rhs>>::value) &&
-		tc::is_actual_arithmetic<Lhs>::value &&
-		tc::is_actual_arithmetic<Rhs>::value
+	template<tc::actual_arithmetic Lhs, tc::actual_arithmetic Rhs> requires
+		(!std::is_same<std::remove_volatile_t<Lhs>, std::remove_volatile_t<Rhs>>::value)
 	[[nodiscard]] constexpr bool equal_to_impl(Lhs const& lhs, Rhs const& rhs) noexcept {
 		return tc::explicit_cast<decltype(lhs+rhs)>(lhs)==tc::explicit_cast<decltype(lhs+rhs)>(rhs);
 	}
@@ -87,7 +85,7 @@ concept comparable_pointers =
 
 template<typename Lhs, typename Rhs>
 [[nodiscard]] constexpr auto less(Lhs const& lhs, Rhs const& rhs) noexcept requires requires { lhs<rhs; } {
-	if constexpr (tc::is_actual_arithmetic<Lhs>::value && tc::is_actual_arithmetic<Rhs>::value) {
+	if constexpr (tc::actual_arithmetic<Lhs> && tc::actual_arithmetic<Rhs>) {
 		auto result = tc::explicit_cast<decltype(lhs+rhs)>(lhs)<tc::explicit_cast<decltype(lhs+rhs)>(rhs);
 		static_assert(std::is_same<decltype(result), bool>::value || std::is_same<decltype(result), tc::constant<true>>::value || std::is_same<decltype(result), tc::constant<false>>::value);
 		return result;
@@ -96,8 +94,8 @@ template<typename Lhs, typename Rhs>
 		return std::less<tc::common_type_t<Lhs, Rhs>>()(lhs, rhs);
 	} else {
 		static_assert(
-			!(std::is_pointer<Lhs>::value && std::is_class<Rhs>::value && std::is_convertible<Rhs const&, Lhs>::value) &&
-			!(std::is_class<Lhs>::value && std::is_pointer<Rhs>::value && std::is_convertible<Lhs const&, Rhs>::value), // use std::is_convertible instead of tc::is_safely_convertible to avoid any pointer comparison with operator<
+			!(std::is_pointer<Lhs>::value && std::is_class<Rhs>::value && std::convertible_to<Rhs const&, Lhs>) &&
+			!(std::is_class<Lhs>::value && std::is_pointer<Rhs>::value && std::convertible_to<Lhs const&, Rhs>), // use std::convertible_to instead of tc::safely_convertible_to avoid any pointer comparison with operator<
 			"if a class type is implicitly convertible to a pointer type and you want to compare this class type with the pointer type,"
 			" tc::implicit_cast class object to pointer when you want to make a pointer comparison between the two,"
 			" otherwise use specific comparison function, e.g. tc::lexicographical_compare_3way, instead of tc::less."
@@ -110,7 +108,7 @@ template<typename Lhs, typename Rhs>
 
 namespace no_adl
 {
-	DEFINE_FN2(tc::equal_to, fn_equal_to) // no DEFINE_FN to avoid ADL
+	DEFINE_FN2(tc::equal_to, fn_equal_to) // no tc_define_fn to avoid ADL
 
 	DEFINE_FN2(!tc::equal_to, fn_not_equal_to)
 
@@ -161,7 +159,7 @@ template< typename Better, typename Var, typename Val  >
 constexpr auto assign_better( Better better, Var&& var, Val&& val ) noexcept {
 	return tc::make_overload(
 		[&](tc::constant<true> b) noexcept {
-			static_assert( tc::is_safely_assignable<Var&&, Val&&>::value );
+			static_assert( tc::safely_assignable_from<Var&&, Val&&> );
 			std::forward<Var>(var) = std::forward<Val>(val);
 			return b;
 		},
@@ -170,7 +168,7 @@ constexpr auto assign_better( Better better, Var&& var, Val&& val ) noexcept {
 		},
 		[&](bool b) noexcept {
 			if (b) {
-				static_assert( tc::is_safely_assignable<Var&&, Val&&>::value );
+				static_assert( tc::safely_assignable_from<Var&&, Val&&> );
 				std::forward<Var>(var) = std::forward<Val>(val);
 				return true;
 			} else {
@@ -237,8 +235,8 @@ void change_with_or(Var&& var, Val&& val, bool& bChanged) noexcept {
 	}
 }
 
-DEFINE_FN( assign_max );
-DEFINE_FN( assign_min );
+tc_define_fn( assign_max );
+tc_define_fn( assign_min );
 
 template< typename Better >
 [[nodiscard]] constexpr auto fn_assign_better(Better&& better) noexcept {
@@ -273,22 +271,16 @@ bool binary_change( Dst& dst, Src const& src ) noexcept {
 	}
 }
 
-#pragma push_macro("change_for_float")
-#define change_for_float( TFloat ) \
-template< typename S > \
-bool change( TFloat& tVar, S&& sValue ) noexcept { \
-	TFloat const fNAN=std::numeric_limits<TFloat>::quiet_NaN(); \
-	_ASSERTINITIALIZED( tVar ); \
-	_ASSERT( !std::isnan( tVar ) || binary_equal(tVar,fNAN) ); \
-	_ASSERTINITIALIZED( sValue ); \
-	TFloat tValue=std::forward<S>(sValue); \
-	_ASSERT( !std::isnan( tValue ) || binary_equal(tValue,fNAN) ); \
-	return binary_change( tVar, tValue ); \
+template< typename Var, typename Value >
+	requires std::floating_point<tc::decay_t<Var>>	
+bool change( Var&& var, Value&& value ) noexcept {
+	using float_type = tc::decay_t<Var>;
+	auto const nan = std::numeric_limits<float_type>::quiet_NaN();
+	_ASSERTINITIALIZED( var );
+	_ASSERT( !std::isnan( var ) || binary_equal(var, nan) );
+	_ASSERTINITIALIZED( value );
+	auto float_value = tc::implicit_cast<float_type>(std::forward<Value>(value));
+	_ASSERT( !std::isnan( float_value ) || binary_equal(float_value, nan) );
+	return binary_change( var, float_value );
 }
-
-change_for_float( float )
-change_for_float( double )
-
-#pragma pop_macro("change_for_float")
-
 } // namespace tc

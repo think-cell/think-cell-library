@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -48,7 +48,7 @@ namespace {
 		STATICASSERTSAME( (tc::common_type_t<tc::constant<2>, tc::constant<3ll>>), (long long) );
 		STATICASSERTSAME( (tc::common_type_t<tc::constant<2>, tc::constant<2ll>>), (tc::constant<2ll>) );
 
-		DEFINE_ENUM(MyEnum,myenum,(ONE)(TWO))
+		TC_DEFINE_ENUM(MyEnum,myenum,(ONE)(TWO))
 
 		static_assert( tc::constant<myenumONE>() == myenumONE );
 		static_assert( std::is_same<tc::constant<myenumONE>, std::integral_constant<MyEnum,myenumONE>>::value );

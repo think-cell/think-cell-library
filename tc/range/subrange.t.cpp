@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -18,7 +18,7 @@
 #include <type_traits>
 
 namespace {
-	STATICASSERTSAME(tc::make_subrange_result_t<tc::ptr_range<char const>&>, tc::ptr_range<char const>);
+	STATICASSERTSAME(tc::make_subrange_result_t<tc::span<char const>&>, tc::span<char const>);
 
 	using SRVI = tc::make_subrange_result_t<tc::vector<int>&>;
 	using CSRVI = tc::make_subrange_result_t<tc::vector<int> const&>;
@@ -176,8 +176,8 @@ namespace {
 			{
 				auto it = tc::lower_bound<tc::return_border>(rng,3);
 				_ASSERTEQUAL(*it,3);
-				_ASSERTEQUAL(*modified(it, --_), 2);
-				_ASSERTEQUAL(*modified(it, ++_), 3);
+				_ASSERTEQUAL(*tc_modified(it, --_), 2);
+				_ASSERTEQUAL(*tc_modified(it, ++_), 3);
 			}
 			{
 				auto it = tc::upper_bound<tc::return_border>(rng,1);
@@ -202,9 +202,9 @@ namespace {
 			as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,5,6)),
 			tc::union_range(
 				[](auto sink) noexcept -> tc::break_or_continue {
-					RETURN_IF_BREAK(sink(1));
-					RETURN_IF_BREAK(sink(3));
-					RETURN_IF_BREAK(sink(5));
+					tc_yield(sink, 1);
+					tc_yield(sink, 3);
+					tc_yield(sink, 5);
 					return tc::continue_;
 				},
 				as_constexpr(tc::make_array(tc::aggregate_tag, 2,6))
@@ -590,7 +590,7 @@ namespace {
 
 	UNITTESTDEF( take_first_sink ) {
 		auto const rngn = [](auto sink) noexcept {
-			for(int i=0;;++i) { RETURN_IF_BREAK(tc::continue_if_not_break(sink, i)); }
+			for(int i=0;;++i) { tc_yield(sink, i); }
 		};
 
 		_ASSERTEQUAL(tc::for_each(tc::begin_next<tc::return_take>(rngn), [](int) noexcept {}), tc::continue_);
@@ -601,7 +601,7 @@ namespace {
 
 		struct assert_no_single_char_sink /*final*/ {
 			auto operator()(char) const& noexcept { _ASSERTFALSE; return tc::construct_default_or_terminate<tc::break_or_continue>(); }
-			auto chunk(tc::ptr_range<char const> str) const& noexcept { return tc::constant<tc::continue_>(); }
+			auto chunk(tc::span<char const> str) const& noexcept { return tc::constant<tc::continue_>(); }
 		};
 		_ASSERTEQUAL(tc::for_each(tc::begin_next<tc::return_take>(rngch, 4), assert_no_single_char_sink()), tc::continue_);
 		_ASSERT(tc::equal("1234", tc::begin_next<tc::return_take>(rngch, 4)));
@@ -609,7 +609,7 @@ namespace {
 
 	UNITTESTDEF( drop_first_sink ) {
 		auto const rngn = [](auto sink) noexcept {
-			for(int i=0; i < 7;++i) { RETURN_IF_BREAK(tc::continue_if_not_break(sink, i)); }
+			for(int i=0; i < 7;++i) { tc_yield(sink, i); }
 			return tc::continue_;
 		};
 
@@ -621,16 +621,16 @@ namespace {
 
 		struct assert_no_single_char_sink /*final*/ {
 			auto operator()(char) const& noexcept { _ASSERTFALSE; return tc::construct_default_or_terminate<tc::break_or_continue>(); }
-			auto chunk(tc::ptr_range<char const> str) const& noexcept { return tc::constant<tc::continue_>(); }
+			auto chunk(tc::span<char const> str) const& noexcept { return tc::constant<tc::continue_>(); }
 		};
 		_ASSERTEQUAL(tc::for_each(rngch, assert_no_single_char_sink()), tc::continue_);
 		_ASSERT(tc::equal("3456", rngch));
 	}
 
-	UNITTESTDEF( ptr_range_from_subrange ) {
+	UNITTESTDEF( span_from_subrange ) {
 		tc::string<char> str("1234");
-		_ASSERTEQUAL( tc::begin(tc::as_pointers(tc::begin_next<tc::return_drop>(str, 2))), tc::begin(tc::begin_next<tc::return_drop>(tc::as_pointers(str), 2)) );
-		_ASSERTEQUAL( tc::end(tc::as_pointers(tc::begin_next<tc::return_take>(str, 2))), tc::end(tc::begin_next<tc::return_take>(tc::as_pointers(str), 2)) );
+		_ASSERTEQUAL( tc::begin(tc::as_span(tc::begin_next<tc::return_drop>(str, 2))), tc::begin(tc::begin_next<tc::return_drop>(tc::as_span(str), 2)) );
+		_ASSERTEQUAL( tc::end(tc::as_span(tc::begin_next<tc::return_take>(str, 2))), tc::end(tc::begin_next<tc::return_take>(tc::as_span(str), 2)) );
 	}
 #ifndef __clang__
 	namespace {
@@ -683,26 +683,26 @@ namespace {
 		Y const y{ &x };
 		Z const z{ &y };
 
-		auto n3=tc::and_then(&z, TC_MEMBER(.py), TC_MEMBER(.px), TC_MEMBER(.n));
+		auto n3=tc::and_then(&z, tc_member(.py), tc_member(.px), tc_member(.n));
 		static_assert(std::is_same<decltype(n3), int>::value);
 		_ASSERTEQUAL(n3, 23);
 
 		Z const* pz=nullptr;
-		auto n4=tc::and_then(pz, TC_MEMBER(.py), TC_MEMBER(.px), TC_MEMBER(.n));
+		auto n4=tc::and_then(pz, tc_member(.py), tc_member(.px), tc_member(.n));
 		static_assert(std::is_same<decltype(n4), int>::value);
 		_ASSERTEQUAL(n4, 0);
 	}
 
 }
 
-STATICASSERTEQUAL( sizeof(tc::ptr_range<int>), 2 * sizeof(int*) );
-static_assert( std::is_nothrow_default_constructible<tc::ptr_range<int>>::value );
-static_assert( std::is_trivially_destructible<tc::ptr_range<int>>::value );
-static_assert( std::is_trivially_copy_constructible<tc::ptr_range<int>>::value );
-static_assert( std::is_trivially_move_constructible<tc::ptr_range<int>>::value );
-static_assert( std::is_trivially_copy_assignable<tc::ptr_range<int>>::value );
-static_assert( std::is_trivially_move_assignable<tc::ptr_range<int>>::value );
-static_assert( std::is_trivially_copyable<tc::ptr_range<int>>::value );
+STATICASSERTEQUAL( sizeof(tc::span<int>), 2 * sizeof(int*) );
+static_assert( std::is_nothrow_default_constructible<tc::span<int>>::value );
+static_assert( std::is_trivially_destructible<tc::span<int>>::value );
+static_assert( std::is_trivially_copy_constructible<tc::span<int>>::value );
+static_assert( std::is_trivially_move_constructible<tc::span<int>>::value );
+static_assert( std::is_trivially_copy_assignable<tc::span<int>>::value );
+static_assert( std::is_trivially_move_assignable<tc::span<int>>::value );
+static_assert( std::is_trivially_copyable<tc::span<int>>::value );
 
 namespace {
 	UNITTESTDEF( subrange_index_translation ) {

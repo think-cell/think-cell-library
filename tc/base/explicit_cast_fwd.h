@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -92,7 +92,7 @@ namespace tc {
 
 	namespace explicit_convert_default {
 		// This is the default explicit_convert, not a specialization, because aggregate initialization must have lower priority than other specializations which could also be aggregate types
-		// Aggregate types are tc::is_safely_constructible from same type (copy/move). This is handled in the default explicit_cast below.
+		// Aggregate types are tc::safely_constructible_from same type (copy/move). This is handled in the default explicit_cast below.
 		template<typename TTarget, typename... Args> requires std::is_class<TTarget>::value && std::is_aggregate<TTarget>::value
 		constexpr auto explicit_convert_impl(tc::type::identity<TTarget>, Args&&... args)
 			return_decltype_MAYTHROW( TTarget{std::forward<Args>(args)...} )
@@ -103,34 +103,25 @@ namespace tc {
 
 	DEFINE_TMPL_FUNC_WITH_CUSTOMIZATIONS(explicit_convert)
 
-	template<typename TTarget, typename... Args, std::enable_if_t<!tc::is_safely_constructible<std::remove_cv_t<TTarget>, Args&&...>::value>* = nullptr>
+	template<typename TTarget, typename... Args, std::enable_if_t<!tc::safely_constructible_from<std::remove_cv_t<TTarget>, Args&&...>>* = nullptr>
 	[[nodiscard]] constexpr auto explicit_cast(Args&&... args)
 		return_decltype_MAYTHROW(tc::explicit_convert(tc::type::identity<std::remove_cv_t<TTarget>>(), std::forward<Args>(args)...))
 
-	template<typename TTarget, typename... Args, std::enable_if_t<tc::is_safely_constructible<std::remove_cv_t<TTarget>, Args&&...>::value>* = nullptr>
+	template<typename TTarget, typename... Args> requires tc::safely_constructible_from<std::remove_cv_t<TTarget>, Args&&...>
 	[[nodiscard]] constexpr auto explicit_cast(Args&&... args)
 		return_ctor_MAYTHROW(std::remove_cv_t<TTarget>, (std::forward<Args>(args)...))
 
-	namespace is_explicit_castable_detail {
-		template<typename TTarget, typename ArgList, typename Enable=void>
-		struct is_explicit_castable : tc::constant<false> {};
-
-		template<typename TTarget, typename... Args>
-		struct is_explicit_castable<TTarget, tc::type::list<Args...>, tc::void_t<decltype(
-			tc::explicit_cast<TTarget>(std::declval<Args>()...)
-		)>> : tc::constant<true> {};
-	}
 	template<typename TTarget, typename... Args>
-	using is_explicit_castable=is_explicit_castable_detail::is_explicit_castable<TTarget,tc::type::list<Args...>>;
+	concept explicit_castable_from = requires { tc::explicit_cast<TTarget>(std::declval<Args>()...); };
 
 	// Using decltype(this->member) ensures casting to the correct type even if member is shadowed (but disallows base classes).
-	#define MEMBER_INIT_CAST(member, ...) member(tc::explicit_cast<decltype(this->member)>(__VA_ARGS__))
+	#define tc_member_init_cast(member, ...) member(tc::explicit_cast<decltype(this->member)>(__VA_ARGS__))
 
 	namespace no_adl {
 		struct bool_context final {
 			template< typename T >
 			constexpr bool_context(T const& t) noexcept
-				: MEMBER_INIT_CAST(m_b, t)
+				: tc_member_init_cast(m_b, t)
 			{}
 			constexpr operator bool() const& noexcept { return m_b; }
 		private:
@@ -142,7 +133,7 @@ namespace tc {
 	template<typename TTarget, typename TSource>
 	[[nodiscard]] constexpr decltype(auto) reluctant_explicit_cast(TSource&& src) noexcept {
 		STATICASSERTSAME(std::remove_cvref_t<TTarget>, TTarget);
-		if constexpr( tc::is_base_of_decayed<TTarget, TSource>::value ) {
+		if constexpr( tc::decayed_derived_from<TSource, TTarget> ) {
 			return std::forward<TSource>(src);
 		} else {
 			return tc::explicit_cast<TTarget>(std::forward<TSource>(src));

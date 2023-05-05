@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -29,43 +29,32 @@
 #include "empty_range.h"
 
 #include <type_traits>
+#include <memory>
 #include <deque>
 
 namespace tc {
 	//-------------------------------------------------------------------------------------------------------------------------
 	
-	template<typename T>
-	constexpr T* raw_ptr(T* t) noexcept { return t; } // overloaded e.g. for boost::interprocess::offset_ptr
-	
-	template<typename Rng> requires std::is_pointer<tc::iterator_t<Rng>>::value
-	constexpr auto ptr_begin(Rng&& rng) return_decltype_NOEXCEPT(
-		tc::begin(rng) // not std::forward<Rng>(rng) : there is no overload for tc::begin(Rng&&), rvalues bind to tc::begin(Rng const&)
-	)
+	template<tc::contiguous_range Rng>
+	[[nodiscard]] constexpr auto ptr_begin(Rng&& rng) noexcept {
+		return std::to_address(tc::begin(std::forward<Rng>(rng)));
+	}
 
-	// constexpr (1) (see above) initialization fails here.
-	template<typename Rng> requires std::is_pointer<tc::sentinel_t<Rng>>::value
-	constexpr auto ptr_end(Rng&& rng) return_decltype_NOEXCEPT(
-		tc::end(rng) // not std::forward<Rng>(rng) : there is no overload for tc::end(Rng&&), rvalues bind to tc::end(Rng const&)
-	)
-
-	template<typename Rng>
-	constexpr auto ptr_begin(Rng&& rng) return_decltype_noexcept(
-		raw_ptr( rng.data() )
-	)
-
-	template<typename Rng>
-	constexpr auto ptr_end(Rng&& rng) return_decltype_noexcept(
-		tc::ptr_begin(rng) + tc::size_linear(rng)
-	)
-
-	TC_HAS_EXPR(ptr_begin, (T), tc::ptr_begin(std::declval<T>()))
+	template<tc::contiguous_range Rng>
+	[[nodiscard]] constexpr auto ptr_end(Rng&& rng) noexcept {
+		if constexpr (tc::common_range<Rng>) {
+			return std::to_address(tc::end(std::forward<Rng>(rng)));
+		} else {
+			return tc::ptr_begin(std::forward<Rng>(rng)) + tc::size_linear_raw(std::forward<Rng>(rng));
+		}
+	}
 	
 	//-------------------------------------------------------------------------------------------------------------------------
 
 	namespace subrange_detail {
 		template<typename Rng>
 		static constexpr decltype(auto) whole_range(Rng&& rng) noexcept {
-			if constexpr( tc::is_instance<tc::subrange, std::remove_reference_t<Rng>>::value ) {
+			if constexpr( tc::instance<std::remove_reference_t<Rng>, tc::subrange> ) {
 				return std::forward<Rng>(rng).base_range();
 			} else {
 				return std::forward<Rng>(rng);
@@ -80,15 +69,15 @@ namespace tc {
 			struct enable_subrange_iterator_base_ctor;
 
 			template<typename It, typename Rhs> requires
-				(!std::is_pointer<It>::value) && // not ptr_range
+				(!std::is_pointer<It>::value) && // not span
 				(!std::is_same<subrange<iterator_base<It>>, std::remove_cvref_t<Rhs>>::value) && // not copy/move ctor
-				// It may not be tc::is_safely_constructible because of slicing (e.g. std::vector::const_iterator/iterator on Windows, or tc::element_t)
+				// It may not be tc::safely_constructible_from because of slicing (e.g. std::vector::const_iterator/iterator on Windows, or tc::element_t)
 				std::is_constructible<It, decltype(tc::begin(std::declval<Rhs&>()))>::value &&
 				std::is_constructible<It, decltype(tc::end(std::declval<Rhs&>()))>::value
 			struct enable_subrange_iterator_base_ctor<iterator_base<It>, Rhs> : tc::constant<true> {};
 
 			template<typename Rng, typename Rhs>
-			struct enable_ptr_range_ctor;
+			struct enable_span_ctor;
 
 			template<typename TTarget, typename TSource> struct is_ptr_safely_convertible;
 			template<typename T> struct is_ptr_safely_convertible<T*, T*> : tc::constant<true> {};
@@ -100,7 +89,7 @@ namespace tc {
 				(!std::is_same<subrange<iterator_base<T*>>, std::remove_cvref_t<Rhs>>::value) && // not copy/move ctor
 				is_ptr_safely_convertible<T*, decltype(tc::ptr_begin(std::declval<Rhs&>()))>::value &&
 				is_ptr_safely_convertible<T*, decltype(tc::ptr_end(std::declval<Rhs&>()))>::value
-			struct enable_ptr_range_ctor<iterator_base<T*>, Rhs> : tc::constant<true> {};
+			struct enable_span_ctor<iterator_base<T*>, Rhs> : tc::constant<true> {};
 		}
 	}
 
@@ -122,7 +111,7 @@ namespace tc {
 			// Disable compiler generated special member functions.
 			// Implicit construction from another subrange of the same type may still be possible via the user-defined constructor below.
 			, std::conditional_t<
-				std::is_lvalue_reference<Rng>::value || tc::is_instance<tc::iterator_base, Rng>::value,
+				std::is_lvalue_reference<Rng>::value || tc::instance<Rng, tc::iterator_base>,
 				tc::copyable,
 				std::conditional_t<
 					tc::is_index_valid_for_move_constructed_range<Rng>::value,
@@ -131,7 +120,7 @@ namespace tc {
 				>
 			>
 		{
-			static_assert( !tc::is_instance<tc::subrange, std::remove_reference_t<Rng>>::value, "Use tc::make_subrange_result_t to construct subrange type." );
+			static_assert( !tc::instance<std::remove_reference_t<Rng>, tc::subrange>, "Use tc::make_subrange_result_t to construct subrange type." );
 
 		private:
 			using this_type = subrange;
@@ -149,8 +138,8 @@ namespace tc {
 			constexpr subrange() = default;
 
 			// ctor from whole range
-			template<ENABLE_SFINAE, typename Rhs> requires
-				(!tc::is_instance<tc::iterator_base, SFINAE_TYPE(Rng)>::value) && tc::is_safely_constructible<Rng, Rhs>::value
+			template<typename Rhs> requires
+				(!tc::instance<Rng, tc::iterator_base>) && tc::safely_constructible_from<Rng, Rhs>
 			constexpr subrange(Rhs&& rng) noexcept(
 				std::is_nothrow_constructible<base_, aggregate_tag_t, Rhs>::value &&
 				noexcept(this->base_begin_index()) && std::is_nothrow_constructible<decltype(this->base_begin_index())>::value &&
@@ -160,7 +149,7 @@ namespace tc {
 				, m_idxBegin(this->base_begin_index())
 				, m_idxEnd(this->base_end_index())
 			{
-				static_assert( !tc::is_instance<tc::subrange, std::remove_reference_t<Rhs>>::value );
+				static_assert( !tc::instance<std::remove_reference_t<Rhs>, tc::subrange> );
 			}
 
 			template<typename Rhs> requires subrange_detail::no_adl::enable_subrange_iterator_base_ctor<Rng, Rhs>::value
@@ -172,7 +161,7 @@ namespace tc {
 				, m_idxEnd(tc::end(rng))
 			{}
 
-			template<typename Rhs> requires subrange_detail::no_adl::enable_ptr_range_ctor<Rng, Rhs>::value
+			template<typename Rhs> requires subrange_detail::no_adl::enable_span_ctor<Rng, Rhs>::value
 			constexpr subrange(Rhs&& rng) noexcept
 				: m_idxBegin(tc::ptr_begin(rng))
 				, m_idxEnd(tc::ptr_end(rng))
@@ -188,10 +177,10 @@ namespace tc {
 			constexpr subrange(slice_tag_t, RhsBase&& rng, N nFrom, N nTo) noexcept
 				: /*construct from whole base range*/subrange(std::forward<RhsBase>(rng))
 			{
-				static_assert(!tc::is_instance<tc::subrange, RhsBase>::value);
-				static_assert(tc::is_random_access_range<Rng>::value); // Enables index translation in O(1).
-				this->take_inplace(modified(this->begin_index(), this->advance_index(_, nTo)));
-				this->drop_inplace(modified(this->begin_index(), this->advance_index(_, nFrom)));
+				static_assert(!tc::instance<RhsBase, tc::subrange>);
+				static_assert(tc::random_access_range<Rng>); // Enables index translation in O(1).
+				this->take_inplace(tc_modified(this->begin_index(), this->advance_index(_, nTo)));
+				this->drop_inplace(tc_modified(this->begin_index(), this->advance_index(_, nFrom)));
 			}
 
 			// ctor that translates indices
@@ -227,18 +216,18 @@ namespace tc {
 
 		public:
 			// ctor from other subrange ()
-			template<ENABLE_SFINAE, typename Rhs> requires 
-				(!tc::is_instance<tc::iterator_base, SFINAE_TYPE(Rng)>::value) &&
+			template<typename Rhs> requires 
+				(!tc::instance<Rng, tc::iterator_base>) &&
 				(
 					// Note: Substitution failure, if std::remove_cvref_t<Rhs> not a subrange
-					!std::is_same<Rng, tc::type::only_t<typename tc::is_instance<tc::subrange, std::remove_reference_t<Rhs>>::arguments>>::value ||
+					!std::is_same<Rng, tc::type::only_t<typename tc::is_instance<std::remove_reference_t<Rhs>, tc::subrange>::arguments>>::value ||
 					(
 						// Do not compete with valid, trivial copy and move ctors. But translate indices for random acess ranges, if necessary.
-						!std::is_lvalue_reference<Rng>::value && tc::is_random_access_range<Rng>::value
+						!std::is_lvalue_reference<Rng>::value && tc::random_access_range<Rng>
 					)
 				) &&
-				tc::is_safely_constructible<Rng, decltype(std::declval<Rhs>().base_range())>::value &&
-				// tc_index may not be tc::is_safely_constructible because of slicing (e.g. std::vector::const_iterator/iterator on Windows, or tc::element_t)
+				tc::safely_constructible_from<Rng, decltype(std::declval<Rhs>().base_range())> &&
+				// tc_index may not be tc::safely_constructible_from because of slicing (e.g. std::vector::const_iterator/iterator on Windows, or tc::element_t)
 				std::is_constructible<tc_index, decltype(std::declval<Rhs>().begin_index())>::value
 			constexpr subrange(Rhs&& rng) noexcept
 				: subrange(index_tag,
@@ -249,16 +238,15 @@ namespace tc {
 			{}
 
 			template<typename Rhs, typename Begin, typename End> requires
-				tc::is_safely_constructible<Rng, decltype(subrange_detail::whole_range(std::declval<Rhs>()))>::value &&
-				 // tc_index may not be tc::is_safely_constructible because of slicing (e.g. std::vector::const_iterator/iterator on Windows, or tc::element_t)
-				std::is_constructible<tc_index, decltype(tc::iterator2index(std::declval<Begin>()))>::value &&
-				std::is_constructible<tc_index, decltype(tc::iterator2index(std::declval<End>()))>::value
+				tc::safely_constructible_from<Rng, decltype(subrange_detail::whole_range(std::declval<Rhs>()))> &&
+				 // tc_index may not be tc::safely_constructible_from because of slicing (e.g. std::vector::const_iterator/iterator on Windows, or tc::element_t)
+				std::is_constructible<tc_index, decltype(tc::iterator2index<Rhs>(std::declval<Begin>()))>::value &&
+				std::is_constructible<tc_index, decltype(tc::iterator2index<Rhs>(std::declval<End>()))>::value
 			constexpr explicit subrange(Rhs&& rng, Begin&& begin, End&& end) noexcept
-				: subrange(index_tag, std::forward<Rhs>(rng), tc::iterator2index(std::forward<Begin>(begin)), tc::iterator2index(std::forward<End>(end)))
+				: subrange(index_tag, std::forward<Rhs>(rng), tc::iterator2index<Rhs>(std::forward<Begin>(begin)), tc::iterator2index<Rhs>(std::forward<End>(end)))
 			{}
 
-			template<ENABLE_SFINAE> requires std::is_default_constructible<SFINAE_TYPE(base_)>::value
-			constexpr subrange(tc::empty_range) noexcept(std::is_nothrow_default_constructible<base_>::value)
+			constexpr subrange(tc::empty_range) noexcept(std::is_nothrow_default_constructible<base_>::value) requires std::is_default_constructible<base_>::value
 				: m_idxBegin()
 				, m_idxEnd()
 			{}
@@ -322,12 +310,12 @@ namespace tc {
 
 			template< typename It >
 			constexpr void take_inplace( It&& it ) & noexcept {
-				m_idxEnd=tc::iterator2index( std::forward<It>(it) );
+				m_idxEnd=tc::iterator2index<Rng>( std::forward<It>(it) );
 			}
 
 			template< typename It >
 			constexpr void drop_inplace( It&& it ) & noexcept {
-				m_idxBegin=tc::iterator2index( std::forward<It>(it) );
+				m_idxBegin=tc::iterator2index<Rng>( std::forward<It>(it) );
 			}
 
 			template< typename It >
@@ -342,7 +330,6 @@ namespace tc {
 				return tc_move(rng);
 			}
 
-			template<ENABLE_SFINAE>
 			constexpr decltype(auto) dereference_untransform(tc_index const& idx) const& noexcept {
 				return this->base_range().dereference_untransform(idx);
 			}
@@ -354,7 +341,7 @@ namespace tc {
 		struct is_index_valid_for_move_constructed_range<tc::subrange<Rng>> : tc::is_index_valid_for_move_constructed_range<Rng> {};
 	}
 
-	template<typename Rng> requires tc::is_range_with_iterators<Rng>::value
+	template<tc::range_with_iterators Rng>
 	[[nodiscard]] constexpr auto make_view(Rng&& rng) return_ctor_MAYTHROW(
 		tc::make_subrange_result_t< Rng >,
 		(std::forward<Rng>(rng))
@@ -382,41 +369,26 @@ namespace tc {
 
 	//-------------------------------------------------------------------------------------------------------------------------
 	// drop
-	namespace no_adl {
-		template< typename Cont, typename It, typename Enable=void >
-		struct has_mem_fn_erase_from_begin final: tc::constant<false> {};
+	namespace detail {
+		template<typename Cont, typename It>
+		concept has_mem_fn_erase_from_begin = requires { std::declval<Cont&>().erase(tc::begin(std::declval<Cont&>()),std::declval<It&&>()); };
 
-		template< typename Cont, typename It >
-		struct has_mem_fn_erase_from_begin<Cont, It, tc::void_t<decltype(std::declval<Cont&>().erase(tc::begin(std::declval<Cont&>()),std::declval<It&&>()))>> final: tc::constant<true> {};
+		template<typename Cont, typename It>
+		concept has_mem_fn_take_inplace = requires { std::declval<Cont&>().take_inplace(std::declval<It&&>()); };
 
-		template< typename Cont, typename It, typename Enable=void >
-		struct has_mem_fn_erase_to_end final: tc::constant<false> {};
-
-		template< typename Cont, typename It >
-		struct has_mem_fn_erase_to_end<Cont, It, tc::void_t<decltype(std::declval<Cont&>().erase(std::declval<It&&>(),tc::end(std::declval<Cont&>())))>> final: tc::constant<true> {};
-
-		template< typename Cont, typename It, typename Enable=void >
-		struct has_mem_fn_take_inplace final: tc::constant<false> {};
-
-		template< typename Cont, typename It >
-		struct has_mem_fn_take_inplace<Cont, It, tc::void_t<decltype(std::declval<Cont&>().take_inplace(std::declval<It&&>()))>> final: tc::constant<true> {};
-
-		template< typename Cont, typename It, typename Enable=void >
-		struct has_mem_fn_drop_inplace final: tc::constant<false> {};
-
-		template< typename Cont, typename It >
-		struct has_mem_fn_drop_inplace<Cont, It, tc::void_t<decltype(std::declval<Cont&>().drop_inplace(std::declval<It&&>()))>> final: tc::constant<true> {};
+		template<typename Cont, typename It>
+		concept has_mem_fn_drop_inplace = requires { std::declval<Cont&>().drop_inplace(std::declval<It&&>()); };
 	}
 
 	template< typename T >
-	concept char_ptr = std::is_pointer<T>::value && tc::is_char<std::remove_pointer_t<T>>::value;
+	concept char_ptr = std::is_pointer<T>::value && tc::char_type<std::remove_pointer_t<T>>;
 
-	template< typename Cont, typename It> requires no_adl::has_mem_fn_erase_from_begin<Cont,It>::value
+	template< typename Cont, typename It> requires detail::has_mem_fn_erase_from_begin<Cont,It>
 	constexpr void drop_inplace( Cont & cont, It&& it ) noexcept {
 		cont.erase(tc::begin(cont),std::forward<It>(it));
 	}
 
-	template< typename Cont, typename It> requires no_adl::has_mem_fn_drop_inplace<Cont,It>::value
+	template< typename Cont, typename It> requires detail::has_mem_fn_drop_inplace<Cont,It>
 	constexpr void drop_inplace( Cont & cont, It&& it ) noexcept {
 		cont.drop_inplace(std::forward<It>(it));
 	}
@@ -434,7 +406,7 @@ namespace tc {
 	// C strings have efficient in-place drop
 	template< typename CharPtr, typename It> requires tc::char_ptr<std::remove_reference_t<CharPtr>>
 	constexpr std::decay_t<CharPtr> drop_impl( CharPtr&& pch, It&& it ) noexcept {
-		return modified(pch, tc::drop_inplace(_, std::forward<It>(it)));
+		return tc_modified(pch, tc::drop_inplace(_, std::forward<It>(it)));
 	}
 
 	template< typename Rng, typename It >
@@ -493,7 +465,7 @@ namespace tc {
 		}
 	}
 
-	template< typename RangeReturn, typename Rng> requires tc::is_range_with_iterators<Rng>::value
+	template< typename RangeReturn, tc::range_with_iterators Rng>
 	[[nodiscard]] constexpr auto begin_next(
 		Rng&& rng,
 		typename boost::range_size< std::remove_reference_t<Rng> >::type n=1
@@ -501,7 +473,7 @@ namespace tc {
 		return begin_next_detail::begin_next<RangeReturn, /*bLinear*/false>(std::forward<Rng>(rng), n, typename boost::range_traversal<Rng>::type());
 	}
 
-	template< typename RangeReturn, typename Rng> requires tc::is_range_with_iterators<Rng>::value
+	template< typename RangeReturn, tc::range_with_iterators Rng>
 	[[nodiscard]] auto linear_begin_next(
 		Rng&& rng,
 		typename boost::range_size< std::remove_reference_t<Rng> >::type n=1
@@ -559,14 +531,14 @@ namespace tc {
 
 	template< typename Cont, typename It >
 	constexpr void take_inplace( Cont& cont, It&& it ) noexcept {
-		if constexpr( no_adl::has_mem_fn_take_inplace<Cont,It>::value ) {
+		if constexpr( detail::has_mem_fn_take_inplace<Cont,It> ) {
 			cont.take_inplace(std::forward<It>(it));
-		} else if constexpr( (tc::is_instance<std::vector, Cont>::value || tc::is_instance<std::deque, Cont>::value) && !std::is_move_assignable<tc::range_value_t<Cont&>>::value ) {
+		} else if constexpr( (tc::instance<Cont, std::vector> || tc::instance<Cont, std::deque>) && !std::is_move_assignable<tc::range_value_t<Cont&>>::value ) {
 			if (tc::begin(cont) == it) {
 				cont.clear();
 			} else {
 				--it;
-				while (modified(tc::end(cont), --_) != it) {
+				while (tc_modified(tc::end(cont), --_) != it) {
 					cont.pop_back();
 				}
 			}
@@ -606,7 +578,7 @@ namespace tc {
 	T advance_forward_bounded(It&& it, T n, Sentinel&& itBound) noexcept;
 
 	namespace take_first_detail {
-		DEFINE_ENUM(ETakePred, etakepred,
+		TC_DEFINE_ENUM(ETakePred, etakepred,
 			(TAKEANDCONTINUE)
 			(TAKEANDBREAK)
 			(DONTTAKE)
@@ -650,7 +622,7 @@ namespace tc {
 					decltype(tc::continue_if_not_break(tc::mem_fn_chunk(), std::declval<Sink const&>(), tc::take(std::declval<Rng>(), tc::begin(std::declval<Rng&>())))),
 					tc::constant<tc::break_>
 				> {
-					auto_cref(pairitetakepred, m_takepred.take_range(rng)); // MAYTHROW
+					tc_auto_cref(pairitetakepred, m_takepred.take_range(rng)); // MAYTHROW
 					auto breakorcontinue=tc::continue_if_not_break(tc::mem_fn_chunk(), m_sink, tc::take(std::forward<Rng>(rng), pairitetakepred.first)); // MAYTHROW
 					m_breakorcontinue=breakorcontinue;
 					switch_no_default(pairitetakepred.second) {
@@ -693,7 +665,7 @@ namespace tc {
 
 		template< typename TakePred, bool bTruncate, typename Rng >
 		auto take_first_impl(Rng&& rng, std::size_t n) noexcept {
-			static_assert(!tc::is_range_with_iterators<Rng>::value);
+			static_assert(!tc::range_with_iterators<Rng>);
 			return [rng=tc::make_reference_or_value(std::forward<Rng>(rng)), n](auto&& sink) MAYTHROW {
 				if(0<n) {
 					TakePred takepred(n);
@@ -709,7 +681,7 @@ namespace tc {
 		}
 	}
 
-	template< typename RangeReturn, typename Rng, std::enable_if_t<!tc::is_range_with_iterators<Rng>::value && std::is_same<RangeReturn, tc::return_take>::value>* = nullptr >
+	template< typename RangeReturn, typename Rng, std::enable_if_t<!tc::range_with_iterators<Rng> && std::is_same<RangeReturn, tc::return_take>::value>* = nullptr >
 	[[nodiscard]] auto begin_next(Rng&& rng, std::size_t n=1) return_decltype_noexcept(
 		tc::take_first_detail::take_first_impl<take_first_detail::no_adl::take_first_pred, /*bTruncate*/ false>(std::forward<Rng>(rng), n)
 	)
@@ -721,7 +693,7 @@ namespace tc {
 
 	template< typename Cont >
 	void drop_first_inplace(Cont& cont) noexcept {
-		if constexpr( has_mem_fn_pop_front<Cont>::value ) {
+		if constexpr( has_mem_fn_pop_front<Cont> ) {
 			cont.pop_front();
 		} else {
 			tc::drop_inplace(cont, tc::begin_next<tc::return_border>(cont));
@@ -773,7 +745,7 @@ namespace tc {
 		};
 	}
 
-	template< typename RangeReturn, typename Rng> requires (!tc::is_range_with_iterators<Rng>::value) && std::is_same<RangeReturn, tc::return_drop>::value
+	template< typename RangeReturn, typename Rng> requires (!tc::range_with_iterators<Rng>) && std::is_same<RangeReturn, tc::return_drop>::value
 	[[nodiscard]] auto begin_next(Rng&& rng, std::size_t n=1) noexcept {
 		return [rng=tc::make_reference_or_value(std::forward<Rng>(rng)), n](auto&& sink) MAYTHROW {
 			auto nCount=n;
@@ -795,7 +767,7 @@ namespace tc {
 
 	template< typename Cont>
 	void drop_last_inplace(Cont& cont) noexcept {
-		if constexpr( has_mem_fn_pop_back<Cont>::value ) {
+		if constexpr( has_mem_fn_pop_back<Cont> ) {
 			cont.pop_back();
 		} else {
 			tc::take_inplace(cont, tc::end_prev<tc::return_border>(cont));
@@ -803,54 +775,15 @@ namespace tc {
 	}
 
 	//-------------------------------------------------------------------------------------------------------------------------
-	// distance
-
-	namespace distance_impl
-	{
-		template<typename It, typename Enable = void>
-		struct is_subtractible : tc::constant<false> {};
-
-		template<typename It>
-		struct is_subtractible<It, std::void_t<decltype(std::declval<It>() - std::declval<It>())>> : tc::constant<true> {};
-
-		template<typename It, bool CanSubtract = is_subtractible<It>::value>
-		struct distance_impl {
-			static constexpr auto distance(It const& from, It const& to)
-				return_decltype_NOEXCEPT(to - from) // std:: iterators might not have noexcept operator-, even if they can't throw
-		};
-
-		template<typename It>
-		struct distance_impl<It, false> {
-			using Difference = typename std::iterator_traits<It>::difference_type;
-			static constexpr Difference distance(It from, It const& to) noexcept(noexcept(++from) && noexcept(!(from == to)))
-			{
-				static_assert(std::is_nothrow_constructible<Difference, int>::value);
-				static_assert(noexcept(++std::declval<Difference&>()));
-				Difference distance = 0;
-				while (!(from == to)) {
-					++from; // MAYTHROW
-					++distance;
-				}
-				return distance;
-			}
-		};
-	}
-
-	// TODO C++20: Since std::distance is constexpr in C++20, use std::distance instead of tc::distance, and delete tc::distance.
-	template<typename It>
-	constexpr auto distance(It const& from, It const& to)
-		return_decltype_MAYTHROW(distance_impl::distance_impl<It>::distance(from, to))
-
-	//-------------------------------------------------------------------------------------------------------------------------
 	// take_first_truncate...
 
 	template< typename It, typename T, typename Sentinel >
 	T advance_forward_bounded(It&& it, T n, Sentinel&& itBound) noexcept {
 		_ASSERT(0 <= n);
-		if constexpr( std::is_convertible<
+		if constexpr( std::convertible_to<
 			typename boost::iterator_traversal<std::remove_reference_t<It>>::type,
 			boost::iterators::random_access_traversal_tag
-		>::value && requires { itBound - it; } ) {
+		> && requires { itBound - it; } ) {
 			if (tc::assign_better(tc::fn_less_equal(), n, tc::make_size_proxy(itBound - it))) {
 				it = std::forward<Sentinel>(itBound);
 			} else {
@@ -865,7 +798,7 @@ namespace tc {
 				++nCount;
 				++it;
 			}
-			RETURN_CAST(nCount);
+			tc_return_cast(nCount);
 		}
 	}
 
@@ -908,7 +841,7 @@ namespace tc {
 		return make_iterator_range( it, it+std::forward<Count>(count) );
 	}
 
-	template< typename T > requires tc::is_actual_integer<T>::value
+	template< tc::actual_integer T >
 	[[nodiscard]] bool npos(T t) noexcept {
 		if constexpr( std::is_signed<T>::value ) {
 			return -1 == t;
@@ -994,8 +927,8 @@ namespace tc {
 
 			template<typename ReturnBorder, bool bSupportsNoElement = true>
 			struct pack_as_border_before : pack_as_border_base<ReturnBorder, bSupportsNoElement> {
-				template<typename It, typename Rng, typename... Ref>
-				static constexpr auto pack_element(It&& it, Rng&& rng, Ref&&...) return_decltype_xvalue_by_ref_noexcept(
+				template<typename It, typename Rng>
+				static constexpr auto pack_element(It&& it, Rng&& rng, tc::unused /*ref*/={}) return_decltype_xvalue_by_ref_noexcept(
 					ReturnBorder::pack_border(std::forward<It>(it), std::forward<Rng>(rng))
 				)
 				template<typename Rng, typename Begin, typename End>
@@ -1006,8 +939,8 @@ namespace tc {
 
 			template<typename ReturnBorder, bool bSupportsNoElement = true>
 			struct pack_as_border_after : pack_as_border_base<ReturnBorder, bSupportsNoElement> {
-				template<typename It, typename Rng, typename... Ref>
-				static constexpr auto pack_element(It&& it, Rng&& rng, Ref&&...) return_decltype_xvalue_by_ref_MAYTHROW(
+				template<typename It, typename Rng>
+				static constexpr auto pack_element(It&& it, Rng&& rng, tc::unused /*ref*/={}) return_decltype_xvalue_by_ref_MAYTHROW(
 					++it, // MAYTHROW
 					ReturnBorder::pack_border(std::forward<It>(it), std::forward<Rng>(rng))
 				)
@@ -1024,8 +957,8 @@ namespace tc {
 				static constexpr bool allowed_if_always_has_border = true; // element before/after may not exist, even if we have a border.
 				static_assert( ReturnElement::requires_iterator );
 
-				template<typename Rng>
-				static constexpr auto pack_no_border(Rng&& rng) return_decltype_noexcept(
+				template<typename Rng, typename... OptEndIt>
+				static constexpr auto pack_no_border(Rng&& rng, OptEndIt&&...) return_decltype_noexcept(
 					ReturnElement::pack_no_element(std::forward<Rng>(rng))
 				)
 			};
@@ -1115,14 +1048,6 @@ namespace tc {
 
 			static constexpr bool pack_view(tc::unused /*rng*/, tc::unused /*itBegin*/, tc::unused /*itEnd*/) noexcept {
 				return true;
-			}
-			template<typename Index, typename Rng>
-			static constexpr bool pack_element_index(tc::unused /*idx*/, tc::unused /*rng*/) noexcept {
-				return true;
-			}
-			template<typename Index>
-			static constexpr bool pack_no_element_index(tc::unused) noexcept {
-				return false;
 			}
 		};
 
@@ -1231,8 +1156,8 @@ namespace tc {
 		struct return_element {
 			static constexpr bool requires_iterator = true;
 
-			template<typename It, typename... Ref>
-			static constexpr tc::decay_t<It> pack_element(It&& it, tc::unused /*rng*/, Ref&&...) noexcept {
+			template<typename It>
+			static constexpr tc::decay_t<It> pack_element(It&& it, tc::unused /*rng*/, tc::unused /*ref*/={}) noexcept {
 				return std::forward<It>(it);
 			}
 
@@ -1246,8 +1171,8 @@ namespace tc {
 		struct return_element_or_null final {
 			static constexpr bool requires_iterator = true;
 
-			template<typename It, typename... Ref>
-			static constexpr auto pack_element(It&& it, tc::unused /*rng*/, Ref&&...) noexcept {
+			template<typename It>
+			static constexpr auto pack_element(It&& it, tc::unused /*rng*/, tc::unused /*ref*/={}) noexcept {
 				return tc::make_element(std::forward<It>(it));
 			}
 
@@ -1274,8 +1199,9 @@ namespace tc {
 		struct return_value {
 			static constexpr bool requires_iterator = false;
 
-			template<typename It, typename Rng, typename Ref>
-			static constexpr tc::range_value_t<Rng> pack_element(It&&, Rng&&, Ref&& ref) noexcept {
+			// Don't take it by value, or ref may be invalidated
+			template<typename Rng, typename Ref>
+			static constexpr tc::range_value_t<Rng> pack_element(tc::unused /*it*/, Rng&&, Ref&& ref) noexcept {
 				return std::forward<Ref>(ref);
 			}
 			template<typename It, typename Rng>
@@ -1312,8 +1238,9 @@ namespace tc {
 		struct return_value_or_none final {
 			static constexpr bool requires_iterator = false;
 
-			template<typename It, typename Rng, typename Ref>
-			static constexpr std::optional<tc::range_value_t<Rng>> pack_element(It&&, Rng&&, Ref&& ref) noexcept {
+			// Don't take it by value, or ref may be invalidated
+			template<typename Rng, typename Ref>
+			static constexpr std::optional<tc::range_value_t<Rng>> pack_element(tc::unused /*it*/, Rng&&, Ref&& ref) noexcept {
 				return std::forward<Ref>(ref);
 			}
 			template<typename It, typename Rng>
@@ -1337,14 +1264,9 @@ namespace tc {
 		struct return_element_index {
 			static constexpr bool requires_iterator = true;
 
-			template<typename It, typename Rng, typename... Ref>
-			static constexpr auto pack_element(It&& it, Rng&& rng, Ref&&...) noexcept {
+			template<typename It, typename Rng>
+			static constexpr auto pack_element(It&& it, Rng&& rng, tc::unused /*ref*/={}) noexcept {
 				return tc::make_size_proxy(it - tc::begin(rng));
-			}
-
-			template<typename Index, typename Rng>
-			static constexpr auto pack_element_index(Index n, Rng&&) noexcept {
-				return n;
 			}
 
 			template<typename Rng>
@@ -1352,34 +1274,18 @@ namespace tc {
 				_ASSERTFALSE;
 				return decltype(tc::make_size_proxy(tc::begin(std::declval<Rng&>()) - tc::begin(std::declval<Rng&>())))(0);
 			}
-			
-			template<typename Index, typename Rng>
-			static auto pack_no_element_index(Rng&&) noexcept {
-				_ASSERTFALSE;
-				return Index(0);
-			}
 		};
 
 		struct return_element_index_or_none final {
 			static constexpr bool requires_iterator = true;
 
-			template<typename It, typename Rng, typename... Ref>
-			static constexpr auto pack_element(It&& it, Rng&& rng, Ref&&...) noexcept {
+			template<typename It, typename Rng>
+			static constexpr auto pack_element(It&& it, Rng&& rng, tc::unused /*ref*/={}) noexcept {
 				return std::optional(tc::make_size_proxy(it - tc::begin(rng)));
-			}
-
-			template<typename Index, typename Rng>
-			static constexpr auto pack_element_index(Index n, Rng&&) noexcept {
-				return std::optional(n);
 			}
 
 			template<typename Rng>
 			static constexpr std::optional<decltype(tc::make_size_proxy(tc::begin(std::declval<Rng&>()) - tc::begin(std::declval<Rng&>())))> pack_no_element(Rng&&) noexcept {
-				return std::nullopt;
-			}
-
-			template<typename Index, typename Rng>
-			static constexpr std::optional<Index> pack_no_element_index(Rng&&) noexcept {
 				return std::nullopt;
 			}
 		};
@@ -1394,11 +1300,6 @@ namespace tc {
 			static constexpr auto pack_no_element(Rng&&) noexcept {
 				return decltype(tc::make_size_proxy(tc::begin(std::declval<Rng&>()) - tc::begin(std::declval<Rng&>())))(-1);
 			}
-
-			template<typename Index, typename Rng>
-			static constexpr auto pack_no_element_index(Rng&&) noexcept {
-				return Index(-1);
-			}
 		};
 
 		struct return_element_index_or_size final : return_element_index {
@@ -1406,19 +1307,14 @@ namespace tc {
 			static constexpr auto pack_no_element(Rng&& rng) noexcept {
 				return decltype(tc::make_size_proxy(tc::begin(std::declval<Rng&>()) - tc::begin(std::declval<Rng&>())))(tc::size(rng));
 			}
-
-			template<typename Index, typename Rng>
-			static constexpr auto pack_no_element_index(Rng&& rng) noexcept {
-				return Index(tc::size(std::forward<Rng>(rng)));
-			}
 		};
 
 		struct return_singleton_range {
 			static constexpr bool requires_iterator = true;
 
-			template<typename It, typename Rng, typename... Ref>
-			static constexpr decltype(auto) pack_element(It&& it, Rng&& rng, Ref&&...) noexcept(noexcept(++tc::as_lvalue(tc::decay_copy(it)))) {
-				return tc::slice(std::forward<Rng>(rng), it, modified(it, ++_));
+			template<typename It, typename Rng>
+			static constexpr decltype(auto) pack_element(It&& it, Rng&& rng, tc::unused /*ref*/={}) noexcept(noexcept(++tc::as_lvalue(tc::decay_copy(it)))) {
+				return tc::slice(std::forward<Rng>(rng), it, tc_modified(it, ++_));
 			}
 			template<typename Rng>
 			static decltype(auto) pack_no_element(Rng&& rng) noexcept {
@@ -1573,111 +1469,27 @@ namespace tc {
 	using no_adl::return_end_index;
 
 	//-------------------------------------------------------------------------------------------------------------------------
-	// and_then
-
-	namespace and_then_detail {
-		template<typename T, typename TypeList, typename=void>
-		struct and_then_result_impl /*not final*/ {};
-
-		template<typename T>
-		struct and_then_result_impl<T, tc::type::list<>> /*not final*/: tc::type::identity<tc::decay_t<T>> {};
-
-		template<>
-		struct and_then_result_impl<void, tc::type::list<>> /*not final*/: tc::type::identity<bool> {};
-
-		TC_HAS_EXPR(dereference_operator, (T), *std::declval<T>())
-
-		template<typename Func>
-		constexpr auto invoke(Func&& func, tc::unused) return_decltype_xvalue_by_ref_MAYTHROW(
-			tc::invoke(std::forward<Func>(func)) // MAYTHROW
-		)
-
-		template<typename Func, typename T> requires has_dereference_operator<T>::value
-		constexpr auto invoke(Func&& func, T&& t) return_decltype_xvalue_by_ref_MAYTHROW(
-			tc::invoke(std::forward<Func>(func), *std::forward<T>(t)) // MAYTHROW
-		)
-
-		template<typename T, typename Func, typename ...FuncTail>
-		struct and_then_result_impl<
-			T,
-			tc::type::list<Func, FuncTail...>,
-			decltype(tc::and_then_detail::invoke(std::declval<std::remove_reference_t<Func>>(), std::declval<T>()), void())
-		> /*not final*/: and_then_result_impl<
-			decltype(tc::and_then_detail::invoke(std::declval<std::remove_reference_t<Func>>(), std::declval<T>())),
-			tc::type::list<FuncTail...>
-		> {};
-
-		template<typename T, typename Func, typename... FuncTail>
-		struct and_then_result final: and_then_result_impl<T, tc::type::list<Func, FuncTail...>> {};
-	}
-
-	namespace and_then_adl {
-		DEFINE_ADL_TAG_TYPE(adl_tag);
-
-		template<typename T, typename Func>
-		auto and_then_impl(adl_tag_t, T&& t, Func func) noexcept(noexcept(tc::and_then_detail::invoke(tc_move(func), std::forward<T>(t))))
-			-> typename tc::and_then_detail::and_then_result<T, Func>::type
-		{
-			if(t) {
-				if constexpr(std::is_void<decltype(tc::and_then_detail::invoke(tc_move(func), std::forward<T>(t)))>::value) {
-					tc::and_then_detail::invoke(tc_move(func), std::forward<T>(t)); // MAYTHROW
-					return true;
-				} else {
-					return tc::and_then_detail::invoke(tc_move(func), std::forward<T>(t)); // MAYTHROW
-				}
-			} else {
-				return {};
-			}
-		}
-
-		template<typename T, typename Func, typename ...FuncTail>
-		auto and_then_impl(adl_tag_t, T&& t, Func func, FuncTail&& ...funcTail) noexcept(noexcept(
-			and_then_impl(adl_tag, tc::and_then_detail::invoke(tc_move(func), std::forward<T>(t)), std::forward<FuncTail>(funcTail)...)
-		)) // noexcept operator cannot see and_then_impl itself without ADL
-			-> typename tc::and_then_detail::and_then_result<T, Func, FuncTail...>::type
-		{
-			if(t) {
-				return and_then_impl( // MAYTHROW
-					adl_tag,
-					tc::and_then_detail::invoke(tc_move(func), std::forward<T>(t)), // MAYTHROW
-					std::forward<FuncTail>(funcTail)...
-				);
-			} else {
-				return {};
-			}
-		}
-	}
-
-	template<typename T, typename... Func>
-	auto and_then(T&& t, Func&&... func) return_decltype_MAYTHROW(
-		tc::and_then_adl::and_then_impl(tc::and_then_adl::adl_tag, std::forward<T>(t), std::forward<Func>(func)...)
-	)
-
-	DEFINE_FN2(std::make_optional, fn_make_optional);
-
-	//-------------------------------------------------------------------------------------------------------------------------
-	// as_pointers
-	// get a consecutive block of memory from range and return an iterator_range of pointers
-
-	template< typename Rng > requires tc::is_safely_convertible<Rng&&, tc::subrange<tc::iterator_base<decltype( ptr_begin( std::declval<Rng>() ) )>>>::value
-	[[nodiscard]] constexpr auto as_pointers(Rng&& rng) noexcept ->tc::subrange<
-		tc::iterator_base<
-			decltype( ptr_begin( std::declval<Rng>() ) )
-		>
-	> {
-		return std::forward<Rng>(rng);
-	}
-
-	//-------------------------------------------------------------------------------------------------------------------------
 	// as_array
 
-	template< typename T, std::size_t N > requires is_char<T>::value
+	template< tc::char_type T, std::size_t N >
 	[[nodiscard]] auto as_array(T (&at)[N] ) return_decltype_noexcept(
 		tc::counted( std::addressof(at[0]), N )
 	)
 
-	template< typename T >
-	using ptr_range = subrange < iterator_base<T*> >;
+
+	//-------------------------------------------------------------------------------------------------------------------------
+	// span
+	template <typename T>
+	using span = subrange<iterator_base<T*>>;
+
+	namespace span_detail {
+		template <typename Rng>
+		using unchecked_span_t = span<std::remove_pointer_t<decltype(tc::ptr_begin(std::declval<Rng>()))>>;
+	}
+
+	template <tc::contiguous_range Rng>
+			requires tc::safely_convertible_to<Rng&&, span_detail::unchecked_span_t<Rng>>
+	using span_t = span_detail::unchecked_span_t<Rng>;
 
 	namespace no_adl {
 		template<typename T>
@@ -1685,11 +1497,11 @@ namespace tc {
 
 		template<typename Rng>
 		struct is_lvalue_reference_or_iterator_base_subrange<tc::subrange<Rng>>
-			: tc::constant<std::is_lvalue_reference<Rng>::value || tc::is_instance<tc::iterator_base, Rng>::value>
+			: tc::constant<std::is_lvalue_reference<Rng>::value || tc::instance<Rng, tc::iterator_base>>
 		{};
 
 		template<typename T, typename TSource>
-		struct is_class_safely_constructible<tc::ptr_range<T>, TSource> final
+		struct is_class_safely_constructible<tc::span<T>, TSource> final
 			: tc::constant<
 				std::is_lvalue_reference<TSource>::value ||
 				std::is_pointer<std::remove_reference_t<TSource>>::value ||
@@ -1698,69 +1510,52 @@ namespace tc {
 			>
 		{};
 
-		template<typename Rng>
-		struct ptr_range_type_impl final {};
-
-		template<typename Rng>
-			requires tc::is_safely_convertible<
-				Rng,
-				tc::ptr_range<std::remove_pointer_t<decltype(tc::ptr_begin(std::declval<Rng>()))>>
-			>::value
-		struct ptr_range_type_impl<Rng> final {
-			using type = tc::ptr_range<std::remove_pointer_t<decltype(tc::ptr_begin(std::declval<Rng>()))>>;
-		};
-	}
-
-	template<typename Rng>
-	using ptr_range_t = typename no_adl::ptr_range_type_impl<Rng>::type;
-
-	namespace no_adl {
 		template<typename T1, typename T2>
-		struct common_ptr_range_impl_base {};
+		struct common_span_impl_base {};
 
 		template<typename T1, typename T2>
 			requires (sizeof(T1)==sizeof(std::remove_pointer_t<tc::common_type_t<T1*, T2*>>))
 				&& (sizeof(T2)==sizeof(std::remove_pointer_t<tc::common_type_t<T1*, T2*>>))
-		struct common_ptr_range_impl_base<tc::ptr_range<T1>, tc::ptr_range<T2>> {
-			using type = tc::ptr_range<std::remove_pointer_t<tc::common_type_t<T1*, T2*>>>;
+		struct common_span_impl_base<tc::span<T1>, tc::span<T2>> {
+			using type = tc::span<std::remove_pointer_t<tc::common_type_t<T1*, T2*>>>;
 		};
 
 		template<typename Rng0, typename Rng1, typename Enable=void>
-		struct common_ptr_range_impl final {};
+		struct common_span_impl final {};
 
 		template<>
-		struct common_ptr_range_impl<empty_range, empty_range, void> final
+		struct common_span_impl<empty_range, empty_range, void> final
 		{
 			using type = empty_range;
 		};
 
 		template<typename Rng>
-		struct common_ptr_range_impl<empty_range, Rng, tc::void_t<tc::ptr_range_t<Rng>>> final
+		struct common_span_impl<empty_range, Rng, tc::void_t<tc::span_t<Rng>>> final
 		{
-			using type = tc::ptr_range_t<Rng>;
+			using type = tc::span_t<Rng>;
 		};
 
 		template<typename Rng>
-		struct common_ptr_range_impl<Rng, empty_range, tc::void_t<tc::ptr_range_t<Rng>>> final
+		struct common_span_impl<Rng, empty_range, tc::void_t<tc::span_t<Rng>>> final
 		{
-			using type = tc::ptr_range_t<Rng>;
+			using type = tc::span_t<Rng>;
 		};
 
 		template<typename Rng0, typename Rng1>
-		struct common_ptr_range_impl<Rng0, Rng1, tc::void_t<tc::ptr_range_t<Rng0>, tc::ptr_range_t<Rng1>>> final: common_ptr_range_impl_base<tc::ptr_range_t<Rng0>, tc::ptr_range_t<Rng1>> {};
+		struct common_span_impl<Rng0, Rng1, tc::void_t<tc::span_t<Rng0>, tc::span_t<Rng1>>> final: common_span_impl_base<tc::span_t<Rng0>, tc::span_t<Rng1>> {};
 
 		template<typename Rng0, typename Rng1>
-		using common_ptr_range_impl_t = typename common_ptr_range_impl<Rng0, Rng1>::type;
+		using common_span_impl_t = typename common_span_impl<Rng0, Rng1>::type;
 
 		template<typename... T>
-		using common_ptr_range_t = tc::type::accumulate_with_front_t<tc::type::list<T...>, common_ptr_range_impl_t>;
+		using common_span_t = tc::type::accumulate_with_front_t<tc::type::list<T...>, common_span_impl_t>;
 
 		// tc::common_reference_xvalue_as_ref_t customization tc::subrange: If
 		//		1. the base ranges (whole_range_t) have a tc::common_reference_xvalue_as_ref which is an lvalue reference,
 		// the result type is tc::make_subrange_result_t<tc::common_reference_xvalue_as_ref<base ranges...>>
 		template<typename... T>
 		concept has_common_subrange_lvalue_reference =
-			(tc::is_instance<tc::subrange, std::remove_reference_t<T>>::value || ...)
+			(tc::instance<std::remove_reference_t<T>, tc::subrange> || ...)
 			&& std::is_lvalue_reference<
 				tc::common_reference_xvalue_as_ref_t<subrange_detail::whole_range_t<T>...>
 			>::value;
@@ -1770,19 +1565,30 @@ namespace tc {
 			using type = tc::make_subrange_result_t<tc::common_reference_xvalue_as_ref_t<subrange_detail::whole_range_t<T>...>>;
 		};
 
-		// tc::common_reference_xvalue_as_ref_t customization tc::ptr_range: If
-		//		1. all input ranges are tc::is_safely_convertible to tc::ptr_range and,
-		//		2. those tc::ptr_range(s) has_common_ptr_range,
-		// the result type is common_ptr_range_t. 
+		// tc::common_reference_xvalue_as_ref_t customization tc::span: If
+		//		1. all input ranges are tc::safely_convertible_to tc::span and,
+		//		2. those tc::span(s) has_common_span,
+		// the result type is common_span_t. 
 		template<typename... T>
 			requires (!has_actual_common_reference<T...>)
 				&& (!has_common_subrange_lvalue_reference<T...>)
-				&& requires { typename common_ptr_range_t<T...>; }
+				&& requires { typename common_span_t<T...>; }
 		struct common_reference_xvalue_as_ref<T...> final {
-			using type = common_ptr_range_t<T...>;
+			using type = common_span_t<T...>;
 		};
-
 	}
+
+	//-------------------------------------------------------------------------------------------------------------------------
+	// as_span
+	// get a consecutive block of memory from range and return an iterator_range of pointers
+
+	template<tc::contiguous_range Rng>
+	[[nodiscard]] constexpr auto as_span(Rng&& rng) noexcept 
+		-> tc::span_t<Rng&&>
+	{
+		return std::forward<Rng>(rng);
+	}
+
 
 	//--------------------------------------------------------------------------------------------------------------------------
 	// as_blob
@@ -1795,19 +1601,40 @@ namespace tc {
 	// - char is bad because it is either signed or unsigned, so it has the same problem.
 	// - unsigned char is better than std::uint8_t because the latter must be 8 bit, but we mean the smallest addressable unit, which is char and may be larger (or smaller?) on other platforms.
 
-	static_assert(!tc::is_range_with_iterators< void const* >::value);
+	static_assert(!tc::range_with_iterators< void const* >);
 
 	template<typename T>
 	[[nodiscard]] constexpr auto single(T&& t) noexcept;
 
-	template<typename Rng> requires has_ptr_begin<Rng>::value
+	template<tc::contiguous_range Rng>
 	[[nodiscard]] auto range_as_blob(Rng&& rng) noexcept {
-		static_assert( std::is_trivially_copyable< tc::range_value_t<Rng&> >::value, "as_blob only works on std::is_trivially_copyable types" );
 		using cv_value_type = std::remove_pointer_t<decltype(tc::ptr_begin(rng))>;
-		return tc::make_iterator_range( 
-			reinterpret_cast<same_cvref_t<unsigned char, cv_value_type>*>( tc::ptr_begin(rng) ),
-			reinterpret_cast<same_cvref_t<unsigned char, cv_value_type>*>( tc::ptr_end(rng) )
-		);
+		static_assert( std::is_trivially_copyable< cv_value_type >::value, "as_blob only works on std::is_trivially_copyable types" );
+		if constexpr(tc::safely_constructible_from<tc::span<cv_value_type>, Rng>) {
+			return tc::make_iterator_range(
+				reinterpret_cast<same_cvref_t<unsigned char, cv_value_type>*>(tc::ptr_begin(rng)),
+				reinterpret_cast<same_cvref_t<unsigned char, cv_value_type>*>(tc::ptr_end(rng))
+			);
+		} else {
+			// not inside blob_range_t because templates cannot be declared inside of a local class
+			static auto constexpr as_blob_ptr=[](auto ptr) noexcept {
+				return reinterpret_cast<same_cvref_t<unsigned char, std::remove_pointer_t<decltype(ptr)>>*>(ptr);
+			};
+			struct blob_range_t final {
+				explicit blob_range_t(Rng&& rng) noexcept : m_rng(tc_move(rng)) {}
+				auto begin() & noexcept { return as_blob_ptr(tc::ptr_begin(m_rng)); }
+				auto begin() const& noexcept { return as_blob_ptr(tc::ptr_begin(m_rng)); }
+				auto end() & noexcept { return as_blob_ptr(tc::ptr_end(m_rng)); }
+				auto end() const& noexcept { return as_blob_ptr(tc::ptr_end(m_rng)); }
+			private:
+				static_assert(!std::is_reference<Rng>::value);
+				std::remove_cv_t<Rng> m_rng;
+			public:
+				using iterator=decltype(as_blob_ptr(tc::ptr_begin(m_rng)));
+				using const_iterator=decltype(as_blob_ptr(tc::ptr_begin(tc::as_const(m_rng))));
+			};
+			return blob_range_t(tc_move(rng));
+		}
 	}
 
 	namespace no_adl {
@@ -1821,7 +1648,7 @@ namespace tc {
 			explicit range_as_blob_sink(Sink& sink) noexcept: m_sink(sink) {}
 
 			// chunk must be defined before operator() - otherwise MSVC will not allow it to occur in the return type of operator()
-			template<typename Rng> requires has_ptr_begin<Rng>::value
+			template<tc::contiguous_range Rng>
 			auto chunk(Rng&& rng) const& return_decltype_MAYTHROW (
 				tc::for_each(tc::range_as_blob(tc_move_if_owned(rng)), m_sink)
 			)
@@ -1842,7 +1669,7 @@ namespace tc {
 
 	template<typename T> requires std::is_trivially_copyable<std::remove_reference_t<T>>::value
 	[[nodiscard]] auto as_blob(T&& t) noexcept {
-		return tc::range_as_blob( tc::single(/* no std::forward<T> */ t) );
+		return tc::range_as_blob( tc::single( std::forward<T>(t) ) );
 	}
 
 	namespace assert_no_overlap_impl {
@@ -1856,7 +1683,7 @@ namespace tc {
 	template< typename Lhs, typename Rhs>
 	void assert_no_overlap(Lhs const& lhs, Rhs const& rhs) noexcept {
 		assert_no_overlap_impl::assert_no_overlap(tc::single(lhs), tc::single(rhs));
-		if constexpr( has_ptr_begin<Lhs>::value && has_ptr_begin<Rhs>::value ) {
+		if constexpr( tc::contiguous_range<Lhs> && tc::contiguous_range<Rhs> ) {
 			assert_no_overlap_impl::assert_no_overlap(lhs, rhs);
 		}
 	}

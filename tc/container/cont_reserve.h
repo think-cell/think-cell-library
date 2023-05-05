@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -26,7 +26,7 @@ namespace tc {
 
 	template< typename Cont >
 	void cont_reserve( Cont& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type n ) noexcept {
-		if constexpr( has_mem_fn_reserve<Cont>::value ) {
+		if constexpr( has_mem_fn_reserve<Cont> ) {
 			if( cont.capacity()<n ) {
 				NOEXCEPT( cont.reserve(cont_extended_memory(cont,n) ));
 			}

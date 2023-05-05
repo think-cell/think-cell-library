@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -13,13 +13,8 @@
 #include <type_traits>
 
 namespace tc {
-	namespace no_adl {
-		template< typename Rng >
-		struct is_range_with_iterators : tc::constant<
-			boost::has_range_iterator<Rng>::value
-		> {};
-	}
-	using no_adl::is_range_with_iterators;
+	template<typename Rng>
+	concept range_with_iterators = boost::has_range_iterator<Rng>::value;
 
 	namespace no_adl {
 		template<typename It>
@@ -34,19 +29,19 @@ namespace tc {
 	using subrange_adl::subrange;
 
 	namespace transform_adaptor_adl {
-		template< typename Func, typename Rng, bool HasIterator=is_range_with_iterators< Rng >::value >
+		template< typename Func, typename Rng, bool HasIterator=tc::range_with_iterators< Rng > >
 		struct transform_adaptor;
 	}
 	using transform_adaptor_adl::transform_adaptor;
 
 	namespace no_adl {
-		template< typename Pred, typename Rng, bool HasIterator=is_range_with_iterators< Rng >::value >
+		template< typename Pred, typename Rng, bool HasIterator=tc::range_with_iterators< Rng > >
 		struct filter_adaptor;
 	}
 	using no_adl::filter_adaptor;
 
 	namespace no_adl {
-		template< typename Pred, typename Rng, bool HasIterator=is_range_with_iterators< Rng >::value >
+		template< typename Pred, typename Rng, bool HasIterator=tc::range_with_iterators< Rng > >
 		struct take_while_adaptor;
 	}
 	using no_adl::take_while_adaptor;
@@ -64,17 +59,17 @@ namespace tc {
 	using make_subrange_result_t = typename no_adl::make_subrange_result<Rng>::type;
 
 	namespace reverse_adaptor_adl {
-		template<typename Rng, bool HasIterators = is_range_with_iterators<Rng>::value>
+		template<typename Rng, bool HasIterators = tc::range_with_iterators<Rng>>
 		struct reverse_adaptor;
 	}
 	using reverse_adaptor_adl::reverse_adaptor;
 
 	template<typename Rng>
-	reverse_adaptor<Rng> reverse(Rng&& rng) noexcept;
+	constexpr reverse_adaptor<Rng> reverse(Rng&& rng) noexcept;
 
 	namespace no_adl {
-		template<typename Rng, typename Enable=void>
-		struct constexpr_size_base;
+		template<typename Rng>
+		struct constexpr_size_impl;
 	}
 
 	namespace empty_range_adl {

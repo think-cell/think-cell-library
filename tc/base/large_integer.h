@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -32,14 +32,16 @@ namespace tc {
 		using unsigned_=boost::multiprecision::number<boost::multiprecision::cpp_int_backend<nBits, nBits, boost::multiprecision::unsigned_magnitude, boost::multiprecision::unchecked, void> >;
 	};
 
-	template<unsigned MinBits,unsigned MaxBits,boost::multiprecision::cpp_integer_type SignType,boost::multiprecision::cpp_int_check_type Checked,typename Alloc>
-	struct is_actual_integer_like<boost::multiprecision::number<
-		boost::multiprecision::cpp_int_backend<
-			MinBits,
-			MaxBits,
-			SignType,
-			Checked,
-			Alloc
-		>
-	>> final : tc::constant<true> {};
+	namespace actual_integer_like_detail {
+		template<unsigned MinBits,unsigned MaxBits,boost::multiprecision::cpp_integer_type SignType,boost::multiprecision::cpp_int_check_type Checked,typename Alloc>
+		inline constexpr bool actual_integer_like_impl<boost::multiprecision::number<
+			boost::multiprecision::cpp_int_backend<
+				MinBits,
+				MaxBits,
+				SignType,
+				Checked,
+				Alloc
+			>
+		>> = true;
+	}
 }

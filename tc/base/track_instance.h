@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -10,6 +10,7 @@
 
 #include "casts.h"
 #include "noncopyable.h"
+#include "../storage_for.h"
 
 namespace tc {
 	namespace no_adl {
@@ -76,7 +77,39 @@ namespace tc {
 				}
 			}
 		};
+
+		template <typename Derived>
+		struct unique_instance {
+			static int s_nRefCnt;
+			static storage_for<Derived> s_ot;
+			unique_instance() noexcept {
+				if(0==s_nRefCnt++) {
+					s_ot.ctor();
+				}
+			}
+			~unique_instance() {
+				if(1==s_nRefCnt) {
+					s_ot.dtor();
+				}
+				--s_nRefCnt;
+			}
+		};
+		template <typename T> int unique_instance<T>::s_nRefCnt=0;
+		template <typename T> storage_for<T> unique_instance<T>::s_ot;
+
+		template <typename T>
+		struct scoped_increment {
+		private:
+			static int s_nRefCnt;
+		public:
+			explicit scoped_increment() noexcept { ++s_nRefCnt; }
+			~scoped_increment() { --s_nRefCnt; }
+			static bool IsActive() noexcept { return 0 < s_nRefCnt; }
+		};
+		template <typename T> int scoped_increment<T>::s_nRefCnt=0;
 	}
 	using no_adl::track_unique_instance;
 	using no_adl::track_outermost_instance;
+	using no_adl::unique_instance;
+	using no_adl::scoped_increment;
 }

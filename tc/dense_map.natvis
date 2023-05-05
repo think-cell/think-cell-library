@@ -65,4 +65,13 @@
 		</Expand>
 	</Type>
 
+	<Type Name="tc::geo::margin_adl::margin&lt;*&gt;">
+		<DisplayString>margin (left: {m_a[0].m_a[0]}, top: {m_a[1].m_a[0]}, right: {m_a[0].m_a[1]}, bottom: {m_a[1].m_a[1]}) </DisplayString>
+		<Expand>
+			<Item Name="left"> m_a[0].m_a[0] </Item>
+			<Item Name="top"> m_a[1].m_a[0] </Item>
+			<Item Name="right"> m_a[0].m_a[1] </Item>
+			<Item Name="bottom"> m_a[1].m_a[1] </Item>
+		</Expand>
+	</Type>
 </AutoVisualizer>

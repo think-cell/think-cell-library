@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -61,8 +61,8 @@ UNITTESTDEF( equal_generator ) {
 	auto g143 = tc::make_generator_range(v143);
 	auto g1234 = tc::make_generator_range(v1234);
 
-	STATIC_ASSERT(tc::is_range_with_iterators<decltype(ve)>::value);
-	STATIC_ASSERT(!tc::is_range_with_iterators<decltype(ge)>::value);
+	STATIC_ASSERT(tc::range_with_iterators<decltype(ve)>);
+	STATIC_ASSERT(!tc::range_with_iterators<decltype(ge)>);
 
 	TEST_RANGE_EQUAL(ve, ge);
 	TEST_RANGE_EQUAL(ge, ve);

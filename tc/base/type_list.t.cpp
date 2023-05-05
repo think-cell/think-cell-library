@@ -1,6 +1,6 @@
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -11,7 +11,7 @@
 
 namespace tc {
 	template<typename Rng>
-	using is_char_range = tc::is_range_of<tc::is_char, Rng>;
+	using is_char_range = tc::is_range_of<TRAITFROMCONCEPT(tc::char_type), Rng>;
 }
 
 STATICASSERTSAME((tc::type::list<char, int, double, void>), (tc::type::concat_t<tc::type::list<>, tc::type::list<char, int, double, void>>));
@@ -87,13 +87,13 @@ static_assert(type_algo_sfinae_test<tc::type::drop_last_t, tc::type::list<int>, 
 static_assert(!type_algo_sfinae_test<tc::type::drop_last_t, tc::type::list<int>, 2>::value);
 static_assert(!type_algo_sfinae_test<tc::type::drop_last_t, tc::type::list<>, 1>::value);
 
-static_assert(tc::type::all_of<tc::type::list<int, short, long long>, tc::is_actual_integer>::value);
-static_assert(tc::type::all_of<tc::type::list<>, tc::is_actual_integer>::value);
-static_assert(!tc::type::all_of<tc::type::list<int, short, long long, char>, tc::is_actual_integer>::value);
+static_assert(tc::type::all_of<tc::type::list<int, short, long long>, TRAITFROMCONCEPT(tc::actual_integer)>::value);
+static_assert(tc::type::all_of<tc::type::list<>, TRAITFROMCONCEPT(tc::actual_integer)>::value);
+static_assert(!tc::type::all_of<tc::type::list<int, short, long long, char>, TRAITFROMCONCEPT(tc::actual_integer)>::value);
 
-static_assert(tc::type::any_of<tc::type::list<int, short, char, long long>, tc::is_char>::value);
-static_assert(!tc::type::any_of<tc::type::list<int, short, long long>, tc::is_char>::value);
-static_assert(!tc::type::any_of<tc::type::list<>, tc::is_char>::value);
+static_assert(tc::type::any_of<tc::type::list<int, short, char, long long>, TRAITFROMCONCEPT(tc::char_type)>::value);
+static_assert(!tc::type::any_of<tc::type::list<int, short, long long>, TRAITFROMCONCEPT(tc::char_type)>::value);
+static_assert(!tc::type::any_of<tc::type::list<>, TRAITFROMCONCEPT(tc::char_type)>::value);
 
 namespace tc::type {
 	STATICASSERTSAME(

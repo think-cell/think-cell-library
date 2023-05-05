@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -34,7 +34,7 @@ namespace tc {
 	}
 
 	template<typename... Rng>
-	concept concatenable_with_iterators = tc::has_common_reference_prvalue_as_val<tc::iter_reference_t<tc::iterator_t<Rng>>...>;
+	concept concatenable_with_iterators = tc::has_common_reference_prvalue_as_val<std::iter_reference_t<tc::iterator_t<Rng>>...>;
 
 	template<typename... Rng>
 	using concat_adaptor = concat_adaptor_adl::concat_adaptor_impl<concatenable_with_iterators<Rng...>, Rng...>;
@@ -55,7 +55,7 @@ namespace tc {
 
 			template<typename ConcatAdaptor, typename Sink, typename... Rng>
 			struct has_for_each<ConcatAdaptor, Sink, tc::concat_adaptor<Rng...>> : tc::constant<
-				(tc::has_for_each<tc::apply_cvref_t<Rng, ConcatAdaptor>, tc::decay_t<Sink> const&>::value && ...)
+				(tc::has_for_each<tc::apply_cvref_t<Rng, ConcatAdaptor>, tc::decay_t<Sink> const&> && ...)
 			> {};
 
 			template<typename Sink>
@@ -103,8 +103,7 @@ namespace tc {
 				return tc::size_raw(tc::get<nconstIndex()>(m_tupleadaptbaserng).base_range());
 			}
 		public:
-			template< ENABLE_SFINAE, std::enable_if_t<std::conjunction<tc::has_size<SFINAE_TYPE(Rng)>...>::value>* = nullptr >
-			constexpr auto size() const& noexcept {
+			constexpr auto size() const& noexcept requires (... && tc::has_size<Rng>) {
 				return 
 					tc::accumulate(
 						tc::transform(
@@ -120,7 +119,7 @@ namespace tc {
 				return tc::all_of(m_tupleadaptbaserng, [](auto const& adaptbaserng) noexcept { return tc::empty(adaptbaserng.base_range()); });
 			}
 
-			template<typename Self, std::enable_if_t<tc::is_base_of_decayed<concat_adaptor_impl, Self>::value>* = nullptr>
+			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, concat_adaptor_impl>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
 			friend auto range_output_t_impl(Self&&) -> tc::type::unique_t<tc::type::concat_t<
 				tc::range_output_t<decltype(std::declval<tc::apply_cvref_t<tc::range_adaptor_base_range<Rng>, Self>>().base_range())>...
 			>> {} // unevaluated
@@ -215,7 +214,7 @@ namespace tc {
 			}
 
 			STATIC_FINAL_MOD(constexpr, begin_index)() const& noexcept -> tc_index {
-				return modified(
+				return tc_modified(
 					create_begin_index(tc::constant<tc::explicit_cast<std::size_t>(0)>()),
 					correct_index<0>(_)
 				);
@@ -242,17 +241,12 @@ namespace tc {
 			}
 
 
-			STATIC_FINAL_MOD(
-				TC_FWD(template<
-					ENABLE_SFINAE,
-					std::enable_if_t<
-						std::conjunction<tc::has_decrement_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>...>::value &&
-						std::conjunction<tc::has_end_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>...>::value &&
-						tc::is_equality_comparable<SFINAE_TYPE(tc_index)>::value
-					>* = nullptr
-				>),
-				decrement_index
-			)(tc_index& idx) const& noexcept -> void {
+			STATIC_FINAL_MOD(constexpr, decrement_index)(tc_index& idx) const& noexcept -> void
+				requires
+					(... && tc::has_decrement_index<std::remove_reference_t<Rng>>) &&
+					(... && tc::has_end_index<std::remove_reference_t<Rng>>) &&
+					tc::is_equality_comparable<tc_index>::value
+			{
 				tc::invoke_with_constant<std::make_index_sequence<sizeof...(Rng)+1>>(
 					[&](auto nconstIndexStart) noexcept {
 						tc::for_each(
@@ -299,16 +293,12 @@ MODIFY_WARNINGS(((suppress)(4544))) // 'Func2': default template argument ignore
 				);
 			}
 
-			STATIC_FINAL_MOD(
-				TC_FWD(template<
-					ENABLE_SFINAE,
-					std::enable_if_t<
-						std::conjunction<tc::has_distance_to_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>...>::value &&
-						std::conjunction<tc::has_end_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>...>::value &&
-						std::conjunction<tc::has_advance_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>...>::value
-					>* = nullptr
-				> constexpr), advance_index
-			)(tc_index& idx, difference_type d) const& noexcept -> void {
+			STATIC_FINAL_MOD(constexpr, advance_index)(tc_index& idx, difference_type d) const& noexcept -> void
+				requires
+					(... && tc::has_distance_to_index<std::remove_reference_t<Rng>>) &&
+					(... && tc::has_end_index<std::remove_reference_t<Rng>>) &&
+					(... && tc::has_advance_index<std::remove_reference_t<Rng>>)
+			{
 				tc::invoke_with_constant<std::make_index_sequence<sizeof...(Rng)+1>>(
 					[&](auto nconstIndexStart) noexcept {
 						if (d < 0) {
@@ -390,16 +380,11 @@ MODIFY_WARNINGS(((suppress)(4544))) // 'Func2': default template argument ignore
 				);
 			}
 
-			STATIC_FINAL_MOD(
-				TC_FWD(template<
-					ENABLE_SFINAE,
-					std::enable_if_t<
-						std::conjunction<tc::has_distance_to_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>...>::value &&
-						std::conjunction<tc::has_end_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>...>::value
-					>* = nullptr
-				> constexpr),
-				distance_to_index
-			)(tc_index const& idxLhs, tc_index const& idxRhs) const& noexcept -> difference_type {
+			STATIC_FINAL_MOD(constexpr, distance_to_index)(tc_index const& idxLhs, tc_index const& idxRhs) const& noexcept -> difference_type
+				requires
+					(... && tc::has_distance_to_index<std::remove_reference_t<Rng>>) &&
+					(... && tc::has_end_index<std::remove_reference_t<Rng>>)
+			{
 				if (idxLhs.index() == idxRhs.index()) {
 					return tc::invoke_with_constant<std::make_index_sequence<sizeof...(Rng)+1>>(
 						[&](auto nconstIndex) noexcept -> difference_type {
@@ -454,8 +439,8 @@ MODIFY_WARNINGS(((suppress)(4544))) // 'Func2': default template argument ignore
 	}
 
 	namespace no_adl {
-		template<bool HasIterator, typename... Rng>
-		struct constexpr_size_base<tc::concat_adaptor_adl::concat_adaptor_impl<HasIterator, Rng...>, tc::void_t<typename tc::constexpr_size<Rng>::type...>>
+		template<bool HasIterator, tc::has_constexpr_size... Rng>
+		struct constexpr_size_impl<tc::concat_adaptor_adl::concat_adaptor_impl<HasIterator, Rng...>>
 			: tc::constant<(... + tc::constexpr_size<Rng>::value)>
 		{};
 
@@ -486,7 +471,7 @@ MODIFY_WARNINGS(((suppress)(4544))) // 'Func2': default template argument ignore
 	namespace concat_detail {
 		template<typename Rng>
 		[[nodiscard]] constexpr auto forward_range_as_tuple(Rng&& rng) noexcept {
-			if constexpr( tc::is_safely_convertible<Rng&&, tc::empty_range>::value ) {
+			if constexpr( tc::safely_convertible_to<Rng&&, tc::empty_range> ) {
 				return tc::tuple<>{};
 			} else if constexpr( tc::is_concat_range<std::remove_cvref_t<Rng>>::value ) {
 				return forward_base_ranges_as_tuple(std::forward<Rng>(rng), typename std::remove_cvref_t<Rng>::index_seq());

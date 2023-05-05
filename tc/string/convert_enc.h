@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -20,7 +20,7 @@
 namespace tc {
 	namespace codeunit_sequence_size_detail {
 		[[nodiscard]] constexpr inline std::optional<int> codeunit_sequence_size_raw(char ch) noexcept {
-			if( auto const n=0xffu & ~tc::underlying_cast(ch); 0!=n ) { // code unit 0xff is invalid
+			if( auto const n=0xffu & ~tc::to_underlying(ch); 0!=n ) { // code unit 0xff is invalid
 				switch(tc::index_of_most_significant_bit(n)) {
 					case 7: return 1;
 					case 5: return 2;
@@ -34,7 +34,7 @@ namespace tc {
 
 		// tc::make_interval not used to avoid dependency cycle
 		[[nodiscard]] constexpr std::optional<int> codeunit_sequence_size_raw(tc::char16 ch) noexcept {
-			if( auto const n=tc::underlying_cast(ch); n<0xd800u || 0xdfffu<n) return 1;
+			if( auto const n=tc::to_underlying(ch); n<0xd800u || 0xdfffu<n) return 1;
 			else if( n<0xdc00u ) return 2; // high-surrogate
 			else return std::nullopt; // low-surrogate, continuation
 		}
@@ -53,7 +53,7 @@ namespace tc {
 	using codeunit_sequence_size_detail::codeunit_sequence_size_raw;
 	using codeunit_sequence_size_detail::codeunit_sequence_size;
 
-	DEFINE_ENUM(ECodeunitSequenceType, ecodeunitseqtyp,
+	TC_DEFINE_ENUM(ECodeunitSequenceType, ecodeunitseqtyp,
 		(TRUNCATED) // The sequence lacks continuation code unit(s). In UTF-16, an unpaired high-surrogate.
 		// Embedded in any code unit sequence, end == increment(decrement(end)) for sequence types below.
 		(VALID) // A structurally well formed sequence. In UTF-8, the sequence may still encode surrogate code points or be an overlong encoding. In utf-16, such a sequence is always a valid encoding.
@@ -78,8 +78,7 @@ namespace tc {
 		}
 	}
 
-	template<typename Rng, typename Index> requires
-		tc::has_decrement_index<Rng>::value &&
+	template<tc::has_decrement_index Rng, typename Index> requires
 		tc::is_equality_comparable<Index>::value
 	constexpr ECodeunitSequenceType codepoint_decrement_index(Rng const& rng, Index& idx) MAYTHROW {
 		tc::decrement_index(rng, idx); // MAYTHROW
@@ -108,6 +107,18 @@ namespace tc {
 		}
 	}
 
+	constexpr char32_t surrogate_pair_value(tc::char16 const chLeading, tc::char16 const chTrailing) noexcept {
+		auto n = tc::to_underlying(chLeading) - 0xd800u;
+		_ASSERTDEBUG(n<0x400u);
+		n<<=10;
+
+		unsigned int n2=tc::to_underlying(chTrailing)-0xdc00u;
+		_ASSERTDEBUG(n2<0x400u);
+		n+=n2+0x10000u;
+		_ASSERTDEBUG(n<0x110000u);
+		return static_cast<char32_t>(n);
+	}
+
 	template<typename Rng>
 	constexpr std::optional<char32_t> codepoint_value_impl(Rng const& rng, tc::index_t<Rng const> idx) MAYTHROW {
 		static_assert(
@@ -118,22 +129,14 @@ namespace tc {
 		if(	auto const ch=tc::dereference_index(rng, idx); // MAYTHROW
 			auto const onSequenceSize=tc::codeunit_sequence_size_raw(ch)
 		) {
-			unsigned int n=tc::underlying_cast(ch);
+			unsigned int n=tc::to_underlying(ch);
 			tc::increment_index(rng, idx); // MAYTHROW
 			if( 1==*onSequenceSize || (!tc::at_end_index(rng, idx) && [&]() MAYTHROW {
 				if constexpr( std::is_same<tc::char16, tc::range_value_t<Rng const&>>::value ) {
 					auto const ch2=tc::dereference_index(rng, idx); // MAYTHROW
 					_ASSERTDEBUGEQUAL(*onSequenceSize, 2);
 					if(tc::is_trailing_codeunit(ch2)) {
-						n-=0xd800u;
-						_ASSERTDEBUG(n<0x400u);
-						n<<=10;
-
-						unsigned int n2=tc::underlying_cast(ch2)-0xdc00u;
-						_ASSERTDEBUG(n2<0x400u);
-						n+=n2+0x10000u;
-						_ASSERTDEBUG(n<0x110000u);
-
+						n=tc::to_underlying(tc::surrogate_pair_value(ch, ch2));
 						return true;
 					}
 				} else if constexpr(std::is_same<char, tc::range_value_t<Rng const&>>::value) {
@@ -145,7 +148,7 @@ namespace tc {
 						if(!tc::is_trailing_codeunit(ch2)) TC_UNLIKELY return false;
 
 						n<<=6;
-						n|=tc::underlying_cast(ch2) & 0x3fu;
+						n|=tc::to_underlying(ch2) & 0x3fu;
 						if(1 == --i) {
 							switch_no_default(*onSequenceSize) {
 								case 2: return 0x80u<=n;
@@ -170,6 +173,56 @@ namespace tc {
 	constexpr decltype(auto) codepoint_value(Rng const& rng) MAYTHROW {
 		_ASSERTE( !tc::empty(rng) );
 		return tc::codepoint_value_impl(rng, tc::begin_index(rng)); // MAYTHROW
+	}
+
+	template<typename Char>
+	constexpr int codepoint_codeunit_count(unsigned int nCodePoint) noexcept {
+		if constexpr( std::same_as<char, Char> ) {
+			return 
+				nCodePoint<0x80u ? 1
+				: nCodePoint<0x800u	? 2
+				: nCodePoint<0x10000u ? 3 : 4;
+		} else if constexpr( std::same_as<tc::char16, Char> ) {
+			return nCodePoint<0x10000u ? 1 : 2;
+		} else {
+			return 1;
+		}
+	}
+
+	template<typename Char>
+	constexpr Char codepoint_codeunit_at(unsigned int nCodePoint, int nCodeUnitIndex) noexcept {
+		_ASSERTDEBUG(nCodePoint<0x110000u);
+		auto const nLastIndex=tc::codepoint_codeunit_count<Char>(nCodePoint) - 1;
+		if constexpr( std::same_as<char, Char> ) {
+			return tc::bit_cast<char>(tc::explicit_cast<std::uint8_t>([&]() noexcept {
+				switch_no_default(nCodeUnitIndex) {
+					case 0:
+						return 0==nLastIndex
+							? nCodePoint
+							: nCodePoint>>nLastIndex*6 | ((1 << (nLastIndex+1))-1)<<(7-nLastIndex);
+					case 1:
+					case 2:
+					case 3:
+						_ASSERTDEBUG(nCodeUnitIndex<=nLastIndex);
+						return (nCodePoint>>(nLastIndex-nCodeUnitIndex)*6 & 0x3fu) | 0x80u;
+				}
+			}()));
+		} else if constexpr( std::same_as<tc::char16, Char> ) {
+			return tc::bit_cast<tc::char16>(tc::explicit_cast<std::uint16_t>([&]() noexcept {
+				switch_no_default(nCodeUnitIndex) {
+					case 0:
+						switch_no_default(nLastIndex) {
+							case 0: return nCodePoint;
+							case 1: return ((nCodePoint-0x10000u) >> 10)+0xd800u;
+						}
+					case 1:
+						_ASSERTDEBUG(1==nLastIndex);
+						return (nCodePoint-0x10000u & 0x3ffu)+0xdc00u;
+				}
+			}()));
+		} else {
+			return tc::explicit_cast<Char>(nCodePoint);
+		}
 	}
 
 	namespace convert_enc_impl {
@@ -240,19 +293,16 @@ namespace tc {
 			Index m_idx;
 			int m_nCodeUnitIndex;
 
-			template<ENABLE_SFINAE, std::enable_if_t<tc::is_equality_comparable<Index>::value>* = nullptr>
-			friend bool operator==(SCodeUnitIndex const& lhs, SCodeUnitIndex const& rhs) noexcept {
-				return EQUAL_MEMBERS(m_idx, m_nCodeUnitIndex);
-			}
+			friend bool operator==(SCodeUnitIndex const& lhs, SCodeUnitIndex const& rhs) noexcept = default;
 		};
 
-		template<typename Derived, typename Rng>
+		template<typename Derived, typename Rng, typename Char>
 		struct SStringConversionFromUtf32RangeBase
 			: tc::range_iterator_from_index<
 				Derived,
 				SCodeUnitIndex<tc::index_t<std::remove_reference_t<Rng>>>
 			>
-			, protected tc::range_adaptor_base_range<Rng>
+			, tc::range_adaptor_base_range<Rng>
 		{
 		private:
 			using this_type = SStringConversionFromUtf32RangeBase;
@@ -264,16 +314,12 @@ namespace tc {
 
 			static constexpr bool c_bHasStashingIndex=tc::has_stashing_index<std::remove_reference_t<Rng>>::value;
 
-		protected:
-			STATIC_STATIC_VIRTUAL_MOD(constexpr, codeunit_at)
-			STATIC_STATIC_VIRTUAL_MOD(constexpr, codepoint_last_index)
-
 		private:
 			// Indexes pointing to continuation code units are invalid. If the underlying range contains lone continuation units, they will be converted to a
 			// REPLACEMENT CHARACTER
 			template<ENABLE_SFINAE> // clang workaround
 			constexpr auto codepoint_at(decltype(tc_index::m_idx) const& idxBaseRng) const& MAYTHROW {
-				if(	auto const n=tc::underlying_cast(tc::dereference_index(SFINAE_VALUE(this)->base_range(), idxBaseRng)); // MAYTHROW
+				if(	auto const n=tc::to_underlying(tc::dereference_index(SFINAE_VALUE(this)->base_range(), idxBaseRng)); // MAYTHROW
 					VERIFYNOTIFY(n<0x110000u) && VERIFYNOTIFY(n<0xd800u || 0xdfffu<n) 
 				) {
 					return n;
@@ -290,7 +336,7 @@ namespace tc {
 			STATIC_OVERRIDE_MOD(TC_FWD(
 				template<
 					ENABLE_SFINAE,
-					std::enable_if_t<tc::has_mem_fn_end_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value>* = nullptr
+					std::enable_if_t<tc::has_mem_fn_end_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>>* = nullptr
 				> constexpr),
 				end_index
 			)() const& return_ctor_MAYTHROW(
@@ -302,34 +348,23 @@ namespace tc {
 				tc::at_end_index(this->base_range(), idx.m_idx) && (_ASSERTE(0==idx.m_nCodeUnitIndex), true)
 			)
 
-			STATIC_OVERRIDE_MOD(
-				// delay instantiation of dereference_index, so that codeunit_at can be mentioned in its declaration (return_decltype_MAYTHROW) before the
-				// Derived type is complete.
-				template<typename index_=tc_index> constexpr,
-				dereference_index
-			)(index_ const& idx) const& return_decltype_MAYTHROW(
-				codeunit_at(codepoint_at(idx.m_idx) /*MAYTHROW*/, idx.m_nCodeUnitIndex)
+			STATIC_OVERRIDE_MOD(constexpr, dereference_index)(tc_index const& idx) const& return_MAYTHROW(
+				tc::codepoint_codeunit_at<Char>(codepoint_at(idx.m_idx) /*MAYTHROW*/, idx.m_nCodeUnitIndex)
 			)
 
 			STATIC_OVERRIDE_MOD(constexpr, increment_index)(tc_index& idx) const& MAYTHROW {
-				if(idx.m_nCodeUnitIndex<codepoint_last_index(codepoint_at(idx.m_idx) /*MAYTHROW*/)) {
-					++idx.m_nCodeUnitIndex;
-				} else {
+				if(++idx.m_nCodeUnitIndex == tc::codepoint_codeunit_count<Char>(codepoint_at(idx.m_idx) /*MAYTHROW*/)) {
 					idx.m_nCodeUnitIndex=0;
 					tc::increment_index(this->base_range(), idx.m_idx); // MAYTHROW
 				}
 			}
 
-			STATIC_OVERRIDE_MOD(
-				TC_FWD(template<
-					ENABLE_SFINAE,
-					std::enable_if_t<tc::has_decrement_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value>* = nullptr
-				> constexpr),
-				decrement_index
-			)(tc_index& idx) const& MAYTHROW {
+			STATIC_OVERRIDE_MOD(constexpr, decrement_index)(tc_index& idx) const& MAYTHROW
+				requires tc::has_decrement_index<std::remove_reference_t<Rng>>
+			{
 				if(0==idx.m_nCodeUnitIndex) {
 					tc::decrement_index(this->base_range(), idx.m_idx); // MAYTHROW
-					idx.m_nCodeUnitIndex=codepoint_last_index(codepoint_at(idx.m_idx) /*MAYTHROW*/);
+					idx.m_nCodeUnitIndex=tc::codepoint_codeunit_count<Char>(codepoint_at(idx.m_idx) /*MAYTHROW*/) - 1;
 				} else {
 					--idx.m_nCodeUnitIndex;
 				}
@@ -345,74 +380,26 @@ namespace tc {
 		// Lazily convert UTF-32 strings to UTF-16
 		template<typename Rng>
 		struct [[nodiscard]] SStringConversionRange<tc::char16, Rng, char32_t>
-			: SStringConversionFromUtf32RangeBase<SStringConversionRange<tc::char16, Rng>, Rng>
+			: SStringConversionFromUtf32RangeBase<SStringConversionRange<tc::char16, Rng>, Rng, tc::char16>
 		{
 		private:
 			using this_type = SStringConversionRange<tc::char16, Rng>;
-			using base_ = SStringConversionFromUtf32RangeBase<this_type, Rng>;
+			using base_ = SStringConversionFromUtf32RangeBase<this_type, Rng, tc::char16>;
 
 		public:
 			using base_::base_;
-
-		private:
-			STATIC_FINAL_MOD(static constexpr, codeunit_at)(unsigned int nCodePoint, int nCodeUnitIndex) noexcept {
-				_ASSERTDEBUG(nCodePoint<0x110000u);
-				return tc::bit_cast<tc::char16>(tc::explicit_cast<std::uint16_t>([&]() noexcept {
-					auto const nLastIndex=base_::codepoint_last_index(nCodePoint);
-					switch_no_default(nCodeUnitIndex) {
-						case 0:
-							switch_no_default(nLastIndex) {
-								case 0: return nCodePoint;
-								case 1: return ((nCodePoint-0x10000u) >> 10)+0xd800u;
-							}
-						case 1:
-							_ASSERTDEBUG(1==nLastIndex);
-							return (nCodePoint-0x10000u & 0x3ffu)+0xdc00u;
-					}
-				}()));
-			}
-
-			STATIC_FINAL_MOD(static constexpr, codepoint_last_index)(unsigned int nCodePoint) noexcept {
-				return nCodePoint<0x10000u ? 0 : 1;
-			}
 		};
 
 		template<typename Rng>
 		struct [[nodiscard]] SStringConversionRange<char, Rng, char32_t>
-			: SStringConversionFromUtf32RangeBase<SStringConversionRange<char, Rng>, Rng>
+			: SStringConversionFromUtf32RangeBase<SStringConversionRange<char, Rng>, Rng, char>
 		{
 		private:
 			using this_type = SStringConversionRange<char, Rng>;
-			using base_ = SStringConversionFromUtf32RangeBase<this_type, Rng>;
+			using base_ = SStringConversionFromUtf32RangeBase<this_type, Rng, char>;
 
 		public:
 			using base_::base_;
-
-		private:
-			STATIC_FINAL_MOD(static constexpr, codeunit_at)(unsigned int nCodePoint, int nCodeUnitIndex) noexcept {
-				_ASSERTDEBUG(nCodePoint<0x110000u);
-				return tc::bit_cast<char>(tc::explicit_cast<std::uint8_t>([&]() noexcept {
-					auto const nLastIndex=base_::codepoint_last_index(nCodePoint);
-					switch_no_default(nCodeUnitIndex) {
-						case 0:
-							return 0==nLastIndex
-								? nCodePoint
-								: nCodePoint>>nLastIndex*6 | ((1 << (nLastIndex+1))-1)<<(7-nLastIndex);
-						case 1:
-						case 2:
-						case 3:
-							_ASSERTDEBUG(nCodeUnitIndex<=nLastIndex);
-							return (nCodePoint>>(nLastIndex-nCodeUnitIndex)*6 & 0x3fu) | 0x80u;
-					}
-				}()));
-			}
-
-			STATIC_FINAL_MOD(static constexpr, codepoint_last_index)(unsigned int nCodePoint) noexcept {
-				return 
-					nCodePoint<0x80u ? 0
-					: nCodePoint<0x800u	? 1
-					: nCodePoint<0x10000u ? 2 : 3;
-			}
 		};
 
 		template<typename Rng>
@@ -467,62 +454,78 @@ namespace tc {
 	} // namespace convert_enc_impl
 
 	//--------------------------------------------------------------------------------------------------------------------------
-	// must_convert_enc
-	// Converts range of char type to a lazy range of a different char type
-
-	template< typename Dst, typename Src>
-	[[nodiscard]] auto must_convert_enc(Src&& src) noexcept {
-		static_assert( tc::is_char<Dst>::value );
-		return convert_enc_impl::SStringConversionRange<Dst, Src>{aggregate_tag, std::forward<Src>(src)};
-	}
-
-	//--------------------------------------------------------------------------------------------------------------------------
-	// may_convert_enc
+	// convert_enc
 	// Either forwards its argument (if it is a range of Dst), or converts it to a lazy range of Dst (if it is a range of another char type).
 
-	template< typename Dst, typename Src, std::enable_if_t<!std::is_same<tc::range_value_t<Src>, Dst>::value && !std::is_same<tc::range_value_t<Src>, tc::char_ascii>::value>* = nullptr>
-	[[nodiscard]] auto may_convert_enc( Src&& src ) return_decltype_noexcept(
-		tc::must_convert_enc<Dst>(std::forward<Src>(src))
-	)
+	namespace no_adl {
+		template<typename Sink, tc::char_like Dst>
+		struct convert_enc_sink;
+	}
 
-	template< typename Dst, typename Src, std::enable_if_t<std::is_same<tc::range_value_t<Src>, Dst>::value || std::is_same<tc::range_value_t<Src>, tc::char_ascii>::value>* = nullptr>
-	[[nodiscard]] Src&& may_convert_enc( Src&& src ) noexcept {
-		return std::forward<Src>( src );
+	namespace convert_enc_detail {
+		template<tc::char_like Dst, typename Src>
+		[[nodiscard]] decltype(auto) with_sink_impl(Src&& src) noexcept {
+			return tc::generator_range_output<Dst>([src=tc::make_reference_or_value(std::forward<Src>(src))](auto&& sink) MAYTHROW {
+				return tc::for_each(*src, no_adl::convert_enc_sink<decltype(sink), Dst>(tc_move_if_owned(sink)));
+			});
+		}
+	}
+
+	template <typename T>
+	void foo() {
+			static_assert(tc::char_like<T>);
+	}
+
+	template<tc::char_like Dst, typename Src> requires (!tc::instance_or_derived<std::remove_reference_t<Src>, convert_enc_impl::SStringConversionRange>)
+	[[nodiscard]] decltype(auto) convert_enc(Src&& src) noexcept {
+		if constexpr(tc::has_range_value<Src>::value) {
+			foo<tc::range_value_t<Src>>();
+			//static_assert(tc::char_like<tc::range_value_t<Src>>);
+			if constexpr(tc::safely_convertible_to<tc::range_value_t<Src>, Dst>) {
+				return std::forward<Src>(src);
+			} else if constexpr(tc::char_type<Dst> && tc::char_type<tc::range_value_t<Src>> && tc::range_with_iterators<Src>) {
+				return convert_enc_impl::SStringConversionRange<Dst, Src>{aggregate_tag, std::forward<Src>(src)};
+			} else if constexpr(std::same_as<Dst, tc::char_ascii>) {
+				return tc::transform(std::forward<Src>(src), tc::fn_explicit_cast<tc::char_ascii>());
+			} else {
+				return convert_enc_detail::with_sink_impl<Dst>(std::forward<Src>(src));
+			}
+		} else {
+			return convert_enc_detail::with_sink_impl<Dst>(std::forward<Src>(src));
+		}
+	}
+
+	template<tc::char_type Dst, typename Src> requires tc::instance_or_derived<std::remove_reference_t<Src>, convert_enc_impl::SStringConversionRange>
+	[[nodiscard]] auto convert_enc(Src&& src) noexcept {
+		return tc::convert_enc<Dst>(tc_move_if_owned(src).base_range());
 	}
 
 	namespace no_adl {
-		template<typename Sink, typename Dst>
-		struct may_convert_enc_sink /*final*/ {
+		template<typename Sink, tc::char_like Dst>
+		struct convert_enc_sink /*final*/ {
 		private:
 			tc::decay_t<Sink> m_sink;
 
 		public:
-			explicit may_convert_enc_sink(Sink&& sink) noexcept
+			explicit convert_enc_sink(Sink&& sink) noexcept
 				: m_sink(std::forward<Sink>(sink)) 
 			{}
 
-			template<typename CharT, std::enable_if_t<std::is_same<CharT, Dst>::value || std::is_same<CharT, tc::char_ascii>::value>* = nullptr>
+			template<tc::char_like CharT, std::enable_if_t<tc::safely_convertible_to<CharT, Dst>>* = nullptr>
 			auto operator()(CharT ch) const& return_decltype_MAYTHROW(
 				m_sink(ch)
 			)
 
-			template<ENABLE_SFINAE, typename Rng, std::enable_if_t<std::is_same<tc::range_value_t<Rng>, Dst>::value>* = nullptr>
+			template<typename Rng, std::enable_if_t<tc::range_with_iterators<Rng> && tc::char_like<tc::range_value_t<Rng>>>* = nullptr> // terse syntax triggers VS17.1 ICE
 			auto chunk(Rng&& rng) const& return_decltype_MAYTHROW(
-				SFINAE_VALUE(m_sink).chunk(std::forward<Rng>(rng))
+				tc::for_each(tc::convert_enc<Dst>(std::forward<Rng>(rng)), m_sink)
 			)
 		};
 	}
 
-	template< typename Dst, typename Src, std::enable_if_t<!tc::has_range_value<Src>::value>* = nullptr>
-	[[nodiscard]] auto may_convert_enc( Src&& src ) noexcept {
-		return tc::generator_range_output<Dst>([src=tc::make_reference_or_value(std::forward<Src>(src))](auto&& sink) MAYTHROW {
-			return tc::for_each(*src, no_adl::may_convert_enc_sink<decltype(sink), Dst>(tc_move_if_owned(sink)));
-		});
-	}
-
 	template<typename T>
 	[[nodiscard]] constexpr bool is_single_codeunit(T const ch) noexcept {
-		return char_in_range<T>(tc::underlying_cast(ch));
+		return char_in_range<T>(tc::to_underlying(ch));
 	}
 }
 

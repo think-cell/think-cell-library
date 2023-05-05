@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -12,6 +12,7 @@
 #include "../base/chained.h"
 #include "../base/enum.h"
 #include "../base/functors.h"
+#include "../base/inplace.h"
 #include "../base/template_func.h"
 #include "../base/empty_chain.h"
 #include "../range/transform_adaptor.h"
@@ -31,7 +32,7 @@ namespace tc {
 	// < involving NAN always returns false, so it is not even a partial order
 	template<typename T>
 	constexpr void assert_not_isnan(T const& t) noexcept {
-		if constexpr( std::is_floating_point<T>::value ) {
+		if constexpr( std::floating_point<T> ) {
 			_ASSERTDEBUG( !std::isnan(t) );
 		}
 	}
@@ -61,7 +62,7 @@ namespace tc {
 		// class T derives from tc::equal_from_three_way if T has a user defined operator<=> and implements operator== with operator<=>
 		template< typename T >
 		struct TC_EMPTY_BASES equal_from_three_way {
-			template<ENABLE_SFINAE> // clang doesn't support requires clause for non-template friend function inside template class
+			template<ENABLE_SFINAE> // ENABLE_SFINAE is needed because of possible clang/regression gcc bug https://godbolt.org/z/z7z3nf34f. It will be fixed in clang 16.
 			friend constexpr bool operator==(SFINAE_TYPE(T) const& lhs, SFINAE_TYPE(T) const& rhs) noexcept(noexcept(lhs<=>rhs==0)) requires requires { {lhs<=>rhs==0} -> std::same_as<bool>; } {
 				return lhs<=>rhs==0;
 			}
@@ -87,17 +88,11 @@ namespace tc {
 	using no_adl::equal_from_three_way;
 	using no_adl::comparable;
 
-	template<typename Cat> requires tc::is_comparison_category<Cat>
-	constexpr auto negate(Cat const& order) noexcept {
-		return 0<=>order;
-	}
-
-	template<typename Cat> requires tc::is_comparison_category<Cat>
-	constexpr auto negate_if(tc::bool_context b, Cat const& order) noexcept {
-		if(b)
-			return tc::negate(order);
-		else
-			return order;
+	namespace inplace_adl {
+		template<tc::is_comparison_category Cat>
+		constexpr auto operator-(inplace<Cat> inplaceorder) noexcept {
+			inplaceorder.m_t = 0<=>inplaceorder.m_t;
+		}
 	}
 
 #ifndef __clang__
@@ -107,16 +102,6 @@ namespace tc {
 	constexpr bool is_eq(std::partial_ordering order) noexcept { return order==0; }
 	constexpr bool is_neq(std::partial_ordering order) noexcept { return order!=0; }
 #endif
-
-	namespace sign_adl {
-		template<typename Cat> requires tc::is_comparison_category<Cat>
-		Cat& operator*=(Cat& order, sign sign_) noexcept {
-			if( sign::neg==tc::verify_not_end(sign_) ){
-				order = tc::negate(order);
-			}
-			return order;
-		}
-	}
 
 	namespace explicit_convert_adl {
 		template<std::same_as<std::weak_ordering> TTarget, std::same_as<std::partial_ordering> TSource>
@@ -171,57 +156,59 @@ namespace tc {
 		}
 	}
 
-	DEFINE_FN(compare)
+	tc_define_fn(compare)
 
 	//////////////////////////////////////////////////////////////
 	// macros for implementing compare on compound types
 
-	#define RETURN_IF_NOT_EQUAL( compare ) \
+	#define tc_return_if_not_equal( compare ) \
 		if ( auto const order_ = compare; tc::is_neq(order_) ) return order_;
 
 	// auto&& triggers internal error for VS2017
 	// decltype((lhs)) triggers internal error for VS2019 16.8.0 preview 3.0
 	// Not using return_decltype_MAYTHROW because noexcept(noexcept(expr)) not needed and triggering ICE in MSVC 19.28.
-	#define INTERNAL_COMPARE_EXPR(fcompare, lhs, rhs, expr) \
+	#define tc_internal_compare_expr(fcompare, lhs, rhs, expr) \
 		(fcompare)( \
 			([&](auto&& _) MAYTHROW -> decltype(auto) { return tc::lvalue_or_decay(VERIFYINITIALIZED(expr)); })(VERIFYINITIALIZED(lhs)), \
 			([&](auto&& _) MAYTHROW -> decltype(auto) { return tc::lvalue_or_decay(VERIFYINITIALIZED(expr)); })(VERIFYINITIALIZED(rhs)) \
 		)
 
-	#define COMPARE_EXPR( expr ) RETURN_IF_NOT_EQUAL( INTERNAL_COMPARE_EXPR(tc::compare, lhs, rhs, expr) )
-	#define COMPARE_EXPR_REVERSE( expr ) RETURN_IF_NOT_EQUAL( INTERNAL_COMPARE_EXPR(tc::compare, rhs, lhs, expr) )
-	#define COMPARE_EXPR_REVERSE_IF( cond, expr ) RETURN_IF_NOT_EQUAL( tc::negate_if(cond, INTERNAL_COMPARE_EXPR(tc::compare, lhs, rhs, expr)) )
-	#define COMPARE_EXPR_TIMES_SIGN( expr, sign ) RETURN_IF_NOT_EQUAL( INTERNAL_COMPARE_EXPR(tc::compare, lhs, rhs, expr)*(sign) )
+	#define tc_compare_expr( expr ) tc_return_if_not_equal( tc_internal_compare_expr(tc::compare, lhs, rhs, expr) )
+	#define tc_compare_expr_reverse( expr ) tc_return_if_not_equal( tc_internal_compare_expr(tc::compare, rhs, lhs, expr) )
+	#define tc_compare_expr_reverse_if( cond, expr ) tc_return_if_not_equal( tc::negate_if(cond, tc_internal_compare_expr(tc::compare, lhs, rhs, expr)) )
+	#define tc_compare_expr_times_sign( expr, sign ) tc_return_if_not_equal( tc_internal_compare_expr(tc::compare, lhs, rhs, expr)*(sign) )
 
-	#define COMPARE_EXPR_LEX( expr ) RETURN_IF_NOT_EQUAL( INTERNAL_COMPARE_EXPR(tc::lexicographical_compare_3way, lhs, rhs, expr) )
-	#define COMPARE_EXPR_LEX_REVERSE( expr ) RETURN_IF_NOT_EQUAL( INTERNAL_COMPARE_EXPR(tc::lexicographical_compare_3way, rhs, lhs, expr) )
-	#define COMPARE_EXPR_LEX_REVERSE_IF( cond, expr ) RETURN_IF_NOT_EQUAL( tc::negate_if(cond, INTERNAL_COMPARE_EXPR(tc::lexicographical_compare_3way, lhs, rhs, expr)) )
-	#define COMPARE_EXPR_LEX_TIMES_SIGN( expr, sign ) RETURN_IF_NOT_EQUAL( INTERNAL_COMPARE_EXPR(tc::lexicographical_compare_3way, lhs, rhs, expr)*(sign) )
+	#define tc_compare_expr_lex( expr ) tc_return_if_not_equal( tc_internal_compare_expr(tc::lexicographical_compare_3way, lhs, rhs, expr) )
+	#define tc_compare_expr_lex_reverse( expr ) tc_return_if_not_equal( tc_internal_compare_expr(tc::lexicographical_compare_3way, rhs, lhs, expr) )
+	#define tc_compare_expr_lex_reverse_if( cond, expr ) tc_return_if_not_equal( tc::negate_if(cond, tc_internal_compare_expr(tc::lexicographical_compare_3way, lhs, rhs, expr)) )
+	#define tc_compare_expr_lex_times_sign( expr, sign ) tc_return_if_not_equal( tc_internal_compare_expr(tc::lexicographical_compare_3way, lhs, rhs, expr)*(sign) )
 
-	#define COMPARE_BASE( basetype ) \
-		COMPARE_EXPR( tc::base_cast<basetype>(_) );
+	#define tc_compare_base( basetype ) \
+		tc_compare_expr( tc::base_cast<basetype>(_) );
 
-	#define COMPARE_MASK( maskmember, maskvalue ) \
-		COMPARE_EXPR( tc::explicit_cast<bool>((_.m_ ## maskmember) & (maskmember ## maskvalue)) )
+	#define tc_compare_mask( maskmember, maskvalue ) \
+		tc_compare_expr( tc::explicit_cast<bool>((_.m_ ## maskmember) & (maskmember ## maskvalue)) )
 
-	#define COMPARE_ASPECT_IF_VAR( tplbb,  expr ) \
-		if (auto const tplbb = INTERNAL_COMPARE_EXPR(TC_FN(tc::make_tuple), lhs, rhs, tc::explicit_cast<bool>(expr)); tplbb != tc::make_tuple(true,true)) { \
+	#define tc_compare_aspect_if_var( tplbb,  expr ) \
+		if (auto const tplbb = tc_internal_compare_expr(tc_fn(tc::make_tuple), lhs, rhs, tc::explicit_cast<bool>(expr)); tplbb != tc::make_tuple(true,true)) { \
 			if (tplbb == tc::make_tuple(false, true)) return std::weak_ordering::less; \
 			else if (tplbb == tc::make_tuple(true, false)) return std::weak_ordering::greater; \
 		} else \
 
-	#define COMPARE_ASPECT_IF( expr ) COMPARE_ASPECT_IF_VAR(UNIQUE_IDENTIFIER, expr)
+	#define tc_compare_aspect_if( expr ) tc_compare_aspect_if_var(UNIQUE_IDENTIFIER, expr)
 
-	#define COMPARE_ASPECT( maskmember, maskvalue, member ) \
-		COMPARE_ASPECT_IF((_.m_ ## maskmember) & (maskmember ## maskvalue)) COMPARE_EXPR( _.member )
+	#define tc_compare_aspect( maskmember, maskvalue, member ) \
+		tc_compare_aspect_if((_.m_ ## maskmember) & (maskmember ## maskvalue)) tc_compare_expr( _.member )
 
-	#define COMPARE_ASPECT_LEX( maskmember, maskvalue, member ) \
-		COMPARE_ASPECT_IF((_.m_ ## maskmember) & (maskmember ## maskvalue)) COMPARE_EXPR_LEX( _.member )
+	#define tc_compare_aspect_lex( maskmember, maskvalue, member ) \
+		tc_compare_aspect_if((_.m_ ## maskmember) & (maskmember ## maskvalue)) tc_compare_expr_lex( _.member )
 
-	#define HASH_ASPECT( maskmember, maskvalue, member ) \
-		tc::hash_append_separator(h); \
+	#define tc_hash_aspect( maskmember, maskvalue, member ) \
 		if((t.m_ ## maskmember) & (maskmember ## maskvalue)) { \
 			tc::hash_append(h, t. ## member ); \
+			tc::hash_append(h, true); \
+		} else { \
+			tc::hash_append(h, false); \
 		}
 
 	///////////////////////////////////////////////////////////
@@ -230,7 +217,7 @@ namespace tc {
 	template<typename Rng>
 	[[nodiscard]] constexpr auto lexicographical_compare_3way(Rng const& rng) noexcept {
 #if 0 // TODO Xcode14
-		return tc::optional_value_or(tc::find_first_if<tc::return_value_or_none>(rng, [](auto const order) {
+		return tc::value_or(tc::find_first_if<tc::return_value_or_none>(rng, [](auto const order) {
 			return tc::is_neq(order);
 		}), std::weak_ordering::equal);
 #else // constexpr workaround
@@ -247,7 +234,7 @@ namespace tc {
 	}
 
 	namespace lexicographical_compare_3way_detail {
-		DEFINE_ENUM(EPrefix, eprefix, (FORBID)(ALLOW)(EQUIVALENT))
+		TC_DEFINE_ENUM(EPrefix, eprefix, (FORBID)(ALLOW)(EQUIVALENT))
 		template< EPrefix eprefix, typename Lhs, typename Rhs, typename FnCompare >
 		constexpr auto lexicographical_compare_3way_impl( Lhs const& lhs, Rhs const& rhs, FnCompare fnCompare) noexcept ->
 			decltype(fnCompare(*tc::begin(lhs), *tc::begin(rhs)))
@@ -274,7 +261,7 @@ namespace tc {
 					_ASSERTE(eprefixFORBID!=eprefix);
 					return std::strong_ordering::greater; // rhs shorter than lhs, thus >
 				}
-				RETURN_IF_NOT_EQUAL( fnCompare( *itLhs, *itRhs ) );
+				tc_return_if_not_equal( fnCompare( *itLhs, *itRhs ) );
 				++itLhs;
 				++itRhs;
 			}
@@ -294,9 +281,9 @@ namespace tc {
 		return lexicographical_compare_3way_detail::lexicographical_compare_3way_impl<lexicographical_compare_3way_detail::eprefixEQUIVALENT>(lhs, rhs, std::forward<FnCompare>(fnCompare));
 	}
 
-	DEFINE_FN( lexicographical_compare_3way );
-	DEFINE_FN( lexicographical_compare_3way_noprefix );
-	DEFINE_FN( lexicographical_compare_3way_prefixequivalence );
+	tc_define_fn( lexicographical_compare_3way );
+	tc_define_fn( lexicographical_compare_3way_noprefix );
+	tc_define_fn( lexicographical_compare_3way_prefixequivalence );
 }
 
 #if defined(__clang__) && !defined(__cpp_lib_three_way_comparison) // three way comparison operators are not implemented for library types in Xcode13/14. TODO Xcode15
@@ -316,8 +303,8 @@ namespace std { // ADL
 		decltype(tc::compare(lhs.first, rhs.first)),
 		decltype(tc::compare(lhs.second, rhs.second))
 	> {
-		COMPARE_EXPR( _.first );
-		COMPARE_EXPR( _.second );
+		tc_compare_expr( _.first );
+		tc_compare_expr( _.second );
 		return std::strong_ordering::equivalent;
 	}
 	
@@ -342,7 +329,7 @@ namespace std { // ADL
 		} else if(rhs.valueless_by_exception()) {
 			return std::strong_ordering::greater;
 		} else {
-			COMPARE_EXPR(_.index());
+			tc_compare_expr(_.index());
 			using result_t = tc::common_comparison_category_t<decltype(tc::compare(std::declval<T const&>(), std::declval<T const&>()))...>;
 			return tc::fn_visit(
 				[]<typename TVal>(TVal const& valLhs, TVal const& valRhs) noexcept -> result_t {
@@ -363,9 +350,9 @@ namespace std { // ADL
 		return tc::compare(static_cast<bool>(opt), false);
 	}
 
-	template<typename T, typename U, std::enable_if_t<!tc::is_instance<std::optional, U>::value>* = nullptr>
+	template<typename T, typename U, std::enable_if_t<!tc::instance<U, std::optional>>* = nullptr>
 	constexpr auto operator<=>(std::optional<T> const& opt, U const& value) noexcept -> decltype(tc::compare(*opt, value)) {
-		return static_cast<bool>(opt) ? tc::compare(*opt, value) : std::strong_ordering::less;
+		return opt ? tc::compare(*opt, value) : std::strong_ordering::less;
 	}
 }
 #endif
@@ -417,17 +404,17 @@ namespace tc {
 
 	template< typename FCompare>
 	constexpr auto lessfrom3way( FCompare&& fnCompare ) noexcept {
-		return tc::chained(TC_FN(std::is_lt), std::forward<FCompare>(fnCompare));
+		return tc::chained(tc_fn(std::is_lt), std::forward<FCompare>(fnCompare));
 	}
 
 	template< typename FCompare>
 	constexpr auto greaterfrom3way( FCompare&& fnCompare ) noexcept {
-		return tc::chained(TC_FN(std::is_gt), std::forward<FCompare>(fnCompare));
+		return tc::chained(tc_fn(std::is_gt), std::forward<FCompare>(fnCompare));
 	}
 
 	template< typename FCompare>
 	constexpr auto equalfrom3way( FCompare&& fnCompare ) noexcept {
-		return tc::chained(TC_FN(tc::is_eq), std::forward<FCompare>(fnCompare));
+		return tc::chained(tc_fn(tc::is_eq), std::forward<FCompare>(fnCompare));
 	}
 
 	namespace tuple_adl {

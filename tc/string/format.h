@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -51,7 +51,7 @@ namespace tc {
 			> {
 				static_assert( std::is_unsigned<T>::value );
 				if( this->m_n<integral_as_padded_dec_impl::c_nTenPow ) {
-					RETURN_IF_BREAK(tc::continue_if_not_break(sink, tc::char_ascii('0')));
+					tc_yield(sink, tc::char_ascii('0'));
 				}
 				return tc::base_cast< integral_as_padded_dec_impl<T,N-1> >(*this)(tc_move(sink));
 			}
@@ -75,7 +75,7 @@ namespace tc {
 		};
 	}
 
-	template< typename T> requires tc::is_actual_integer<T>::value
+	template< tc::actual_integer T>
 	constexpr auto as_dec(T t) return_ctor_noexcept(
 		TC_FWD(integral_as_padded_dec_adl::integral_as_padded_dec_impl<T, 1>),
 		(t)
@@ -86,10 +86,10 @@ namespace tc {
 		tc::as_dec(t.m_t)
 	)
 
-	template< std::size_t N, typename T> requires tc::is_actual_integer<T>::value
+	template< std::size_t N, tc::actual_integer T>
 	constexpr auto as_padded_dec(T t) return_ctor_noexcept(
 		TC_FWD(integral_as_padded_dec_adl::integral_as_padded_dec_impl<std::make_unsigned_t<T>, N>),
-		(tc::unsigned_cast(t))
+		(tc::as_unsigned(t))
 	)
 
 	template< std::size_t N, typename T >
@@ -97,7 +97,7 @@ namespace tc {
 		tc::as_padded_dec<N>(t.m_t)
 	)
 
-	DEFINE_ENUM(casing, BOOST_PP_EMPTY(), (uppercase)(lowercase));
+	TC_DEFINE_ENUM(casing, BOOST_PP_EMPTY(), (uppercase)(lowercase));
 
 	namespace as_hex_adl {
 		///////////////
@@ -122,7 +122,7 @@ namespace tc {
 				} while( nWidth*4<=nShift && 0==(m_n>>nShift) );
 				for(;;) {
 					auto const nDigit=(m_n>>nShift)&0xf;
-					RETURN_IF_BREAK(tc::continue_if_not_break(sink, nDigit<10 ? tc::char_ascii('0')+nDigit : tc::char_ascii(tc::lowercase==c ? 'a' : 'A')+(nDigit-10)));
+					tc_yield(sink, nDigit<10 ? tc::char_ascii('0')+nDigit : tc::char_ascii(tc::lowercase==c ? 'a' : 'A')+(nDigit-10));
 					if constexpr (!std::is_same<return_t, tc::constant<tc::break_>>::value) {
 						if (0 == nShift) break;
 						nShift -= 4;
@@ -264,7 +264,7 @@ MODIFY_WARNINGS_END
 		};
 	}
 
-	template< typename T > requires tc::is_instance<std::optional, std::remove_reference_t<T>>::value
+	template< typename T > requires tc::instance<std::remove_reference_t<T>, std::optional>
 	auto bool_prefixed(T&& t) return_ctor_noexcept(
 		no_adl::bool_prefixed_impl<T>,
 		(aggregate_tag, std::forward<T>(t))

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -16,6 +16,7 @@
 #include "range_fwd.h"
 
 #include <type_traits>
+#include <iterator>
 
 namespace tc {
 	namespace begin_end_adl {
@@ -50,12 +51,43 @@ namespace tc {
 	using iterator_t = decltype(tc::begin(std::declval<Rng&>()));
 	template<typename Rng>
 	using sentinel_t = decltype(tc::end(std::declval<Rng&>()));
+
 	template<typename Rng>
 	concept common_range = std::same_as<tc::iterator_t<Rng>, tc::sentinel_t<Rng>>;
 
+	// Note that we cannot use std::contiguous_iterator yet as it is broken on our version of libcxx.
+	// So instead we just check the iterator category as a proxy.
+#ifdef _LIBCPP_VERSION
+	namespace contiguous_range_detail {
+		template <typename It>
+		constexpr auto compute_iterator_concept() {
+			using traits = std::iterator_traits<It>;
 
-	template<typename It> // TODO C++20 Use std::iter_reference_t
-	using iter_reference_t = decltype(*std::declval<It&>());
+			// This algorithm isn't precisely the one specified for ITER_CONCEPT in the standard,
+			// but that requires detecting whether or not traits have been specialized, which a non-standard library cannot do.
+			// So instead we approximate it.
+			if constexpr (requires { typename It::iterator_concept; }) {
+				return typename It::iterator_concept();
+			} else if constexpr (requires { typename traits::iterator_concept; }) {
+				return typename traits::iterator_concept();
+			} else if constexpr (requires { typename It::iterator_category; }) {
+				return typename It::iterator_category();
+			} else {
+				return typename traits::iterator_category();
+			}
+		}
+		template <typename It>
+		using iterator_concept = decltype(compute_iterator_concept<It>());
+
+		template <typename It>
+		concept contiguous_iterator = std::is_pointer_v<It> || std::is_base_of_v<std::contiguous_iterator_tag, iterator_concept<It>>;
+	}
+	template <typename Rng>
+	concept contiguous_range = contiguous_range_detail::contiguous_iterator<tc::iterator_t<Rng>>;
+#else
+	template <typename Rng>
+	concept contiguous_range = std::contiguous_iterator<tc::iterator_t<Rng>>;
+#endif
 
 	namespace range_output_t_adl {
 		DEFINE_ADL_TAG_TYPE(adl_tag);
@@ -68,9 +100,9 @@ namespace tc {
 		template<typename Rng>
 		struct from_iter_reference {};
 
-		template<typename Rng> requires (!std::is_void<tc::iter_reference_t<tc::iterator_t<Rng>>>::value)
+		template<typename Rng> requires (!std::is_void<std::iter_reference_t<tc::iterator_t<Rng>>>::value)
 		struct from_iter_reference<Rng> {
-			using type = tc::type::list<tc::remove_rvalue_reference_t<tc::iter_reference_t<tc::iterator_t<Rng>>>>;
+			using type = tc::type::list<tc::remove_rvalue_reference_t<std::iter_reference_t<tc::iterator_t<Rng>>>>;
 		};
 
 		template<typename Rng>
@@ -79,7 +111,7 @@ namespace tc {
 		template<typename Rng> requires requires { /*adl*/range_output_t_impl(tc::range_output_t_adl::adl_tag, std::declval<Rng>()); }
 		struct from_adl_with_tag<Rng> {
 			using type = decltype(/*adl*/range_output_t_impl(tc::range_output_t_adl::adl_tag, std::declval<Rng>()));
-			static_assert(tc::decayed<type> && tc::is_instance<tc::type::list, type>::value);
+			static_assert(tc::decayed<type> && tc::instance<type, tc::type::list>);
 			static_assert(!tc::type::any_of<type, std::is_rvalue_reference>::value);
 		};
 
@@ -89,7 +121,7 @@ namespace tc {
 		template<typename Rng> requires requires { /*adl*/range_output_t_impl(std::declval<Rng>()); }
 		struct from_adl<Rng> {
 			using type = decltype(/*adl*/range_output_t_impl(std::declval<Rng>()));
-			static_assert(tc::decayed<type> && tc::is_instance<tc::type::list, type>::value);
+			static_assert(tc::decayed<type> && tc::instance<type, tc::type::list>);
 			static_assert(!tc::type::any_of<type, std::is_rvalue_reference>::value);
 		};
 	}
@@ -159,26 +191,23 @@ namespace tc {
 	using no_adl::has_range_value;
 
 	namespace no_adl {
-		template<typename Rng, typename>
-		struct constexpr_size_base {};
+		template<typename Rng>
+		struct constexpr_size_impl {};
 
 		template<typename T, std::size_t N>
-		struct constexpr_size_base<T[N], void> : tc::constant<N - (tc::is_char<T>::value ? 1 : 0)> {};
+		struct constexpr_size_impl<T[N]> : tc::constant<N - (tc::char_type<T> ? 1 : 0)> {};
 
 		template<typename T, T... t>
-		struct constexpr_size_base<std::integer_sequence<T, t...>, void> : tc::constant<sizeof...(t)> {};
+		struct constexpr_size_impl<std::integer_sequence<T, t...>> : tc::constant<sizeof...(t)> {};
+
+		template<typename Tuple> requires requires { std::tuple_size<Tuple>::value; } && (!requires { tc::begin(std::declval<Tuple>()); })
+		struct constexpr_size_impl<Tuple>: tc::constant<std::tuple_size<Tuple>::value> {};
 	}
 	template<typename Rng>
-	using constexpr_size = no_adl::constexpr_size_base<std::remove_cvref_t<Rng>>;
+	using constexpr_size = no_adl::constexpr_size_impl<std::remove_cvref_t<Rng>>;
 
-	namespace no_adl {
-		template<typename Rng, typename = void>
-		struct has_constexpr_size : tc::constant<false> {};
-
-		template<typename Rng>
-		struct has_constexpr_size<Rng, std::void_t<typename tc::constexpr_size<Rng>::type>> : tc::constant<true> {};
-	}
-	using no_adl::has_constexpr_size;
+	template<typename Rng>
+	concept has_constexpr_size = requires { tc::constexpr_size<Rng>::value; };
 
 	template<typename T>
 	[[nodiscard]] constexpr std::size_t strlen( T const* pt ) noexcept {
@@ -189,7 +218,7 @@ namespace tc {
 	namespace zero_termination_sentinel_adl {
 		struct zero_termination_sentinel final {};
 
-		template<typename Char> requires tc::is_char<Char>::value
+		template<tc::char_type Char>
 		constexpr bool operator==(zero_termination_sentinel, Char const* psz) noexcept {
 			return static_cast<Char>(0) == *psz;
 		}
@@ -199,7 +228,7 @@ namespace tc {
 	namespace nullptr_or_zero_termination_sentinel_adl {
 		struct nullptr_or_zero_termination_sentinel final {};
 
-		template<typename Char> requires tc::is_char<Char>::value
+		template<tc::char_type Char>
 		constexpr bool operator==(nullptr_or_zero_termination_sentinel, Char const* psz) noexcept {
 			return !psz || static_cast<Char>(0) == *psz;
 		}
@@ -216,24 +245,20 @@ namespace tc {
 			return at;
 		}
 		template<typename T, std::size_t N>
-		constexpr T* end(begin_end_tag_t, T (&at)[N]) noexcept {
-			if constexpr( tc::is_char<T>::value ) {
-				auto const nSize = tc::strlen(at);
-				_ASSERTE( tc::constexpr_size<T[N]>::value == nSize );
-				return at+nSize;
-			} else {
-				return at+tc::constexpr_size<T[N]>::value;
+		constexpr T* end_array_impl(T (&at)[N]) noexcept {
+			constexpr auto nSize = tc::constexpr_size<T[N]>::value;
+			if constexpr (tc::char_type<T>) {
+				_ASSERTE( tc::strlen(at) == nSize );
 			}
+			return at + nSize;
+		}
+		template<typename T, std::size_t N>
+		constexpr T* end(begin_end_tag_t, T (&at)[N]) noexcept {
+			return end_array_impl(at);
 		}
 		template<typename T, std::size_t N>
 		constexpr T const* end(begin_end_tag_t, T const (&at)[N]) noexcept {
-			if constexpr( tc::is_char<T>::value ) {
-				auto const nSize = tc::strlen(at);
-				_ASSERTE( tc::constexpr_size<T[N]>::value == nSize );
-				return at+nSize;
-			} else {
-				return at+tc::constexpr_size<T[N]>::value;
-			}
+			return end_array_impl(at);
 		}
 
 		template<typename It, typename Enable = decltype(*++std::declval<It&>())>
@@ -247,6 +272,7 @@ namespace tc {
 	}
 }
 
+#pragma push_macro("CHAR_RANGE")
 #define CHAR_RANGE( xchar ) \
 namespace boost { \
 	template<> \
@@ -287,21 +313,21 @@ namespace tc { \
 	namespace begin_end_adl { \
 		/* Note: We cannot use overloading to differentiate xchar* and xchar(&)[N]. */ \
 		template<typename CharPtrConvertible> requires \
-			tc::is_safely_convertible<CharPtrConvertible, xchar*>::value \
-				&& (!tc::has_constexpr_size<CharPtrConvertible>::value) \
+			tc::safely_convertible_to<CharPtrConvertible, xchar*> \
+				&& (!tc::has_constexpr_size<CharPtrConvertible>) \
 		constexpr xchar* begin(begin_end_tag_t, CharPtrConvertible&& pchc) noexcept { \
 			return pchc; \
 		} \
 		template<typename CharPtrConvertible> requires \
-			tc::is_safely_convertible<CharPtrConvertible, xchar const*>::value \
-				&& (!tc::is_safely_convertible<CharPtrConvertible, xchar*>::value) \
-				&& (!tc::has_constexpr_size<CharPtrConvertible>::value) \
+			tc::safely_convertible_to<CharPtrConvertible, xchar const*> \
+				&& (!tc::safely_convertible_to<CharPtrConvertible, xchar*>) \
+				&& (!tc::has_constexpr_size<CharPtrConvertible>) \
 		constexpr xchar const* begin(begin_end_tag_t, CharPtrConvertible&& pchc) noexcept { \
 			return pchc; \
 		} \
 		template<typename CharPtrConvertible> requires \
-			tc::is_safely_convertible<CharPtrConvertible, xchar const*>::value \
-				&& (!tc::has_constexpr_size<CharPtrConvertible>::value) \
+			tc::safely_convertible_to<CharPtrConvertible, xchar const*> \
+				&& (!tc::has_constexpr_size<CharPtrConvertible>) \
 		constexpr tc::zero_termination_sentinel end(begin_end_tag_t, CharPtrConvertible&& pchc) noexcept { \
 			_ASSERT( pchc ); \
 			return {}; \
@@ -313,6 +339,8 @@ CHAR_RANGE(char)
 CHAR_RANGE(wchar_t)
 CHAR_RANGE(char16_t)
 CHAR_RANGE(char32_t)
+
+#pragma pop_macro("CHAR_RANGE")
 
 namespace tc{
 	namespace no_adl {

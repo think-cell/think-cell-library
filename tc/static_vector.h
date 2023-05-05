@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -273,6 +273,8 @@ namespace tc {
 			}
 			STATIC_FINAL_MOD(constexpr, dereference_index)(tc_index idx) & noexcept -> T& { return this->dereference(idx); }
 			STATIC_FINAL_MOD(constexpr, dereference_index)(tc_index idx) const& noexcept -> T const& { return this->dereference(idx); }
+			STATIC_FINAL_MOD(constexpr, index_to_address)(const tc_index& idx)& noexcept ->  T* { return this->data() + idx; }
+			STATIC_FINAL_MOD(constexpr, index_to_address)(const tc_index& idx) const& noexcept ->  const T* { return this->data() + idx; }
 		public:
 			constexpr void clear() & noexcept {
 				this->shrink(0);

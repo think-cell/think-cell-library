@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -76,7 +76,7 @@ namespace tc {
 			constexpr array(func_tag_t, Func func, std::index_sequence<IndexPack...>) MAYTHROW 
 				: m_a{std::addressof(func(IndexPack))...} 
 			{
-				static_assert(tc::is_safely_constructible<T&, decltype(func(0))>::value);
+				static_assert(tc::safely_constructible_from<T&, decltype(func(0))>);
 			}
 		public:
 			template<typename Func>
@@ -99,7 +99,7 @@ namespace tc {
 			constexpr array(range_tag_t, Iterator it, Iterator itEnd, std::index_sequence<IndexPack...>) MAYTHROW
 				: m_a{(_ASSERTE(itEnd!=it), std::addressof(*it)), (static_cast<void>(IndexPack), ++it, _ASSERTE(itEnd!=it), std::addressof(*it))...}
 			{
-				static_assert(tc::is_safely_constructible<T&, decltype(*it)>::value);
+				static_assert(tc::safely_constructible_from<T&, decltype(*it)>);
 				STATICASSERTEQUAL(N, sizeof...(IndexPack)+1);
 				_ASSERTE(itEnd==++it);
 			}
@@ -109,13 +109,14 @@ namespace tc {
 				: array(range_tag, tc::begin(rng), tc::end(rng), std::make_index_sequence<N-1>())
 			{}
 
-			template<typename T2> requires tc::is_safely_assignable<T&, T2 const&>::value
+#if 0
+			template<typename T2> requires tc::safely_assignable_from<T&, T2 const&>
 			array const& operator=(array<T2, N> const& rhs) const& noexcept(std::is_nothrow_assignable<T&, T2 const&>::value) {
 				VERIFY(boost::copy(VERIFYINITIALIZED(rhs), begin())==end());
 				return *this;
 			}
 
-			template<typename T2> requires tc::is_safely_assignable<T&, T2&&>::value
+			template<typename T2> requires tc::safely_assignable_from<T&, T2&&>
 			array const& operator=(array<T2, N>&& rhs) const& noexcept(std::is_nothrow_assignable<T&, T2&&>::value) {
 				auto it=tc::begin(rhs);
 				auto const itEnd=tc::end(rhs);
@@ -124,6 +125,7 @@ namespace tc {
 				}
 				return *this;
 			}
+#endif
 
 			// iterators
 			// reference semantics == no deep constness
@@ -144,7 +146,7 @@ namespace tc {
 
 #if defined(TC_PRIVATE) && defined(_DEBUG) && !defined(__clang__)
 			friend constexpr bool check_initialized_impl(array const& a) noexcept {
-				return tc::all_of(a, TC_FN(tc::check_initialized));
+				return tc::all_of(a, tc_fn(tc::check_initialized));
 			}
 #endif
 		};
@@ -163,7 +165,7 @@ namespace tc {
 
 	namespace no_adl {
 		template<typename T, std::size_t N>
-		struct constexpr_size_base<tc::array<T&, N>, void> : tc::constant<N> {};
+		struct constexpr_size_impl<tc::array<T&, N>> : tc::constant<N> {};
 	}
 
 	/////////////////////////////////////////////////////
@@ -171,7 +173,7 @@ namespace tc {
 
 	namespace no_adl {
 		template<typename T, std::size_t N>
-		struct constexpr_size_base<std::array<T, N>, void> : tc::constant<N> {};
+		struct constexpr_size_impl<std::array<T, N>> : tc::constant<N> {};
 	}
 
 	namespace explicit_convert_std_array_detail {
@@ -191,7 +193,7 @@ namespace tc {
 
 		template<typename T, typename Iterator, typename Dummy>
 		constexpr std::array<T, 1> with_range_tag_impl(tc::type::identity<std::array<T, 1>>, Iterator it, Iterator itEnd, Dummy&&) MAYTHROW {
-			return std::array<T, 1>{ {(_ASSERTE(itEnd != it), _ASSERTE(itEnd == modified(it, ++_)), *it)} };
+			return std::array<T, 1>{ {(_ASSERTE(itEnd != it), _ASSERTE(itEnd == tc_modified(it, ++_)), *it)} };
 		}
 
 		template<typename T, std::size_t N, typename Iterator, std::size_t... IndexPack> requires (1<N)
@@ -200,7 +202,7 @@ namespace tc {
 			return std::array<T, N>{ {
 				(_ASSERTE(itEnd != it), *it),
 				(static_cast<void>(IndexPack), ++it, _ASSERTE(itEnd != it), *it)...,
-				(++it, _ASSERTE(itEnd != it), _ASSERTE(itEnd == modified(it, ++_)), *it)
+				(++it, _ASSERTE(itEnd != it), _ASSERTE(itEnd == tc_modified(it, ++_)), *it)
 			} };
 		}
 	}
@@ -208,16 +210,16 @@ namespace tc {
 	namespace explicit_convert_adl {
 		template<typename T, std::size_t N, typename Func>
 		constexpr std::array<T, N> explicit_convert_impl(adl_tag_t, tc::type::identity<std::array<T, N>> id, tc::func_tag_t, Func func) MAYTHROW {
-			static_assert(tc::is_safely_constructible<T, decltype(func(N-1))>::value);
+			static_assert(tc::safely_constructible_from<T, decltype(func(N-1))>);
 			return tc::explicit_convert_std_array_detail::with_func_tag_impl(id, tc_move(func), std::make_index_sequence<N>());
 		}
 
-		template<typename T, std::size_t N, typename... Args> requires (0!=N) && tc::is_explicit_castable<T, Args&&...>::value
+		template<typename T, std::size_t N, typename... Args> requires (0!=N) && tc::explicit_castable_from<T, Args&&...>
 		constexpr std::array<T, N> explicit_convert_impl(adl_tag_t, tc::type::identity<std::array<T, N>> id, tc::fill_tag_t, Args&& ... args) MAYTHROW {
 			return tc::explicit_convert_std_array_detail::with_fill_tag_impl(id, std::make_index_sequence<N-1>(), std::forward<Args>(args)...);
 		}
 
-		template<typename T, std::size_t N, typename... Args> requires (tc::is_explicit_castable<T, Args&&>::value && ...)
+		template<typename T, std::size_t N, typename... Args> requires (tc::explicit_castable_from<T, Args&&> && ...)
 		constexpr std::array<T, N> explicit_convert_impl(adl_tag_t, tc::type::identity<std::array<T, N>>, tc::aggregate_tag_t, Args&& ... args) MAYTHROW {
 			STATICASSERTEQUAL(sizeof...(Args), N, "array initializer list does not match number of elements");
 			return {{tc::explicit_cast<T>(std::forward<Args>(args))...}};
@@ -234,7 +236,7 @@ namespace tc {
 			} else if constexpr( std::is_trivially_default_constructible<T>::value && std::is_trivially_destructible<T>::value ) {
 				std::array<T, N> at;
 				auto itOut = tc::begin(at); // MAYTHROW
-				// cont_assign(at, transform(tc_move_if_owned(rng), TC_FN(tc::explicit_cast<T>))); without moving rng and avoiding dependency
+				// cont_assign(at, transform(tc_move_if_owned(rng), tc_fn(tc::explicit_cast<T>))); without moving rng and avoiding dependency
 				tc::for_each(tc_move_if_owned(rng), [&](auto&& t) MAYTHROW {
 					tc::renew(*itOut, tc_move_if_owned(t)); // MAYTHROW
 					++itOut;
@@ -245,11 +247,11 @@ namespace tc {
 				// The initialization of the C array inside std::array when writing std::array<T,1>{{...}} is
 				// copy list initialization, not direct list initialization, so explicit constructors are not allowed.
 				// int to double is considered narrowing, forbidden in list initialization (but double is already handled above)
-				tc::is_safely_convertible<decltype(*tc::as_lvalue(tc::begin(rng))), T>::value
+				tc::safely_convertible_to<decltype(*tc::as_lvalue(tc::begin(rng))), T>
 			) {
 				return tc::explicit_convert_std_array_detail::with_range_tag_impl(id, tc::begin(rng), tc::end(rng), std::make_index_sequence<1==N ? 0 : N-2>());
 			} else {
-				RETURN_CAST(tc::transform(tc_move_if_owned(rng), tc::fn_explicit_cast<T>()));
+				tc_return_cast(tc::transform(tc_move_if_owned(rng), tc::fn_explicit_cast<T>()));
 			}
 		}
 	}
@@ -303,14 +305,14 @@ namespace tc {
 	// would take place inside the array constructor, resulting in a dangling reference.
 
 	// Unfortunately, there seems to be no way to make this work in C++ without using macros
-#define MAKE_ARRAY_LVALUE_REF(z, n, d) \
+#define TC_MAKE_ARRAY_LVALUE_REF(z, n, d) \
 	template <typename T> requires std::is_lvalue_reference<T>::value \
 	[[nodiscard]] constexpr auto make_array(tc::aggregate_tag_t, BOOST_PP_ENUM_PARAMS(n, T t)) noexcept { \
 		return tc::explicit_cast<tc::array<T, n>>(tc::aggregate_tag, BOOST_PP_ENUM_PARAMS(n, t)); \
 	}
 
-	BOOST_PP_REPEAT_FROM_TO(1, 20, MAKE_ARRAY_LVALUE_REF, _)
-#undef MAKE_ARRAY_LVALUE_REF
+	BOOST_PP_REPEAT_FROM_TO(1, 20, TC_MAKE_ARRAY_LVALUE_REF, _)
+#undef TC_MAKE_ARRAY_LVALUE_REF
 
 	template<typename T>
 	[[nodiscard]] constexpr auto single(T&& t) noexcept {

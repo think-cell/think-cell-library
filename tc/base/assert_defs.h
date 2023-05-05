@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -63,7 +63,7 @@
 	#endif
 	#ifndef _ASSERTANYOF
 		#include <boost/preprocessor/seq/enum.hpp>
-		#define _ASSERTDEBUGANYOF(expr, values) [](auto const& e, auto const&... val) noexcept { assert( ((e == val) || ...) ); }(expr, BOOST_PP_SEQ_ENUM(values))
+		#define _ASSERTANYOF(expr, values) [](auto const& e, auto const&... val) noexcept { assert( ((e == val) || ...) ); }(expr, BOOST_PP_SEQ_ENUM(values))
 	#endif
 	#ifndef _ASSERTDEBUGANYOF
 		#define _ASSERTDEBUGANYOF(expr, values) IF_TC_DEBUG(_ASSERTANYOF(expr, values))

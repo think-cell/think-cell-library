@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -54,21 +54,21 @@ namespace tc {
 				})(m_ubaserng);
 			}
 
-			template<typename Self, std::enable_if_t<tc::is_base_of_decayed<select_range_adaptor, Self>::value>* = nullptr>
+			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, select_range_adaptor>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
 			friend auto range_output_t_impl(Self&&) -> tc::type::unique_t<tc::type::concat_t<
 				tc::range_output_t<decltype(*std::declval<tc::apply_cvref_t<tc::reference_or_value<Rng>, Self>>())>...
 			>> {} // unevaluated
 		};
 
 		// Must be non-friend for MSVC 15.8, but should be a hidden friend 
-		template<typename Self, typename Sink> requires tc::is_instance<select_range_adaptor, std::remove_reference_t<Self>>::value
+		template<typename Self, typename Sink> requires tc::instance<std::remove_reference_t<Self>, select_range_adaptor>
 		auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
 			return tc::fn_visit([&](auto&& rng) MAYTHROW {
 				return tc::for_each(*tc_move_if_owned(rng), sink);
 			})(std::forward<Self>(self).m_ubaserng);
 		}
 
-		template<typename Self, typename Sink> requires tc::is_instance<select_range_adaptor, std::remove_reference_t<Self>>::value
+		template<typename Self, typename Sink> requires tc::instance<std::remove_reference_t<Self>, select_range_adaptor>
 		auto for_each_reverse_impl(Self&& self, Sink&& sink) MAYTHROW {
 			return tc::fn_visit([&](auto&& rng) MAYTHROW {
 				return tc::for_each(tc::reverse(*tc_move_if_owned(rng)), sink);
@@ -92,7 +92,7 @@ namespace tc {
 		);
 
 		tc::storage_for<tc::common_reference_xvalue_as_ref_t<decltype(std::declval<FuncRng>()())...>> result;
-		scope_exit(result.dtor());
+		tc_scope_exit { result.dtor(); };
 
 		tc::invoke_with_constant<std::index_sequence_for<FuncRng...>>(
 			[&](auto nconstIndex) MAYTHROW {
@@ -156,13 +156,13 @@ namespace tc {
 
 #include <boost/vmd/assert.hpp>
 
-// BOOST_PP_VARIADIC_SIZE returns always at least 1, so there is no point of checking against 0. However, empty __VA_ARGS__ will trigger a compilation error in MAKE_LAZY
+// BOOST_PP_VARIADIC_SIZE returns always at least 1, so there is no point of checking against 0. However, empty __VA_ARGS__ will trigger a compilation error in tc_lazy
 #define tc_conditional_range(b, ...) \
 	BOOST_VMD_ASSERT(BOOST_PP_LESS_EQUAL(BOOST_PP_VARIADIC_SIZE(__VA_ARGS__), 2)) \
 	tc::conditional_range(b, \
-		MAKE_LAZY(BOOST_PP_VARIADIC_ELEM(0, __VA_ARGS__)) \
+		tc_lazy(BOOST_PP_VARIADIC_ELEM(0, __VA_ARGS__)) \
 		BOOST_PP_COMMA_IF(BOOST_PP_EQUAL(BOOST_PP_VARIADIC_SIZE(__VA_ARGS__), 2)) \
-		BOOST_PP_EXPR_IF(BOOST_PP_EQUAL(BOOST_PP_VARIADIC_SIZE(__VA_ARGS__), 2), MAKE_LAZY(BOOST_PP_VARIADIC_ELEM(1, __VA_ARGS__))) \
+		BOOST_PP_EXPR_IF(BOOST_PP_EQUAL(BOOST_PP_VARIADIC_SIZE(__VA_ARGS__), 2), tc_lazy(BOOST_PP_VARIADIC_ELEM(1, __VA_ARGS__))) \
 	)
 
 namespace tc {

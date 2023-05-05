@@ -1,21 +1,21 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 #include <string>
-#include "../base/type_traits.h"
+#include "../base/type_traits_fwd.h"
 
 namespace tc {
 	namespace no_adl {
 		template<typename Char, typename=void>
 		struct char_traits_selector;
 
-		template<typename Char> requires tc::is_char<Char>::value && (!(std::is_same<Char, char>::value && std::is_signed<char>::value))
+		template<typename Char> requires tc::char_type<Char> && (!(std::is_same<Char, char>::value && std::is_signed<char>::value))
 		struct char_traits_selector<Char> final {
 			using type = std::char_traits<Char>;
 		};

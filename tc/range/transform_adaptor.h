@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -49,8 +49,7 @@ namespace tc {
 				, m_func(std::forward<FuncOther>(func))
 			{}
 
-			template< ENABLE_SFINAE, std::enable_if_t<tc::has_size<SFINAE_TYPE(Rng)>::value>* = nullptr >
-			constexpr auto size() const& noexcept {
+			constexpr auto size() const& noexcept requires tc::has_size<Rng> {
 				return tc::size_raw(this->base_range());
 			}
 
@@ -59,7 +58,7 @@ namespace tc {
 				return tc::no_adl::transform_sink<Func, tc::decay_t<Sink>>{m_func, std::forward<Sink>(sink)};
 			}
 
-			template<typename Self, std::enable_if_t<tc::is_base_of_decayed<transform_adaptor, Self>::value>* = nullptr>
+			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, transform_adaptor>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
 			friend auto range_output_t_impl(Self&&) -> tc::type::unique_t<tc::type::transform_t<tc::range_output_t<decltype(std::declval<Self>().base_range())>, tc::type::curry<tc::transform_output_t, Func>::template type>> {} // unevaluated
 		};
 
@@ -101,6 +100,10 @@ namespace tc {
 				return tc::invoke(tc::as_const(this->m_func), this->template dereference_index<base_>(idx));
 			}
 
+			// We may inherit an index_to_address from our base; just like dereference_index(), we need to override it.
+			// But in the case of transform, we are no longer contiguous, so delete it.
+			auto STATIC_VIRTUAL_METHOD_NAME(index_to_address)(tc_index const&) const = delete;
+
 			static constexpr decltype(auto) border_base_index(tc_index const& idx) noexcept {
 				return idx;
 			}
@@ -124,7 +127,7 @@ namespace tc {
 
 	namespace no_adl {
 		template<typename Func, typename Rng, bool bConst>
-		struct constexpr_size_base<tc::transform_adaptor<Func,Rng,bConst>, void> : tc::constexpr_size<Rng> {};
+		struct constexpr_size_impl<tc::transform_adaptor<Func,Rng,bConst>> : tc::constexpr_size<Rng> {};
 	}
 
 	template<typename Rng, typename Func>
@@ -132,20 +135,17 @@ namespace tc {
 		return_ctor_noexcept(TC_FWD(transform_adaptor<tc::decay_t<Func>, Rng >), (std::forward<Rng>(rng), std::forward<Func>(func)))
 
 	template<typename Rng>
-	requires tc::is_instance2<transform_adaptor,std::remove_reference_t<Rng>>::value
+	requires tc::instance2<std::remove_reference_t<Rng>, transform_adaptor>
 	[[nodiscard]] decltype(auto) untransform(Rng&& rng) noexcept {
 		return std::forward<Rng>(rng).base_range();
 	}
 
 	template<typename Rng >
-	requires tc::is_instance2<
-		transform_adaptor,
-		std::remove_reference_t<
+	requires tc::instance2<std::remove_reference_t<
 			tc::type::only_t<
-				typename tc::is_instance<subrange,std::remove_reference_t<Rng>>::arguments
+				typename tc::is_instance<std::remove_reference_t<Rng>, subrange>::arguments
 			>
-		>
-	>::value
+		>, transform_adaptor>
 	[[nodiscard]] auto untransform(Rng&& rng) noexcept {
 		return tc::slice(untransform(std::forward<Rng>(rng).base_range()), rng.begin_index(), rng.end_index());
 	}

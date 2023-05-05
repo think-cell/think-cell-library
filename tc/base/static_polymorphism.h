@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -116,15 +116,7 @@
 	STATIC_OVERRIDE_MOD( BOOST_PP_EMPTY(), Name )
 
 #define STATIC_VIRTUAL_WITH_FALLBACK_MOD(Mod, Name) \
-	template<typename U, typename... Args> \
-	struct has_static_virtual_ ## Name ## _override { \
-	private: \
-		template<typename T> static auto test(int) -> decltype(std::declval<T>().STATIC_VIRTUAL_METHOD_NAME(Name)( std::declval<Args>()... ), tc::constant<true>()); \
-		template<typename> static tc::constant<false> test(...); \
-	public: \
-		static constexpr bool value = decltype(test<U>(0))::value; \
-	}; \
-	template<typename Derived_, typename... Args, std::enable_if_t<!has_static_virtual_ ## Name ## _override<Derived_, Args...>::value>* = nullptr> \
+	template<typename Derived_, typename... Args> requires (!requires { std::declval<Derived_>().STATIC_VIRTUAL_METHOD_NAME(Name)( std::declval<Args>()... ); }) \
 	static \
 	auto STATIC_VIRTUAL_DISPATCH_IMPL_NAME(Name)(Derived_&& derived, Args&&... args) return_decltype_xvalue_by_ref_MAYTHROW( \
 		std::forward<Derived_>(derived).STATIC_VIRTUAL_FALLBACK_NAME(Name)(std::forward<Args>(args)...) \

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -28,7 +28,7 @@ namespace tc {
 			constexpr reference_or_value(reference_or_value const&) = default;
 			constexpr reference_or_value(reference_or_value&&) = default;
 			
-			template< typename Rhs> requires tc::is_safely_constructible<T, Rhs&&>::value
+			template< typename Rhs> requires tc::safely_constructible_from<T, Rhs&&>
 			constexpr reference_or_value( aggregate_tag_t, Rhs&& rhs ) noexcept
 				: m_t(std::forward<Rhs>(rhs))
 			{}
@@ -128,7 +128,7 @@ namespace tc {
 
 		template< typename T >
 		struct TC_EMPTY_BASES empty_value {
-			static_assert( tc::is_empty<T>::value );
+			static_assert( tc::empty_type<T> );
 
 			constexpr empty_value() = default;
 			constexpr empty_value(aggregate_tag_t, T) noexcept {}
@@ -146,7 +146,7 @@ namespace tc {
 	}
 	template<typename T>
 	using reference_or_value = std::conditional_t<
-		tc::is_empty<T>::value,
+		tc::empty_type<T>,
 		no_adl::empty_value<std::remove_cv_t<T>>,
 		no_adl::reference_or_value<std::remove_cv_t<T>>
 	>;

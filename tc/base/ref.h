@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -40,7 +40,7 @@ namespace tc {
 				if constexpr (std::is_function<RefT>::value) {
 					return *reinterpret_cast<RefT*>(m_fpvRef);
 				} else {
-					return *static_cast<RefT*>(tc::make_mutable_ptr(m_pvRef));
+					return *static_cast<RefT*>(tc::as_mutable_ptr(m_pvRef));
 				}
 			}
 
@@ -88,10 +88,10 @@ namespace tc {
 			}
 				
 			template <typename Func> requires
-				(!tc::is_base_of_decayed< function_ref_base, Func >::value)
+				(!tc::decayed_derived_from<Func, function_ref_base>)
 				&& tc::is_invocable<std::remove_reference_t<Func>&, Args...>::value
 				&& (
-					std::is_convertible<decltype(tc::invoke(std::declval<std::remove_reference_t<Func>&>(), std::declval<Args>()...)), Ret>::value
+					std::convertible_to<decltype(tc::invoke(std::declval<std::remove_reference_t<Func>&>(), std::declval<Args>()...)), Ret>
 					|| std::is_same<Ret, tc::break_or_continue>::value
 					|| std::is_void<Ret>::value
 				)
@@ -99,7 +99,7 @@ namespace tc {
 				: m_pfuncTypeErased(tc::no_adl::make_type_erased_function_ptr<bNoExcept, std::remove_reference_t<Func>, Ret, Args...>{}())
 				, m_anyref(tc::as_lvalue(func))
 			{
-				static_assert(!std::is_member_function_pointer<Func>::value, "Raw member functions are not supported (how would you call them?).  Pass in a lambda or use std::mem_fn/TC_MEM_FN instead.");
+				static_assert(!std::is_member_function_pointer<Func>::value, "Raw member functions are not supported (how would you call them?).  Pass in a lambda or use std::mem_fn/tc_mem_fn instead.");
 				static_assert(!std::is_pointer<Func>::value, "Pass in functions rather than function pointers.");
 				// Checking the noexcept value of the function call is commented out because MAYTHROW is widely used in generic code such as for_each, range_adaptor...
 				// static_assert(!bNoExcept || noexcept(std::declval<tc::decay_t<Func>&>()(std::declval<Args>()...)));

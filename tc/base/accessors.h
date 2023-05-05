@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -47,54 +47,75 @@ namespace tc {
 	TC_EXPAND(TC_EXPAND(BOOST_PP_IF(BOOST_PP_GREATER(BOOST_PP_VARIADIC_SIZE(__VA_ARGS__), 1), DEFINE_MEMBER_WITH_INIT, DEFINE_MEMBER_WITHOUT_INIT))(TC_FWD(type), __VA_ARGS__))
 
 #define DEFINE_ACCESSORS_BASE(type, funcname, invariant, name) \
-	public: \
-		constexpr typename tc::no_adl::accessor_return_type<type>::const_ref_type funcname() const& noexcept { invariant(name); return name; } \
-		\
-		template<ENABLE_SFINAE> requires /*dummy constraint making this function preferred in overload resolution over the deleted function below*/true \
-		constexpr typename tc::no_adl::accessor_return_type<SFINAE_TYPE(type)>::ref_ref_type funcname() && noexcept { invariant(name); return tc_move(name); } \
-		\
-		template<ENABLE_SFINAE> /* needed to stay behind non-deleted function in overload resolution */ \
-		constexpr type&& funcname() && noexcept = delete; /* Visual Studio gives improper error message if it returns a dummy type */ \
-		\
-		template<ENABLE_SFINAE> requires true \
-		constexpr typename tc::no_adl::accessor_return_type<SFINAE_TYPE(type)>::const_ref_ref_type funcname() const&& noexcept { invariant(name); return std::move(name); } \
-		\
-		template<ENABLE_SFINAE> \
-		constexpr type const&& funcname() const&& noexcept = delete; /* Visual Studio gives improper error message if it returns a dummy type */
+	constexpr typename tc::no_adl::accessor_return_type<type>::const_ref_type funcname() const& noexcept { invariant(name); return name; } \
+	\
+	template<ENABLE_SFINAE> requires /*dummy constraint making this function preferred in overload resolution over the deleted function below*/true \
+	constexpr typename tc::no_adl::accessor_return_type<SFINAE_TYPE(type)>::ref_ref_type funcname() && noexcept { invariant(name); return tc_move(name); } \
+	\
+	template<ENABLE_SFINAE> /* needed to stay behind non-deleted function in overload resolution */ \
+	constexpr type&& funcname() && noexcept = delete; /* Visual Studio gives improper error message if it returns a dummy type */ \
+	\
+	template<ENABLE_SFINAE> requires true \
+	constexpr typename tc::no_adl::accessor_return_type<SFINAE_TYPE(type)>::const_ref_ref_type funcname() const&& noexcept { invariant(name); return std::move(name); } \
+	\
+	template<ENABLE_SFINAE> \
+	constexpr type const&& funcname() const&& noexcept = delete; /* Visual Studio gives improper error message if it returns a dummy type */
 
 #define DEFINE_MEMBER_INVARIANT(...) ([&](auto const& _) constexpr noexcept { \
 	_ASSERTINITIALIZED(_); \
 	__VA_ARGS__; \
 })
 
-#define DEFINE_MEMBER_AND_NAMED_ACCESSORS_INVARIANT(type, funcname, invariant, ...) /* type, funcname, invariant, name(, value) */ \
+#define INTERNAL_MEMBER_AND_NAMED_ACCESSOR_INVARIANT(accessspecifierMember, type, accessspecifierAccessor, funcname, invariant, ...) /* type, funcname, invariant, name(, value) */ \
+	accessspecifierMember: \
 	DEFINE_MEMBER_BASE(TC_FWD(type), __VA_ARGS__) \
-	DEFINE_ACCESSORS_BASE(TC_FWD(type), funcname, DEFINE_MEMBER_INVARIANT(invariant), BOOST_PP_VARIADIC_ELEM(0, __VA_ARGS__)) \
-	private:
+	accessspecifierAccessor: \
+	DEFINE_ACCESSORS_BASE(TC_FWD(type), TC_FWD(funcname), DEFINE_MEMBER_INVARIANT(invariant), BOOST_PP_VARIADIC_ELEM(0, __VA_ARGS__)) \
+	accessspecifierMember:
 
-#define DEFINE_MEMBER_AND_NAMED_ACCESSORS(type, funcname, ...) /* type, funcname, name(, value) */ \
-	DEFINE_MEMBER_AND_NAMED_ACCESSORS_INVARIANT(TC_FWD(type), funcname, BOOST_PP_EMPTY(), __VA_ARGS__)
+/********* private member, public accessor ******************************************************************/
 
-#define DEFINE_PROTECTED_MEMBER_AND_NAMED_ACCESSORS_INVARIANT(type, funcname, invariant, ...) /* type, funcname, invariant, name(, value) */ \
-	DEFINE_MEMBER_BASE(TC_FWD(type), __VA_ARGS__) \
-	DEFINE_ACCESSORS_BASE(TC_FWD(type), funcname, DEFINE_MEMBER_INVARIANT(invariant), BOOST_PP_VARIADIC_ELEM(0, __VA_ARGS__)) \
-	protected:
+#define PRIVATE_MEMBER_PUBLIC_NAMED_ACCESSOR_INVARIANT(type, funcname, invariant, ...) /* type, funcname, invariant, name(, value) */ \
+	INTERNAL_MEMBER_AND_NAMED_ACCESSOR_INVARIANT(private, TC_FWD(type), public, TC_FWD(funcname), TC_FWD(invariant), __VA_ARGS__)
 
-#define DEFINE_PROTECTED_MEMBER_AND_NAMED_ACCESSORS(type, funcname, ...) /* type, funcname, name(, value) */ \
-	DEFINE_PROTECTED_MEMBER_AND_NAMED_ACCESSORS_INVARIANT(TC_FWD(type), funcname, BOOST_PP_EMPTY(), __VA_ARGS__)
+#define PRIVATE_MEMBER_PUBLIC_NAMED_ACCESSOR(type, funcname, ...) /* type, funcname, name(, value) */ \
+	PRIVATE_MEMBER_PUBLIC_NAMED_ACCESSOR_INVARIANT(TC_FWD(type), TC_FWD(funcname), BOOST_PP_EMPTY(), __VA_ARGS__)
 
-#define DEFINE_MEMBER_AND_ACCESSORS_INVARIANT(type, invariant, ...) /* type, invariant, name(, value) */ \
-	DEFINE_MEMBER_BASE(TC_FWD(type), __VA_ARGS__) \
-	DEFINE_ACCESSORS_BASE(TC_FWD(type), BOOST_PP_CAT(BOOST_PP_VARIADIC_ELEM(0, __VA_ARGS__), _), DEFINE_MEMBER_INVARIANT(invariant), BOOST_PP_VARIADIC_ELEM(0, __VA_ARGS__)) \
-	private:
+#define PRIVATE_MEMBER_PUBLIC_ACCESSOR_INVARIANT(type, invariant, ...) /* type, invariant, name(, value) */ \
+	PRIVATE_MEMBER_PUBLIC_NAMED_ACCESSOR_INVARIANT(TC_FWD(type), BOOST_PP_CAT(BOOST_PP_VARIADIC_ELEM(0, __VA_ARGS__), _), TC_FWD(invariant), __VA_ARGS__)
 
-#define DEFINE_MEMBER_AND_ACCESSORS(type, ...) /* type, name(, value) */ \
-	DEFINE_MEMBER_AND_ACCESSORS_INVARIANT(TC_FWD(type), BOOST_PP_EMPTY(), __VA_ARGS__)
+#define PRIVATE_MEMBER_PUBLIC_ACCESSOR(type, ...) /* type, name(, value) */ \
+	PRIVATE_MEMBER_PUBLIC_ACCESSOR_INVARIANT(TC_FWD(type), BOOST_PP_EMPTY(), __VA_ARGS__)
 
-#define DEFINE_PROTECTED_MEMBER_AND_ACCESSORS_INVARIANT(type, invariant, ...) /* type, invariant, name(, value) */ \
-	DEFINE_MEMBER_BASE(TC_FWD(type), __VA_ARGS__) \
-	DEFINE_ACCESSORS_BASE(TC_FWD(type), BOOST_PP_CAT(BOOST_PP_VARIADIC_ELEM(0, __VA_ARGS__), _), DEFINE_MEMBER_INVARIANT(invariant), BOOST_PP_VARIADIC_ELEM(0, __VA_ARGS__)) \
-	protected:
+/********* protected member, public accessor ******************************************************************/
 
-#define DEFINE_PROTECTED_MEMBER_AND_ACCESSORS(type, ...) /* type, name(, value) */ \
-	DEFINE_PROTECTED_MEMBER_AND_ACCESSORS_INVARIANT(TC_FWD(type), BOOST_PP_EMPTY(), __VA_ARGS__)
+#define PROTECTED_MEMBER_PUBLIC_NAMED_ACCESSOR_INVARIANT(type, funcname, invariant, ...) /* type, funcname, invariant, name(, value) */ \
+	INTERNAL_MEMBER_AND_NAMED_ACCESSOR_INVARIANT(protected, TC_FWD(type), public, TC_FWD(funcname), TC_FWD(invariant), __VA_ARGS__)
+
+#define PROTECTED_MEMBER_PUBLIC_NAMED_ACCESSOR(type, funcname, ...) /* type, funcname, name(, value) */ \
+	PROTECTED_MEMBER_PUBLIC_NAMED_ACCESSOR_INVARIANT(TC_FWD(type), TC_FWD(funcname), BOOST_PP_EMPTY(), __VA_ARGS__)
+
+#define PROTECTED_MEMBER_PUBLIC_ACCESSOR_INVARIANT(type, invariant, ...) /* type, invariant, name(, value) */ \
+	PROTECTED_MEMBER_PUBLIC_NAMED_ACCESSOR_INVARIANT(TC_FWD(type), BOOST_PP_CAT(BOOST_PP_VARIADIC_ELEM(0, __VA_ARGS__), _), TC_FWD(invariant), __VA_ARGS__)
+
+#define PROTECTED_MEMBER_PUBLIC_ACCESSOR(type, ...) /* type, name(, value) */ \
+	PROTECTED_MEMBER_PUBLIC_ACCESSOR_INVARIANT(TC_FWD(type), BOOST_PP_EMPTY(), __VA_ARGS__)
+
+/********* public member, public accessor ******************************************************************/
+
+#define PUBLIC_MEMBER_PUBLIC_NAMED_ACCESSOR_INVARIANT(type, funcname, invariant, ...) /* type, funcname, invariant, name(, value) */ \
+	INTERNAL_MEMBER_AND_NAMED_ACCESSOR_INVARIANT(public, TC_FWD(type), public, TC_FWD(funcname), TC_FWD(invariant), __VA_ARGS__)
+
+#define PUBLIC_MEMBER_PUBLIC_NAMED_ACCESSOR(type, funcname, ...) /* type, funcname, name(, value) */ \
+	PUBLIC_MEMBER_PUBLIC_NAMED_ACCESSOR_INVARIANT(TC_FWD(type), TC_FWD(funcname), BOOST_PP_EMPTY(), __VA_ARGS__)
+
+#define PUBLIC_MEMBER_PUBLIC_ACCESSOR_INVARIANT(type, invariant, ...) /* type, invariant, name(, value) */ \
+	PUBLIC_MEMBER_PUBLIC_NAMED_ACCESSOR_INVARIANT(TC_FWD(type), BOOST_PP_CAT(BOOST_PP_VARIADIC_ELEM(0, __VA_ARGS__), _), TC_FWD(invariant), __VA_ARGS__)
+
+#define PUBLIC_MEMBER_PUBLIC_ACCESSOR(type, ...) /* type, name(, value) */ \
+	PUBLIC_MEMBER_PUBLIC_ACCESSOR_INVARIANT(TC_FWD(type), BOOST_PP_EMPTY(), __VA_ARGS__)
+
+/********* private member, private accessor ******************************************************************/
+
+#define PRIVATE_MEMBER_PRIVATE_ACCESSOR_INVARIANT(type, invariant, ...) /* type, invariant, name(, value) */ \
+	INTERNAL_MEMBER_AND_NAMED_ACCESSOR_INVARIANT(private, TC_FWD(type), private, BOOST_PP_CAT(BOOST_PP_VARIADIC_ELEM(0, __VA_ARGS__), _), TC_FWD(invariant), __VA_ARGS__)

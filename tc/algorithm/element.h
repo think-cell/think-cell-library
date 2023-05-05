@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -21,7 +21,7 @@ namespace tc {
 	[[nodiscard]] constexpr decltype(auto) back(auto&& rng) noexcept {
 		static_assert( !std::is_same<RangeReturn, tc::return_void>::value );
 		static_assert( !std::is_same<RangeReturn, tc::return_bool>::value, "Use tc::empty instead of tc::back<tc::return_bool>" );
-		static_assert( tc::is_bidirectional_range<std::remove_reference_t<decltype(rng)>>::value ); // TODO reverse generator would also be fine, but find_last_if is not specialized for this case yet.
+		static_assert( tc::bidirectional_range<std::remove_reference_t<decltype(rng)>> ); // TODO reverse generator would also be fine, but find_last_if is not specialized for this case yet.
 		return tc::find_last_if<RangeReturn>(tc_move_if_owned(rng), tc::constexpr_function<true>());
 	}
 
@@ -29,9 +29,9 @@ namespace tc {
 	[[nodiscard]] decltype(auto) linear_back(auto&& rng) noexcept {
 		static_assert( !std::is_same<RangeReturn, tc::return_void>::value );
 		static_assert( !std::is_same<RangeReturn, tc::return_bool>::value, "Use tc::empty instead of tc::linear_back<tc::return_bool>" );
-		static_assert( !tc::is_bidirectional_range<std::remove_reference_t<decltype(rng)>>::value, "Use tc::back for bidirectional ranges" );
+		static_assert( !tc::bidirectional_range<std::remove_reference_t<decltype(rng)>>, "Use tc::back for bidirectional ranges" );
 		auto it = tc::begin(rng);
-		auto_cref(itEnd, tc::end(rng));
+		tc_auto_cref(itEnd, tc::end(rng));
 		if (it!=itEnd) {
 			auto itNext = it;
 			while (itEnd!=++itNext) {
@@ -61,11 +61,11 @@ namespace tc {
 	[[nodiscard]] constexpr auto linear_at(auto&& rng, typename boost::range_size< std::remove_reference_t<decltype(rng)> >::type n) noexcept {
 		static_assert( !std::is_same<RangeReturn, tc::return_void>::value );
 		static_assert( !std::is_same<RangeReturn, tc::return_bool>::value, "Use tc::size_bounded instead of tc::linear_at<tc::return_bool>" );
-		if constexpr (std::is_convertible<typename boost::range_traversal<decltype(rng)>::type, boost::iterators::random_access_traversal_tag>::value) {
+		if constexpr (std::convertible_to<typename boost::range_traversal<decltype(rng)>::type, boost::iterators::random_access_traversal_tag>) {
 			return tc::at<RangeReturn>(tc_move_if_owned(rng), tc_move(n));
 		} else {
 			_ASSERTE(0<=n);
-			auto_cref(itEnd, tc::end(rng));
+			tc_auto_cref(itEnd, tc::end(rng));
 			for (auto it=tc::begin(rng); it!=itEnd; ++it, --n) {
 				if (0==n) {
 					return RangeReturn::pack_element(tc_move(it), tc_move_if_owned(rng));
@@ -93,7 +93,7 @@ namespace tc {
 			if constexpr(RangeReturn::requires_iterator) {
 				auto const itEnd = tc::end(rng);
 				auto const itBegin = tc::begin(rng);
-				if(itEnd != itBegin && (itEnd == modified(itBegin, ++_) || tc::explicit_cast<bool>(func()))) {
+				if(itEnd != itBegin && (itEnd == tc_modified(itBegin, ++_) || tc::explicit_cast<bool>(func()))) {
 					return RangeReturn::pack_element(itBegin, tc_move_if_owned(rng));
 				} else {
 					return RangeReturn::pack_no_element(tc_move_if_owned(rng));
@@ -191,7 +191,7 @@ namespace tc {
 		stash.extract(tc::name<tc::return_element>(std::forward<Rng>(rng))) \
 	) \
 	\
-	/* Use tc::fn_front() instead of TC_FN(tc::front) because the latter returns a dangling xvalue reference when used with counting ranges. */ \
+	/* Use tc::fn_front() instead of tc_fn(tc::front) because the latter returns a dangling xvalue reference when used with counting ranges. */ \
 	/* Support tc::fn_front<tc::return_xxx>() for consistency*/ \
 	namespace fn_ ## name ## _adl { \
 		template<typename RangeReturn=void> \
@@ -274,10 +274,10 @@ namespace tc {
 			return (nMax<=n) ? tc::break_ : tc::continue_;
 		});
 		if (0==n) {
-			RETURN_CAST(RangeReturn::template pack_no_element<Rng>(), tc_move(n));
+			tc_return_cast(RangeReturn::template pack_no_element<Rng>(), tc_move(n));
 		} else {
-			scope_exit(ot.dtor());
-			RETURN_CAST(*tc_move(ot), tc_move(n));
+			tc_scope_exit { ot.dtor(); };
+			tc_return_cast(*tc_move(ot), tc_move(n));
 		}
 	}
 }

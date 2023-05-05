@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -23,45 +23,44 @@
 #include <bitset>
 #include <cstdint>
 
-#define _ASSERT_NOT_ORDERED(Enum) \
-	bool operator<(Enum, Enum) noexcept; \
-	bool operator<=(Enum, Enum) noexcept; \
-	bool operator>=(Enum, Enum) noexcept; \
-	bool operator>(Enum, Enum) noexcept;
-
 namespace tc {
-	namespace no_adl {
-		struct no_contiguous_enum final {};
-	}
-
-	template<typename T>
-	no_adl::no_contiguous_enum contiguous_enum_impl(T&& t) noexcept;
+	template <typename Enum>
+	void contiguous_enum_impl(Enum const&) = delete;
 
 	namespace no_adl {
-		template< typename Impl >
-		struct contiguous_enum_eval : tc::constant<true> {
-			static constexpr typename Impl::type begin() noexcept { return Impl::begin; }
-			static constexpr typename Impl::type end() noexcept { return Impl::end; }
+		template <typename Enum>
+		struct contiguous_enum : tc::constant<false> {};
+
+		template <typename Enum>
+			requires requires(Enum const& e) { contiguous_enum_impl(e); }
+		struct contiguous_enum<Enum> : tc::constant<true> {
+			using impl = decltype(contiguous_enum_impl(std::declval<Enum>()));
+
+			static constexpr auto begin() noexcept {
+				return impl::start();
+			}
+
+			static constexpr auto end() noexcept {
+				// Note that we cannot use from_underlying due to a recursion.
+				return static_cast<decltype(impl::last())>(tc::to_underlying(impl::last()) + 1);
+			}
 		};
-
-		template<>
-		struct contiguous_enum_eval<no_contiguous_enum> : tc::constant<false> {};
-
-		template<typename Enum>
-		struct contiguous_enum : contiguous_enum_eval< decltype(contiguous_enum_impl(std::declval<tc::decay_t<Enum>>())) > {};
 	}
 	using no_adl::contiguous_enum;
 
+	template<typename T>
+	concept contiguous_enum_type = tc::enum_type<T> && contiguous_enum<T>::value;
+
 	template<typename Enum, typename Integer>
 	[[nodiscard]] constexpr bool is_enum_value_or_end(Integer const& n) noexcept { // reference to avoid error C4701: potentially uninitialized local variable
-		static_assert( tc::is_actual_integer<Integer>::value );
+		static_assert( tc::actual_integer<Integer> );
 		if constexpr( tc::contiguous_enum<Enum>::value ) {
 			// There are values that e can have without UB that are not one its enum values, in particular when e has a fixed underlying_type or the value fits
 			// into the bits needed for representing the enum values:
 			// http://stackoverflow.com/questions/18195312/what-happens-if-you-static-cast-invalid-value-to-enum-class
 			// We do not allow such values here.
-			return tc::explicit_cast<Integer>(tc::underlying_cast(tc::contiguous_enum<Enum>::begin())) <= n
-				&& n <= tc::explicit_cast<Integer>(tc::underlying_cast(tc::contiguous_enum<Enum>::end()));
+			return tc::explicit_cast<Integer>(tc::to_underlying(tc::contiguous_enum<Enum>::begin())) <= n
+				&& n <= tc::explicit_cast<Integer>(tc::to_underlying(tc::contiguous_enum<Enum>::end()));
 		} else {
 			// TODO: Implement is_enum_value_or_end(...) for all persisted enum types.
 			return true;
@@ -70,22 +69,19 @@ namespace tc {
 
 	template<typename Enum, typename Integer>
 	[[nodiscard]] constexpr bool is_enum_value(Integer const& n) noexcept {
-		static_assert( tc::is_actual_integer<Integer>::value );
+		static_assert( tc::actual_integer<Integer> );
 		if constexpr( tc::contiguous_enum<Enum>::value ) { 
-			return tc::explicit_cast<Integer>(tc::underlying_cast(tc::contiguous_enum<Enum>::begin())) <= n
-				&& n < tc::explicit_cast<Integer>(tc::underlying_cast(tc::contiguous_enum<Enum>::end()));
+			return tc::explicit_cast<Integer>(tc::to_underlying(tc::contiguous_enum<Enum>::begin())) <= n
+				&& n < tc::explicit_cast<Integer>(tc::to_underlying(tc::contiguous_enum<Enum>::end()));
 		} else {
 			// TODO: Implement is_enum_value(...) for all persisted enum types.
 			return true;
 		}
 	}
 
-	// Use enum_cast only for upcasts from integer to enum. For casting between enums, use tc::explicit_cast (customize tc::explicit_convert if necessary).
-	template<typename Enum, typename Integer>
-	[[nodiscard]] constexpr Enum enum_cast(Integer const& t) noexcept {
-		static_assert( std::is_enum<Enum>::value );
-		auto const n=tc::explicit_cast< std::underlying_type_t<Enum> >(t);
-		_ASSERTDEBUG( is_enum_value_or_end<Enum>(n) ); // _ASSERT triggers win/ARM64EC/release ICE
+	template<tc::contiguous_enum_type Enum>
+	[[nodiscard]] constexpr auto from_underlying_impl(tc::type::identity<Enum>, tc::underlying_type_t<Enum> n) {
+		_ASSERTDEBUG(is_enum_value_or_end<Enum>(n)); // _ASSERT triggers win/ARM64EC/release ICE
 		return static_cast<Enum>(n);
 	}
 
@@ -94,28 +90,28 @@ namespace tc {
 	using enum_difference=tc::constant<static_cast<std::underlying_type_t<Enum>>(e1)-static_cast<std::underlying_type_t<Enum>>(e2)>;
 
 	template <typename Enum>
-	using enum_count=tc::constant<tc::unsigned_cast(enum_difference<Enum, tc::contiguous_enum<Enum>::end(), tc::contiguous_enum<Enum>::begin()>::value)>;
+	using enum_count=tc::constant<tc::as_unsigned(enum_difference<Enum, tc::contiguous_enum<Enum>::end(), tc::contiguous_enum<Enum>::begin()>::value)>;
 }
 
-#define BITMASK_OPS(Enum) \
+#define TC_BITMASK_OPS(Enum) \
 [[nodiscard]] constexpr Enum operator&(Enum _Left, Enum _Right) \
 {	/* return _Left & _Right */ \
-	return tc::enum_cast<Enum>(tc::underlying_cast(_Left) & tc::underlying_cast(_Right)); \
+	return tc::from_underlying<Enum>(tc::to_underlying(_Left) & tc::to_underlying(_Right)); \
 } \
 \
 [[nodiscard]] constexpr Enum operator|(Enum _Left, Enum _Right) \
 {	/* return _Left | _Right */ \
-	return tc::enum_cast<Enum>(tc::underlying_cast(_Left) | tc::underlying_cast(_Right)); \
+	return tc::from_underlying<Enum>(tc::to_underlying(_Left) | tc::to_underlying(_Right)); \
 } \
 \
 [[nodiscard]] constexpr Enum operator^(Enum _Left, Enum _Right) \
 {	/* return _Left ^ _Right */ \
-	return tc::enum_cast<Enum>(tc::underlying_cast(_Left) ^ tc::underlying_cast(_Right)); \
+	return tc::from_underlying<Enum>(tc::to_underlying(_Left) ^ tc::to_underlying(_Right)); \
 } \
 \
 [[nodiscard]] constexpr Enum operator~(Enum _Left) \
 {	/* return ~_Left */ \
-	return tc::enum_cast<Enum>(~tc::underlying_cast(_Left)); \
+	return tc::from_underlying<Enum>(~tc::to_underlying(_Left)); \
 } \
 \
 constexpr Enum& operator&=(Enum& _Left, Enum _Right) \
@@ -141,7 +137,11 @@ constexpr Enum& operator^=(Enum& _Left, Enum _Right) \
 	return !(~_Left & _Right); \
 }\
 \
-_ASSERT_NOT_ORDERED(Enum)
+std::strong_ordering operator<=>(Enum, Enum) = delete; \
+bool operator<(Enum, Enum) = delete; \
+bool operator<=(Enum, Enum) = delete; \
+bool operator>=(Enum, Enum) = delete; \
+bool operator>(Enum, Enum) = delete;
 
 #ifdef TC_PRIVATE
 struct CSaveHandler;
@@ -156,7 +156,7 @@ namespace tc {
 			//	a fixed underlying_type or the value fits into the bits needed for representing the enum values:
 			//	http://stackoverflow.com/questions/18195312/what-happens-if-you-static-cast-invalid-value-to-enum-class 
 			//	We don't allow such values here
-			tc::is_enum_value<Enum>(tc::underlying_cast(e))
+			tc::is_enum_value<Enum>(tc::to_underlying(e))
 		);
 	}
 
@@ -173,20 +173,19 @@ namespace tc {
 	using enumset_adl::enumset;
 }
 
-#define DEFINE_CONTIGUOUS_ENUM(Enum, enumBegin, enumEnd) \
-	namespace no_adl { \
-		struct Enum ## _helper { \
-			using type=Enum; \
-			static constexpr Enum begin = enumBegin; \
-			static constexpr Enum end = enumEnd; \
+#define TC_DEFINE_CONTIGUOUS_ENUM(Enum, enumStart, enumLast) \
+	[[nodiscard]] inline auto contiguous_enum_impl(Enum const&) { \
+		struct impl { \
+			static constexpr Enum start() noexcept { return (enumStart); } \
+			static constexpr Enum last() noexcept { return (enumLast); } \
 		}; \
+		return impl{}; \
 	} \
-	no_adl::Enum ## _helper contiguous_enum_impl(Enum&&); \
 	[[nodiscard]] inline bool check_initialized_impl(Enum const& e) noexcept { /*reference to avoid error C4701: potentially uninitialized local variable*/ \
-		return tc::is_enum_value_or_end<Enum>(tc::underlying_cast(e)); \
+		return tc::is_enum_value_or_end<Enum>(tc::to_underlying(e)); \
 	} \
 	[[nodiscard]] constexpr boost::int_max_value_t< tc::enum_count<Enum>::value >::least operator-(Enum e1, Enum e2) noexcept { \
-		return static_cast<boost::int_max_value_t< tc::enum_count<Enum>::value >::least>(tc::underlying_cast(e1)-tc::underlying_cast(e2)); \
+		return static_cast<boost::int_max_value_t< tc::enum_count<Enum>::value >::least>(tc::to_underlying(e1)-tc::to_underlying(e2)); \
 	} \
 	template<ENABLE_SFINAE> \
 	[[nodiscard]] constexpr tc::enumset<SFINAE_TYPE(Enum)> operator|(Enum lhs, Enum rhs) noexcept { \
@@ -200,30 +199,30 @@ namespace tc {
 	} \
 	constexpr Enum& operator++(Enum& e) noexcept { \
 		_ASSERTDEBUG( e!=tc::contiguous_enum<Enum>::end() ); \
-		e = tc::enum_cast<Enum>( tc::underlying_cast(e)+1); \
+		e = tc::from_underlying<Enum>( tc::to_underlying(e)+1); \
 		return e; \
 	} \
 	constexpr Enum& operator--(Enum& e) noexcept { \
 		_ASSERTDEBUG( e!=tc::contiguous_enum<Enum>::begin() ); \
-		e = tc::enum_cast<Enum>( tc::underlying_cast(e)-1); \
+		e = tc::from_underlying<Enum>( tc::to_underlying(e)-1); \
 		return e; \
 	} \
-	template<typename N> requires tc::is_actual_integer<N>::value \
+	template<tc::actual_integer N> \
 	constexpr Enum& operator+=(Enum& e, N const& n) noexcept { \
-		e = tc::enum_cast<Enum>( tc::add( tc::underlying_cast(e), n ) ); \
+		e = tc::from_underlying<Enum>( tc::add( tc::to_underlying(e), n ) ); \
 		return e; \
 	} \
-	template<typename N> requires tc::is_actual_integer<N>::value \
+	template<tc::actual_integer N> \
 	constexpr Enum& operator-=(Enum& e, N const& n) noexcept { \
-		e = tc::enum_cast<Enum>( tc::sub( tc::underlying_cast(e), n ) ); \
+		e = tc::from_underlying<Enum>( tc::sub( tc::to_underlying(e), n ) ); \
 		return e; \
 	} \
-	template<typename N> requires tc::is_actual_integer<N>::value \
+	template<tc::actual_integer N> \
 	[[nodiscard]] constexpr Enum operator+(Enum e, N const& n) noexcept { \
 		e+=n; \
 		return e; \
 	} \
-	template<typename N> requires tc::is_actual_integer<N>::value \
+	template<tc::actual_integer N> \
 	[[nodiscard]] constexpr Enum operator-(Enum e, N const& n) noexcept { \
 		e-=n; \
 		return e; \
@@ -238,26 +237,26 @@ namespace tc {
 		} \
 	}
 
-#define PREFIX_CONSTANT_STRING( _, prefix, constant ) #prefix #constant
-
 #ifdef _DEBUG
-#define DEFINE_ENUM_REPORTSTREAM_PIPE( Enum, prefix, constants ) \
+#define TC_PREFIX_CONSTANT_STRING( _, prefix, constant ) #prefix #constant
+
+#define TC_DEFINE_ENUM_REPORTSTREAM_PIPE( Enum, prefix, constants ) \
 	[[nodiscard]] inline char const* enum_literal(Enum e) noexcept { \
 		static constexpr char const* c_map[]={ \
-			BOOST_PP_SEQ_ENUM(BOOST_PP_SEQ_TRANSFORM(PREFIX_CONSTANT_STRING, prefix, constants)), \
+			BOOST_PP_SEQ_ENUM(BOOST_PP_SEQ_TRANSFORM(TC_PREFIX_CONSTANT_STRING, prefix, constants)), \
 			"tc::contiguous_enum<" #Enum ">::end()" \
 		}; \
 		return c_map[e-tc::contiguous_enum<Enum>::begin()]; \
 	}
 #else
-#define DEFINE_ENUM_REPORTSTREAM_PIPE( Enum, prefix, constants )
+#define TC_DEFINE_ENUM_REPORTSTREAM_PIPE( Enum, prefix, constants )
 #endif
 
 // pair == ( Enum, prefix )
 // need to forward BOOST_PP_TUPLE_ELEM result two times, otherwise concatenation does not work
-#define DEFINE_ENUM_CONSTANT_INTERN_INTERN( Enum, prefix, constant ) inline constexpr Enum prefix##constant = Enum :: constant;
-#define DEFINE_ENUM_CONSTANT_INTERN(a,b,c) DEFINE_ENUM_CONSTANT_INTERN_INTERN(a,b,c)
-#define DEFINE_ENUM_CONSTANT( state, pair, constant ) DEFINE_ENUM_CONSTANT_INTERN( BOOST_PP_TUPLE_ELEM(2, 0, pair),  BOOST_PP_TUPLE_ELEM(2, 1, pair), constant)
+#define TC_DEFINE_ENUM_CONSTANT_INTERN_INTERN( Enum, prefix, constant ) inline constexpr Enum prefix##constant = Enum :: constant;
+#define TC_DEFINE_ENUM_CONSTANT_INTERN(a,b,c) TC_DEFINE_ENUM_CONSTANT_INTERN_INTERN(a,b,c)
+#define TC_DEFINE_ENUM_CONSTANT( state, pair, constant ) TC_DEFINE_ENUM_CONSTANT_INTERN( BOOST_PP_TUPLE_ELEM(2, 0, pair),  BOOST_PP_TUPLE_ELEM(2, 1, pair), constant)
 
 namespace tc::enum_detail {
 	template<typename IntOffset>
@@ -271,32 +270,29 @@ namespace tc::enum_detail {
 	}
 }
 
-#define DEFINE_SCOPED_ENUM_WITH_OFFSET( Enum, prefix, offset, constants ) \
+#define TC_DEFINE_SCOPED_ENUM_WITH_OFFSET( Enum, prefix, offset, constants ) \
 	namespace Enum ## _adl { \
 		enum class Enum : boost::int_max_value_t<tc::enum_detail::max_value_for_underlying_type((offset), BOOST_PP_SEQ_SIZE(constants))>::least { \
 			BOOST_PP_SEQ_HEAD(constants) = offset, \
 			BOOST_PP_SEQ_ENUM( BOOST_PP_SEQ_TAIL(BOOST_PP_SEQ_PUSH_BACK(constants, _END) ) ) \
 		}; \
-		DEFINE_CONTIGUOUS_ENUM(Enum, Enum::BOOST_PP_SEQ_HEAD(constants), Enum::_END) \
-		DEFINE_ENUM_REPORTSTREAM_PIPE( Enum, prefix, constants ) \
+		TC_DEFINE_CONTIGUOUS_ENUM(Enum, Enum::BOOST_PP_SEQ_HEAD(constants), static_cast<Enum>(tc::to_underlying(Enum::_END) - 1)) \
+		TC_DEFINE_ENUM_REPORTSTREAM_PIPE( Enum, prefix, constants ) \
 	} \
 	using Enum ## _adl::Enum;
 
-#define DEFINE_SCOPED_ENUM( Enum, prefix, constants ) \
-	DEFINE_SCOPED_ENUM_WITH_OFFSET( Enum, prefix, 0, constants )
+#define TC_DEFINE_SCOPED_ENUM( Enum, prefix, constants ) \
+	TC_DEFINE_SCOPED_ENUM_WITH_OFFSET( Enum, prefix, 0, constants )
 
-#define DEFINE_ENUM_WITH_OFFSET( Enum, prefix, offset, constants ) \
-	DEFINE_SCOPED_ENUM_WITH_OFFSET( Enum, prefix, offset, constants ) \
-	BOOST_PP_SEQ_FOR_EACH(DEFINE_ENUM_CONSTANT, (Enum, prefix), constants)
+#define TC_DEFINE_ENUM_WITH_OFFSET( Enum, prefix, offset, constants ) \
+	TC_DEFINE_SCOPED_ENUM_WITH_OFFSET( Enum, prefix, offset, constants ) \
+	BOOST_PP_SEQ_FOR_EACH(TC_DEFINE_ENUM_CONSTANT, (Enum, prefix), constants)
 
-#define DEFINE_ENUM( Enum, prefix, constants ) \
-	DEFINE_ENUM_WITH_OFFSET( Enum, prefix, 0, constants )
+#define TC_DEFINE_ENUM( Enum, prefix, constants ) \
+	TC_DEFINE_ENUM_WITH_OFFSET( Enum, prefix, 0, constants )
 
-#define DEFINE_UNPREFIXED_ENUM( Enum, constants ) \
-	DEFINE_ENUM(Enum, , constants)
-
-#define VERIFY_EQUALITY_BETWEEN_ENUMSUPER_AND_ENUMSUB(state, pair, constant) \
-	static_assert(tc::underlying_cast(BOOST_PP_TUPLE_ELEM(2, 0, pair)::constant) == tc::underlying_cast(BOOST_PP_TUPLE_ELEM(2, 1, pair)::constant));
+#define TC_DEFINE_UNPREFIXED_ENUM( Enum, constants ) \
+	TC_DEFINE_ENUM(Enum, , constants)
 
 namespace tc {
 	namespace no_adl {
@@ -326,12 +322,12 @@ namespace tc {
 
 		template<typename EnumSub, typename EnumSuper> requires tc::is_sub_enum_of<EnumSub, EnumSuper>::value
 		constexpr EnumSub explicit_convert_impl(adl_tag_t, tc::type::identity<EnumSub>, EnumSuper const esuper) noexcept {
-			return tc::enum_cast<EnumSub>(tc::underlying_cast(esuper));
+			return tc::from_underlying<EnumSub>(tc::to_underlying(esuper));
 		}
 
 		template<typename EnumSub, typename EnumSuper> requires tc::is_sub_enum_of<EnumSub, EnumSuper>::value
 		constexpr std::optional<EnumSub> explicit_convert_impl(adl_tag_t, tc::type::identity<std::optional<EnumSub>>, EnumSuper const esuper) noexcept {
-			if (auto const n = tc::underlying_cast(esuper); tc::is_enum_value<EnumSub>(n)) {
+			if (auto const n = tc::to_underlying(esuper); tc::is_enum_value<EnumSub>(n)) {
 				return static_cast<EnumSub>(n);
 			} else {
 				return std::nullopt;
@@ -340,9 +336,12 @@ namespace tc {
 	}
 }
 
+#define TC_VERIFY_EQUALITY_BETWEEN_ENUMSUPER_AND_ENUMSUB(state, pair, constant) \
+	static_assert(tc::to_underlying(BOOST_PP_TUPLE_ELEM(2, 0, pair)::constant) == tc::to_underlying(BOOST_PP_TUPLE_ELEM(2, 1, pair)::constant));
+
 #define DEFINE_SUB_ENUM(EnumSuper, EnumSub, prefixsub, constants) \
-	DEFINE_ENUM_WITH_OFFSET(EnumSub, prefixsub, tc::underlying_cast(EnumSuper::BOOST_PP_SEQ_HEAD(constants)), constants) \
-	BOOST_PP_SEQ_FOR_EACH(VERIFY_EQUALITY_BETWEEN_ENUMSUPER_AND_ENUMSUB, (EnumSuper, EnumSub), constants) \
+	TC_DEFINE_ENUM_WITH_OFFSET(EnumSub, prefixsub, tc::to_underlying(EnumSuper::BOOST_PP_SEQ_HEAD(constants)), constants) \
+	BOOST_PP_SEQ_FOR_EACH(TC_VERIFY_EQUALITY_BETWEEN_ENUMSUPER_AND_ENUMSUB, (EnumSuper, EnumSub), constants) \
 	namespace tc::no_adl { \
 		template<> \
 		struct sub_enum_trait<EnumSub> final { \

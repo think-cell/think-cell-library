@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -33,7 +33,7 @@ namespace tc {
 				, m_pred(std::forward<PredRef>(pred))
 			{}
 
-			template<typename Self, typename Sink> requires tc::is_base_of_decayed<take_while_adaptor, Self>::value
+			template<tc::decayed_derived_from<take_while_adaptor> Self, typename Sink> 
 			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
 				tc::common_type_t<decltype(tc::for_each(std::forward<Self>(self).base_range(), sink)),tc::constant<tc::continue_>> breakorcontinue = tc::constant<tc::continue_>();
 				tc::for_each(

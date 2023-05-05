@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -33,7 +33,7 @@ namespace tc {
 			decltype(nitHole) nitGreaterChild;
 			if( nHole < nWithRightChildEnd ) { // hole has right child
 				nitGreaterChild = tc::best(
-					tc::projected(tc::reverse_binary_rel(less), TC_FN(*tc::get<1>)),
+					tc::projected(tc::reverse_binary_rel(less), tc_fn(*tc::get<1>)),
 					IndexAndIterator(nHole * 2 + 1),
 					IndexAndIterator(nHole * 2 + 2)
 				);
@@ -67,7 +67,7 @@ namespace tc {
 			auto vec = tc::make_vector(*rng);
 			boost::range::make_heap(vec, greater);
 			while( auto const it = tc::front<tc::return_element_or_null>(vec) ) {
-				RETURN_IF_BREAK( tc::continue_if_not_break(sink, *it) ); // MAYTHROW
+				tc_yield(sink, *it); // MAYTHROW
 				if( tc::invoke(predKeep, *it) ) {
 					tc::replace_heap(vec, tc::range_value_t<decltype(vec)>(tc_move_always(*it)), greater);
 				} else {

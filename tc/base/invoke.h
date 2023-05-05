@@ -1,14 +1,12 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
-
-#include "assert_defs.h"
 
 #include "return_decltype.h"
 #include "tag_type.h"
@@ -18,6 +16,9 @@
 #include <type_traits>
 
 namespace tc {
+	template<typename T>
+	concept tuple_like = tc::actual_integer<decltype(std::tuple_size<std::remove_reference_t<T>>::value)>;
+
 	namespace invoke_no_adl {
 		//////////////////////////////////////////////////////////////////////////
 		// expanded
@@ -32,9 +33,6 @@ namespace tc {
 				return std::forward<Arg>(arg);
 			}
 		};
-
-		template<typename T>
-		concept tuple_like = tc::is_actual_integer<decltype(std::tuple_size<std::remove_reference_t<T>>::value)>::value;
 
 		template<tuple_like Tuple, typename IndexSeq>
 		struct expanded_tuple;

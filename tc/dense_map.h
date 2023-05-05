@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -24,7 +24,7 @@ namespace tc {
 	namespace no_adl {
 		template<>
 		struct [[nodiscard]] all_values<bool> final {
-			static auto constexpr c_rngsete = tc::transform(tc::iota(0, 2), tc::fn_static_cast<bool>());
+			static auto constexpr c_rngsete = tc::transform(tc::iota_range_constant<0, 2>(), tc::fn_static_cast<bool>());
 
 		public:
 			static constexpr auto begin() noexcept {
@@ -38,7 +38,7 @@ namespace tc {
 			using iterator = const_iterator;
 
 			static constexpr std::size_t index_of(bool b) noexcept {
-				return tc::underlying_cast(b);
+				return tc::to_underlying(b);
 			}
 #ifdef _MSC_VER
 		private:
@@ -47,7 +47,7 @@ namespace tc {
 		};
 
 		template<>
-		struct constexpr_size_base<all_values<bool>> : tc::constant<tc::explicit_cast<std::uint8_t>(2)> {};
+		struct constexpr_size_impl<all_values<bool>> : tc::constant<tc::explicit_cast<std::uint8_t>(2)> {};
 
 		template<>
 		struct [[nodiscard]] all_values<std::strong_ordering> final {
@@ -70,7 +70,7 @@ namespace tc {
 		};
 
 		template<>
-		struct constexpr_size_base<all_values<std::strong_ordering>> : tc::constant<tc::explicit_cast<std::uint8_t>(3)> {};
+		struct constexpr_size_impl<all_values<std::strong_ordering>> : tc::constant<tc::explicit_cast<std::uint8_t>(3)> {};
 
 		template<>
 		struct [[nodiscard]] all_values<std::weak_ordering> final {
@@ -93,7 +93,7 @@ namespace tc {
 		};
 
 		template<>
-		struct constexpr_size_base<all_values<std::weak_ordering>> : tc::constant<tc::explicit_cast<std::uint8_t>(3)> {};
+		struct constexpr_size_impl<all_values<std::weak_ordering>> : tc::constant<tc::explicit_cast<std::uint8_t>(3)> {};
 
 		template<>
 		struct [[nodiscard]] all_values<std::partial_ordering> final {
@@ -116,24 +116,17 @@ namespace tc {
 		};
 
 		template<>
-		struct constexpr_size_base<all_values<std::partial_ordering>> : tc::constant<tc::explicit_cast<std::uint8_t>(4)> {};
+		struct constexpr_size_impl<all_values<std::partial_ordering>> : tc::constant<tc::explicit_cast<std::uint8_t>(4)> {};
 		
 		template<typename... Ts>
 		struct [[nodiscard]] all_values<tc::tuple<Ts...>> final : decltype(tc::cartesian_product(tc::all_values<Ts>()...)) {
-		private:
-			using base_ = decltype(tc::cartesian_product(tc::all_values<Ts>()...));
-		public:
-			constexpr all_values()
-			: base_(tc::cartesian_product(tc::all_values<Ts>()...)) {
-			}
-
 			constexpr std::size_t index_of(tc::tuple<Ts...> const& tpl) const& noexcept {
-				return tc::find_unique<tc::return_element_index>(*this, tpl);
+				return tc::find_unique<tc::return_element_index>(tc::cartesian_product(tc::all_values<Ts>()...), tpl);
 			}
 		};
 
 		template<typename... Ts>
-		struct constexpr_size_base<all_values<tc::tuple<Ts...>>> : tc::constant<tc::size_raw(all_values<tc::tuple<Ts...>>())> {};
+		struct constexpr_size_impl<all_values<tc::tuple<Ts...>>> : tc::constant<tc::size_raw(tc::cartesian_product(tc::all_values<Ts>()...))> {};
 	}
 
 	// all_values are views
@@ -168,19 +161,17 @@ namespace tc {
 			using dense_map_key_type = Key;
 
 			// We cannot tell if *this is constructed using value-initialization syntax or default-initialization syntax. Therefore, we must value-initialize here.
-			template<ENABLE_SFINAE> requires std::is_default_constructible<SFINAE_TYPE(decltype(m_a))>::value // ctors - VS compiler 19.15.26726 didn't sfinae correctly on Array, using decltype(m_a) instead
-			constexpr dense_map() noexcept(std::is_nothrow_default_constructible<decltype(m_a)>::value): m_a{} {}
+			constexpr dense_map() noexcept(std::is_nothrow_default_constructible<decltype(m_a)>::value) requires std::is_default_constructible<decltype(m_a)>::value: m_a{} {}
 
 			// std::is_default_constructible checks for value-initialization, instead of default-initialization. However, T cannot be const, so there should be no observable difference
-			template<ENABLE_SFINAE> requires std::is_default_constructible<SFINAE_TYPE(Value)>::value
-			explicit dense_map(boost::container::default_init_t) noexcept(std::is_nothrow_constructible<Value>::value) {}
+			explicit dense_map(boost::container::default_init_t) noexcept(std::is_nothrow_constructible<Value>::value) requires std::is_default_constructible<Value>::value {}
 
 			template<typename... Args> requires (0 < sizeof...(Args)) // dense_map(fill_tag) could exist, but it should be explicit
 			constexpr dense_map( tc::fill_tag_t, Args&&... val ) noexcept
-			: MEMBER_INIT_CAST(m_a, tc::fill_tag, std::forward<Args>(val)...) {}
+			: tc_member_init_cast(m_a, tc::fill_tag, std::forward<Args>(val)...) {}
 
 			template<typename Rng>
-			constexpr dense_map(tc::range_tag_t, Rng&& rng) noexcept : MEMBER_INIT_CAST( m_a, std::forward<Rng>(rng) ) {}
+			constexpr dense_map(tc::range_tag_t, Rng&& rng) noexcept : tc_member_init_cast( m_a, std::forward<Rng>(rng) ) {}
 
 			// aggregate construction of tc::dense_map does not require tc::aggregate_tag because
 			//   1. number of arguments must be the same as the size of dense_map,
@@ -191,32 +182,33 @@ namespace tc {
 					(!tc::tag<std::remove_reference_t<First>>)
 					&& (tc::econstructionIMPLICIT == tc::elementwise_construction_restrictiveness<Value, First&&, Second&&, Args&&...>::value)
 			constexpr dense_map(First&& first, Second&& second, Args&& ...args) noexcept(noexcept(tc::explicit_cast<decltype(m_a)>(tc::aggregate_tag, std::forward<First>(first), std::forward<Second>(second), std::forward<Args>(args)...)))
-			: MEMBER_INIT_CAST(m_a, tc::aggregate_tag, std::forward<First>(first), std::forward<Second>(second), std::forward<Args>(args)...) {}
+			: tc_member_init_cast(m_a, tc::aggregate_tag, std::forward<First>(first), std::forward<Second>(second), std::forward<Args>(args)...) {}
 
 			template< typename First, typename Second, typename... Args>
 				requires
 					(!tc::tag<std::remove_reference_t<First>>)
 					&& (tc::econstructionEXPLICIT == tc::elementwise_construction_restrictiveness<Value, First&&, Second&&, Args&&...>::value)
 			constexpr explicit dense_map(First&& first, Second&& second, Args&& ...args) noexcept(noexcept(tc::explicit_cast<decltype(m_a)>(tc::aggregate_tag, std::forward<First>(first), std::forward<Second>(second), std::forward<Args>(args)...)))
-				: MEMBER_INIT_CAST( m_a, tc::aggregate_tag, std::forward<First>(first), std::forward<Second>(second), std::forward<Args>(args)... )
+				: tc_member_init_cast( m_a, tc::aggregate_tag, std::forward<First>(first), std::forward<Second>(second), std::forward<Args>(args)... )
 			{}
 
 			template< typename Func > requires tc::is_invocable<Func&, Key>::value
 			constexpr dense_map(tc::func_tag_t, Func func) MAYTHROW
-				: MEMBER_INIT_CAST( m_a, tc::func_tag, [&func](std::size_t n) MAYTHROW -> Value { // force return of Value
-					STATICASSERTSAME(decltype(tc_at_nodebug(c_rngkey, n))&&, Key&&);
+				: tc_member_init_cast( m_a, tc::func_tag, [&func](std::size_t n) MAYTHROW -> Value { // force return of Value
+					//STATICASSERTSAME(decltype(tc_at_nodebug(c_rngkey, n))&&, Key&&); does not hold, if c_rngkey is all_values<tuple<...>>
+					// TODO Remove static_cast<Key> below after we change counting_iterator::operator*() to return small trivial by value.
 					static_assert(
-						std::is_same<Value, decltype(func(std::declval<Key>()))>::value || // guaranteed copy elision, Value does not need to be copy/move constructible
-						tc::is_safely_constructible<Value, decltype(func(std::declval<Key>()))>::value
+						std::is_same<Value, decltype(tc::invoke(func, std::declval<Key>()))>::value || // guaranteed copy elision, Value does not need to be copy/move constructible
+						tc::safely_constructible_from<Value, decltype(tc::invoke(func, std::declval<Key>()))>
 					);
-					return func(tc_at_nodebug(c_rngkey, n));
+					return tc::invoke(func, static_cast<Key>(tc_at_nodebug(c_rngkey, n)));
 				} )
 			{}
 
 			template< typename Func > requires (!tc::is_invocable<Func&, Key>::value)
 			constexpr dense_map(tc::func_tag_t, Func func) MAYTHROW
 				: dense_map(tc::func_tag, [&](auto const key) MAYTHROW -> Value {
-					return {tc::func_tag, [&](auto const... keys) return_decltype_MAYTHROW( func(key, keys...) )};
+					return {tc::func_tag, [&](auto const... keys) return_decltype_MAYTHROW( tc::invoke(func, key, keys...) )};
 				})
 			{}
 
@@ -232,16 +224,14 @@ namespace tc {
 
 			template< typename Func, typename Value2 >
 			constexpr dense_map(transform_tag_t, other_dense_map<Value2> const& mapOther, Func&& func) MAYTHROW
-				: MEMBER_INIT_CAST( m_a, tc::transform(mapOther.m_a, std::forward<Func>(func)) )
+				: tc_member_init_cast( m_a, tc::transform(mapOther.m_a, std::forward<Func>(func)) )
 			{}
 
 			template< typename Func, typename Value2 >
 			constexpr dense_map(transform_tag_t, other_dense_map<Value2>&& mapOther, Func func) MAYTHROW
-				: MEMBER_INIT_CAST( m_a,
+				: tc_member_init_cast( m_a,
 					// TODO rvalue elements for rvalue ranges: tc::transform(tc_move(mapOther.m_a), std::forward<Func>(func))
-					tc::transform(mapOther.m_a, [&](auto& elem) MAYTHROW -> decltype(auto) {
-						return func(static_cast<Value2&&>(elem));
-					})
+					tc::transform(mapOther.m_a, tc::chained(std::forward<Func>(func), tc::fn_static_cast<Value2&&>()))
 				)
 			{}
 
@@ -257,7 +247,7 @@ namespace tc {
 			template <typename Value2>
 				requires (tc::econstructionIMPLICIT==tc::construction_restrictiveness<Value, Value2 const&>::value)
 			constexpr dense_map(other_dense_map<Value2> const& mapOther) noexcept(std::is_nothrow_constructible<Value, Value2 const&>::value)
-				: MEMBER_INIT_CAST( m_a, mapOther.m_a )
+				: tc_member_init_cast( m_a, mapOther.m_a )
 			{}
 
 			template <typename Value2>
@@ -269,7 +259,7 @@ namespace tc {
 			template <typename Value2>
 				requires (tc::econstructionIMPLICIT==tc::construction_restrictiveness<Value, Value2&&>::value)
 			constexpr dense_map(other_dense_map<Value2>&& mapOther) noexcept(std::is_nothrow_constructible<Value, Value2&&>::value)
-				: MEMBER_INIT_CAST( m_a, tc_move(mapOther).m_a )
+				: tc_member_init_cast( m_a, tc_move(mapOther).m_a )
 			{}
 
 			template <typename Value2>
@@ -279,14 +269,14 @@ namespace tc {
 			{}
 
 			template <typename Value2>
-				requires (tc::is_safely_assignable<Value&, Value2 const&>::value)
+				requires (tc::safely_assignable_from<Value&, Value2 const&>)
 			dense_map& operator=(other_dense_map<Value2> const& rhs) & noexcept(std::is_nothrow_assignable<Array, typename other_dense_map<Value2>::Array const&>::value) {
 				tc::cont_assign(m_a, rhs.m_a);
 				return *this;
 			}
 
 			template <typename Value2>
-				requires (tc::is_safely_assignable<Value&, Value2&&>::value)
+				requires (tc::safely_assignable_from<Value&, Value2&&>)
 			dense_map& operator=(other_dense_map<Value2>&& rhs) & noexcept(std::is_nothrow_assignable<Array, typename other_dense_map<Value2>::Array&&>::value) {
 				tc::cont_assign(m_a, tc_move(rhs.m_a));
 				return *this;
@@ -323,21 +313,6 @@ namespace tc {
 			[[nodiscard]] constexpr auto data() const& return_decltype_noexcept(
 				SFINAE_VALUE(m_a).data()
 			)
-
-		private:
-			template<typename Self>
-			static constexpr auto enumerate_(Self&& self) noexcept {
-				if constexpr( std::is_move_constructible<Self>::value ) {
-					return tc::zip(c_rngkey, std::forward<Self>(self));
-				} else {
-					static_assert( !std::is_lvalue_reference<Self>::value );
-					// Cannot static_assert(dependent_false<Self>::value) here.
-					// tc::zip(..., NonMovable()) does not compile, but this overload gets instantiated even if not used.
-				}
-			}
-
-		public:
-			RVALUE_THIS_OVERLOAD_MOVABLE_MUTABLE_REF(enumerate)
 
 			// comparison
 			template<typename Key_, typename LHS, typename RHS>
@@ -390,21 +365,14 @@ namespace tc {
 	using dense_map_adl::dense_map;
 
 	namespace no_adl {
-		template<typename DenseMapOrDerived> requires tc::is_instance_or_derived<dense_map, DenseMapOrDerived>::value
-		struct constexpr_size_base<DenseMapOrDerived>
-			: constexpr_size<tc::all_values<tc::type::front_t<typename is_instance_or_derived<dense_map, DenseMapOrDerived>::arguments>>>
+		template<tc::instance_or_derived<tc::dense_map> DenseMapOrDerived>
+		struct constexpr_size_impl<DenseMapOrDerived>
+			: constexpr_size<tc::all_values<tc::type::front_t<typename tc::is_instance_or_derived<DenseMapOrDerived, dense_map>::arguments>>>
 		{};
 	} // namespace no_adl
 
-	BOOST_MPL_HAS_XXX_TRAIT_DEF(dense_map_key_type)
-	
 	template <typename Map, typename T>
-	struct is_dense_map_with_key final : tc::constant<false> {};
-	
-	template <typename Map, typename T> requires tc::has_dense_map_key_type<Map>::value
-	struct is_dense_map_with_key<Map, T> final
-		: tc::constant<std::is_same<typename Map::dense_map_key_type, T>::value>
-	{};
+	concept indexed_by = std::same_as<typename Map::dense_map_key_type, T>;
 
 	////////////////////
 	// special RangeReturns for dense_maps
@@ -412,8 +380,8 @@ namespace tc {
 	struct return_element_key final {
 		static constexpr bool requires_iterator = true;
 
-		template<typename It, typename DenseMap, typename... Ref>
-		static auto pack_element(It&& it, DenseMap&& rng, Ref&&...) noexcept {
+		template<typename It, typename DenseMap>
+		static auto pack_element(It&& it, DenseMap&& rng, tc::unused /*ref*/={}) noexcept {
 			return tc_at_nodebug(rng.c_rngkey, it - tc::begin(rng));
 		}
 		template<typename DenseMap>
@@ -426,8 +394,8 @@ namespace tc {
 	struct return_element_key_or_none final {
 		static constexpr bool requires_iterator = true;
 
-		template<typename It, typename DenseMap, typename... Ref>
-		static std::optional<typename std::remove_reference_t<DenseMap>::dense_map_key_type> pack_element(It&& it, DenseMap&& rng, Ref&&...) noexcept {
+		template<typename It, typename DenseMap>
+		static std::optional<typename std::remove_reference_t<DenseMap>::dense_map_key_type> pack_element(It&& it, DenseMap&& rng, tc::unused /*ref*/={}) noexcept {
 			return tc_at_nodebug(rng.c_rngkey, it - tc::begin(rng));
 		}
 		template<typename DenseMap>
@@ -438,13 +406,18 @@ namespace tc {
 
 	template <typename Key, typename Func>
 	[[nodiscard]] constexpr auto make_dense_map(tc::func_tag_t, Func&& func) return_ctor_MAYTHROW(
-		TC_FWD(tc::dense_map<Key, tc::decay_t<decltype(tc::as_lvalue(tc::decay_copy(func))(tc_front_nodebug(tc::all_values<Key>())))>>),
-		( tc::func_tag, std::forward<Func>(func) )
+		TC_FWD(tc::dense_map<Key, tc::decay_t<decltype(tc::invoke(tc::as_lvalue(tc::decay_copy(func)), tc_front_nodebug(tc::all_values<Key>())))>>),
+		(tc::func_tag, std::forward<Func>(func))
 	)
 
 	template <typename Key, /*always deduce Ts, otherwise use dense_map<Key, T>*/int = 0, typename... Ts>
 	[[nodiscard]] constexpr auto make_dense_map(tc::fill_tag_t, Ts&&... ts) noexcept {
 		return tc::dense_map<Key, tc::common_type_t<Ts...>>(tc::fill_tag, std::forward<Ts>(ts)...);
+	}
+
+	template <typename Key, typename Rng>
+	[[nodiscard]] constexpr auto make_dense_map(tc::range_tag_t, Rng&& rng) noexcept {
+		return tc::dense_map<Key, tc::range_value_t<Rng>>(tc::range_tag, std::forward<Rng>(rng));
 	}
 
 	template <typename Key, /*always deduce Ts, otherwise use dense_map<Key, T>*/int = 0, typename... Ts>
@@ -456,27 +429,34 @@ namespace tc {
 		///////////////////
 		// all_values specialization dense_maps
 		template< typename Key, typename Value >
-		struct [[nodiscard]] all_values<tc::dense_map<Key,Value> > final {
-			friend auto range_output_t_impl(all_values const&) -> tc::type::list<tc::dense_map<Key, Value>>; // declaration only
-
+		struct [[nodiscard]] all_values<tc::dense_map<Key,Value>> final {
 		private:
-			template< int... Ns >
-			static decltype(auto) InternalGenerate(std::integer_sequence<int, Ns...>) noexcept {
-				auto const AllValues = [](int) noexcept -> decltype(auto) { return tc::all_values<Value>(); };
-				return tc::transform(tc::cartesian_product(AllValues(Ns)...), [](auto&& val0, auto&& val1, auto&& ... vals) noexcept {
-					return tc::make_dense_map<Key>(tc_move_if_owned(val0), tc_move_if_owned(val1), tc_move_if_owned(vals)...);
-				});
-			}
+			using baserng = tc::all_values<tc::type::apply_t<tc::tuple, tc::type::repeat_n_t<tc::size(tc::all_values<Key>()), Value>>>;
+			static constexpr baserng c_baserng{};
+			static constexpr auto c_rngmapkv = tc::transform(c_baserng, tc_fn(tc::dense_map<Key, Value>));
 
 		public:
-			template< typename Func >
-			auto operator()(Func&& func) const& MAYTHROW {
-				return tc::for_each(InternalGenerate(tc::make_integer_sequence<int, 0, tc::enum_count<Key>::value>()), std::forward<Func>(func));
+			static constexpr auto begin() noexcept {
+				return tc::begin(c_rngmapkv);
 			}
+			static constexpr auto end() noexcept {
+				return tc::end(c_rngmapkv);
+			}
+
+			using const_iterator = decltype(tc::begin(c_rngmapkv));
+			using iterator = const_iterator;
+
+			static constexpr std::size_t index_of(tc::dense_map<Key, Value> const& mapkv) noexcept {
+				return c_baserng.index_of(tc::apply([&](auto... key) { return tc::make_tuple(mapkv[key]...); }, tc::all_constants<Key>));
+			}
+#ifdef _MSC_VER
+		private:
+			static auto constexpr _natvis_begin = false; // natvis visualizations cannot call functions even if they are constexpr.
+#endif
 		};
 
 		template<typename Key, typename Value>
-		struct constexpr_size_base<tc::all_values<tc::dense_map<Key,Value>>, void>
+		struct constexpr_size_impl<tc::all_values<tc::dense_map<Key,Value>>>
 			: tc::constant<tc::pow(tc::constexpr_size<tc::all_values<Value>>::value, tc::constexpr_size<tc::all_values<Key>>::value)>
 		{};
 	}
@@ -487,18 +467,35 @@ namespace tc {
 			return std::is_lt(tc::lexicographical_compare_3way(lhs, rhs));
 		}
 	}
+
+	template<tc::instance_or_derived<tc::dense_map> DenseMap, tc::instance_or_derived<tc::dense_map>... DenseMaps>
+	[[nodiscard]] constexpr auto zip(DenseMap&& dm, DenseMaps&&... dms) noexcept {
+		static_assert((tc::indexed_by<std::remove_reference_t<DenseMaps>, typename std::remove_reference_t<DenseMap>::dense_map_key_type> && ...));
+
+		return tc::make_dense_map<
+			typename std::remove_reference_t<DenseMap>::dense_map_key_type
+		>(tc::func_tag, [&](auto const key) noexcept
+			-> tc::tuple<tc::xvalue_decay_t<decltype(std::declval<DenseMap>()[key])>, tc::xvalue_decay_t<decltype(std::declval<DenseMaps>()[key])>...>
+		{
+			return {std::forward<DenseMap>(dm)[key], std::forward<DenseMaps>(dms)[key]...};
+		});
+	}
+
+	template<tc::instance_or_derived<tc::dense_map> DenseMap>
+	[[nodiscard]] constexpr auto enumerate(DenseMap&& dm) noexcept {
+		using Key = typename std::remove_reference_t<DenseMap>::dense_map_key_type;
+		return tc::zip(tc::dense_map<Key, Key>(tc::func_tag, tc::identity()), std::forward<DenseMap>(dm));
+	}
 }
 
 #define TC_DENSE_MAP_SUPPORT_1(class_name) \
 	TC_DENSE_MAP_SUPPORT_2(class_name, tc::type::deducible_identity_t)
 
 #define TC_DENSE_MAP_SUPPORT_2(class_name, value_template) \
-	template <ENABLE_SFINAE> requires std::is_default_constructible<SFINAE_TYPE(base_)>::value \
-	class_name() noexcept(std::is_nothrow_default_constructible<base_>::value) \
+	class_name() noexcept(std::is_nothrow_default_constructible<base_>::value) requires std::is_default_constructible<base_>::value \
 		: base_() {} \
 	\
-	template <ENABLE_SFINAE> requires std::is_constructible<SFINAE_TYPE(base_), boost::container::default_init_t>::value \
-	explicit class_name(boost::container::default_init_t) noexcept(std::is_nothrow_constructible<base_, boost::container::default_init_t>::value) \
+	explicit class_name(boost::container::default_init_t) noexcept(std::is_nothrow_constructible<base_, boost::container::default_init_t>::value) requires std::is_constructible<base_, boost::container::default_init_t>::value \
 		: base_(boost::container::default_init) {} \
 	\
 	/* inherit default ctor and constructors with at least two arguments from dense_map*/ \
@@ -529,14 +526,14 @@ namespace tc {
 	\
 	/* inherit implicit and explicit copy and move constructors from dense_map (only if argument is actual dense_map<base_::dense_map_key_type, T>) as explict constructors*/ \
 	template <typename K, typename T2> \
-		requires tc::is_explicit_castable<base_, tc::dense_map<K, T2> const&>::value \
+		requires tc::explicit_castable_from<base_, tc::dense_map<K, T2> const&> \
 	explicit class_name(tc::dense_map<K, T2> const& other) noexcept(std::is_nothrow_constructible<base_, tc::dense_map<K, T2> const&>::value) \
 		: base_(other) \
 	{ \
 		STATICASSERTSAME(K, typename base_::dense_map_key_type); /*Should use tc::dense_map<dense_map_key_type, T2> for parameter above, but MSVC turns this into dense_map<int, T2>*/ \
 	} \
 	template <typename K, typename T2> \
-		requires tc::is_explicit_castable<base_, tc::dense_map<K, T2>&&>::value \
+		requires tc::explicit_castable_from<base_, tc::dense_map<K, T2>&&> \
 	explicit class_name(tc::dense_map<K, T2>&& other) noexcept(std::is_nothrow_constructible<base_, tc::dense_map<K, T2>&&>::value) \
 		: base_(other) \
 	{ \
@@ -545,14 +542,14 @@ namespace tc {
 	\
 	/* inherit assignment */ \
 	template <typename T2> \
-		requires tc::is_safely_assignable<base_&, typename class_name<T2>::base_ const&>::value \
+		requires tc::safely_assignable_from<base_&, typename class_name<T2>::base_ const&> \
 	class_name& operator=(class_name<T2> const& rhs) & noexcept(std::is_nothrow_assignable<base_, typename class_name<T2>::base_ const&>::value) { \
 		tc::base_cast<base_>(*this)=tc::base_cast<typename class_name<T2>::base_>(rhs); \
 		return *this; \
 	} \
 	\
 	template <typename T2> \
-		requires tc::is_safely_assignable<base_&, typename class_name<T2>::base_&&>::value \
+		requires tc::safely_assignable_from<base_&, typename class_name<T2>::base_&&> \
 	class_name& operator=(class_name<T2>&& rhs) & noexcept(std::is_nothrow_assignable<base_, typename class_name<T2>::base_&&>::value) { \
 		tc::base_cast<base_>(*this)=tc::base_cast<typename class_name<T2>::base_>(tc_move(rhs)); \
 		return *this; \
@@ -573,7 +570,11 @@ namespace tc {
 	template< typename Arg, typename... Args> requires (std::is_same<tc::decay_t<Arg>, tc::decay_t<Args>>::value && ...) \
 	template_name(Arg&&, Args&&...) -> template_name<type_function<tc::decay_t<Arg>>>; \
 	template< typename Rng > \
-	template_name(tc::range_tag_t, Rng&&) -> template_name< type_function< tc::range_value_t<Rng> > >;
+	template_name(tc::range_tag_t, Rng&&) -> template_name< type_function< tc::range_value_t<Rng> > >; \
+	template< typename DenseMap, typename Func > \
+	template_name(tc::transform_tag_t, DenseMap&&, Func&&) -> template_name< type_function< tc::transform_value_t<Func, decltype(std::declval<DenseMap>()[{}])> > >; \
+	template< typename Key, typename ValuePri, typename ValueSec > requires std::same_as<tc::decay_t<ValuePri>, tc::decay_t<ValueSec>> && std::same_as<Key, typename template_name<type_function<tc::decay_t<ValuePri>>>::dense_map_key_type> \
+	template_name(Key, ValuePri&&, ValueSec&&) -> template_name<type_function<tc::decay_t<ValuePri>>>;
 
 #define TC_DENSE_MAP_DEDUCTION_GUIDES(...) \
 	TC_EXPAND(BOOST_PP_OVERLOAD(TC_DENSE_MAP_DEDUCTION_GUIDES_, __VA_ARGS__)(__VA_ARGS__))

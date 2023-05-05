@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -38,9 +38,10 @@ namespace tc {
 		struct chunk_range_sink {
 			Sink& m_sink;
 
+			auto chunk(RngChunk rng) const& return_decltype_MAYTHROW(m_sink(static_cast<RngChunk&&>(rng)))
+
 			template<typename T>
-			auto operator()(T&& t) const& noexcept { return chunk(tc::single(std::forward<T>(t))); }
-			auto chunk(RngChunk rng) const& noexcept { return m_sink(static_cast<RngChunk&&>(rng)); }
+			auto operator()(T&& t) const& return_decltype_MAYTHROW(chunk(tc::single(std::forward<T>(t))))
 		};
 
 		template<typename RngChunk, typename Rng>
@@ -158,3 +159,10 @@ namespace tc {
 #define TEST_NOT_EQUAL(EXPECT, IS) _ASSERT(!(EXPECT == IS));
 
 #define STATIC_ASSERT(...) static_assert((__VA_ARGS__), #__VA_ARGS__ " is not true.")
+
+
+#if defined(__clang__) || defined(_MSC_VER)
+	#define GCC_WORKAROUND_STATIC_ASSERT static_assert
+#else // Fixed in GCC 13: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=92505
+	#define GCC_WORKAROUND_STATIC_ASSERT _ASSERT
+#endif

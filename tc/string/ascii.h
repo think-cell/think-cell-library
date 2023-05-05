@@ -1,13 +1,14 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
+#include "value_restrictive.h"
 #include "../base/assert_defs.h"
 #include "../base/explicit_cast.h"
 #include "../range/meta.h"
@@ -20,40 +21,40 @@ namespace tc {
 	// cast may not be necessary, but let's avoid problems even in case of user-defined T
 	template< typename T >
 	[[nodiscard]] constexpr bool isasciidigit( T ch ) noexcept {
-		return tc::explicit_cast<T>('0')<=ch && ch<=tc::explicit_cast<T>('9');
+		return tc::char_ascii('0')<=ch && ch<=tc::char_ascii('9');
 	}
 
 	template< typename T >
 	[[nodiscard]] constexpr bool isasciixdigit( T ch ) noexcept {
 		return isasciidigit(ch)
-			|| (tc::explicit_cast<T>('A')<=ch && ch<=tc::explicit_cast<T>('F'))
-			|| (tc::explicit_cast<T>('a')<=ch && ch<=tc::explicit_cast<T>('f'));
+			|| (tc::char_ascii('A')<=ch && ch<=tc::char_ascii('F'))
+			|| (tc::char_ascii('a')<=ch && ch<=tc::char_ascii('f'));
 	}
 
 	template< typename T >
 	[[nodiscard]] constexpr bool isasciiupper( T ch ) noexcept {
-		return tc::explicit_cast<T>('A')<=ch && ch<=tc::explicit_cast<T>('Z');
+		return tc::char_ascii('A')<=ch && ch<=tc::char_ascii('Z');
 	}
 
 	template< typename T >
 	[[nodiscard]] constexpr bool isasciilower( T ch ) noexcept {
-		return tc::explicit_cast<T>('a')<=ch && ch<=tc::explicit_cast<T>('z');
+		return tc::char_ascii('a')<=ch && ch<=tc::char_ascii('z');
 	}
 
 	template< typename T >
 	[[nodiscard]] constexpr bool isasciicntrl( T ch ) noexcept {
-		return (tc::explicit_cast<T>('\0')<=ch && ch<=tc::explicit_cast<T>('\x1f')) || tc::explicit_cast<T>('\x7f')==ch;
+		return (tc::char_ascii('\0')<=ch && ch<=tc::char_ascii('\x1f')) || tc::char_ascii('\x7f')==ch;
 	}
 
 	template< typename T >
 	[[nodiscard]] constexpr bool isasciiblank( T ch ) noexcept {
-		return tc::explicit_cast<T>('\t')==ch || tc::explicit_cast<T>(' ')==ch;
+		return tc::char_ascii('\t')==ch || tc::char_ascii(' ')==ch;
 	}
 
 	template< typename T >
 	[[nodiscard]] constexpr bool isasciispace( T ch ) noexcept {
 		return tc::isasciiblank(ch) ||
-			(tc::explicit_cast<T>('\xa')<=ch && ch<=tc::explicit_cast<T>('\xd')); // \n, \v, \f, \r
+			(tc::char_ascii('\xa')<=ch && ch<=tc::char_ascii('\xd')); // \n, \v, \f, \r
 	}
 
 	template< typename T >
@@ -76,12 +77,12 @@ namespace tc {
 
 	template<typename Rng>
 	decltype(auto) transform_asciiupper(Rng&& rng) noexcept { // return_decltype_noexcept in C++20
-		return tc::transform( std::forward<Rng>(rng), TC_FN(tc::toasciiupper) );
+		return tc::transform( std::forward<Rng>(rng), tc_fn(tc::toasciiupper) );
 	}
 
 	template<typename Rng>
 	decltype(auto) transform_asciilower(Rng&& rng) noexcept { // return_decltype_noexcept in C++20
-		return tc::transform( std::forward<Rng>(rng), TC_FN(tc::toasciilower) );
+		return tc::transform( std::forward<Rng>(rng), tc_fn(tc::toasciilower) );
 	}
 
 	namespace rfc3986 {
@@ -93,26 +94,26 @@ namespace tc {
 			return tc::isasciilower(ch)
 				|| tc::isasciiupper(ch)
 				|| tc::isasciidigit(ch)
-				|| tc::explicit_cast<T>('-')==ch
-				|| tc::explicit_cast<T>('.')==ch
-				|| tc::explicit_cast<T>('_')==ch
-				|| tc::explicit_cast<T>('~')==ch;
+				|| tc::char_ascii('-')==ch
+				|| tc::char_ascii('.')==ch
+				|| tc::char_ascii('_')==ch
+				|| tc::char_ascii('~')==ch;
 		};
 
 		template<typename T>
 		bool is_subdelim(T ch) noexcept {
 			// sub-delims    = "!" / "$" / "&" / "'" / "(" / ")" / "*" / "+" / "," / ";" / "="
-			return tc::explicit_cast<T>('!')==ch
-				|| tc::explicit_cast<T>('$')==ch
-				|| tc::explicit_cast<T>('&')==ch
-				|| tc::explicit_cast<T>('\'')==ch
-				|| tc::explicit_cast<T>('(')==ch
-				|| tc::explicit_cast<T>(')')==ch
-				|| tc::explicit_cast<T>('*')==ch
-				|| tc::explicit_cast<T>('+')==ch
-				|| tc::explicit_cast<T>(',')==ch
-				|| tc::explicit_cast<T>(';')==ch
-				|| tc::explicit_cast<T>('=')==ch;
+			return tc::char_ascii('!')==ch
+				|| tc::char_ascii('$')==ch
+				|| tc::char_ascii('&')==ch
+				|| tc::char_ascii('\'')==ch
+				|| tc::char_ascii('(')==ch
+				|| tc::char_ascii(')')==ch
+				|| tc::char_ascii('*')==ch
+				|| tc::char_ascii('+')==ch
+				|| tc::char_ascii(',')==ch
+				|| tc::char_ascii(';')==ch
+				|| tc::char_ascii('=')==ch;
 		};
 
 		template<typename T>
@@ -120,8 +121,8 @@ namespace tc {
 			//pchar         = unreserved / pct-encoded / sub-delims / ":" / "@"
 			return tc::rfc3986::is_unreserved(ch)
 				|| tc::rfc3986::is_subdelim(ch)
-				|| tc::explicit_cast<T>(':')==ch
-				|| tc::explicit_cast<T>('@')==ch;
+				|| tc::char_ascii(':')==ch
+				|| tc::char_ascii('@')==ch;
 		};
 	}
 
@@ -131,7 +132,7 @@ namespace tc {
 			// Other ASCII control characters may be added here as exceptions.
 			_ASSERTE((ch >= 0x20 && ch <= 0x7E) || ch == '\r' || ch == '\n' || ch == '\t');
 
-			return tc::underlying_cast(ch);
+			return tc::to_underlying(ch);
 		}
 	}
 }

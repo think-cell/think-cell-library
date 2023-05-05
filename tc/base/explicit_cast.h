@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -19,22 +19,22 @@ namespace tc {
 	DEFINE_FN2_TMPL( explicit_cast, (typename) )
 
 	namespace explicit_convert_adl {
-		template<typename TTarget, typename TSource> requires tc::is_char<TTarget>::value && tc::is_char<TSource>::value
+		template<tc::char_type TTarget, tc::char_type TSource>
 		constexpr TTarget explicit_convert_impl(adl_tag_t, tc::type::identity<TTarget>, TSource src) noexcept {
 			static_assert(tc::decayed<TTarget>);
-			_ASSERTE(tc::char_in_range<TSource>(tc::underlying_cast(src)));
-			_ASSERTE(tc::char_in_range<TTarget>(tc::underlying_cast(src)));
+			_ASSERTE(tc::char_in_range<TSource>(tc::to_underlying(src)));
+			_ASSERTE(tc::char_in_range<TTarget>(tc::to_underlying(src)));
 			return static_cast<TTarget>(src);
 		}
 
-		template<typename TTarget, typename TSource> requires tc::is_actual_integer<TTarget>::value && std::is_floating_point<TSource>::value
+		template<tc::actual_integer TTarget, std::floating_point TSource>
 		TTarget explicit_convert_impl(adl_tag_t, tc::type::identity<TTarget>, TSource src) noexcept {
 			TTarget target=static_cast<TTarget>(src);
 			_ASSERTDEBUGEQUAL( target,src ); // default round-to-zero from floating point to integer is wrong most of the time, so we force rounding first
 			return target;
 		}
 
-		template<typename TTarget, typename TSource> requires std::is_floating_point<TTarget>::value && tc::is_actual_integer<TSource>::value
+		template<std::floating_point TTarget, tc::actual_integer TSource>
 		constexpr TTarget explicit_convert_impl(adl_tag_t, tc::type::identity<TTarget>, TSource src) noexcept {
 			return static_cast<TTarget>(src); // silence warning for int to float conversion
 		}
@@ -48,7 +48,7 @@ MODIFY_WARNINGS_BEGIN(
 	((disable)(4388)) // signed/unsigned mismatch
 )
 #endif
-		template<typename TTarget, typename TSource> requires tc::is_actual_integer<TTarget>::value && tc::is_actual_integer<TSource>::value
+		template<tc::actual_integer TTarget, tc::actual_integer TSource>
 		constexpr TTarget explicit_convert_impl(adl_tag_t, tc::type::identity<TTarget>, TSource src) noexcept {
 			_ASSERTE(
 				(
@@ -108,7 +108,7 @@ MODIFY_WARNINGS_END
 
 		// tc::constant
 
-		template<typename T, T t, typename TSource> requires tc::is_explicit_castable<T, TSource&&>::value
+		template<typename T, T t, typename TSource> requires tc::explicit_castable_from<T, TSource&&>
 		constexpr tc::constant<t> explicit_convert_impl(adl_tag_t, tc::type::identity<std::integral_constant<T, t>>, TSource&& source) noexcept {
 			_ASSERTE(t == tc::explicit_cast<T>(std::forward<TSource>(source)));
 			return {};
@@ -120,7 +120,7 @@ MODIFY_WARNINGS_END
 			template<typename... Args>
 			struct [[nodiscard]] return_cast_impl final : tc::nonmovable {
 				tc::tuple<Args&&...> m_tuple;
-				template<typename TTarget> requires tc::is_explicit_castable<TTarget, Args...>::value
+				template<tc::explicit_castable_from<Args...> TTarget> 
 				constexpr operator TTarget() && return_MAYTHROW(
 					tc::apply(tc::fn_explicit_cast<std::remove_cv_t<TTarget>>(), tc_move(m_tuple))
 				)
@@ -137,19 +137,19 @@ MODIFY_WARNINGS_END
 		}
 	}
 
-	// operator+ casts to xvalue to disallow RETURN_CAST in function with auto return type.
-	#define RETURN_CAST/*(...)*/ \
+	// operator+ casts to xvalue to disallow tc_return_cast in function with auto return type.
+	#define tc_return_cast/*(...)*/ \
 		return +tc::return_cast_detail::return_cast /*(__VA_ARGS__)*/
 
 	DEFINE_FN2_TMPL( reluctant_explicit_cast, (typename) )
 
 	template<typename Target, typename Source>
 	[[nodiscard]] Target explicit_cast_with_rounding(Source&& src) noexcept {
-		if constexpr( std::is_floating_point< tc::decay_t<Source> >::value && tc::is_actual_integer< Target >::value ) {
+		if constexpr( std::floating_point< tc::decay_t<Source> > && tc::actual_integer< Target > ) {
 			double srcRounded=std::floor( static_cast<double>(std::forward<Source>(src))+.5 );
-			RETURN_CAST(srcRounded);
+			tc_return_cast(srcRounded);
 		} else {
-			RETURN_CAST(src);
+			tc_return_cast(src);
 		}
 	}
 
@@ -169,30 +169,30 @@ MODIFY_WARNINGS_END
 		struct is_value_safely_constructible<TTarget, lazy_explicit_cast<TTarget, Args...>&&> : tc::constant<true> {};
 	}
 
-	template<typename T, typename... Args>
+	template<typename T, typename... Args> requires tc::explicit_castable_from<T, Args&&...>
 	constexpr tc::no_adl::lazy_explicit_cast<T, Args...> lazy_explicit_cast(Args&&... args) noexcept {
 		return { {}, tc::forward_as_tuple(std::forward<Args>(args)...) };
 	}
 
 	namespace detail {
-		template<typename T, typename Func, typename... Args>
-		constexpr decltype(auto) with_lazy_explicit_cast_impl(tc::constant<true>, Func func, Args&&... args) return_MAYTHROW(
+		template<typename T, typename Func, typename... Args> requires tc::safely_constructible_from<T, Args&&...>
+		constexpr decltype(auto) with_lazy_explicit_cast_impl(Func func, Args&&... args) return_MAYTHROW(
 			func(std::forward<Args>(args)...)
 		)
 
-		template<typename T, typename Func, typename... Args>
-		constexpr decltype(auto) with_lazy_explicit_cast_impl(tc::constant<false>, Func func, Args&&... args) return_MAYTHROW(
+		template<typename T, typename Func, typename... Args> requires (!tc::safely_constructible_from<T, Args&&...>)
+		constexpr decltype(auto) with_lazy_explicit_cast_impl(Func func, Args&&... args) return_MAYTHROW(
 			func(tc::lazy_explicit_cast<T>(std::forward<Args>(args)...))
 		)
 	}
 
 	template<typename T, typename Func, typename... Args>
 	constexpr decltype(auto) with_lazy_explicit_cast(Func&& func, Args&&... args) return_MAYTHROW(
-		tc::detail::with_lazy_explicit_cast_impl<T>(tc::is_safely_constructible<T, Args&&...>{}, std::forward<Func>(func), std::forward<Args>(args)...)
+		tc::detail::with_lazy_explicit_cast_impl<T>(std::forward<Func>(func), std::forward<Args>(args)...)
 	)
 
 	namespace explicit_convert_adl {
-		template<typename T, typename... TSource> requires tc::is_explicit_castable<T, TSource&&...>::value
+		template<typename T, typename... TSource> requires tc::explicit_castable_from<T, TSource&&...>
 		constexpr std::optional<T> explicit_convert_impl(adl_tag_t, tc::type::identity<std::optional<T>>, std::in_place_t, TSource&&... src) MAYTHROW {
 			return tc::with_lazy_explicit_cast<T> (
 				[](auto&&... args) return_ctor_MAYTHROW(std::optional<T>, (std::in_place, tc_move_if_owned(args)...)),

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -19,6 +19,8 @@
 #include "../static_vector.h"
 
 #include "ascii.h"
+#include "value_restrictive.h"
+
 #include <boost/version.hpp>
 
 #ifndef __clang__
@@ -109,11 +111,28 @@ namespace tc {
 	}
 
 	namespace no_adl {
-		template<typename Char> requires tc::is_char<Char>::value
-		struct char_encoding final {
+		template<typename Char>
+		struct char_encoding;
+
+		template<tc::char_type Char>
+		struct char_encoding<Char> final {
 			using char_type = Char;
+
 			static constexpr bool ischar(int) noexcept {
 				return true;
+			}
+			static ::boost::uint32_t toucs4(int ch) noexcept { // for debug only
+				return ch;
+			}
+		};
+
+		template<tc::char_type T, T tFirst, T tLast>
+		struct char_encoding<tc::value_restrictive<T, tFirst, tLast>> final {
+			using char_type = tc::value_restrictive<T, tFirst, tLast>;
+
+			template<tc::char_like Char>
+			static constexpr bool ischar(Char ch) noexcept {
+				return char_type(tFirst) <= ch && ch <= char_type(tLast); // We reuse the SFINAE from the comparison operators of value_restrictive.
 			}
 			static ::boost::uint32_t toucs4(int ch) noexcept { // for debug only
 				return ch;
@@ -172,7 +191,7 @@ namespace tc {
 		return tc_move_if_owned(rng);
 	}
 
-	template<typename Char> requires tc::is_char<Char>::value
+	template<tc::char_type Char>
 	constexpr x3::literal_char<
 		tc::char_encoding<Char>,
 		x3::unused_type
@@ -182,14 +201,14 @@ namespace tc {
 
 	template<typename Char>
 	using literal_string_type = x3::literal_string<
-		tc::ptr_range<Char const>,
+		tc::span<Char const>,
 		tc::char_encoding<Char>,
 		x3::unused_type
 	>;
 
-	template<typename Str> requires tc::is_safely_convertible<Str&&, tc::ptr_range<tc::range_value_t<Str> const>>::value
+	template<typename Str> requires tc::safely_convertible_to<Str&&, tc::span<tc::range_value_t<Str> const>>
 	constexpr auto lit(Str&& str) noexcept {
-		static_assert(!tc::is_instance</*tc::string*/std::basic_string, Str>::value, "tc::lit won't own string data. Use tc::as_lvalue or x3::lit.");
+		static_assert(!tc::instance<Str, std::basic_string>, "tc::lit won't own string data. Use tc::as_lvalue or x3::lit.");
 		return literal_string_type<tc::range_value_t<Str>>(std::forward<Str>(str));
 	}
 }
@@ -199,7 +218,7 @@ namespace boost::spirit::x3 {
 	struct get_info<tc::literal_string_type<Char>> {
 		using result_type = std::basic_string<char>/*external interface*/;
 		result_type operator()(tc::literal_string_type<Char> const& p) const& noexcept {
-			return modified(result_type(), tc::append(_, p.str));
+			return tc_modified(result_type(), tc::append(_, p.str));
 		}
 	};
 }
@@ -228,7 +247,7 @@ namespace tc {
 
 	template<typename T>
 	inline constexpr no_adl::attr_is_type<T> attr_is = {};
-	
+
 	namespace no_adl {
 		template<typename T>
 		struct value_restrictive_parser final : x3::char_parser<value_restrictive_parser<T>> {
@@ -257,7 +276,7 @@ namespace tc {
 		struct asciilit_impl final: x3::parser<asciilit_impl> {
 			static bool const has_attribute = false;
 			using attribute_type = x3::unused_type;
-			explicit constexpr asciilit_impl(tc::ptr_range<char const> str) noexcept: m_str(tc_move(str)) {
+			explicit constexpr asciilit_impl(tc::span<char const> str) noexcept: m_str(tc_move(str)) {
 				_ASSERTE(tc::all_of(m_str, [](char const ch) constexpr noexcept { return '\0'<=ch && ch<='\x7f'; }));
 			}
 
@@ -273,7 +292,7 @@ namespace tc {
 				return false;
 			}
 		private:
-			tc::ptr_range<char const> m_str;
+			tc::span<char const> m_str;
 		};
 	}
 
@@ -293,7 +312,7 @@ namespace tc {
 				// ' '	(0x20) space (SPC)
 				// '\t'	(0x09) horizontal tab (TAB)
 				// TODO: support unicode?
-				return tc::explicit_cast<CharType>(' ')==ch || tc::explicit_cast<CharType>('\t')==ch;
+				return tc::char_ascii(' ')==ch || tc::char_ascii('\t')==ch;
 			}
 		};
 
@@ -311,7 +330,7 @@ namespace tc {
 				// '\f'	(0x0c) feed (FF)
 				// '\r'	(0x0d) carriage return (CR)
 				// TODO: support unicode?
-				return tc::explicit_cast<CharType>(' ')==ch || (tc::explicit_cast<CharType>('\t')<=ch && ch<=tc::explicit_cast<CharType>('\r'));
+				return tc::char_ascii(' ')==ch || (tc::char_ascii('\t')<=ch && ch<=tc::char_ascii('\r'));
 			}
 		};
 	}

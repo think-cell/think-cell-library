@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -14,12 +14,12 @@
 
 namespace tc
 {
-	namespace no_adl
+	namespace iterator_facade_detail
 	{
-		template< typename T >
-		struct iterator_facade_value_wrapper final {
+		template<typename T>
+		struct value_wrapper final {
 			template<typename It>
-			constexpr iterator_facade_value_wrapper(It const& it) noexcept(noexcept(*it))
+			constexpr value_wrapper(It const& it) noexcept(noexcept(*it))
 				: m_value(*it)
 			{}
 
@@ -29,12 +29,32 @@ namespace tc
 		private:
 			T m_value;
 		};
+
+#ifdef _MSC_VER
+		// Due to a bug in the MSVC standard library, we need to allow std::ptrdiff_t as distance type as well.
+		// Note that this is only the type in the interface of the operators, not the actual one as reported by the traits.
+		// https://github.com/microsoft/STL/issues/3663
+		template <typename It>
+		using difference_type = std::ptrdiff_t;
+#else
+		template <typename It>
+		using difference_type = typename std::iterator_traits<std::decay_t<It>>::difference_type;
+#endif
+	
+		template <typename It>	
+		constexpr auto as_difference_type(difference_type<It> value) noexcept {
+			using actual_difference_type = typename std::iterator_traits<std::decay_t<It>>::difference_type;
+			return tc::explicit_cast<actual_difference_type>(value);
+		}
+
+		struct TC_EMPTY_BASES iterator_facade_base{};
+
+		template <typename T>
+		concept iterator_facade = std::is_base_of<iterator_facade_base, std::decay_t<T>>::value;
 	}
 
 	namespace iterator_facade_adl
 	{
-		tc::constant<false> is_iterator_facade_derived_impl(...);
-
 		// This base class implements several iterator operators in terms of other operators.
 		//
 		// iterator_facade relies on the following members being implemented in the derived class:
@@ -48,107 +68,85 @@ namespace tc
 		//   iterator& operator--()
 		//
 		// For random access traversal:
-		//   iterator& operator+=(iterator&, difference_type)
+		//   void iterator::advance(difference_type)
 		//   difference_type operator-(iterator const&, iterator const&)
+		template<typename Derived>
+		struct TC_EMPTY_BASES iterator_facade : iterator_facade_detail::iterator_facade_base {
+			template<typename It = Derived>
+			constexpr decltype(auto) operator->() const& noexcept(noexcept(*std::declval<It const&>())) {
+				auto& self = tc::derived_cast<Derived>(*MSVC_WORKAROUND_THIS);
 
-		template< typename Derived >
-		struct TC_EMPTY_BASES iterator_facade {
-			template< typename Derived_ = Derived >
-			constexpr auto operator[](typename std::iterator_traits<Derived_>::difference_type index) const& return_decltype_MAYTHROW(
-				*(derived_cast<Derived_>(*MSVC_WORKAROUND_THIS) + index)
-			)
-			
-			template< typename Derived_ = Derived >
-			constexpr decltype(auto) operator->() const& noexcept(noexcept(*std::declval<Derived const&>())) {
-				static_assert(std::is_same<Derived_, Derived>::value);
-				using reference = decltype(*std::declval<Derived const&>());
-				
+				using reference = decltype(*std::declval<It const&>());
 				if constexpr (std::is_reference<reference>::value) {
 					// There are no rvalue pointers; return a pointer even if operator* returns an rvalue reference.
 					// std::addressof will not accept an rvalue reference argument
-					return std::addressof(tc::as_lvalue(**derived_cast<Derived>(MSVC_WORKAROUND_THIS)));
+					return std::addressof(tc::as_lvalue(*self));
 				} else {
-					// If operator* returns a value type (e.g. for transform_adaptor iterators) then operator-> returns a proxy instead of a pointer
-					
 					// If operator* returns a const or volatile object by value, it's not clear whether we should keep that qualifier
 					static_assert(std::is_same<reference, std::remove_cv_t<reference>>::value, "Iterator dereferencing should not result in a const or volatile value type");
 
-					return no_adl::iterator_facade_value_wrapper<reference>(*derived_cast<Derived>(MSVC_WORKAROUND_THIS));
+					// If operator* returns a value type (e.g. for transform_adaptor iterators) then operator-> returns a proxy instead of a pointer
+					return iterator_facade_detail::value_wrapper<reference>(self);
 				}
 			}
 
-			friend tc::constant<true> is_iterator_facade_derived_impl(iterator_facade const&);
+			template<typename It = Derived>
+			constexpr auto operator[](iterator_facade_detail::difference_type<It> index) const& return_decltype_xvalue_by_ref_MAYTHROW(
+				*(tc::derived_cast<It>(*MSVC_WORKAROUND_THIS) + iterator_facade_detail::as_difference_type<It>(index))
+			)
+			template<typename It = Derived>
+			constexpr auto operator[](iterator_facade_detail::difference_type<It> index) && return_decltype_xvalue_by_ref_MAYTHROW(
+				*(tc::derived_cast<It>(*MSVC_WORKAROUND_THIS) += iterator_facade_detail::as_difference_type<It>(index))
+			)
 		};
 
-		// The operators are found using ADL. ADL can find these operators even if the operand does not inherit from iterator_facade,
-		// so we also check is_iterator_facade_derived using SFINAE.
-		template< typename T >
-		struct is_iterator_facade_derived : decltype(is_iterator_facade_derived_impl(std::declval<T const&>())) {};
-
-		template< typename It, std::enable_if_t<is_iterator_facade_derived<It>::value>* = nullptr >
-		constexpr auto operator <(It const& itLhs, It const& itRhs) return_decltype_noexcept(
-			(itLhs - itRhs) < 0
-		)
-
-		template< typename It, std::enable_if_t<is_iterator_facade_derived<It>::value>* = nullptr >
-		constexpr auto operator >(It const& itLhs, It const& itRhs) return_decltype_noexcept(
-			itRhs < itLhs
-		)
-
-		template< typename It, std::enable_if_t<is_iterator_facade_derived<It>::value>* = nullptr >
-		constexpr auto operator <=(It const& itLhs, It const& itRhs) return_decltype_noexcept(
-			!(itRhs < itLhs)
-		)
-
-		template< typename It, std::enable_if_t<is_iterator_facade_derived<It>::value>* = nullptr >
-		constexpr auto operator >=(It const& itLhs, It const& itRhs) return_decltype_noexcept(
-			!(itLhs < itRhs)
-		)
-
-		template< typename It, std::enable_if_t<is_iterator_facade_derived<It>::value>* = nullptr, typename ItDecayed = tc::decay_t<It> >
-		constexpr auto operator +(It&& itLhs, typename std::iterator_traits<ItDecayed>::difference_type rhs) noexcept(std::is_nothrow_constructible<ItDecayed, It&&>::value && noexcept(std::declval<ItDecayed&>() += rhs)) {
-			ItDecayed itResult = std::forward<It>(itLhs);
-			itResult += rhs;
-			return itResult;
-		}
-
-		template< typename It, std::enable_if_t<is_iterator_facade_derived<It>::value>* = nullptr >
-		constexpr auto operator +(typename std::iterator_traits<tc::decay_t<It>>::difference_type lhs, It&& itRhs) noexcept(noexcept(std::forward<It>(itRhs) + lhs)) {
-			return std::forward<It>(itRhs) + lhs;
-		}
-
-		// tc::decay_t should be std::void_t when it works properly in MSVC
-		template<
-			typename It,
-			std::enable_if_t<is_iterator_facade_derived<It>::value>* = nullptr,
-			tc::decay_t<decltype(std::declval<It&>() += tc::explicit_cast<typename std::iterator_traits<tc::decay_t<It>>::difference_type>(-std::declval<typename std::iterator_traits<tc::decay_t<It>>::difference_type>()))>* = nullptr
-		>
-		constexpr auto operator -=(It& itLhs, typename std::iterator_traits<It>::difference_type rhs) noexcept(noexcept(std::declval<It&>() += tc::explicit_cast<decltype(rhs)>(-rhs))) {
-			itLhs += tc::explicit_cast<decltype(rhs)>(-rhs);
-			return itLhs;
-		}
-
-		// tc::decay_t should be std::void_t when it works properly in MSVC
-		template< typename It, std::enable_if_t<is_iterator_facade_derived<It>::value>* = nullptr, typename ItDecayed = tc::decay_t<It>, tc::decay_t<decltype(std::declval<ItDecayed&>() -= std::declval<typename std::iterator_traits<ItDecayed>::difference_type>())>* = nullptr >
-		constexpr auto operator -(It&& itLhs, typename std::iterator_traits<ItDecayed>::difference_type rhs) noexcept(std::is_nothrow_constructible<ItDecayed, It&&>::value && noexcept(std::declval<ItDecayed&>() -= rhs)) {
-			ItDecayed itResult = std::forward<It>(itLhs);
-			itResult -= rhs;
-			return itResult;
-		}
-
-		template< typename It, std::enable_if_t<is_iterator_facade_derived<It>::value>* = nullptr >
-		constexpr tc::decay_t<It> operator ++(It& itLhs, int) noexcept(std::is_nothrow_copy_constructible<It>::value && noexcept(++itLhs)) {
-			tc::decay_t<It> result = itLhs;
-			++itLhs;
+		template<iterator_facade_detail::iterator_facade It>
+		constexpr It operator++(It &it, int) noexcept(std::is_nothrow_copy_constructible<It>::value && noexcept(++std::declval<It&>())) {
+			auto result = it;
+			++it;
 			return result;
 		}
 
-		template< typename It, std::enable_if_t<is_iterator_facade_derived<It>::value>* = nullptr >
-		constexpr tc::decay_t<It> operator --(It& itLhs, int) noexcept(std::is_nothrow_copy_constructible<It>::value && noexcept(--itLhs)) {
-			tc::decay_t<It> result = itLhs;
-			--itLhs;
+		template<iterator_facade_detail::iterator_facade It>
+			requires requires(It& it) { --it; }
+		constexpr It operator--(It& it, int) noexcept(std::is_nothrow_copy_constructible<It>::value && noexcept(--std::declval<It&>())) {
+			auto result = it;
+			--it;
 			return result;
 		}
+
+		template<iterator_facade_detail::iterator_facade It>
+		constexpr auto operator+=(It& it, iterator_facade_detail::difference_type<It> n) return_decltype_MAYTHROW(
+			it.advance(iterator_facade_detail::as_difference_type<It>(n)), it
+		)
+		template<iterator_facade_detail::iterator_facade It>
+		constexpr auto operator-=(It& it, iterator_facade_detail::difference_type<It> n) return_decltype_MAYTHROW(
+			it.advance(iterator_facade_detail::as_difference_type<It>(-n)), it
+		)
+
+		// clang bug: We cannot use only requires to constrain the operator overload, need at least one enable_if.
+		// (Otherwise, it complains about overloading it for non-class types.)
+		template<typename It, typename ItDecay = std::decay_t<It>,
+				 std::enable_if_t<iterator_facade_detail::iterator_facade<ItDecay>>* = nullptr>
+			requires requires (ItDecay& it) { it += 1; }
+		constexpr auto operator+(It&& lhs, iterator_facade_detail::difference_type<It> rhs) noexcept(std::is_nothrow_constructible<std::decay_t<It>, It&&>::value && noexcept(std::declval<ItDecay&>() += 1)) {
+			auto result = tc_move_if_owned(lhs);
+			result += iterator_facade_detail::as_difference_type<It>(rhs);
+			return result;
+		}
+		template<iterator_facade_detail::iterator_facade It>
+		constexpr auto operator+(iterator_facade_detail::difference_type<It> lhs, It&& rhs) return_decltype_MAYTHROW(
+			tc_move_if_owned(rhs) + lhs
+		)
+		template<iterator_facade_detail::iterator_facade It>
+		constexpr auto operator-(It&& lhs, iterator_facade_detail::difference_type<It> rhs) return_decltype_MAYTHROW(
+			tc_move_if_owned(lhs) + iterator_facade_detail::as_difference_type<It>(-rhs)
+		)
+
+		template<iterator_facade_detail::iterator_facade It>
+		constexpr auto operator<=>(const It& lhs, const It& rhs) return_decltype_noexcept(
+			(lhs - rhs) <=> 0
+		)
 	}
 	using iterator_facade_adl::iterator_facade;
 }

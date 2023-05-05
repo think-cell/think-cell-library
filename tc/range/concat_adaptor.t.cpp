@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -225,22 +225,22 @@ namespace
 		{
 			auto rng = tc::concat(forward_range(), forward_range());
 			auto it = tc::begin(rng);
-			static_assert(!tc::has_decrement_index<decltype(rng)>::value);
-			static_assert(!has_decrement_operator<decltype(it)>::value);
+			static_assert(!tc::has_decrement_index<decltype(rng)>);
+			static_assert(!has_decrement_operator<decltype(it)>);
 			static_assert(std::is_same<typename boost::iterator_traversal<decltype(it)>::type, boost::iterators::forward_traversal_tag>::value);
 		}
 		{
 			auto rng = tc::concat(forward_range(), bidir_range());
 			auto it = tc::begin(rng);
-			static_assert(!tc::has_decrement_index<decltype(rng)>::value);
-			static_assert(!has_decrement_operator<decltype(it)>::value);
+			static_assert(!tc::has_decrement_index<decltype(rng)>);
+			static_assert(!has_decrement_operator<decltype(it)>);
 			static_assert(std::is_same<typename boost::iterator_traversal<decltype(it)>::type, boost::iterators::forward_traversal_tag>::value);
 		}
 		{
 			auto rng = tc::concat(bidir_range(), forward_range());
 			auto it = tc::begin(rng);
-			static_assert(!tc::has_decrement_index<decltype(rng)>::value);
-			static_assert(!has_decrement_operator<decltype(it)>::value);
+			static_assert(!tc::has_decrement_index<decltype(rng)>);
+			static_assert(!has_decrement_operator<decltype(it)>);
 			static_assert(std::is_same<typename boost::iterator_traversal<decltype(it)>::type, boost::iterators::forward_traversal_tag>::value);
 		}
 
@@ -248,8 +248,8 @@ namespace
 		{
 			auto rng = tc::concat(bidir_range(), bidir_range());
 			auto it = tc::begin(rng);
-			static_assert(tc::has_decrement_index<decltype(rng)>::value);
-			static_assert(has_decrement_operator<decltype(it)>::value);
+			static_assert(tc::has_decrement_index<decltype(rng)>);
+			static_assert(has_decrement_operator<decltype(it)>);
 			static_assert(std::is_same<typename boost::iterator_traversal<decltype(it)>::type, boost::iterators::bidirectional_traversal_tag>::value);
 		}
 	}

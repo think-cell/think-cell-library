@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -38,11 +38,11 @@ namespace tc {
 		return std::forward<It>(it);
 	}
 
-	template< typename Cont, typename It> requires is_instance<std::multiset,Cont>::value || is_instance<std::multimap,Cont>::value || is_instance<boost::intrusive::multiset,Cont>::value
+	template< typename Cont, typename It> requires tc::instance<Cont, std::multiset> || tc::instance<Cont, std::multimap> || tc::instance<Cont, boost::intrusive::multiset>
 	It&& verify_at_upper_bound(Cont const& cont, It&& it) noexcept {
 #ifdef _DEBUG
 		/* standard says: the inserted element has to be placed at upper bound */
-		auto itNext = modified(it, ++_);
+		auto itNext = tc_modified(it, ++_);
 		_ASSERTDEBUG(tc::end(cont) == itNext || cont.value_comp()(*it, *itNext));
 #endif
 		return std::forward<It>(it);
@@ -53,7 +53,7 @@ namespace tc {
 		return verify_inserted( verify_at_upper_bound( cont, NOBADALLOC(cont.insert(val)) ) );
 	}
 
-	template< typename Cont, typename... Args> requires tc::is_explicit_castable<tc::range_value_t<Cont&>, Args&& ... >::value
+	template< typename Cont, typename... Args> requires tc::explicit_castable_from<tc::range_value_t<Cont&>, Args&& ... >
 	auto cont_must_emplace_before(Cont& cont, tc::iterator_t<Cont const> itHint, Args&& ... args) MAYTHROW {
 	#ifdef _CHECKS
 		auto const c=cont.size();
@@ -63,18 +63,18 @@ namespace tc {
 			std::forward<Args>(args)...
 		); // MAYTHROW
 		_ASSERTEQUAL( cont.size(), c+1 );
-		_ASSERTEQUAL(modified(it, ++_), itHint);
+		_ASSERTEQUAL(tc_modified(it, ++_), itHint);
 		return it;
 	}
 
 	namespace cont_emplace_back_detail {
 		template<typename RangeReturn, typename Cont, typename... T>
 		constexpr auto cont_emplace_back_impl(Cont& cont, T&& ... value) noexcept {
-			if constexpr (has_mem_fn_lower_bound<Cont>::value) {
+			if constexpr (has_mem_fn_lower_bound<Cont>) {
 				return [&]() return_decltype_MAYTHROW(
 					RangeReturn::pack_element(tc::cont_must_emplace_before(cont, tc::end(cont), std::forward<T>(value)...), cont)
 				);
-			} else if constexpr (0 == sizeof...(T) || tc::is_safely_constructible<tc::range_value_t<Cont&>, T&& ... >::value) {
+			} else if constexpr (0 == sizeof...(T) || tc::safely_constructible_from<tc::range_value_t<Cont&>, T&& ... >) {
 				return [&]() noexcept(std::is_nothrow_constructible<tc::range_value_t<Cont&>, T...>::value) -> decltype(auto) {
 					if constexpr (has_emplace_back<Cont, T...>::value) {
 						NOBADALLOC( cont.emplace_back(std::forward<T>(value)...) );
@@ -87,7 +87,7 @@ namespace tc {
 					}
 					return tc::back<RangeReturn>(cont);
 				};
-			} else if constexpr (tc::is_explicit_castable<tc::range_value_t<Cont&>, T&&...>::value) {
+			} else if constexpr (tc::explicit_castable_from<tc::range_value_t<Cont&>, T&&...>) {
 				return [&]() return_decltype_MAYTHROW(
 					cont_emplace_back_impl<RangeReturn>(cont, tc::lazy_explicit_cast<tc::range_value_t<Cont&>>(std::forward<T>(value)...))()
 				);
@@ -107,7 +107,7 @@ namespace tc {
 
 	template <typename Cont>
 	void emplace_back_by_index( Cont& cont, typename boost::range_size<Cont>::type n ) noexcept {
-		tc::cont_emplace_back( cont, MAKE_LAZY( tc::at(cont, n) ) );
+		tc::cont_emplace_back( cont, tc_lazy( tc::at(cont, n) ) );
 	}
 
 	template< typename Cont, typename... Args >

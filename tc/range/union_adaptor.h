@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -24,7 +24,7 @@ namespace tc {
 			typename Comp,
 			typename Rng0,
 			typename Rng1,
-			bool HasIterator = is_range_with_iterators< Rng0 >::value && is_range_with_iterators< Rng1 >::value
+			bool HasIterator = tc::range_with_iterators< Rng0 > && tc::range_with_iterators< Rng1 >
 		>
 		struct union_adaptor;
 
@@ -61,7 +61,7 @@ namespace tc {
 			};
 
 		public:
-			template<typename Self, typename Sink> requires tc::is_base_of_decayed<union_adaptor, Self>::value
+			template<tc::decayed_derived_from<union_adaptor> Self, typename Sink>
 			friend auto for_each_impl(Self&& self, Sink const sink) MAYTHROW {
 				return tc::interleave_2(
 					tc::get<0>(std::forward<Self>(self).m_tupleadaptbaserng).base_range(),
@@ -73,13 +73,13 @@ namespace tc {
 				);
 			}
 
-			template<typename Self, std::enable_if_t<tc::is_base_of_decayed<union_adaptor, Self>::value>* = nullptr>
+			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, union_adaptor>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
 			friend auto range_output_t_impl(Self&&) -> tc::type::unique_t<tc::type::concat_t<
 				tc::range_output_t<decltype(tc::get<0>(std::declval<Self>().m_tupleadaptbaserng).base_range())>,
 				tc::range_output_t<decltype(tc::get<1>(std::declval<Self>().m_tupleadaptbaserng).base_range())>
 			>> {} // unevaluated
 
-			template<typename Self, typename Sink> requires tc::is_base_of_decayed<union_adaptor, Self>::value
+			template<tc::decayed_derived_from<union_adaptor> Self, typename Sink>
 			friend auto for_each_reverse_impl(Self&& self, Sink const sink) MAYTHROW {
 				return tc::interleave_2(
 					tc::reverse(tc::get<0>(std::forward<Self>(self).m_tupleadaptbaserng).base_range()),
@@ -205,7 +205,7 @@ namespace tc {
 					if(tc::is_eq(*idx.m_oorder)) {
 						increment_index_fwd<0>(idx);
 					} else {
-						_ASSERT(std::is_gt(*idx.m_oorder));
+						_ASSERTDEBUG(std::is_gt(*idx.m_oorder));
 					}
 					increment_index_fwd<1>(idx);
 				}
@@ -232,7 +232,7 @@ namespace tc {
 					} else if(std::is_gt(*idx.m_oorder)) {
 						tc::get<0>(idx.m_tplindex) = tc::get<0>(tc_move(idxOriginal).m_tplindex);
 					} else {
-						_ASSERT(tc::is_eq(*idx.m_oorder));
+						_ASSERTDEBUG(tc::is_eq(*idx.m_oorder));
 					}
 				}
 			}
@@ -246,7 +246,7 @@ namespace tc {
 					auto idx0Begin = tc::get<0>(idx.m_tplindex);
 					tc::middle_point(tc::get<0>(this->m_tupleadaptbaserng).base_range(), tc::get<0>(idx.m_tplindex), tc::get<0>(idxEnd.m_tplindex));
 					auto&& ref0 = dereference_index_fwd<0>(idx);
-					tc::get<1>(idx.m_tplindex) = tc::iterator2index(
+					tc::get<1>(idx.m_tplindex) = tc::iterator2index<Rng1>(
 						tc::lower_bound(
 							tc::make_iterator(tc::get<1>(tc::as_mutable(this->m_tupleadaptbaserng)).base_range(), tc::get<1>(idx.m_tplindex)),
 							tc::make_iterator(tc::get<1>(tc::as_mutable(this->m_tupleadaptbaserng)).base_range(), tc::get<1>(idxEnd.m_tplindex)),

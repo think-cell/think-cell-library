@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -83,5 +83,27 @@ UNITTESTDEF(SReportStreamTest) {
 	tc::append(rs, "][", tc::debug_output(pt), "]");
 	tc::append(rs, tc::debug_output(STestError3()));
 	_ASSERTEQUAL(rs.m_str, "abc[10][nullptr]STestError3(STestError2(5, STestError1(-1)), nullptr)");
+}
+
+
+UNITTESTDEF(SReportStreamExceptionTest) {
+	tc::SReportStream rs;
+	tc::append(rs,
+		"Generate msg#0: ", [](auto sink) MAYTHROW {
+			tc::for_each("<part0>", sink);
+			tc::for_each([](auto sink) MAYTHROW { throw 0; }, sink);
+			throw 1;
+		}, "\n"
+		"Generate msg#1: ", [](tc::report_appender appdr) MAYTHROW {
+			tc::for_each([](auto sink) MAYTHROW { throw 0; }, appdr);
+			tc::for_each([](auto sink) MAYTHROW { throw 1; }, appdr);
+			tc::for_each("<part2>", appdr);
+			throw 0;
+		}, "\n"
+	);
+	_ASSERTEQUAL(rs.m_str,
+		"Generate msg#0: <part0><tc::report threw exception>\n"
+		"Generate msg#1: <tc::report threw exception><tc::report threw exception><part2><tc::report threw exception>\n"
+	);
 }
 #endif

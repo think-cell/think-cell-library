@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -24,7 +24,7 @@ struct non_empty_generator {
 UNITTESTDEF( empty_range ) {
 	{ // test container with empty() method
 		tc::vector<int> vec;
-		static_assert( has_mem_fn_empty<decltype(vec)>::value );
+		static_assert( has_mem_fn_empty<decltype(vec)> );
 		_ASSERT( tc::empty(vec) );
 		_ASSERT( tc::empty(vec) );
 
@@ -33,12 +33,12 @@ UNITTESTDEF( empty_range ) {
 		_ASSERT( !tc::empty(vec) );
 	}
 	{ // test iterator range
-		static_assert( !has_mem_fn_empty<tc::decay_t<decltype("")> >::value );
-		static_assert( tc::is_range_with_iterators<decltype("")>::value );
+		static_assert( !has_mem_fn_empty<tc::decay_t<decltype("")> > );
+		static_assert( tc::range_with_iterators<decltype("")> );
 		_ASSERT( tc::empty("") );
 
-		static_assert( !has_mem_fn_empty<tc::decay_t<decltype("x")> >::value );
-		static_assert( tc::is_range_with_iterators<decltype("x")>::value );
+		static_assert( !has_mem_fn_empty<tc::decay_t<decltype("x")> > );
+		static_assert( tc::range_with_iterators<decltype("x")> );
 		_ASSERT( !tc::empty("x") );
 	}
 	{ // test generator range

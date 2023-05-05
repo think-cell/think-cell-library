@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -23,6 +23,7 @@
 #include <boost/preprocessor/seq/seq.hpp>
 #include <boost/preprocessor/seq/size.hpp>
 #include <boost/preprocessor/seq/transform.hpp>
+#include <boost/preprocessor/seq/reverse.hpp>
 #include <boost/preprocessor/tuple/eat.hpp>
 
 #define TC_EXPAND(...) __VA_ARGS__
@@ -87,6 +88,42 @@
 		)) /*(macro(elem1))(delimiter)...(delimiter)(macro(elemN))*/ \
 	)
 
+// expands a parameter seq into its pack:
+// ((type)(...)(name)) --> ...
+// ((type)(name)) -->
+#define TC_PP_PARAM_PACK(seq) \
+	BOOST_PP_IF(BOOST_PP_EQUAL(TC_PP_SEQ_SIZE(seq),3), BOOST_PP_SEQ_ELEM, BOOST_PP_EAT)(1, seq)
+
+// expands a parameter seq into its type:
+// ((type)(...)(name)) --> type
+// ((type)(name)) --> type
+#define TC_PP_PARAM_TYPE(seq) \
+	BOOST_PP_SEQ_ELEM(0, seq)
+
+// expands a parameter seq into its type pack:
+// ((type)(...)(name)) --> type ...
+// ((type)(name)) --> type
+#define TC_PP_PARAM_TYPE_PACK(seq) \
+	TC_PP_PARAM_TYPE(seq) TC_PP_PARAM_PACK(seq)
+
+// expands a parameter seq into its name:
+// ((type)(...)(name)) --> name
+// ((type)(name)) --> name
+#define TC_PP_PARAM_NAME(seq) \
+	BOOST_PP_SEQ_HEAD(BOOST_PP_SEQ_REVERSE(seq))
+
+// expands a parameter seq into its name pack:
+// ((type)(...)(name)) --> name ...
+// ((type)(name)) --> name
+#define TC_PP_PARAM_NAME_PACK(seq) \
+	TC_PP_PARAM_NAME(seq) TC_PP_PARAM_PACK(seq)
+
+// expands a parameter seq:
+// ((type)(...)(name)) --> type ... name
+// ((type)(name)) --> type name
+#define TC_PP_PARAM(seq) \
+	TC_PP_PARAM_TYPE_PACK(seq) TC_PP_PARAM_NAME(seq)
+
 // expands a variable pair into its type:
 // ((type)(name)) --> type
 #define TC_PP_PAIR_VAR_TYPE(pairTypeName) \
@@ -107,15 +144,20 @@
 #define TC_PP_PAIR_VAR_DEFINE(pairTypeName) \
 	TC_PP_PAIR_VAR(pairTypeName);
 
-// expands a list of variable pairs into function argument definitions:
-// "type1 name1, type2 name2, ... , typeN nameN"
-#define TC_PP_PAIRS_TO_FUNC_ARG_DEFS(seqArgs) \
-	TC_PP_ENUM_TRANSFORMED_SEQ(TC_PP_APPLY_MACRO, TC_PP_PAIR_VAR, seqArgs)
+// expands parameter seq to enum. e.g. (template|function definition) parameter list supporting optional parameter pack:
+// "type1 (...)? name1, type2 (...)? name2, ... , typeN (...)? nameN"
+#define TC_PP_PARAMS_ENUM(seqArgs) \
+	TC_PP_ENUM_TRANSFORMED_SEQ(TC_PP_APPLY_MACRO, TC_PP_PARAM, seqArgs)
 
-// expands a list of variable pairs into function call arguments (losing the types):
-// "name1, name2, ... , nameN"
-#define TC_PP_PAIRS_TO_FUNC_CALL_ARGS(seqArgs) \
-	TC_PP_ENUM_TRANSFORMED_SEQ(TC_PP_APPLY_MACRO, TC_PP_PAIR_VAR_NAME, seqArgs)
+// expands parameter seq to argument enum (losing the types). e.g. (template|function call) argument list supporting optional parameter pack:
+// "name1 (...)?, name2 (...)?, ... , nameN (...)?"
+#define TC_PP_PARAMS_ARG_ENUM(seqArgs) \
+	TC_PP_ENUM_TRANSFORMED_SEQ(TC_PP_APPLY_MACRO, TC_PP_PARAM_NAME_PACK, seqArgs)
+
+// expands parameter seq to type enum (losing the names). e.g. (template template|function decl) parameter list supporting optional parameter pack:
+// "type1 (...)?, type2 (...)?, ... , typeN (...)?
+#define TC_PP_PARAMS_TYPE_ENUM(seqArgs) \
+	TC_PP_ENUM_TRANSFORMED_SEQ(TC_PP_APPLY_MACRO, TC_PP_PARAM_TYPE_PACK, seqArgs)
 
 #define TC_OP_PAIR_TO_SPACE_SEPARATED_PAIR(state, data, pair) \
 	BOOST_PP_SEQ_ELEM(0, pair) BOOST_PP_SEQ_ELEM(1, pair)
@@ -138,25 +180,6 @@
 
 // Use if you have to check if an expression compiles, e.g., to check if an operator is defined, a cast is valid etc
 #define TC_HAS_EXPR_TEMPLATE_PARAMETER(Type) typename Type
-// The following implementation would be more compact and canonical:
-// 		#define TC_HAS_EXPR(name, seqArgs, ...) \
-// 		template< BOOST_PP_SEQ_ENUM(BOOST_PP_SEQ_TRANSFORM(TC_PP_APPLY_MACRO, TC_HAS_EXPR_TEMPLATE_PARAMETER, seqArgs)), typename=void > \
-// 		struct BOOST_PP_CAT(has_,name) : tc::constant<false> {}; \
-// 		template< BOOST_PP_SEQ_ENUM(BOOST_PP_SEQ_TRANSFORM(TC_PP_APPLY_MACRO, TC_HAS_EXPR_TEMPLATE_PARAMETER, seqArgs)) > \
-// 		struct BOOST_PP_CAT(has_,name)<BOOST_PP_SEQ_ENUM(seqArgs), tc::void_t<decltype(__VA_ARGS__)>> : tc::constant<true> {};
-// but MSVC seems to get confused by pattern matching, when call trees are too deep.
-#define TC_HAS_EXPR_EXTERNAL_PARAMETER(Type) BOOST_PP_CAT(External,Type)
 #define TC_HAS_EXPR(name, seqArgs, ...) \
-namespace no_adl { \
-	template< BOOST_PP_SEQ_ENUM(BOOST_PP_SEQ_TRANSFORM(TC_PP_APPLY_MACRO, TC_HAS_EXPR_TEMPLATE_PARAMETER, BOOST_PP_SEQ_TRANSFORM(TC_PP_APPLY_MACRO, TC_HAS_EXPR_EXTERNAL_PARAMETER, seqArgs))) > \
-	struct BOOST_PP_CAT(has_,name) { \
-	private: \
-		template< typename... > \
-		static tc::constant<false> check(...); /*unevaluated-only*/ \
-		template< BOOST_PP_SEQ_ENUM(BOOST_PP_SEQ_TRANSFORM(TC_PP_APPLY_MACRO, TC_HAS_EXPR_TEMPLATE_PARAMETER, seqArgs)) > \
-		static tc::constant<true> check(tc::void_t<decltype(__VA_ARGS__)>*); /*unevaluated-only*/ \
-	public: \
-		static constexpr bool value = decltype(check<BOOST_PP_SEQ_ENUM(BOOST_PP_SEQ_TRANSFORM(TC_PP_APPLY_MACRO, TC_HAS_EXPR_EXTERNAL_PARAMETER, seqArgs))>(nullptr))::value; \
-	}; \
-} \
-using no_adl::BOOST_PP_CAT(has_,name);
+template< BOOST_PP_SEQ_ENUM(BOOST_PP_SEQ_TRANSFORM(TC_PP_APPLY_MACRO, TC_HAS_EXPR_TEMPLATE_PARAMETER, seqArgs)) > \
+concept has_ ## name = requires { __VA_ARGS__; };

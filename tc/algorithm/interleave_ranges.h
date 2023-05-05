@@ -1,3 +1,10 @@
+// think-cell public library
+//
+// Copyright (C) 2016-2023 think-cell Software GmbH
+//
+// Distributed under the Boost Software License, Version 1.0.
+// See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
+
 #pragma once
 
 #include "../range/subrange.h"
@@ -63,7 +70,7 @@ namespace tc {
 
 			static_assert(!tc::is_stashing_element<tc::iterator_t<RngRng const&>>::value || std::is_copy_constructible<tc::iterator_t<RngRng const&>>::value);
 			interleave_ranges_index(RngRng const& rng) noexcept
-				: MEMBER_INIT_CAST(m_vecview, tc::filter(
+				: tc_member_init_cast(m_vecview, tc::filter(
 					tc::make_range_of_iterators(rng),
 					[](auto const& it) noexcept {
 						return !tc::empty(*it);
@@ -95,11 +102,11 @@ namespace tc {
 			{}
 
 			constexpr auto greater() const& noexcept {
-				return tc::reverse_binary_rel(tc::projected(m_less, TC_MEM_FN(.dereference)));
+				return tc::reverse_binary_rel(tc::projected(m_less, tc_mem_fn(.dereference)));
 			}
 
 			constexpr void prepare_index(tc_index& idx) const& noexcept {
-				auto_cref(greater, this->greater());
+				tc_auto_cref(greater, this->greater());
 				idx.m_nLast = tc::size(idx.m_vecview);
 				do {
 					boost::range::pop_heap(tc::begin_next<tc::return_take>(idx.m_vecview, idx.m_nLast), greater);
@@ -127,7 +134,7 @@ namespace tc {
 			STATIC_FINAL_MOD(constexpr, increment_index)(tc_index& idx) const& noexcept -> void {
 				_ASSERTE(!this->at_end_index(idx));
 
-				auto_cref(greater, this->greater());
+				tc_auto_cref(greater, this->greater());
 
 				tc::filter_inplace(idx.m_vecview, tc::begin_next<tc::return_border>(idx.m_vecview, idx.m_nLast), [](auto& view) noexcept{
 					view.increment_index();
@@ -148,7 +155,7 @@ namespace tc {
 			STATIC_FINAL_MOD(constexpr, dereference_index)(tc_index const& idx) const& {
 				return tc::transform(
 					tc::begin_next<tc::return_drop>(idx.m_vecview, idx.m_nLast),
-					TC_MEM_FN(.dereference)
+					tc_mem_fn(.dereference)
 				);
 			}
 		};

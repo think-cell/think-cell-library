@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -20,14 +20,14 @@ namespace tc {
 	namespace reverse_adaptor_detail {
 		namespace for_each_reverse_default {
 			template<typename Rng, typename Sink>
-			auto for_each_reverse_impl(Rng&& rng, Sink const sink) MAYTHROW
-				-> tc::common_type_t<decltype(tc::continue_if_not_break(sink, tc::dereference_index(std::declval<Rng>(), tc::as_lvalue(tc::begin_index(std::declval<Rng&>()))))), tc::constant<tc::continue_>>
+			constexpr auto for_each_reverse_impl(Rng&& rng, Sink const sink) MAYTHROW
+				-> tc::common_type_t<decltype(tc::continue_if_not_break(sink, tc::dereference_index(std::declval<Rng&>(), tc::as_lvalue(tc::begin_index(std::declval<Rng&>()))))), tc::constant<tc::continue_>>
 			{
 				auto const idxBegin = tc::begin_index(rng);
 				auto idxEnd = tc::end_index(rng);
 				while( idxBegin != idxEnd ) {
 					tc::decrement_index(rng, idxEnd);
-					RETURN_IF_BREAK(tc::continue_if_not_break(sink, tc::dereference_index(rng, idxEnd)));
+					tc_yield(sink, tc::dereference_index(rng, idxEnd));
 				}
 				return tc::constant<tc::continue_>();
 			}
@@ -41,13 +41,13 @@ namespace tc {
 		struct [[nodiscard]] reverse_adaptor<Rng, false> : tc::range_adaptor_base_range<Rng>, tc::range_output_from_base_range {
 			using tc::range_adaptor_base_range<Rng>::range_adaptor_base_range;
 
-			template<typename Self, typename Sink> requires tc::is_base_of_decayed<reverse_adaptor, Self>::value
-			friend auto for_each_impl(Self&& self, Sink&& sink) return_MAYTHROW(
+			template<tc::decayed_derived_from<reverse_adaptor> Self, typename Sink>
+			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) return_MAYTHROW(
 				reverse_adaptor_detail::for_each_reverse(std::forward<Self>(self).base_range(), std::forward<Sink>(sink))
 			)
 
-			template<typename Self, typename Sink> requires tc::is_base_of_decayed<reverse_adaptor, Self>::value
-			friend auto for_each_reverse_impl(Self&& self, Sink&& sink) return_MAYTHROW(
+			template<tc::decayed_derived_from<reverse_adaptor> Self, typename Sink>
+			friend constexpr auto for_each_reverse_impl(Self&& self, Sink&& sink) return_MAYTHROW(
 				tc::for_each(std::forward<Self>(self).base_range(), std::forward<Sink>(sink))
 			)
 		};
@@ -67,7 +67,7 @@ namespace tc {
 		private:
 			using this_type = reverse_adaptor;
 
-			static_assert(tc::has_decrement_index<std::remove_reference_t<Rng>>::value, "Base range must have bidirectional traversal or it cannot be reversed");
+			static_assert(tc::has_decrement_index<std::remove_reference_t<Rng>>, "Base range must have bidirectional traversal or it cannot be reversed");
 
 		public:
 			using typename reverse_adaptor::range_iterator_from_index::tc_index;
@@ -117,28 +117,25 @@ namespace tc {
 				tc::dereference_index(this->base_range(),*idx)
 			)
 
-			STATIC_FINAL_MOD(
-				TC_FWD(template<
-					ENABLE_SFINAE,
-					std::enable_if_t<tc::has_distance_to_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value>* = nullptr
-				>),
-			distance_to_index)(tc_index const& idxLhs, tc_index const& idxRhs) const& noexcept {
-				return tc::distance_to_index(this->base_range(), idxRhs ? *idxRhs : this->base_begin_index(), idxLhs ? *idxLhs : this->base_begin_index()) + (idxRhs ? 0 : 1) + (idxLhs ? 0 : -1);
+			STATIC_FINAL(distance_to_index)(tc_index const& idxLhs, tc_index const& idxRhs) const& noexcept
+				requires tc::has_distance_to_index<std::remove_reference_t<Rng>>
+			{
+				return tc_modified(
+					tc::distance_to_index(this->base_range(), idxRhs ? *idxRhs : this->base_begin_index(), idxLhs ? *idxLhs : this->base_begin_index()),
+					if(!idxRhs) ++_;
+					if(!idxLhs) --_;
+				);
 			}
 
-			STATIC_FINAL_MOD(
-				TC_FWD(template<
-					ENABLE_SFINAE,
-					std::enable_if_t<
-						tc::has_advance_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value &&
-						tc::has_decrement_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value &&
-						tc::is_equality_comparable<SFINAE_TYPE(tc_index)>::value
-					>* = nullptr
-				>),
-				advance_index
-			)(tc_index& idx, typename boost::range_difference<Rng>::type d) const& noexcept -> void {
+			STATIC_FINAL(advance_index)(tc_index& idx, typename boost::range_difference<Rng>::type d) const& noexcept -> void
+				requires
+					tc::has_advance_index<std::remove_reference_t<Rng>> &&
+					tc::has_decrement_index<std::remove_reference_t<Rng>> &&
+					tc::is_equality_comparable<tc_index>::value
+			{
+				using difference_type = typename boost::range_difference<Rng>::type;
 				if (idx) {
-					tc::advance_index(this->base_range(),*idx, -(d-1));
+					tc::advance_index(this->base_range(),*idx, tc::explicit_cast<difference_type>(-(d-1)));
 					if (this->base_begin_index() == *idx) {
 						idx = std::nullopt;
 					} else {
@@ -148,13 +145,13 @@ namespace tc {
 					if (0 != d) {
 						_ASSERT(d < 0);
 						idx = this->base_begin_index();
-						tc::advance_index(this->base_range(),*idx, -(d+1));
+						tc::advance_index(this->base_range(),*idx, tc::explicit_cast<difference_type>(-(d+1)));
 					}
 				}
 			}
 		public:
 			auto border_base_index(tc_index const& idx) const& noexcept {
-				return idx ? modified(*idx, tc::increment_index(this->base_range(),_)) : this->base_begin_index();
+				return idx ? tc_modified(*idx, tc::increment_index(this->base_range(),_)) : this->base_begin_index();
 			}
 
 			auto element_base_index(tc_index const& idx) const& noexcept {
@@ -181,10 +178,10 @@ namespace tc {
 	}
 
 	template<typename Rng>
-	struct no_adl::constexpr_size_base<tc::reverse_adaptor<Rng>, void> : tc::constexpr_size<Rng> {};
+	struct no_adl::constexpr_size_impl<tc::reverse_adaptor<Rng>> : tc::constexpr_size<Rng> {};
 
 	template<typename Rng>
-	auto reverse(Rng&& rng) return_ctor_noexcept(
+	constexpr auto reverse(Rng&& rng) return_ctor_noexcept(
 		reverse_adaptor< Rng >,
 		(aggregate_tag, std::forward<Rng>(rng))
 	)

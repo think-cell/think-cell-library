@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -226,7 +226,7 @@ namespace tc::as_constexpr_no_adl {
 // cmp_equal/cmp_less/cmp_greater...
 
 namespace tc { // TODO c++20: replace these functions with std versions
-	template< typename T, typename U > requires tc::is_actual_integer<T>::value && tc::is_actual_integer<U>::value
+	template< tc::actual_integer T, tc::actual_integer U >
 	constexpr bool cmp_equal( T t, U u ) noexcept
 	{
 	    if constexpr (std::is_signed_v<T> == std::is_signed_v<U>)
@@ -242,7 +242,7 @@ namespace tc { // TODO c++20: replace these functions with std versions
 		!cmp_equal(t, u)
 	)
 	 
-	template< typename T, typename U> requires tc::is_actual_integer<T>::value && tc::is_actual_integer<U>::value
+	template< tc::actual_integer T, tc::actual_integer U>
 	constexpr bool cmp_less( T t, U u ) noexcept
 	{
 	    if constexpr (std::is_signed_v<T> == std::is_signed_v<U>)
@@ -284,7 +284,7 @@ namespace tc {
 }
 
 //////////////////////////////////////////////////////////////////////////
-// make_lazy/MAKE_LAZY
+// make_lazy/tc_lazy
 
 namespace tc {
 	namespace no_adl {
@@ -304,7 +304,7 @@ namespace tc {
 }
 
 // lazy rvalues are returned by value - avoid decltype on __VA_ARGS__, because expression usually contains lambdas
-#define MAKE_LAZY( ... ) tc::make_lazy([&](auto&&...) MAYTHROW -> decltype(auto) { return tc::lvalue_or_decay(__VA_ARGS__); })
+#define tc_lazy( ... ) tc::make_lazy([&](auto&&...) MAYTHROW -> decltype(auto) { return tc::lvalue_or_decay(__VA_ARGS__); })
 
 //////////////////////////////////////////////////////////////////////////
 // tc::unused
@@ -312,6 +312,7 @@ namespace tc {
 namespace tc {
 	namespace no_adl {
 		struct unused final {
+			constexpr unused() noexcept = default;
 			template<typename T>
 			constexpr unused(T const&) noexcept {}
 		};

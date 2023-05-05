@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -29,6 +29,15 @@ namespace tc {
 				)...
 			);
 		}
+		template<typename... AdaptBaseRng>
+		constexpr auto MakeRngEndIndexPairTuple(AdaptBaseRng&&... adaptbaserng) MAYTHROW {
+			return tc::make_tuple(
+				std::pair<decltype(std::declval<AdaptBaseRng>().base_range()), decltype(adaptbaserng.base_end_index())>(
+					std::forward<AdaptBaseRng>(adaptbaserng).base_range(),
+					adaptbaserng.base_end_index() // MAYTHROW
+				)...
+			);
+		}
 
 		template<typename PairRngIdx>
 		constexpr decltype(auto) DereferenceRngIndexPair(PairRngIdx& pairrngidx) MAYTHROW {
@@ -39,6 +48,12 @@ namespace tc {
 		constexpr void IncrementRngIndexPair(PairRngIdx& pairrngidx) MAYTHROW {
 			tc::increment_index(pairrngidx.first, pairrngidx.second);
 		}
+
+		template<typename PairRngIdx>
+		constexpr void DecrementRngIndexPair(PairRngIdx& pairrngidx) MAYTHROW {
+			tc::decrement_index(pairrngidx.first, pairrngidx.second);
+		}
+
 
 #ifdef _CHECKS
 		template<typename PairRngIdx>
@@ -69,9 +84,6 @@ namespace tc {
 		template<typename Rng>
 		using range_difference_t = typename boost::range_difference<std::remove_cvref_t<Rng>>::type;
 
-		template<typename Rng>
-		using is_range_without_iterators = std::negation<tc::is_range_with_iterators<Rng>>;
-
 		template<typename T, typename ConstIndex, typename... Rng>
 		using zip_adaptor_with_generator_forwarding_tuple_t = tc::type::apply_t<
 			tc::tuple,
@@ -82,7 +94,7 @@ namespace tc {
 							tc::type::take_first_t<tc::type::list<Rng...>, ConstIndex::value>,
 							tc::iterator_t
 						>,
-						tc::iter_reference_t
+						std::iter_reference_t
 					>,
 					tc::type::list<T>,
 					tc::type::transform_t<
@@ -90,7 +102,7 @@ namespace tc {
 							tc::type::drop_first_t<tc::type::list<Rng...>, ConstIndex::value+1>,
 							tc::iterator_t
 						>,
-						tc::iter_reference_t
+						std::iter_reference_t
 					>
 				>,
 				std::add_rvalue_reference_t // forwarding tuple
@@ -107,12 +119,26 @@ namespace tc {
 		struct [[nodiscard]] zip_adaptor {
 		protected:
 			tc::tuple<tc::range_adaptor_base_range<Rng>...> m_tupleadaptbaserng;
+#ifdef __clang__
+		private:
+			template<typename T>
+			using is_range_with_iterators = tc::constant<tc::range_with_iterators<T>>;
+#endif
 
 #if !defined(__clang__) && !defined(_MSC_VER) // Bug in gcc12
 		public:
 #endif		
 			static constexpr std::size_t generator_index() noexcept {
-				using PureGenerator = tc::type::find_unique_if<tc::type::list<Rng...>, is_range_without_iterators>;
+				using PureGenerator = tc::type::find_unique_if<
+					tc::type::list<Rng...>,
+					tc::type::negation<
+#ifdef __clang__
+						is_range_with_iterators // workaround Xcode14 clang segmentation fault
+#else
+						TRAITFROMCONCEPT(tc::range_with_iterators)
+#endif
+					>::template type
+				>;
 				if constexpr( PureGenerator::found ) {
 					return PureGenerator::index;
 				} else {
@@ -126,7 +152,7 @@ namespace tc {
 				: m_tupleadaptbaserng{{ {{aggregate_tag, std::forward<RngRef>(rng)}}... }}
 			{}
 
-			template<typename Self, typename Sink> requires tc::is_base_of_decayed<zip_adaptor, Self>::value
+			template<tc::decayed_derived_from<zip_adaptor> Self, typename Sink>
 			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
 				return internal_for_each_impl(
 					std::forward<Self>(self),
@@ -135,8 +161,17 @@ namespace tc {
 					std::make_index_sequence<sizeof...(Rng) - generator_index() - 1>()
 				); // MAYTHROW
 			}
+			template<tc::decayed_derived_from<zip_adaptor> Self, typename Sink>
+			friend constexpr auto for_each_reverse_impl(Self&& self, Sink&& sink) MAYTHROW {
+				return internal_for_each_reverse_impl(
+					std::forward<Self>(self),
+					std::forward<Sink>(sink),
+					std::make_index_sequence<generator_index()>(),
+					std::make_index_sequence<sizeof...(Rng) - generator_index() - 1>()
+				); // MAYTHROW
+			}
 
-			template<typename Self, std::enable_if_t<tc::is_base_of_decayed<zip_adaptor, Self>::value>* = nullptr>
+			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, zip_adaptor>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
 			friend auto range_output_t_impl(Self&&) -> tc::type::unique_t<tc::type::transform_t<
 				tc::range_output_t<apply_cvref_to_base_range_t<tc::type::at_t<tc::type::list<Rng...>, generator_index()>, Self>>,
 				tc::type::rcurry<
@@ -171,19 +206,31 @@ namespace tc {
 				_ASSERTE( tc::break_ == breakorcontinue || (zip_detail::RngIndexPairAtEnd(tc::get<nPrefix>(tuplepairrngidxPrefix)) && ...) && (zip_detail::RngIndexPairAtEnd(tc::get<nSuffix>(tuplepairrngidxSuffix)) && ...) );
 				return breakorcontinue;
 			}
-
-		public:
-			template<typename Self>
-			static auto base_ranges(Self&& self) noexcept {
-				return tc::tuple_transform(
-					std::forward<Self>(self).m_tupleadaptbaserng,
-					TC_MEM_FN_XVALUE_BY_REF(.base_range)
-				);
+			template<typename Self, typename Sink, std::size_t... nPrefix/*=0,...,generator_index()-1*/, std::size_t... nSuffix/*=0,...,sizeof...(Rng)-generator_index()-2*/>
+			static constexpr auto internal_for_each_reverse_impl(Self&& self, Sink&& sink, std::index_sequence<nPrefix...>, std::index_sequence<nSuffix...>) MAYTHROW {
+				STATICASSERTEQUAL( sizeof...(nPrefix), generator_index() );
+				STATICASSERTEQUAL( sizeof...(nPrefix) + 1 + sizeof...(nSuffix), sizeof...(Rng) );
+				auto tuplepairrngidxPrefix = zip_detail::MakeRngEndIndexPairTuple(tc::get<nPrefix>(std::forward<Self>(self).m_tupleadaptbaserng)...); // MAYTHROW
+				auto tuplepairrngidxSuffix = zip_detail::MakeRngEndIndexPairTuple(tc::get<sizeof...(nPrefix) + 1 + nSuffix>(std::forward<Self>(self).m_tupleadaptbaserng)...); // MAYTHROW
+				auto const breakorcontinue = tc::for_each(tc::reverse(tc::get<sizeof...(nPrefix)>(std::forward<Self>(self).m_tupleadaptbaserng).base_range()), [&](auto&& u) MAYTHROW {
+					(zip_detail::DecrementRngIndexPair(tc::get<nPrefix>(tuplepairrngidxPrefix)), ...); // MAYTHROW
+					(zip_detail::DecrementRngIndexPair(tc::get<nSuffix>(tuplepairrngidxSuffix)), ...); // MAYTHROW
+					return tc::continue_if_not_break(
+						sink,
+						tc::forward_as_tuple(
+							zip_detail::DereferenceRngIndexPair(tc::get<nPrefix>(tuplepairrngidxPrefix))...,  // MAYTHROW
+							tc_move_if_owned(u),
+							zip_detail::DereferenceRngIndexPair(tc::get<nSuffix>(tuplepairrngidxSuffix))...  // MAYTHROW
+						)
+					); // MAYTHROW
+				}); // MAYTHROW
+				_ASSERTE( tc::break_ == breakorcontinue || ((tc::begin_index(tc::get<nPrefix>(tuplepairrngidxPrefix).first)==tc::get<nPrefix>(tuplepairrngidxPrefix).second) && ...) && ((tc::begin_index(tc::get<nSuffix>(tuplepairrngidxSuffix).first)==tc::get<nSuffix>(tuplepairrngidxSuffix).second) && ...) );
+				return breakorcontinue;
 			}
 
+		public:
 			// TODO: Enable size() when any range supports constant-time size().
-			template< ENABLE_SFINAE, std::enable_if_t<tc::has_size<tc::type::front_t<tc::type::list<SFINAE_TYPE(Rng)...>>>::value>* = nullptr >
-			constexpr auto size() const& noexcept {
+			constexpr auto size() const& noexcept requires tc::has_size<tc::type::front_t<tc::type::list<Rng...>>> {
 				return tc::size_raw(tc::get<0>(m_tupleadaptbaserng).base_range());
 			}
 		};
@@ -194,52 +241,31 @@ namespace tc {
 				return tc::get<0>(lhs) == tc::get<0>(rhs);
 			}
 		};
-	}
-}
 
-template<typename... Index>
-struct std::tuple_size<tc::no_adl::zip_index<Index...>> : tc::constant<sizeof...(Index)> {};
-
-namespace tc {
-	namespace no_adl {
-		template<typename... Ranges>
-		struct [[nodiscard]] zip_adaptor<true, Ranges...>
-			: zip_adaptor<false, Ranges...>
-			, range_iterator_from_index<
-				zip_adaptor<true, Ranges...>,
-				zip_index<
-					tc::index_t<std::remove_reference_t<Ranges>>...
-				>
-			>
+		template<typename... Rng>
+		struct [[nodiscard]] zip_adaptor<true, Rng...>
+			: product_index_range_adaptor<zip_adaptor, zip_index, Rng...>
 		{
 		private:
 			using this_type = zip_adaptor;
 		public:
-			static constexpr bool c_bHasStashingIndex=std::disjunction<tc::has_stashing_index<std::remove_reference_t<Ranges>>...>::value;
-
-			using zip_adaptor<false, Ranges...>::zip_adaptor;
+			using product_index_range_adaptor<zip_adaptor, zip_index, Rng...>::product_index_range_adaptor;
 
 			using typename this_type::range_iterator_from_index::tc_index;
-
-			using difference_type = smallest_numeric_type_t<range_difference_t<Ranges>...>;
+			using difference_type = smallest_numeric_type_t<range_difference_t<Rng>...>;
 
 		private:
-			STATIC_FINAL(begin_index)() const& noexcept -> tc_index {
-				return {tc::tuple_transform(this->m_tupleadaptbaserng, TC_MEM_FN(.base_begin_index))};
+			STATIC_FINAL_MOD(constexpr, begin_index)() const& noexcept -> tc_index {
+				return {tc::tuple_transform(this->m_tupleadaptbaserng, tc_mem_fn(.base_begin_index))};
 			}
 
-			STATIC_FINAL_MOD(
-				TC_FWD(template<
-					ENABLE_SFINAE,
-					std::enable_if_t<SFINAE_VALUE(
-						std::conjunction<tc::has_end_index<std::remove_reference_t<Ranges>>...>::value
-					)>* = nullptr
-				>),
-			end_index)() const& noexcept -> tc_index {
-				return {tc::tuple_transform(this->m_tupleadaptbaserng, TC_MEM_FN(.base_end_index))};
+			STATIC_FINAL_MOD(constexpr, end_index)() const& noexcept -> tc_index
+				requires (... && tc::has_end_index<std::remove_reference_t<Rng>>)
+			{
+				return {tc::tuple_transform(this->m_tupleadaptbaserng, tc_mem_fn(.base_end_index))};
 			}
 
-			STATIC_FINAL(at_end_index)(tc_index const& idx) const& noexcept -> bool {
+			STATIC_FINAL_MOD(constexpr, at_end_index)(tc_index const& idx) const& noexcept -> bool {
 				auto MemberRangeAtEnd = 
 					[&](auto nconstIndex) noexcept {
 						return tc::at_end_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(), tc::get<nconstIndex()>(idx));
@@ -248,66 +274,38 @@ namespace tc {
 				bool const bAtEnd = MemberRangeAtEnd(tc::constant<tc::explicit_cast<std::size_t>(0)>());
 
 				_ASSERT(tc::all_of(
-					tc::make_integer_sequence<std::size_t, 1, sizeof...(Ranges)>(),
+					tc::make_integer_sequence<std::size_t, 1, sizeof...(Rng)>(),
 					[&](auto nconstIndex) noexcept { return MemberRangeAtEnd(nconstIndex) == bAtEnd; }
 				));
 
 				return bAtEnd;
 			}
 
-			STATIC_FINAL(increment_index)(tc_index& idx) const& noexcept -> void {
+			STATIC_FINAL_MOD(constexpr, increment_index)(tc_index& idx) const& noexcept -> void {
 				tc::for_each(
-					tc::tuple_zip(this->m_tupleadaptbaserng, idx),
+					tc::zip(this->m_tupleadaptbaserng, idx),
 					[](auto&& adaptbaserng, auto& baseidx) noexcept {
 						tc::increment_index(adaptbaserng.base_range(), baseidx);
 					}
 				);
 			}
 
-			STATIC_FINAL_MOD(
-				TC_FWD(template<
-					ENABLE_SFINAE,
-					std::enable_if_t<SFINAE_VALUE(
-						std::conjunction<tc::has_decrement_index<std::remove_reference_t<Ranges>>...>::value
-					)>* = nullptr
-				>),
-			decrement_index)(tc_index& idx) const& noexcept -> void {
+			STATIC_FINAL_MOD(constexpr, decrement_index)(tc_index& idx) const& noexcept -> void
+				requires (... && tc::has_decrement_index<std::remove_reference_t<Rng>>)
+			{
 				tc::for_each(
-					tc::tuple_zip(this->m_tupleadaptbaserng, idx),
+					tc::zip(this->m_tupleadaptbaserng, idx),
 					[](auto&& adaptbaserng, auto& baseidx) noexcept {
 						tc::decrement_index(adaptbaserng.base_range(), baseidx);
 					}
 				);
 			}
 
-			STATIC_FINAL(dereference_index)(tc_index const& idx) const& noexcept {
-				return tc::tuple_transform(
-					tc::tuple_zip(this->m_tupleadaptbaserng, idx),
-					[](auto&& adaptbaserng, auto const& baseidx) noexcept -> decltype(auto) {
-						return tc::dereference_index(adaptbaserng.base_range(), baseidx);
-					}
-				);
-			}
-
-			STATIC_FINAL(dereference_index)(tc_index const& idx) & noexcept {
-				return tc::tuple_transform(
-					tc::tuple_zip(this->m_tupleadaptbaserng, idx),
-					[](auto&& adaptbaserng, auto const& baseidx) noexcept -> decltype(auto) {
-						return tc::dereference_index(adaptbaserng.base_range(), baseidx);
-					}
-				);
-			}
-
-			STATIC_FINAL_MOD(
-				TC_FWD(template<
-					ENABLE_SFINAE,
-					std::enable_if_t<SFINAE_VALUE(
-						std::conjunction<tc::has_advance_index<std::remove_reference_t<Ranges>>...>::value
-					)>* = nullptr
-				>),
-			advance_index)(tc_index& idx, difference_type d) const& noexcept -> void {
+			STATIC_FINAL_MOD(constexpr, advance_index)(tc_index& idx, difference_type d) const& noexcept -> void
+				requires (... && tc::has_advance_index<std::remove_reference_t<Rng>>)
+			{
 				tc::for_each(
-					tc::tuple_zip(this->m_tupleadaptbaserng, idx),
+					tc::zip(this->m_tupleadaptbaserng, idx),
 					[&](auto&& adaptbaserng, auto& baseidx) noexcept {
 						tc::advance_index(adaptbaserng.base_range(), baseidx, d);
 					}
@@ -315,35 +313,35 @@ namespace tc {
 			}
 
 			// For consistency with other functions, distance_to_index is only available if all base ranges support it - even though we only require one of the base ranges to support it.
-			STATIC_FINAL_MOD(
-				TC_FWD(template<
-					ENABLE_SFINAE,
-					std::enable_if_t<SFINAE_VALUE(
-						std::conjunction<tc::has_distance_to_index<std::remove_reference_t<Ranges>>...>::value
-					)>* = nullptr
-				>),
-			distance_to_index)(tc_index const& idxLhs, tc_index const& idxRhs) const& noexcept->difference_type {
-				RETURN_CAST(tc::distance_to_index(tc::get<0>(this->m_tupleadaptbaserng).base_range(), tc::get<0>(idxLhs), tc::get<0>(idxRhs)));
+			STATIC_FINAL_MOD(constexpr, distance_to_index)(tc_index const& idxLhs, tc_index const& idxRhs) const& noexcept->difference_type
+				requires (... && tc::has_distance_to_index<std::remove_reference_t<Rng>>)
+			{
+				tc_return_cast(tc::distance_to_index(tc::get<0>(this->m_tupleadaptbaserng).base_range(), tc::get<0>(idxLhs), tc::get<0>(idxRhs)));
 			}
 		};
 
-		template<bool HasIterator, typename... Ranges> requires tc::type::any_of<tc::type::list<Ranges...>, tc::has_constexpr_size>::value
-		struct constexpr_size_base<zip_adaptor<HasIterator, Ranges...>>
+		namespace trait_from_concept_workaround { // workaround Xcode14.1 segmentation fault
+			template<typename Rng>
+			using has_constexpr_size = tc::constant<tc::has_constexpr_size<Rng>>;
+		}
+
+		template<bool HasIterator, typename... Rng> requires tc::type::any_of<tc::type::list<Rng...>, trait_from_concept_workaround::has_constexpr_size>::value
+		struct constexpr_size_impl<zip_adaptor<HasIterator, Rng...>>
 			: tc::constexpr_size<tc::type::front_t<tc::type::filter_t<
-				tc::type::list<Ranges...>,
-				tc::has_constexpr_size
+				tc::type::list<Rng...>,
+				trait_from_concept_workaround::has_constexpr_size
 			>>>
 		{};
 
-		template<bool HasIterator, typename... Ranges>
-		struct is_index_valid_for_move_constructed_range<zip_adaptor<HasIterator, Ranges...>>
-			: std::conjunction<tc::is_index_valid_for_move_constructed_range<Ranges>...>
+		template<bool HasIterator, typename... Rng>
+		struct is_index_valid_for_move_constructed_range<zip_adaptor<HasIterator, Rng...>>
+			: std::conjunction<tc::is_index_valid_for_move_constructed_range<Rng>...>
 		{};
 	}
 
-	template<typename... Ranges>
-	constexpr no_adl::zip_adaptor</*HasIterator*/std::conjunction<tc::is_range_with_iterators<Ranges>...>::value, Ranges...> zip(Ranges&& ...ranges) noexcept {
-		return {tc::aggregate_tag, std::forward<Ranges>(ranges)...};
+	template<typename... Rng>
+	constexpr no_adl::zip_adaptor</*HasIterator*/(... && tc::range_with_iterators<Rng>), Rng...> zip(Rng&&... rng) noexcept {
+		return {tc::aggregate_tag, std::forward<Rng>(rng)...};
 	}
 
 	template<typename Rng0, typename Rng1>
@@ -355,8 +353,8 @@ namespace tc {
 			auto it0 = tc::begin(*rng0_);
 			auto it1 = tc::begin(*rng1_);
 
-			auto_cref(it0End, tc::end(tc::as_const(*rng0_)));
-			auto_cref(it1End, tc::end(tc::as_const(*rng1_)));
+			tc_auto_cref(it0End, tc::end(tc::as_const(*rng0_)));
+			tc_auto_cref(it1End, tc::end(tc::as_const(*rng1_)));
 			for(;;) {
 				if (it0End == it0) {
 					return tc::for_each(
@@ -373,7 +371,7 @@ namespace tc {
 						}
 					);
 				} else {
-					RETURN_IF_BREAK(tc::continue_if_not_break(sink, tc::forward_as_tuple(*it0, *it1)));
+					tc_yield(sink, tc::forward_as_tuple(*it0, *it1));
 					++it0;
 					++it1;
 				}
@@ -381,28 +379,25 @@ namespace tc {
 		};
 	}
 
-	template<typename Rng> requires tc::is_instance_b<no_adl::zip_adaptor,std::remove_reference_t<Rng>>::value
-	[[nodiscard]] decltype(auto) unzip(Rng&& rng) noexcept {
+	template<typename Rng> requires tc::instance_b<std::remove_reference_t<Rng>, no_adl::zip_adaptor>
+	[[nodiscard]] constexpr decltype(auto) unzip(Rng&& rng) noexcept {
 		return std::remove_reference_t<Rng>::base_ranges(std::forward<Rng>(rng));
 	}
 
 	template<typename Rng> requires
-		tc::is_instance_b<
-			no_adl::zip_adaptor,
-			std::remove_reference_t<
+		tc::instance_b<std::remove_reference_t<
 				tc::type::only_t<
-					typename tc::is_instance<subrange, std::remove_reference_t<Rng>>::arguments
+					typename tc::is_instance<std::remove_reference_t<Rng>, subrange>::arguments
 				>
-			>
-		>::value
-	[[nodiscard]] auto unzip(Rng&& rng) noexcept {
+			>, no_adl::zip_adaptor>
+	[[nodiscard]] constexpr auto unzip(Rng&& rng) noexcept {
 		return tc::tuple_transform(
-			tc::tuple_zip(
+			tc::zip(
 				tc::unzip(std::forward<Rng>(rng).base_range()),
 				std::forward<Rng>(rng).begin_index(),
 				std::forward<Rng>(rng).end_index()
 			),
-			TC_FN(tc::slice)
+			tc_fn(tc::slice)
 		);
 	}
 
@@ -435,7 +430,7 @@ namespace tc {
 	*/
 	template<typename RngRng>
 	auto zip_ranges(RngRng&& rngrng) noexcept { // for random access ranges
-		_ASSERT(tc::all_same(tc::transform(rngrng, TC_FN(tc::size))));
+		_ASSERT(tc::all_same(tc::transform(rngrng, tc_fn(tc::size))));
 		auto const n = tc::empty(rngrng) ? 0 : tc::size(tc::front(rngrng)); // Do not inline, function evaluation order undefined
 		return tc::transform(
 			tc::iota(0, n),
@@ -454,7 +449,7 @@ namespace tc {
 				: base_(tc::aggregate_tag, tc_move_if_owned(rng))
 			{}
 
-			template<typename Self, typename Sink> requires tc::is_base_of_decayed<enumerate_generator_adaptor, Self>::value
+			template<tc::decayed_derived_from<enumerate_generator_adaptor> Self, typename Sink>
 			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
 				int i = 0;
 				// return_decltype_MAYTHROW with tc_move_if_owned causes compiler segfault on Mac
@@ -463,7 +458,7 @@ namespace tc {
 				});
 			}
 
-			template<typename Self, std::enable_if_t<tc::is_base_of_decayed<enumerate_generator_adaptor, Self>::value>* = nullptr> // accept any cvref qualifiers
+			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, enumerate_generator_adaptor>>* = nullptr> // accept any cvref qualifiers. use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
 			friend auto range_output_t_impl(Self&&) -> typename tc::type::transform<tc::range_output_t<tc::no_adl::apply_cvref_to_base_range_t<Rng, Self>>, tc::type::curry<tc::tuple, int>::template type>::type {} // unevaluated
 		};
 	};
@@ -472,7 +467,7 @@ namespace tc {
 	// TODO: return iterator range, if range has iterators.
 	template <typename Rng>
 	[[nodiscard]] constexpr auto enumerate(Rng&& rng) noexcept {
-		if constexpr( tc::has_size<Rng>::value ) {
+		if constexpr( tc::has_size<Rng> ) {
 			auto nSize = tc::size(rng); // do not inline, evaluation order important
 			return tc::zip(tc::iota(0, nSize), std::forward<Rng>(rng));
 		} else {

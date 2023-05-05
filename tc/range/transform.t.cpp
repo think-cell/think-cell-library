@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -17,10 +17,10 @@
 namespace {
 	[[maybe_unused]] void static_tests() noexcept {
 		auto rngSize = tc::transform(tc::vector<int>(), [](int) noexcept { return 0; });
-		static_assert(tc::has_size<decltype(rngSize)>::value);
+		static_assert(tc::has_size<decltype(rngSize)>);
 
 		auto rngNoSize = tc::transform(tc::filter(tc::vector<int>(), [](int) noexcept { return false; }), [](int) noexcept { return 0; });
-		static_assert(!tc::has_size<decltype(rngNoSize)>::value);
+		static_assert(!tc::has_size<decltype(rngNoSize)>);
 
 		int anNative[] = {1,2,3,4,5};
 		auto anTc = tc::make_array(anNative);

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -19,7 +19,7 @@ namespace tc {
 
 	template <typename T>
 	struct range_filter_by_move_element : tc::constant<
-		tc::is_instance<std::basic_string,T>::value || tc::is_instance<std::vector,T>::value
+		tc::instance<T, std::basic_string> || tc::instance<T, std::vector>
 	> {};
 
 	template<typename Cont>
@@ -27,8 +27,8 @@ namespace tc {
 
 	template<typename Cont> requires
 		has_efficient_erase<Cont>::value ||
-		has_mem_fn_lower_bound<Cont>::value ||
-		has_mem_fn_hash_function<Cont>::value
+		has_mem_fn_lower_bound<Cont> ||
+		has_mem_fn_hash_function<Cont>
 	struct range_filter<Cont> : tc::noncopyable {
 		static_assert(tc::decayed<Cont>);
 		using iterator = tc::iterator_t<Cont>;
@@ -55,7 +55,7 @@ namespace tc {
 
 		constexpr void keep(iterator it) & noexcept {
 #ifdef _CHECKS
-			auto const nDistance = tc::distance(m_itOutputEnd, it);
+			auto const nDistance = std::distance(m_itOutputEnd, it);
 			_ASSERTE( 0<=nDistance );
 			auto const rsize = restrict_size_decrement(m_cont, nDistance, nDistance);
 #endif
@@ -75,8 +75,7 @@ namespace tc {
 			return m_itOutputEnd;
 		}
 
-		template<ENABLE_SFINAE> requires (!has_mem_fn_hash_function<SFINAE_TYPE(Cont)>::value)
-		constexpr void pop_back() & noexcept {
+		constexpr void pop_back() & noexcept requires (!has_mem_fn_hash_function<Cont>) {
 			_ASSERTE( m_itOutputEnd!=tc::begin(m_cont) );
 			auto const rsize = restrict_size_decrement(m_cont);
 			--m_itOutputEnd;
@@ -84,7 +83,7 @@ namespace tc {
 		}
 	};
 
-	template<typename Cont> requires has_mem_fn_splice_after<Cont>::value 
+	template<has_mem_fn_splice_after Cont>
 	struct range_filter<Cont> : Cont, private tc::noncopyable {
 		static_assert(tc::dependent_false<Cont>::value, "Careful: currently unused and without unit test");
 
@@ -124,7 +123,7 @@ namespace tc {
 		}
 	};
 
-	template<typename Cont> requires has_mem_fn_splice<Cont>::value
+	template<has_mem_fn_splice Cont>
 	struct range_filter<Cont> : Cont, private tc::noncopyable {
 		static_assert(tc::decayed<Cont>);
 		Cont& m_contInput;
@@ -194,7 +193,7 @@ namespace tc {
 		constexpr void keep(iterator it) & noexcept {
 #ifdef _CHECKS
 			// Filter without reordering 
-			_ASSERTE( 0<=tc::distance(m_itFirstValid, it) );
+			_ASSERTE( 0<=std::distance(m_itFirstValid, it) );
 			m_itFirstValid=it;
 			++m_itFirstValid;
 #endif
@@ -275,13 +274,14 @@ namespace tc {
 	// filter_inplace
 
 	template<typename Cont, typename Pred = tc::identity>
-	void filter_inplace(Cont & cont, tc::iterator_t<Cont> it, Pred pred = Pred()) noexcept {
+	void filter_inplace(Cont & cont, tc::iterator_t<Cont> it, Pred pred = Pred()) MAYTHROW {
 		for (auto const itEnd = tc::end(cont); it != itEnd; ++it) {
-			if (!tc::explicit_cast<bool>(tc::invoke(pred, *it))) {
+			if (!tc::explicit_cast<bool>(tc::invoke(pred, *it))) { // MAYTHROW
 				tc::range_filter< tc::decay_t<Cont> > rngfilter(cont, it);
 				++it;
 				while (it != itEnd) {
-					if (tc::invoke(pred, *it)) { // taking further action to destruct *it when returning false is legitimate use case, so do do not enforce const
+					// taking further action to destruct *it when returning false is legitimate use case, so do do not enforce const
+					if (tc::invoke(pred, *it)) { // MAYTHROW
 						rngfilter.keep(it++); // may invalidate it, so move away first
 					} else {
 						++it;
@@ -293,7 +293,7 @@ namespace tc {
 	}
 
 	template<typename Cont, typename Pred = tc::identity>
-	void filter_inplace(Cont& cont, Pred&& pred = Pred()) noexcept {
+	void filter_inplace(Cont& cont, Pred&& pred = Pred()) MAYTHROW {
 		tc::filter_inplace( cont, tc::begin(cont), std::forward<Pred>(pred) );
 	}
 

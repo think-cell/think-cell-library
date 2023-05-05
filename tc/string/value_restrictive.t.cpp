@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -19,16 +19,19 @@ static_assert(std::is_standard_layout<tc::char_ascii>::value);
 
 template<typename T>
 struct is_convertible_to_ascii_supporting_types final {
-	static constexpr auto value = tc::is_safely_convertible<tc::char_asciilower, tc::char_ascii>::value | tc::is_safely_convertible<tc::char_asciilower, char>::value | tc::is_safely_convertible<tc::char_asciilower, tc::char16>::value;
+	static constexpr auto value = tc::safely_convertible_to<tc::char_asciilower, tc::char_ascii> | tc::safely_convertible_to<tc::char_asciilower, char> | tc::safely_convertible_to<tc::char_asciilower, tc::char16>;
 };
 
 static_assert(is_convertible_to_ascii_supporting_types<tc::char_asciilower>::value);
 static_assert(is_convertible_to_ascii_supporting_types<tc::char_asciiupper>::value);
 static_assert(is_convertible_to_ascii_supporting_types<tc::char_asciidigit>::value);
 
+template <auto V> struct print;
+
 static_assert(tc::char_ascii('a') == 'a' && 'a' == tc::char_ascii('a'));
 static_assert(tc::char_ascii('a') == u'a' && u'a' == tc::char_ascii('a'));
-static_assert(tc::equal("abc", ASCIISTR("abc")));
+static_assert(tc::size("abc"_tc) == 3);
+static_assert(tc::equal("abc", "abc"_tc));
 
 static_assert(tc::char_ascii('a') == tc::char_asciilower('a') && tc::char_asciilower('a') == tc::char_ascii('a'));
 static_assert(tc::char_ascii('z') == tc::char_asciilower('z') && tc::char_asciilower('z') == tc::char_ascii('z'));
@@ -91,7 +94,7 @@ namespace {
 }
 
 namespace {
-	DEFINE_ENUM(ELetter, eletter, (A)(B)(C));
+	TC_DEFINE_ENUM(ELetter, eletter, (A)(B)(C));
 }
 
 namespace {
@@ -146,29 +149,29 @@ UNITTESTDEF(append_char_ascii) {
 	tc::string<char> str1;
 	tc::cont_emplace_back(str1, tc::char_ascii('a'));
 	_ASSERT(tc::equal(str1, "a"));
-	tc::append(str1, ASCIISTR("bcd"));
+	tc::append(str1, "bcd"_tc);
 	_ASSERT(tc::equal(str1, "abcd"));
 
 	tc::string<char32_t> str2;
 	tc::cont_emplace_back(str2, tc::char_ascii('a'));
 	_ASSERT(tc::equal(str2, U"a"));
-	tc::append(str2, ASCIISTR("bcd"));
+	tc::append(str2, "bcd"_tc);
 	_ASSERT(tc::equal(str2, U"abcd"));
 
 	tc::string<char> str3;
-	tc::append(str3, "a", ASCIISTR("bc"), "d");
+	tc::append(str3, "a", "bc"_tc, "d");
 	_ASSERT(tc::equal(str3, "abcd"));
 
 	tc::string<char32_t> str4;
-	tc::append(str4, U"a", ASCIISTR("bc"), U"d");
+	tc::append(str4, U"a", "bc"_tc, U"d");
 	_ASSERT(tc::equal(str4, U"abcd"));
 
 	tc::string<char32_t> str5;
-	tc::append(str5, "a", ASCIISTR("bc"), "d");
+	tc::append(str5, "a", "bc"_tc, "d");
 	_ASSERT(tc::equal(str5, U"abcd"));
 
 	tc::string<tc::char_ascii> str6;
-	tc::append(str6, ASCIISTR("abc"));
+	tc::append(str6, "abc"_tc);
 	_ASSERT(tc::equal(str6, "abc"));
 	tc::cont_emplace_back(str6, tc::char_ascii('d'));
 	_ASSERT(tc::equal(str6, "abcd"));
@@ -178,9 +181,9 @@ UNITTESTDEF(append_char_ascii) {
 	_ASSERT(tc::equal(str6, "bc"));
 	tc::cont_assign(str6);
 	_ASSERT(tc::empty(str6));
-	tc::append(str6, ASCIISTR("abc"));
+	tc::append(str6, "abc"_tc);
 
-	tc::ptr_range<tc::char_ascii const> str7 = str6;
+	tc::span<tc::char_ascii const> str7 = str6;
 	_ASSERT(tc::equal(str7, "abc"));
 }
 

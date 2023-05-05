@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -12,9 +12,10 @@
 #include "../base/utility.h"
 #include "../base/casts.h"
 #include "../base/explicit_cast.h"
-#include "../array.h"
+#include "../base/string_template_param.h"
 #include "../algorithm/binary_operators.h"
 #include "../range/meta.h"
+#include "../array.h"
 
 namespace tc {
 	// Code unit predicates
@@ -40,23 +41,17 @@ namespace tc {
 
 	namespace value_restrictive_adl {
 		template<typename TTarget, typename TSource, TSource tFirst, TSource tLast>
-		struct is_char_and_interval_is_in_range {
-			static_assert(tFirst <= tLast);
-
-		private:
-			struct interval_is_in_range { // Code units can be directly compared when ALL allowed code points can be represented by one of the smallest code unit type.
-				static constexpr bool value = tc::char_limits<TTarget>::interval_in_range(tFirst, tLast); // interval_in_range guarantees that t is a code point for all t in [tFirst, tLast]
-			};
-
-		public:
-			static constexpr bool value = std::conjunction<tc::is_char<TTarget>, interval_is_in_range>::value;
-		};
+		concept char_and_interval_is_in_range =
+			tc::char_type<TTarget> &&
+			tFirst<=tLast &&
+			// Code units can be directly compared when ALL allowed code points can be represented by one of the smallest code unit type.
+			tc::char_limits<TTarget>::interval_in_range(tFirst, tLast); // interval_in_range guarantees that t is a code point for all t in [tFirst, tLast]
 
 		template<typename T, T tFirst, T tLast>
 		struct value_restrictive final : tc::additive<> {
 		// private: TODO: inhibits usage as template parameter
 			static_assert(tc::decayed<T>);
-			static_assert(std::is_enum<T>::value || is_char_and_interval_is_in_range<T, T, tFirst, tLast>::value);
+			static_assert(std::is_enum<T>::value || char_and_interval_is_in_range<T, T, tFirst, tLast>);
 			static_assert(tFirst <= tLast);
 
 			template<typename U, U uFirst, U uLast>
@@ -76,9 +71,9 @@ namespace tc {
 			template<typename U, U uFirst, U uLast>
 			explicit constexpr value_restrictive(value_restrictive<U, uFirst, uLast> const ch) noexcept : value_restrictive(ch.m_t) {} // Delegate to explicit ctor from data type
 
-			template<typename U> requires tc::is_explicit_castable<T, U const&>::value
-			explicit constexpr value_restrictive(U const u) noexcept : MEMBER_INIT_CAST(m_t, u) {
-				_ASSERTE(tc::underlying_cast(c_tFirst) <= tc::underlying_cast(u) && tc::underlying_cast(u) <= tc::underlying_cast(c_tLast));
+			template<typename U> requires tc::explicit_castable_from<T, U const&>
+			explicit constexpr value_restrictive(U const u) noexcept : tc_member_init_cast(m_t, u) {
+				_ASSERTE(tc::to_underlying(c_tFirst) <= tc::to_underlying(u) && tc::to_underlying(u) <= tc::to_underlying(c_tLast));
 			}
 
 			template<typename Rhs>
@@ -87,19 +82,19 @@ namespace tc {
 				return *this;
 			}
 
-			template<typename U> requires std::is_same<T, U>::value || is_char_and_interval_is_in_range<std::remove_cv_t<U>, T, c_tFirst, c_tLast>::value
+			template<typename U> requires std::is_same<T, U>::value || char_and_interval_is_in_range<std::remove_cv_t<U>, T, c_tFirst, c_tLast>
 			constexpr operator U() const& noexcept {
 				return m_t;
 			}
 
-			template<typename Integral> requires tc::is_actual_integer<Integral>::value
+			template<tc::actual_integer Integral>
 			constexpr value_restrictive& operator+=(Integral const n) noexcept {
 				_ASSERTE(tc::cmp_less_equal(c_tFirst - m_t, n) && tc::cmp_less_equal(n, c_tLast - m_t));
 				m_t = static_cast<T>(m_t + n);
 				return *this;
 			}
 
-			template<typename Integral> requires tc::is_actual_integer<Integral>::value
+			template<tc::actual_integer Integral>
 			constexpr value_restrictive& operator-=(Integral const n) noexcept {
 				_ASSERTE(tc::cmp_less_equal(m_t - c_tLast, n) && tc::cmp_less_equal(n, m_t - c_tFirst));
 				m_t = static_cast<T>(m_t - n);
@@ -108,13 +103,21 @@ namespace tc {
 		};
 
 		template<typename T, T tFirst, T tLast>
-		constexpr auto underlying_cast_impl(value_restrictive<T, tFirst, tLast> const& t) return_decltype_noexcept(
-			tc::underlying_cast(tc::implicit_cast<T>(t))
+		constexpr auto to_underlying_impl(value_restrictive<T, tFirst, tLast> const& t) return_decltype_noexcept(
+			tc::to_underlying(tc::implicit_cast<T>(t))
 		)
+
+		template<typename T, T tFirst, T tLast>
+		constexpr auto from_underlying_impl(tc::type::identity<value_restrictive<T, tFirst, tLast>>, tc::underlying_type_t<value_restrictive<T, tFirst, tLast>> const& t) return_decltype_noexcept(
+			// Range check for T done in its from_underlying implementation.
+			// Range check for [tFirst, tLast] done in constructor.
+			value_restrictive<T, tFirst, tLast>(tc::from_underlying<T>(t))
+		)
+		
 
 #pragma push_macro("DEFINE_COMPARISON_OP")
 #define DEFINE_COMPARISON_OP(op) \
-		template<typename T, T tFirst, T tLast, typename U, std::enable_if_t<std::is_same<T, U>::value || is_char_and_interval_is_in_range<U, T, tFirst, tLast>::value>* = nullptr> \
+		template<typename T, T tFirst, T tLast, typename U, std::enable_if_t<std::is_same<T, U>::value || char_and_interval_is_in_range<U, T, tFirst, tLast>>* = nullptr> \
 		constexpr auto operator op(value_restrictive<T, tFirst, tLast> const& lhs, U const& rhs) return_decltype_noexcept( \
 			static_cast<U>(tc::implicit_cast<T>(lhs)) op rhs \
 		) \
@@ -122,7 +125,7 @@ namespace tc {
 		constexpr auto operator op(value_restrictive<T, tFirst, tLast> const& lhs, value_restrictive<U, uFirst, uLast> const& rhs) return_decltype_noexcept( \
 			tc::implicit_cast<T>(lhs) op tc::implicit_cast<T>(rhs) \
 		) \
-		template<typename T, T tFirst, T tLast, typename U, U uFirst, U uLast, std::enable_if_t<!std::is_same<T, U>::value && tc::is_char<T>::value && tc::is_char<U>::value>* = nullptr> \
+		template<tc::char_type T, T tFirst, T tLast, tc::char_type U, U uFirst, U uLast, std::enable_if_t<!std::is_same<T, U>::value>* = nullptr> \
 		constexpr auto operator op(value_restrictive<T, tFirst, tLast> const& lhs, value_restrictive<U, uFirst, uLast> const& rhs) return_decltype_noexcept( \
 			static_cast<char32_t>(tc::implicit_cast<T>(lhs)) op static_cast<char32_t>(tc::implicit_cast<T>(rhs)) \
 		) \
@@ -130,6 +133,19 @@ namespace tc {
 		DEFINE_COMPARISON_OP(==)
 		DEFINE_COMPARISON_OP(<=>)
 #pragma pop_macro("DEFINE_COMPARISON_OP")
+
+		// operator- between tc::char_like types is used in 2 senarios:
+		//   1. ch - '0'/'a'/'A'
+		//   2. spirit uses chLhs-chRhs as 3-way comparison
+		template<tc::char_type T, T tFirst, T tLast, tc::char_type Char>
+		constexpr auto operator-(value_restrictive<T, tFirst, tLast> const& lhs, Char const& rhs) noexcept {
+			return tc::implicit_cast<T>(lhs) - rhs;
+		}
+
+		template<tc::char_like Char, tc::char_type T, T tFirst, T tLast>
+		constexpr auto operator-(Char const& lhs, value_restrictive<T, tFirst, tLast> const& rhs) noexcept {
+			return lhs - tc::implicit_cast<T>(rhs);
+		}
 	}
 	using value_restrictive_adl::value_restrictive;
 
@@ -138,9 +154,9 @@ namespace tc {
 		return false;
 	}
 
-	namespace no_adl {
+	namespace char_like_detail {
 		template<typename T, T tFirst, T tLast>
-		struct is_char_like_impl<tc::value_restrictive<T, tFirst, tLast>> : tc::is_char_like<T> {};
+		inline constexpr bool char_like_impl<tc::value_restrictive<T, tFirst, tLast>> = tc::char_like<T>;
 	}
 
 	using char_ascii = tc::value_restrictive<char, '\0', '\x7f'>;
@@ -153,8 +169,8 @@ namespace tc {
 		struct char_limits<tc::value_restrictive<Char, chFirst, chLast>> {
 			static constexpr std::size_t c_nMaxCodeUnitsPerCodePoint = 1; // because we static_assert(is_single_codeunit())
 
-			[[nodiscard]] static constexpr bool in_range(unsigned int n) noexcept {
-				return chFirst <= n && n <= chLast;
+			[[nodiscard]] static constexpr bool interval_in_range(unsigned int nFirst, unsigned int nLast) noexcept {
+				return chFirst <= nFirst && nLast <= chLast;
 			}
 		};
 	}
@@ -251,5 +267,8 @@ namespace tc {
 	}
 }
 
-#define ASCIISTRVAL(str) tc::make_array<tc::char_ascii>(str)  // avoid copy
-#define ASCIISTR(str) as_constexpr(ASCIISTRVAL(str))
+template <tc::string_template_param String>
+[[nodiscard]] constexpr auto const& operator""_tc() {
+	static_assert(std::same_as<typename decltype(String)::value_type, char>, "only ASCII is implemented at the moment");
+	return as_constexpr(tc::make_array<tc::char_ascii>(String));
+}

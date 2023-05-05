@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -24,7 +24,7 @@ namespace tc {
 		template<
 			typename RngPairIndexValue,
 			typename TValue,
-			bool HasIterator = is_range_with_iterators< RngPairIndexValue >::value
+			bool HasIterator = tc::range_with_iterators< RngPairIndexValue >
 		>
 		struct [[nodiscard]] sparse_adaptor;
 
@@ -54,8 +54,8 @@ namespace tc {
 					n = nEnd;
 					return bc;
 				};
-				RETURN_IF_BREAK(tc::for_each(this->base_range(), [&](auto&& pairindexvalue) MAYTHROW {
-					RETURN_IF_BREAK(GenerateDefaultUpTo(get<0>(pairindexvalue))); // MAYTHROW
+				tc_return_if_break(tc::for_each(this->base_range(), [&](auto&& pairindexvalue) MAYTHROW {
+					tc_return_if_break(GenerateDefaultUpTo(get<0>(pairindexvalue))); // MAYTHROW
 					++n;
 					return tc::continue_if_not_break(func, tc::get<1>(tc_move_if_owned(pairindexvalue))); // MAYTHROW
 				}));
@@ -97,7 +97,7 @@ namespace tc {
 			bool IndexIsDefault(tc_index const& idx) const& noexcept {
 				_ASSERT(idx.m_n < this->m_nEnd);
 				return tc::at_end_index(this->base_range(),idx.m_idxBase) ||
-					idx.m_n != tc::unsigned_cast(tc::get<0>(tc::dereference_index(this->base_range(),idx.m_idxBase)));
+					idx.m_n != tc::as_unsigned(tc::get<0>(tc::dereference_index(this->base_range(),idx.m_idxBase)));
 			}
 
 			STATIC_FINAL(begin_index)() const& noexcept -> tc_index {

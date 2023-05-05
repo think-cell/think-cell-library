@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -16,7 +16,7 @@ namespace tc {
 	////////////////////////////////////////////////
 	// initialization of TTarget member/element by TSource
 
-	DEFINE_ENUM( econstruction_t, econstruction, (FORBIDDEN)(EXPLICIT)(IMPLICIT) );
+	TC_DEFINE_ENUM( econstruction_t, econstruction, (FORBIDDEN)(EXPLICIT)(IMPLICIT) );
 
 	namespace construction_restrictiveness_detail {
 		// Similar to http://www.open-std.org/jtc1/sc22/wg21/docs/papers/2015/n4387.html :
@@ -33,8 +33,8 @@ namespace tc {
 					return tc::econstructionIMPLICIT;
 				}
 			}
-			if constexpr( tc::is_explicit_castable<TTarget, Args...>::value ) {
-				return tc::is_implicitly_constructible<TTarget, Args...>::value
+			if constexpr( tc::explicit_castable_from<TTarget, Args...> ) {
+				return tc::implicit_constructible_from<TTarget, Args...>
 					? tc::econstructionIMPLICIT
 					: tc::econstructionEXPLICIT;
 			} else {

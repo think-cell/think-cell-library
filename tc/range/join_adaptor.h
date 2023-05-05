@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -18,17 +18,17 @@
 namespace tc {
 	void join();
 	
-	DEFINE_FN(size_linear_raw)
+	tc_define_fn(size_linear_raw)
 
 	namespace no_adl {
 		namespace join_adaptor_detail {
 			template <typename RngRng>
 			struct is_joinable_with_iterators : tc::constant<false> {};
 
-			template <typename RngRng> requires tc::is_range_with_iterators<RngRng>::value
+			template <tc::range_with_iterators RngRng>
 			struct is_joinable_with_iterators<RngRng> : tc::constant<
-				tc::is_range_with_iterators<tc::iter_reference_t<tc::iterator_t<RngRng>>>::value &&
-				std::is_lvalue_reference<tc::iter_reference_t<tc::iterator_t<RngRng>>>::value
+				tc::range_with_iterators<std::iter_reference_t<tc::iterator_t<RngRng>>> &&
+				std::is_lvalue_reference<std::iter_reference_t<tc::iterator_t<RngRng>>>::value
 			> {};
 
 			template<typename RngRng>
@@ -95,7 +95,7 @@ namespace tc {
 				tc::accumulate(tc::transform(SFINAE_VALUE(this)->base_range(), tc::fn_size_linear_raw(), tc::explicit_cast<std::size_t>(0), tc::fn_assign_plus()))
 			)
 
-			template<typename Self, std::enable_if_t<tc::is_base_of_decayed<join_adaptor, Self>::value>* = nullptr>
+			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, join_adaptor>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
 			friend auto range_output_t_impl(Self&&) -> tc::type::unique_t<tc::type::join_t<tc::type::transform_t<tc::range_output_t<decltype(std::declval<Self>().base_range())>, tc::range_output_t>>> {} // unevaluated
 			
 		};
@@ -107,7 +107,7 @@ namespace tc {
 				join_adaptor<RngRng>,
 				tc::tuple<
 					tc::index_t<std::remove_reference_t<RngRng>>,
-					tc::index_t<std::remove_reference_t<tc::iter_reference_t<tc::iterator_t<RngRng>>>>
+					tc::index_t<std::remove_reference_t<std::iter_reference_t<tc::iterator_t<RngRng>>>>
 				>
 			>
 		{
@@ -119,9 +119,9 @@ namespace tc {
 			static_assert(!tc::has_stashing_index<std::remove_reference_t<RngRng>>::value,
 				"RngRgn must not have \"stashing\" index/iterator: copying the composite index would invalidate the inner index/iterator."
 			);
-			static constexpr bool c_bHasStashingIndex=tc::has_stashing_index<std::remove_reference_t<tc::iter_reference_t<tc::iterator_t<RngRng>>>>::value;
+			static constexpr bool c_bHasStashingIndex=tc::has_stashing_index<std::remove_reference_t<std::iter_reference_t<tc::iterator_t<RngRng>>>>::value;
 		private:
-			tc::index_t<std::remove_reference_t<tc::iter_reference_t<tc::iterator_t<RngRng>>>> find_valid_index(tc::index_t<std::remove_reference_t<RngRng>>& idxFirst) const& noexcept {
+			tc::index_t<std::remove_reference_t<std::iter_reference_t<tc::iterator_t<RngRng>>>> find_valid_index(tc::index_t<std::remove_reference_t<RngRng>>& idxFirst) const& noexcept {
 				while (!tc::at_end_index(this->base_range(), idxFirst)) {
 					auto& rngSecond = tc::dereference_index(this->base_range_best_access(), idxFirst);
 					auto idxSecond = tc::begin_index(rngSecond);
@@ -153,7 +153,7 @@ namespace tc {
 
 			STATIC_FINAL_MOD(constexpr, increment_index)(tc_index& idx) const& noexcept -> void {
 				_ASSERT(!tc::at_end_index(this->base_range(), tc::get<0>(idx)));
-				auto_cref(rngSecond, tc::dereference_index(this->base_range(), tc::get<0>(idx)));
+				tc_auto_cref(rngSecond, tc::dereference_index(this->base_range(), tc::get<0>(idx)));
 				tc::increment_index(rngSecond, tc::get<1>(idx));
 				if (tc::at_end_index(rngSecond, tc::get<1>(idx))) {
 					tc::increment_index(this->base_range(), tc::get<0>(idx));
@@ -176,7 +176,7 @@ namespace tc {
 				if(tc::at_end_index(this->base_range(), tc::get<0>(idx))) {
 					funcReverseFindValidIndex();
 				} else {
-					auto_cref(rngSecond, tc::dereference_index(this->base_range(), tc::get<0>(idx)));
+					tc_auto_cref(rngSecond, tc::dereference_index(this->base_range(), tc::get<0>(idx)));
 					if(tc::begin_index(rngSecond) == tc::get<1>(idx)) {
 						funcReverseFindValidIndex();
 					} else {
@@ -198,8 +198,8 @@ namespace tc {
 			}
 		};
 
-		template<typename RngRng>
-		struct constexpr_size_base<join_adaptor<RngRng>, std::void_t<typename tc::constexpr_size<RngRng>::type, typename join_adaptor_detail::rng_constexpr_size<decltype(std::declval<join_adaptor<RngRng> const&>().base_range())>::type>>
+		template<tc::has_constexpr_size RngRng> requires requires {	join_adaptor_detail::rng_constexpr_size<decltype(std::declval<join_adaptor<RngRng> const&>().base_range())>::value; }
+		struct constexpr_size_impl<join_adaptor<RngRng>>
 			: tc::constant<tc::constexpr_size<RngRng>::value * join_adaptor_detail::rng_constexpr_size<decltype(std::declval<join_adaptor<RngRng> const&>().base_range())>::value
 			>
 		{};

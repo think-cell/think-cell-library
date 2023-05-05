@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -53,10 +53,17 @@ namespace tc {
 			struct identity {
 				using type = T;
 			};
+
+			template<template<typename> typename TTrait>
+			struct negation {
+				template<typename T>
+				using type = std::negation<TTrait<T>>;
+			};
 		}
 		using no_adl::curry;
 		using no_adl::rcurry;
 		using no_adl::identity;
+		using no_adl::negation;
 
 		template<typename T>
 		using identity_t = typename no_adl::identity<T>::type;

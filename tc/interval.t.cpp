@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -58,7 +58,7 @@ UNITTESTDEF(interval_center) {
 	{
 		auto TestRoundtrip=[](auto intvl, auto extent, auto intvlExpanded) noexcept {
 			_ASSERTEQUAL(
-				modified(intvl, {
+				tc_modified(intvl, {
 					_.expand_length(extent);
 					VERIFYEQUAL(_, intvlExpanded).expand_length(-extent);
 				}),
@@ -135,11 +135,11 @@ namespace {
 		T const fInfinity = std::numeric_limits<T>::infinity();
 		T const fZero = 0;
 		T const fOne = 1;
-		_ASSERT(0 < modified(fZero, tc::nextafter_inplace(_)));
-		_ASSERTEQUAL(modified(fZero, tc::nextafter_inplace(_)) / 2, 0);
-		_ASSERTEQUAL(modified(fOne, tc::nextafter_inplace(_)) - fOne, std::numeric_limits<T>::epsilon());
-		_ASSERTEQUAL(modified(std::numeric_limits<T>::max(), tc::nextafter_inplace(_)), fInfinity);
-		_ASSERTEQUAL(modified(fInfinity, tc::nextafter_inplace(_)), fInfinity);
+		_ASSERT(0 < tc_modified(fZero, tc::nextafter_inplace(_)));
+		_ASSERTEQUAL(tc_modified(fZero, tc::nextafter_inplace(_)) / 2, 0);
+		_ASSERTEQUAL(tc_modified(fOne, tc::nextafter_inplace(_)) - fOne, std::numeric_limits<T>::epsilon());
+		_ASSERTEQUAL(tc_modified(std::numeric_limits<T>::max(), tc::nextafter_inplace(_)), fInfinity);
+		_ASSERTEQUAL(tc_modified(fInfinity, tc::nextafter_inplace(_)), fInfinity);
 	}
 }
 
@@ -175,14 +175,14 @@ UNITTESTDEF(linear_interval_transform) {
 				// check monotonicity
 				if ( srcLo != srcHi ) {
 					if( dstLo == dstHi ) {
-						_ASSERTEQUAL( intvltrans(modified(src, tc::nextafter_inplace(_))), dst );
-						_ASSERTEQUAL( intvltrans(modified(src, tc::nextbefore_inplace(_))), dst );
+						_ASSERTEQUAL( intvltrans(tc_modified(src, tc::nextafter_inplace(_))), dst );
+						_ASSERTEQUAL( intvltrans(tc_modified(src, tc::nextbefore_inplace(_))), dst );
 					} else if( srcLo < srcHi == dstLo < dstHi ) {
-						_ASSERT( dst <= intvltrans(modified(src, tc::nextafter_inplace(_))) );
-						_ASSERT( intvltrans(modified(src, tc::nextbefore_inplace(_))) <= dst );
+						_ASSERT( dst <= intvltrans(tc_modified(src, tc::nextafter_inplace(_))) );
+						_ASSERT( intvltrans(tc_modified(src, tc::nextbefore_inplace(_))) <= dst );
 					} else {
-						_ASSERT( intvltrans(modified(src, tc::nextafter_inplace(_))) <= dst );
-						_ASSERT( dst <= intvltrans(modified(src, tc::nextbefore_inplace(_))) );
+						_ASSERT( intvltrans(tc_modified(src, tc::nextafter_inplace(_))) <= dst );
+						_ASSERT( dst <= intvltrans(tc_modified(src, tc::nextbefore_inplace(_))) );
 					}
 				}
 			}

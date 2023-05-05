@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -27,48 +27,47 @@ namespace tc {
 				using iterator_category = typename std::iterator_traits<It>::iterator_category;
 
 			private:
-				Derived& derived() noexcept {return tc::derived_cast<Derived>(*MSVC_WORKAROUND_THIS);}
+				constexpr Derived& derived() noexcept {return tc::derived_cast<Derived>(*MSVC_WORKAROUND_THIS);}
 			public:
-
-				base() noexcept : m_bValid(false) {}
+				constexpr base() noexcept : m_bValid(false) {}
 
 				// no implicit conversion from It; we must ensure that It has the semantics of element rather than border before allowing the construction
-				explicit base(It const& it) noexcept : It(it), m_bValid(true) {}
-				explicit base(It && it) noexcept : It(tc_move(it)), m_bValid(true) {}
+				constexpr explicit base(It const& it) noexcept : It(it), m_bValid(true) {}
+				constexpr explicit base(It && it) noexcept : It(tc_move(it)), m_bValid(true) {}
 
-				Derived& operator=(It const& it) & noexcept {
+				constexpr Derived& operator=(It const& it) & noexcept {
 					It::operator=(it);
 					m_bValid = true;
 					return derived();
 				}
-				Derived& operator=(It && it) & noexcept {
+				constexpr Derived& operator=(It && it) & noexcept {
 					It::operator=(tc_move(it));
 					m_bValid = true;
 					return derived();
 				}
 
-				explicit operator bool() const& noexcept {
+				constexpr explicit operator bool() const& noexcept {
 					return m_bValid;
 				}
 
-				Derived& operator++() & noexcept {
+				constexpr Derived& operator++() & noexcept {
 					_ASSERT(m_bValid);
 					++tc::base_cast<It>(*this);
 					return derived();
 				}
 
-				Derived& operator--() & noexcept {
+				constexpr Derived& operator--() & noexcept {
 					_ASSERT(m_bValid);
 					--tc::base_cast<It>(*this);
 					return derived();
 				}
 
-				reference operator*() const& noexcept {
+				constexpr reference operator*() const& noexcept {
 					_ASSERT(m_bValid);
 					return *tc::base_cast<It>(*this);
 				}
 
-				pointer operator->() const& noexcept {
+				constexpr pointer operator->() const& noexcept {
 					_ASSERT(m_bValid);
 					return tc::base_cast<It>(*this).operator->();
 				}
@@ -83,7 +82,7 @@ namespace tc {
 				using base_::operator=;
 
 				template <typename It_ = It>
-				auto element_base() const& noexcept {
+				constexpr auto element_base() const& noexcept {
 					using ItBase = typename nullable_iterator<decltype(tc::base_cast<It>(*this).element_base())>::element_type;
 					return this->m_bValid ? ItBase{ tc::base_cast<It>(*this).element_base() } : ItBase{};
 				}
@@ -95,14 +94,14 @@ namespace tc {
 				using base_::operator=;
 
 				template <typename It_ = It>
-				auto border_base() const& noexcept {
+				constexpr auto border_base() const& noexcept {
 					using ItBase = typename nullable_iterator<decltype(tc::base_cast<It>(*this).border_base())>::border_type;
 					return this->m_bValid ? ItBase{ tc::base_cast<It>(*this).border_base() } : ItBase{};
 				}
 			};
 		};
 
-		template<typename It> requires tc::is_explicit_castable<bool, It>::value
+		template<typename It> requires tc::explicit_castable_from<bool, It>
 		struct nullable_iterator<It> {
 			static_assert(tc::decayed<It>);
 			using element_type = It;
@@ -144,7 +143,7 @@ namespace tc {
 			using difference_type = std::ptrdiff_t; // needed to compile interfaces relying on difference_type
 		};
 
-		template< typename IndexRange> requires has_mem_fn_distance_to_index<IndexRange>::value
+		template< has_mem_fn_distance_to_index IndexRange>
 		struct difference_type_base<IndexRange> {
 			using difference_type = decltype(std::declval<IndexRange const&>().distance_to_index(std::declval<typename IndexRange::tc_index const&>(), std::declval<typename IndexRange::tc_index const&>()));
 		};
@@ -167,24 +166,51 @@ namespace std {
 		: tc::index_iterator_traits_no_adl::difference_type_base<IndexRange> // should not be different for const and non-const
 		, tc::index_iterator_traits_no_adl::value_type_base<tc::conditional_const_t<IndexRange, bConst>&>
 	{
-		static_assert(tc::has_index<IndexRange>::value);
+		static_assert(tc::has_index<IndexRange>);
 
 		// IndexRange::dereference_index does not take an argument of type Index. Did you write tc::transform(Rng, Fn) and Fn takes the wrong argument?
-		using reference = tc::iter_reference_t<tc::index_iterator<IndexRange, bConst>>;
+		using reference = std::iter_reference_t<tc::index_iterator<IndexRange, bConst>>;
 
 		// Since C++20, iterator_traits<It>::pointer is synthesized in this way by default, if typename It::pointer does not exist.
 		using pointer = decltype(std::declval<tc::index_iterator<IndexRange, bConst>&>().operator->());
 
 		// Some of our ranges, may not even conform to LecayInputIterator concept.
 		// We ignore the requirements on value_type and reference, because library implementors do not rely on them anyway.
-		using iterator_category = std::conditional_t<tc::has_mem_fn_decrement_index<IndexRange>::value,
-			std::conditional_t<tc::has_mem_fn_distance_to_index<IndexRange>::value,
-				std::random_access_iterator_tag,
-				std::bidirectional_iterator_tag
-			>,
-			std::forward_iterator_tag
-		>;
+		static auto compute_iterator_concept() {
+			if constexpr (!tc::has_mem_fn_decrement_index<IndexRange>) {
+				return std::forward_iterator_tag();
+			} else if constexpr (!tc::has_mem_fn_distance_to_index<IndexRange>) {
+				return std::bidirectional_iterator_tag();
+			} else if constexpr (!tc::has_mem_fn_index_to_address<IndexRange>) {
+				return std::random_access_iterator_tag();
+			} else {
+				return std::contiguous_iterator_tag();
+			}
+		}
+		using iterator_concept = decltype(compute_iterator_concept());
+
+		// Note that iterator_category must not be std::contiguous_iterator_tag, as code may not expect it.
+		using iterator_category = std::conditional_t<std::is_same_v<iterator_concept, std::contiguous_iterator_tag>, std::random_access_iterator_tag, iterator_concept>;
 	};
+
+	template<typename IndexRange, bool bConst>
+		requires std::same_as<typename iterator_traits<tc::index_iterator<IndexRange, bConst>>::iterator_concept, std::contiguous_iterator_tag>
+	struct pointer_traits<tc::index_iterator<IndexRange, bConst>>
+	{
+		using pointer = tc::index_iterator<IndexRange, bConst>;
+
+		// Note that it is *not* the value_type! We want to preserve a const, while the value type strips it.
+		using element_type = std::remove_reference_t<typename iterator_traits<pointer>::reference>;
+
+		using difference_type = typename iterator_traits<pointer>::difference_type;
+
+		// Note that we cannot provide rebind or pointer_to, but don't need that for our use cases either.
+
+		static constexpr element_type* to_address(pointer const& ptr)
+		{
+			return ptr.get_range().index_to_address(ptr.get_index());
+		}
+	};	
 }
 
 namespace tc {
@@ -213,8 +239,6 @@ namespace tc {
 			using this_type = index_iterator<IndexRange, bConst>;
 
 		public:
-			using is_index_iterator = void;
-
 			constexpr index_iterator() noexcept
 				: m_pidxrng(nullptr)
 				, m_idx()
@@ -231,12 +255,14 @@ namespace tc {
 				, m_idx(tc_move(idx))
 			{}
 
+			constexpr auto& get_range() const& noexcept {
+				return *VERIFY(m_pidxrng);
+			}
 			constexpr tc_index const& get_index() const& noexcept {
 				return m_idx;
 			}
 
-			template< ENABLE_SFINAE, std::enable_if_t<tc::has_mem_fn_middle_point<SFINAE_TYPE(IndexRange)>::value>* = nullptr >
-			friend index_iterator middle_point( index_iterator const& itBegin, index_iterator const& itEnd ) noexcept {
+			friend index_iterator middle_point( index_iterator const& itBegin, index_iterator const& itEnd ) noexcept requires tc::has_mem_fn_middle_point<IndexRange> {
 				index_iterator it=itBegin;
 				_ASSERTE(itBegin.m_pidxrng);
 				_ASSERTE(itBegin.m_pidxrng == itEnd.m_pidxrng);
@@ -244,19 +270,20 @@ namespace tc {
 				return it;
 			}
 
-			template< typename IndexRange_, bool bConst1, bool bConst2>
-				requires tc::has_mem_fn_distance_to_index<IndexRange_>::value
+			template< tc::has_mem_fn_distance_to_index IndexRange_, bool bConst1, bool bConst2>
 			friend constexpr auto operator -(
 				index_iterator<IndexRange_, bConst1> const& itLhs,
 				index_iterator<IndexRange_, bConst2> const& itRhs) noexcept;
 
-			template< ENABLE_SFINAE, std::enable_if_t<tc::has_mem_fn_base_range<SFINAE_TYPE(IndexRange)>::value && tc::has_mem_fn_border_base_index<IndexRange>::value>* = nullptr >
-			constexpr auto border_base() const& noexcept {
+			constexpr auto border_base() const& noexcept requires
+				tc::has_mem_fn_base_range<IndexRange> && tc::has_mem_fn_border_base_index<IndexRange>
+			{
 				return tc::make_iterator( VERIFY(m_pidxrng)->base_range(), tc::as_const(*m_pidxrng).border_base_index(m_idx));
 			}
 
-			template< ENABLE_SFINAE, std::enable_if_t<tc::has_mem_fn_base_range<SFINAE_TYPE(IndexRange)>::value && tc::has_mem_fn_element_base_index<IndexRange>::value>* = nullptr >
-			constexpr auto element_base() const& noexcept {
+			constexpr auto element_base() const& noexcept requires
+				tc::has_mem_fn_base_range<IndexRange> && tc::has_mem_fn_element_base_index<IndexRange>
+			{
 				using It = tc::element_t<tc::decay_t<decltype(tc::make_iterator(m_pidxrng->base_range(), tc::as_const(*m_pidxrng).element_base_index(m_idx)))>>;
 				if(m_pidxrng) {
 					return It(tc::make_iterator(m_pidxrng->base_range(), tc::as_const(*m_pidxrng).element_base_index(m_idx)));
@@ -274,8 +301,7 @@ namespace tc {
 				return *this;
 			}
 
-			template<ENABLE_SFINAE, std::enable_if_t<tc::has_mem_fn_decrement_index<SFINAE_TYPE(IndexRange)>::value>* = nullptr>
-			constexpr this_type& operator--() noexcept(noexcept(m_pidxrng->decrement_index(m_idx))) {
+			constexpr this_type& operator--() noexcept(noexcept(m_pidxrng->decrement_index(m_idx))) requires tc::has_mem_fn_decrement_index<IndexRange> {
 				tc::as_const(*VERIFY(m_pidxrng)).decrement_index(m_idx);
 				return *this;
 			}
@@ -292,10 +318,10 @@ namespace tc {
 				return tc::as_const(*VERIFY(it.m_pidxrng)).at_end_index(it.m_idx);
 			}
 
-			template<typename N> requires tc::has_mem_fn_advance_index<IndexRange>::value
-			constexpr this_type& operator+=(N&& n) noexcept(noexcept(m_pidxrng->advance_index(m_idx, n))) {
+			// For iterator_facade.
+			template<typename N> requires tc::has_mem_fn_advance_index<IndexRange>
+			constexpr void advance(N&& n) noexcept(noexcept(m_pidxrng->advance_index(m_idx, n))) {
 				tc::as_const(*VERIFY(m_pidxrng)).advance_index(m_idx, std::forward<N>(n));
-				return *this;
 			}
 
 			template< typename IndexRange_, bool bConst1, bool bConst2> requires tc::is_equality_comparable<tc::index_t<IndexRange_>>::value
@@ -314,7 +340,7 @@ namespace tc {
 			return itLhs.m_idx == itRhs.m_idx;
 		}
 
-		template< typename IndexRange_, bool bConst1, bool bConst2> requires tc::has_mem_fn_distance_to_index<IndexRange_>::value
+		template< tc::has_mem_fn_distance_to_index IndexRange_, bool bConst1, bool bConst2>
 		constexpr auto operator -(
 			index_iterator<IndexRange_, bConst1> const& itLhs,
 			index_iterator<IndexRange_, bConst2> const& itRhs) noexcept {
@@ -332,16 +358,23 @@ namespace tc {
 	}
 
 	namespace iterator2index_detail {
-		BOOST_MPL_HAS_XXX_TRAIT_DEF(is_index_iterator)
+		template<typename It, typename Rng>
+		concept iterator_of = tc::derived_from<std::remove_cvref_t<It>, tc::iterator_t<std::remove_cvref_t<Rng>>>
+			|| tc::derived_from<std::remove_cvref_t<It>, tc::iterator_t<std::remove_cvref_t<Rng> const>>;
 	}
 
-	template<typename It, std::enable_if_t<!iterator2index_detail::has_is_index_iterator<std::remove_reference_t<It>>::value>* = nullptr>
+	template<typename Rng, typename It>
 	constexpr decltype(auto) iterator2index(It&& it) noexcept {
-		return std::forward<It>(it);
+		if constexpr(tc::has_index<std::remove_reference_t<Rng>>) {
+			if constexpr(std::same_as<tc::index_t<std::remove_reference_t<Rng>>, std::remove_cvref_t<It>>) {
+				return std::forward<It>(it);
+			} else {
+				static_assert(iterator2index_detail::iterator_of<It, Rng>);
+				return (std::forward<It>(it).m_idx);
+			}
+		} else {
+			static_assert(iterator2index_detail::iterator_of<It, Rng>);
+			return std::forward<It>(it);
+		}
 	}
-
-	template<typename It, std::enable_if_t<iterator2index_detail::has_is_index_iterator<std::remove_reference_t<It>>::value>* = nullptr>
-	constexpr auto iterator2index(It&& it) return_decltype_xvalue_by_ref_noexcept(
-		std::forward<It>(it).m_idx
-	)
 }

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -83,13 +83,13 @@ namespace tc {
 ```
 */
 namespace tc_get_impl {
-	template<std::size_t I, typename Variant>
-	[[nodiscard]] constexpr decltype(auto) get(Variant&& v) noexcept requires(tc::is_instance_or_derived<std::variant, Variant>::value) {
+	template<std::size_t I, tc::instance_or_derived<std::variant> Variant>
+	[[nodiscard]] constexpr decltype(auto) get(Variant&& v) noexcept {
 		return tc::forward_like<Variant>(*VERIFYNORETURN(tc::get_if<I>(v)));
 	}
 
-	template<typename T, typename Variant>
-	[[nodiscard]] constexpr decltype(auto) get(Variant&& v) noexcept requires(tc::is_instance_or_derived<std::variant, Variant>::value) {
+	template<typename T, tc::instance_or_derived<std::variant> Variant>
+	[[nodiscard]] constexpr decltype(auto) get(Variant&& v) noexcept {
 		return tc::forward_like<Variant>(*VERIFYNORETURN(tc::get_if<T>(v)));
 	}
 }
@@ -113,7 +113,7 @@ namespace tc {
 			tc::type::transform_t<
 				tc::type::cartesian_product_t<
 					tc::type::transform_t<
-						typename tc::is_instance_or_derived<std::variant, Variants>::arguments,
+						typename tc::is_instance_or_derived<Variants, std::variant>::arguments,
 						tc::type::rcurry<tc::same_cvref_t, Variants>::template type
 					>...
 				>,
@@ -190,7 +190,7 @@ namespace tc {
 #endif
 					(
 						detail::projected_result<detail::visit_result_t<Overload, Variant...>>(tc::base_cast<Overload>(*this)),
-						tc::base_cast<typename tc::is_instance_or_derived<std::variant, Variant>::base_instance>(std::forward<Variant>(v))...
+						tc::base_cast<typename tc::is_instance_or_derived<Variant, std::variant>::base_instance>(std::forward<Variant>(v))...
 					);
 			}
 		};
@@ -212,8 +212,7 @@ namespace tc {
 	using no_adl::variant_type_index;
 
 	namespace explicit_convert_adl {
-		template<typename TVariant, std::size_t I, typename... Args, typename Alternative = std::variant_alternative_t<I, TVariant>>
-			requires tc::is_explicit_castable<Alternative, Args...>::value
+		template<typename TVariant, std::size_t I, typename... Args, tc::explicit_castable_from<Args...> Alternative = std::variant_alternative_t<I, TVariant>>
 		constexpr TVariant explicit_convert_impl(adl_tag_t, tc::type::identity<TVariant>, std::in_place_index_t<I> tag, Args&&... args) noexcept(
 			noexcept(tc::explicit_cast<Alternative>(std::forward<Args>(args)...))
 		) {
@@ -233,7 +232,7 @@ namespace tc {
 			using TTarget = std::variant<TT...>;
 			return tc::invoke_with_constant<std::make_index_sequence<sizeof...(TT)>>(
 				[&](auto nconstIndex) MAYTHROW -> TTarget {
-					RETURN_CAST(std::in_place_index_t<nconstIndex()>(), tc::lazy_explicit_cast<std::variant_alternative_t<nconstIndex(), TTarget>>(tc::get<nconstIndex()>(src)));
+					tc_return_cast(std::in_place_index_t<nconstIndex()>(), tc::lazy_explicit_cast<std::variant_alternative_t<nconstIndex(), TTarget>>(tc::get<nconstIndex()>(src)));
 				},
 				src.index()
 			); // MAYTHROW
@@ -244,7 +243,7 @@ namespace tc {
 			using TTarget = std::variant<TT...>;
 			return tc::invoke_with_constant<std::make_index_sequence<sizeof...(TT)>>(
 				[&](auto nconstIndex) MAYTHROW -> TTarget {
-					RETURN_CAST(std::in_place_index_t<nconstIndex()>(), tc::lazy_explicit_cast<std::variant_alternative_t<nconstIndex(), TTarget>>(tc::get<nconstIndex()>(tc_move(src))));
+					tc_return_cast(std::in_place_index_t<nconstIndex()>(), tc::lazy_explicit_cast<std::variant_alternative_t<nconstIndex(), TTarget>>(tc::get<nconstIndex()>(tc_move(src))));
 				},
 				src.index()
 			); // MAYTHROW
@@ -253,7 +252,7 @@ namespace tc {
 
 	template<std::size_t I, typename TVariant, typename... Args>
 	std::variant_alternative_t<I, TVariant>& emplace(TVariant& var, Args&&... args) MAYTHROW {
-		if constexpr (tc::is_safely_constructible<TVariant, Args&&...>::value) {
+		if constexpr (tc::safely_constructible_from<std::variant_alternative_t<I, TVariant>, Args&&...>) {
 			return var.template emplace<I>(std::forward<Args>(args)...);
 		} else {
 			return var.template emplace<I>(tc::lazy_explicit_cast<std::variant_alternative_t<I, TVariant>>(std::forward<Args>(args)...));
@@ -272,8 +271,8 @@ namespace tc {
 		struct is_equality_comparable_with final: tc::constant<false> {};
 
 		template<typename Lhs, typename Rhs> requires
-			tc::is_safely_convertible<decltype(std::declval<Lhs>()==std::declval<Rhs>()), bool>::value ||
-			tc::is_safely_convertible<decltype(std::declval<Rhs>()==std::declval<Lhs>()), bool>::value
+			tc::safely_convertible_to<decltype(std::declval<Lhs>()==std::declval<Rhs>()), bool> ||
+			tc::safely_convertible_to<decltype(std::declval<Rhs>()==std::declval<Lhs>()), bool>
 		struct is_equality_comparable_with<Lhs, Rhs> final: tc::constant<true> {
 			STATICASSERTSAME(
 				decltype(std::declval<Lhs>()==std::declval<Rhs>()),
@@ -288,8 +287,8 @@ namespace tc {
 		struct is_variant_equality_comparable_to_value final: tc::constant<false> {};
 
 		template<typename... Ts, typename TValue> requires
-			(!tc::is_base_of<std::variant<Ts...>, TValue>::value) &&
-			(!tc::is_base_of<std::optional<std::variant<Ts...>>, TValue>::value)
+			(!tc::derived_from<TValue, std::variant<Ts...>>) &&
+			(!tc::derived_from<TValue, std::optional<std::variant<Ts...>>>)
 		struct is_variant_equality_comparable_to_value<std::variant<Ts...>, TValue> final: tc::constant<
 			tc::type::find_unique_if<tc::type::list<Ts const&...>, tc::type::curry<tc::is_equality_comparable_with, TValue const&>::template type>::found
 		> {};

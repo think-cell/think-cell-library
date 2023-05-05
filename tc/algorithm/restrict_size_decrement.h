@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -43,7 +43,7 @@ namespace tc
 	template< typename Rng >
 	constexpr auto restrict_size_decrement(Rng const& rng, typename boost::range_size<Rng>::type nDecrementMin, typename boost::range_size<Rng>::type nDecrementMax) {
 #ifdef _CHECKS
-		if constexpr (tc::has_size<Rng const&>::value) {
+		if constexpr (tc::has_size<Rng const&>) {
 			auto const nSize = tc::size(rng);
 			return no_adl::SRestrictSize<Rng>(
 				rng,

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -22,7 +22,7 @@
 
 namespace tc {
 
-	DEFINE_ENUM(break_or_continue, BOOST_PP_EMPTY(), (break_)(continue_))
+	TC_DEFINE_ENUM(break_or_continue, BOOST_PP_EMPTY(), (break_)(continue_))
 
 	[[nodiscard]] inline constexpr tc::break_or_continue continue_if(tc::bool_context bCondition) noexcept {
 		if( bCondition ) {
@@ -32,7 +32,7 @@ namespace tc {
 		}
 	}
 
-	#define RETURN_IF_BREAK(...) \
+	#define tc_return_if_break(...) \
 	{ \
 		auto breakorcontinue__ = (__VA_ARGS__); \
 		/* Inline constexpr bools as soon as "constexpr if" works properly in MSVC */ \
@@ -90,22 +90,15 @@ namespace tc {
 		tc_internal_continue_if_not_break(tc::invoke(sink, std::forward<Args>(args)...))
 	)
 
-	///////////////////////////////////////////////////
-	// std::function should support tc::continue_;
-	//	struct Fn {
-	//		int operator()(int) const {
-	//			return 3;
-	//		}
-	//	} fn;
-	//	std::function< void(int) > erased=fn; // erased(x) runs fn(x), discards the return value and returns void
-	//	tc::function{_view}< tc::break_or_continue(int) > erased2=fn; // erased2(x) runs fn(x), discards the return value and returns tc::continue_
-	
+	#define tc_yield(...) tc_return_if_break(tc::continue_if_not_break(__VA_ARGS__))
+
 	namespace no_adl {
 
 		///////////////////////////////////////////////////
-		// tc::function
+		// tc::move_only_function
 
-		// tc::function is noncopyable, but implemented on top of std::function, which requires the functor to be copyable.
+		// Supports constructing tc::move_only_function<tc::break_or_continue_(...)> from a callable with return type other than break_or_continue_.
+		// TODO: Implement on top of std::move_only_function once it becomes available
 		template<typename Func>
 		struct movable_functor_adaptor_base : tc::derivable_t<tc::decay_t<Func>> {
 		private:
@@ -117,7 +110,7 @@ namespace tc {
 				: base_t(tc_move_always(tc::as_mutable(tc::base_cast<base_t>(mfa))))
 			{
 				// On the Mac, the std::function move ctor may actually copy our movable_functor_adaptor.
-				// Since tc::function is noncopyable, we always move here.
+				// Since tc::move_only_function is noncopyable, we always move here.
 			}
 		};
 
@@ -152,21 +145,22 @@ namespace tc {
 		};
 
 		template< bool bNoExcept, typename Ret, typename... Args >
-		struct function_base: tc::noncopyable {
-			function_base() noexcept {} // creates an empty function
-			function_base(std::nullptr_t) noexcept {} // creates an empty function
+		struct move_only_function_base: tc::noncopyable {
+			move_only_function_base() noexcept {} // creates an empty function
+			move_only_function_base(std::nullptr_t) noexcept {} // creates an empty function
 
-			function_base(function_base&& func) noexcept : m_func(tc_move(func).m_func) {}
-			function_base& operator=(function_base&& func) noexcept {
+			move_only_function_base(move_only_function_base&& func) noexcept : m_func(tc_move(func).m_func) {}
+			move_only_function_base& operator=(move_only_function_base&& func) noexcept {
 				m_func=tc_move(func).m_func;
 				return *this;
 			}
 
-			template< typename Func > requires (!tc::is_base_of_decayed< function_base, Func >::value)
-			function_base(Func&& func) MAYTHROW
+			template< typename Func > requires (!tc::decayed_derived_from<Func, move_only_function_base>)
+			move_only_function_base(Func&& func) noexcept
 				: m_func( tc::no_adl::movable_functor_adaptor<Ret, Func>( std::forward<Func>(func) ) )
 			{
-				static_assert(!tc::is_base_of_decayed< std::function< Ret(Args...) >, Func >::value);
+				static_assert(!tc::decayed_derived_from<Func, std::function< Ret(Args...) >>);
+				// TODO: static_assert(!tc::decayed_derived_from<Func, std::move_only_function< Ret(Args...) >>);
 				// Checking the noexcept value of the function call is commented out because
 				// 1. std::ref(func)'s operator() is not noexcept
 				// 2. tc::unordered_set's move ctor is not noexcept
@@ -185,24 +179,24 @@ namespace tc {
 		};
 
 		template< typename Signature >
-		struct function;
+		struct move_only_function;
 	
 		template< typename Ret, typename... Args >
-		struct function< Ret(Args...) > : tc::no_adl::function_base</*bNoExcept*/false, Ret, Args...>
+		struct move_only_function< Ret(Args...) > : tc::no_adl::move_only_function_base</*bNoExcept*/false, Ret, Args...>
 		{
-			using base_ = typename function::function_base;
+			using base_ = typename move_only_function::move_only_function_base;
 			using base_::base_;
 		};
 
 		template< typename Ret, typename... Args >
-		struct function< Ret(Args...) noexcept > : tc::no_adl::function_base</*bNoExcept*/true, Ret, Args...>
+		struct move_only_function< Ret(Args...) noexcept > : tc::no_adl::move_only_function_base</*bNoExcept*/true, Ret, Args...>
 		{
-			using base_ = typename function::function_base;
+			using base_ = typename move_only_function::move_only_function_base;
 			using base_::base_;
 		};
 	} // no_adl
 
-	using no_adl::function;
+	using no_adl::move_only_function;
 
 	inline bool cyclic_improve_impl(int n, int& nSkipRule) noexcept {
 		return false;

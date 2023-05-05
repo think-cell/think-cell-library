@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -14,6 +14,7 @@
 #include "../range/index_range.h"
 #include "../range/meta.h"
 #include "../tuple.h"
+#include "../base/modified.h"
 
 #include "break_or_continue.h"
 
@@ -50,14 +51,8 @@ namespace tc {
 	template<typename... T>
 	using common_type_break_or_continue_t = typename no_adl::common_type_break_or_continue<T...>::type;
 
-	namespace no_adl {
-		template<typename Func, typename Rng, typename Enable=void>
-		struct has_mem_fn_chunk /*final*/: tc::constant<false> {};
-
-		template<typename Func, typename Rng>
-		struct has_mem_fn_chunk<Func, Rng, tc::void_t<decltype(std::declval<Func>().chunk(std::declval<Rng>()))>> /*final*/: tc::constant<true> {};
-	}
-	using no_adl::has_mem_fn_chunk;
+	template<typename Sink, typename Rng>
+	concept has_mem_fn_chunk = requires { std::declval<Sink>().chunk(std::declval<Rng>()); };
 
 	DEFINE_MEM_FN(chunk);
 
@@ -96,7 +91,7 @@ namespace tc {
 				return {};
 			}
 
-			template<typename Rng> requires tc::has_mem_fn_chunk<Sink const&, Rng>::value
+			template<typename Rng> requires tc::has_mem_fn_chunk<Sink const&, Rng>
 			constexpr tc::constant<breakorcontinue> chunk(Rng&& rng) const& noexcept(noexcept(
 				tc::base_cast<Sink>(*this).chunk(std::forward<Rng>(rng))
 			)) {
@@ -141,11 +136,8 @@ namespace tc {
 	template<typename> \
 	void for_each_impl() noexcept; /*TODO c++20: workaround for c++17*/
 
-	template<typename Rng, typename Sink>
-	using for_each_uses_chunk = tc::has_mem_fn_chunk<tc::decay_t<Sink> const&, Rng>;
-
 	namespace for_each_detail {
-		DEFINE_ENUM(EOverload, eoverload, (CHUNK)(ADL)(INVOKERNG)(ADLTAG)(INDEX)(ITERATOR)(NONE))
+		TC_DEFINE_ENUM(EOverload, eoverload, (CHUNK)(ADL)(INVOKERNG)(ADLTAG)(INDEX)(ITERATOR)(NONE))
 
 		namespace no_adl {
 			template<typename BreakOrContinue>
@@ -167,12 +159,12 @@ namespace tc {
 			template<typename Rng, typename Sink> requires_clause \
 			struct select_overload<Rng, Sink, priority> : tc::constant<eoverload> {};
 
-			SELECT_OVERLOAD_IF(0, eoverloadCHUNK, TC_FWD(requires tc::for_each_uses_chunk<Rng, Sink>::value))
+			SELECT_OVERLOAD_IF(0, eoverloadCHUNK, TC_FWD(requires tc::has_mem_fn_chunk<tc::decay_t<Sink> const&, Rng>))
 			SELECT_OVERLOAD_IF(1, eoverloadADL, TC_FWD(requires requires { for_each_impl(std::declval<Rng>(), std::declval<Sink>()); }))
 			SELECT_OVERLOAD_IF(1, eoverloadINVOKERNG, TC_FWD(requires requires { typename make_break_or_continue_t<decltype(std::declval<Rng>()(std::declval<Sink>()))>; }))
 			SELECT_OVERLOAD_IF(2, eoverloadADLTAG, TC_FWD(requires requires { for_each_impl(for_each_adl::adl_tag, std::declval<Rng>(), std::declval<Sink>()); }))
-			SELECT_OVERLOAD_IF(2, eoverloadINDEX, requires tc::has_index<std::remove_reference_t<Rng>>::value)
-			SELECT_OVERLOAD_IF(3, eoverloadITERATOR, requires tc::is_range_with_iterators<Rng>::value)
+			SELECT_OVERLOAD_IF(2, eoverloadINDEX, requires tc::has_index<std::remove_reference_t<Rng>>)
+			SELECT_OVERLOAD_IF(3, eoverloadITERATOR, requires tc::range_with_iterators<Rng>)
 			SELECT_OVERLOAD_IF(4, eoverloadNONE, /*none*/)
 #pragma pop_macro("SELECT_OVERLOAD_IF")
 		}
@@ -207,7 +199,7 @@ namespace tc {
 	) -> tc::common_type_t<decltype(tc::continue_if_not_break(std::declval<tc::decay_t<Sink> const&>(), rng.dereference_index(tc::as_lvalue(rng.begin_index())))), tc::constant<tc::continue_>> {
 		tc::decay_t<Sink> const sink = sink_; // do we really need that copy?
 		for (auto i = rng.begin_index(); !rng.at_end_index(i); rng.increment_index(i)) {
-			RETURN_IF_BREAK(tc::continue_if_not_break(sink, rng.dereference_index(i)));
+			tc_yield(sink, rng.dereference_index(i));
 		}
 		return tc::constant<tc::continue_>();
 	}
@@ -221,7 +213,7 @@ namespace tc {
 		tc::decay_t<Sink> const sink = sink_; // do we really need that copy?
 		auto const itEnd = tc::end(rng);
 		for(auto it = tc::begin(rng); it!= itEnd; ++it) {
-			RETURN_IF_BREAK( tc::continue_if_not_break(sink, *it) );
+			tc_yield(sink, *it);
 		}
 		return tc::constant<tc::continue_>();
 	}
@@ -278,19 +270,37 @@ namespace tc {
 		)
 
 		template<typename Tuple, typename Sink,
-			std::enable_if_t<tc::is_instance_or_derived<std::tuple, Tuple>::value>* = nullptr,
+			std::enable_if_t<tc::instance_or_derived<Tuple, std::tuple>>* = nullptr,
 			typename IndexList = typename for_each_detail::integer_sequence_to_type_list<std::make_index_sequence<std::tuple_size<std::remove_reference_t<Tuple>>::value>>::type
 		>
 		constexpr auto for_each_impl(adl_tag_t, Tuple&& tuple, Sink&& sink) return_decltype_MAYTHROW(
 			for_each_detail::for_each_parameter_pack(IndexList(), for_each_detail::tuple_index_sink<Tuple, tc::decay_t<Sink>>{std::forward<Tuple>(tuple), std::forward<Sink>(sink)})
 		)
+
+		template<typename Rng, typename Sink, /*not requires because of CWG issue 2369*/std::enable_if_t<!std::is_reference<Rng>::value>* = nullptr>
+		constexpr auto for_each_impl(adl_tag_t, Rng&& rng, Sink&& sink_) noexcept(
+			noexcept(tc::end(rng)) &&
+			noexcept(++tc::as_lvalue(tc::begin(rng))) &&
+			noexcept(tc::continue_if_not_break(std::declval<tc::decay_t<Sink> const&>(), tc_move_always(rng.extract(tc::begin(rng)).value())))
+		) -> tc::common_type_t<decltype(tc::continue_if_not_break(std::declval<tc::decay_t<Sink> const&>(), tc_move_always(rng.extract(tc::begin(rng)).value()))), tc::constant<tc::continue_>> {
+			tc::decay_t<Sink> const sink = sink_; // do we really need that copy?
+
+			auto it = tc::begin(rng);
+			auto const itEnd = tc::end(rng);
+			while (it != itEnd) {
+				auto itNext = tc_modified(it, ++_);
+				tc_yield(sink, tc_move_always(rng.extract(it).value()));
+				it = itNext;
+			}
+			return tc::constant<tc::continue_>();
+		}
 	}
 
 	namespace range_output_tuple_impl {
 		template<template<typename...> typename TupleT, typename Tuple>
 		using type = tc::type::unique_t<tc::type::transform_t<
 			tc::type::transform_t<
-				typename tc::is_instance_or_derived<TupleT, Tuple>::arguments,
+				typename tc::is_instance_or_derived<Tuple, TupleT>::arguments,
 				tc::type::rcurry<tc::apply_cvref_t, Tuple>::template type
 			>,
 			tc::remove_rvalue_reference_t

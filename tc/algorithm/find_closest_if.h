@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -13,14 +13,14 @@
 namespace tc {
 	template< typename Rng, typename It, typename Func >
 	auto for_each_iterator_pair_outwards(Rng&& rng, It itOrigin, bool bSkipSelf, Func func) noexcept
-		-> tc::common_type_t<decltype(tc::continue_if_not_break(func, std::declval<tc::ptr_range<It> const&>())), tc::constant<tc::continue_>>
+		-> tc::common_type_t<decltype(tc::continue_if_not_break(func, std::declval<tc::span<It> const&>())), tc::constant<tc::continue_>>
 	{
 		std::array<It, 2> const aitLimit = { tc::begin(rng), tc::end(rng) };
 		std::array<It, 2> ait = { itOrigin, itOrigin };
 
 		if (!bSkipSelf) {
 			_ASSERT(tc::back(aitLimit) != tc::back(ait));
-			RETURN_IF_BREAK(tc::continue_if_not_break(func, tc::begin_next<tc::return_take>(tc::as_const(ait))));
+			tc_yield(func, tc::begin_next<tc::return_take>(tc::as_const(ait)));
 			++tc::back(ait);
 		} else if(tc::back(aitLimit) != tc::back(ait)) {
 			++tc::back(ait);
@@ -29,19 +29,19 @@ namespace tc {
 		for (;;) {
 			if (tc::front(aitLimit) == tc::front(ait)) {
 				for (; tc::back(ait) != tc::back(aitLimit); ++tc::back(ait)) {
-					RETURN_IF_BREAK(tc::continue_if_not_break(func, tc::begin_next<tc::return_drop>(tc::as_const(ait))));
+					tc_yield(func, tc::begin_next<tc::return_drop>(tc::as_const(ait)));
 				}
 				return tc::constant<tc::continue_>();
 			}
 			if (tc::back(aitLimit) == tc::back(ait)) {
 				for (; tc::front(ait) != tc::front(aitLimit); ) {
 					--tc::front(ait);
-					RETURN_IF_BREAK(tc::continue_if_not_break(func, tc::begin_next<tc::return_take>(tc::as_const(ait))));
+					tc_yield(func, tc::begin_next<tc::return_take>(tc::as_const(ait)));
 				}
 				return tc::constant<tc::continue_>();
 			}
 			--tc::front(ait);
-			RETURN_IF_BREAK(tc::continue_if_not_break(func, tc::as_const(ait)));
+			tc_yield(func, tc::as_const(ait));
 			++tc::back(ait);
 		}
 	}
@@ -58,7 +58,7 @@ namespace tc {
 				return tc::continue_;
 			});
 		})) {
-			scope_exit(oitc.dtor());
+			tc_scope_exit { oitc.dtor(); };
 			return RangeReturn::pack_element(oitc->m_it_(), std::forward<Rng>(rng), **tc_move(oitc));
 		} else {
 			return RangeReturn::pack_no_element(std::forward<Rng>(rng));

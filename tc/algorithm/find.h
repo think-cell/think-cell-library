@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -42,7 +42,7 @@ namespace tc {
 					if (tc::explicit_cast<bool>(tc::invoke(pred, tc::as_const(ref)) /*MAYTHROW*/)) {
 #ifdef _CHECKS
 						if constexpr( c_bCheckUnique ) {
-							for( auto it2 = modified(it, ++_); it2!=itEnd; ++it2 ) { // hand-rolled loop to avoid dependency to subrange
+							for( auto it2 = tc_modified(it, ++_); it2!=itEnd; ++it2 ) { // hand-rolled loop to avoid dependency to subrange
 								_ASSERTE( !tc::explicit_cast<bool>(tc::invoke(pred, tc::as_const(*it2))) );
 							}
 						}
@@ -73,7 +73,7 @@ namespace tc {
 							return tc::continue_;
 						}
 					}) /* MAYTHROW */ ) {
-						scope_exit( ot.dtor() );
+						tc_scope_exit { ot.dtor(); };
 						return *tc_move(ot);
 					}
 				}
@@ -94,7 +94,7 @@ namespace tc {
 
 	template< typename RangeReturn, typename Rng, typename Pred = tc::identity >
 	[[nodiscard]] constexpr decltype(auto) find_last_if(Rng&& rng, Pred pred = Pred()) MAYTHROW {
-		if constexpr( tc::is_bidirectional_range<Rng>::value && tc::common_range<Rng> ) {
+		if constexpr( tc::bidirectional_range<Rng> && tc::common_range<Rng> ) {
 			auto const itBegin=tc::begin(rng);
 			for( auto it=tc::end(rng); it!=itBegin; ) {
 				--it;
@@ -109,20 +109,20 @@ namespace tc {
 				std::array<tc::storage_for_without_dtor<tc::iterator_cache<decltype(it)>>, 2> aic; // tc::storage_for was too slow in debug builds
 				int iFound = 0;
 				aic[iFound].ctor(it);
-				scope_exit(aic[iFound].dtor()); //iFound captured by reference
+				tc_scope_exit { aic[iFound].dtor(); }; //iFound captured by reference
 				if (tc::explicit_cast<bool>(tc::invoke(pred, tc::as_const(**aic[iFound])))) {
 					for (;;) {
 						++it;
 						if (itEnd==it) break;
 						aic[1 - iFound].ctor(it);
-						scope_exit(aic[1 - iFound].dtor());
+						tc_scope_exit { aic[1 - iFound].dtor(); };
 						if (tc::invoke(pred, tc::as_const(**aic[1 - iFound]))) {
 							iFound = 1 - iFound;
 						}
 					}
 					
 					return RangeReturn::pack_element(
-						aic[iFound]->m_it_(), // do not move because the iterator must stay alive for the reference to stay valid
+						tc_move_always(*aic[iFound]).m_it_(), // pack_element must not take iterator by value
 						std::forward<Rng>(rng),
 						*tc_move_always(*aic[iFound])
 					);
@@ -138,14 +138,7 @@ namespace tc {
 	using no_adl::has_key_type;
 
 	namespace find_first_or_unique_default {
-		TC_HAS_EXPR(index_of, (Rng)(T), std::declval<Rng const&>().index_of(std::declval<T>()));
-
-		template <typename RangeReturn, IF_TC_CHECKS(bool c_bCheckUnique,) typename Rng, typename T> requires (has_index_of<Rng, T>::value)
-		[[nodiscard]] constexpr decltype(auto) find_first_or_unique_impl(tc::type::identity<RangeReturn>, IF_TC_CHECKS(tc::constant<c_bCheckUnique>,) Rng const& rng, T&& t) noexcept {
-			return RangeReturn::pack_element(tc::begin(rng) + tc::explicit_cast<decltype(tc::begin(rng)-tc::begin(rng))>(rng.index_of(std::forward<T>(t))), rng);
-		}
-
-		template< typename RangeReturn, IF_TC_CHECKS(bool c_bCheckUnique,) typename Rng, typename T > requires (!has_index_of<Rng, T>::value)
+		template< typename RangeReturn, IF_TC_CHECKS(bool c_bCheckUnique,) typename Rng, typename T >
 		[[nodiscard]] constexpr decltype(auto) find_first_or_unique_impl(tc::type::identity<RangeReturn>, IF_TC_CHECKS(tc::constant<c_bCheckUnique>,) Rng&& rng, T const& t) MAYTHROW {
 			static_assert(
 				!tc::has_key_type<std::remove_cvref_t<Rng>>::value,

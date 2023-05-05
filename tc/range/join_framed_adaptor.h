@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -46,7 +46,7 @@ namespace tc {
 				, m_rngEnd(aggregate_tag, std::forward<RngEnd2>(rngEnd))
 			{}
 
-			template<typename Self, typename Sink> requires tc::is_base_of_decayed<join_framed_adaptor, Self>::value
+			template<tc::decayed_derived_from<join_framed_adaptor> Self, typename Sink>
 			friend auto for_each_impl(Self&& self, Sink sink) MAYTHROW {
 				return tc::framed_for_each(*std::forward<Self>(self).m_baserng,
 					[&]() MAYTHROW {
@@ -64,7 +64,7 @@ namespace tc {
 				);
 			}
 
-			template<typename Self, std::enable_if_t<tc::is_base_of_decayed<join_framed_adaptor, Self>::value>* = nullptr>
+			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, join_framed_adaptor>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
 			friend auto range_output_t_impl(Self&& self) -> tc::type::unique_t<tc::type::concat_t<
 				tc::range_output_t<decltype(*std::forward<Self>(self).m_rngBegin)>,
 				tc::type::join_t<tc::type::transform_t<tc::range_output_t<decltype(*std::forward<Self>(self).m_baserng)>, tc::range_output_t>>,

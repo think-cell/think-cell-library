@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -10,6 +10,7 @@
 
 #include "base/invoke.h"
 #include "base/tc_move.h"
+#include "range/range_fwd.h"
 
 namespace tc {
 	// std::tuple from Microsofts STL is using a recursive implementation which is very slow.
@@ -17,7 +18,7 @@ namespace tc {
 	// (std::tuple has 18 constructors and 14 are conditionally explicit) and use an almost
 	// trivial get implementation (at the expense of not being able to do the empty base optimization).
 	namespace tuple_member_adl {
-		template<std::size_t n, typename T, bool bEmpty = tc::is_empty<T>::value>
+		template<std::size_t n, typename T, bool bEmpty = tc::empty_type<T>>
 		struct tuple_member;
 
 		template<std::size_t n, typename T>
@@ -93,7 +94,7 @@ namespace tc {
 
 #pragma push_macro("DEFINE_CONVERSION_OPERATOR")
 #define DEFINE_CONVERSION_OPERATOR(cvref) \
-			template<typename... U> requires (tc::is_safely_convertible<T cvref, U>::value && ...) \
+			template<typename... U> requires (tc::safely_convertible_to<T cvref, U> && ...) \
 			constexpr operator tuple<U...>() cvref noexcept(std::conjunction<std::is_nothrow_constructible<U, T cvref>...>::value) { \
 				return {{ {tc::get<n>(static_cast<tc_tuple_impl cvref>(*this))}... }}; \
 			}
@@ -160,8 +161,8 @@ namespace tc {
 	template<typename... Tuple>
 	[[nodiscard]] constexpr auto tuple_cat(Tuple&&... tuple) MAYTHROW {
 		return tc::apply( // MAYTHROW
-			[](auto&&... args) noexcept -> tc::type::apply_t<tc::tuple, tc::type::concat_t<typename tc::is_instance<tc::tuple, tc::decay_t<Tuple>>::arguments...>> {
-				return {{ {{tc_move_if_owned(args)}}... }}; // MAYTHROW
+			[](auto&&... args) noexcept -> tc::type::apply_t<tc::tuple, tc::type::concat_t<typename tc::is_instance<tc::decay_t<Tuple>, tc::tuple>::arguments...>> {
+				return {{ {tc_move_if_owned(args)}... }}; // MAYTHROW
 			},
 			std::forward<Tuple>(tuple)...
 		);
@@ -171,31 +172,37 @@ namespace tc {
 	[[nodiscard]] constexpr auto tuple_transform(Tuple&& tuple, Fn&& fn) MAYTHROW {
 		return tc::apply(
 			[fn=std::forward<Fn>(fn)](auto&&... args) MAYTHROW {
-				return tc::tuple<decltype(tc::invoke(fn, tc_move_if_owned(args)))...>{{ {{tc::invoke(fn, tc_move_if_owned(args))}}... }};
+				return tc::tuple<decltype(tc::invoke(fn, tc_move_if_owned(args)))...>{{ {tc::invoke(fn, tc_move_if_owned(args))}... }};
 			},
 			std::forward<Tuple>(tuple)
 		);
 	}
 
 	namespace tuple_detail {
-		template<std::size_t I, typename... Tuple>
+		template<std::size_t I, tuple_like... Tuple>
 		constexpr auto zip_get(Tuple&&... tuple) noexcept {
-			return tc::forward_as_tuple(tc::get<I>(std::forward<Tuple>(tuple))...);
+			// Tuple elements are tc::apply_cvref_t<std::tuple_element_t<I, std::remove_cvref_t<Tuple>>, Tuple>... unless tuple is tc::tuple and element types is empty.
+			return tc::tuple<std::conditional_t<
+				std::is_rvalue_reference<std::tuple_element_t<I, std::remove_cvref_t<Tuple>>>::value,
+				decltype(tc::get<I>(std::declval<Tuple>())),
+				tc::remove_rvalue_reference_t<decltype(tc::get<I>(std::declval<Tuple>()))>
+			>...>{{
+				{tc::get<I>(std::forward<Tuple>(tuple))}...
+			}};
 		}
 
-		template<std::size_t... I, typename... Tuple>
+		template<std::size_t... I, tuple_like... Tuple>
 		constexpr auto zip_impl(std::index_sequence<I...>, Tuple&&... tuple) noexcept {
-			return tc::make_tuple(
-				tuple_detail::zip_get<I>(std::forward<Tuple>(tuple)...)...
-			);
+			return tc::tuple<decltype(tuple_detail::zip_get<I>(std::forward<Tuple>(tuple)...))...>{{ // tc::make_tuple without extra copy
+				{tuple_detail::zip_get<I>(std::forward<Tuple>(tuple)...)}...
+			}};
 		}
 	}
 
-	template<typename Tuple0, typename... Tuple>
-	[[nodiscard]] constexpr auto tuple_zip(Tuple0&& tuple0, Tuple&&... tuple) noexcept {
-		static_assert(
-			((std::tuple_size<std::remove_reference_t<Tuple0>>::value == std::tuple_size<std::remove_reference_t<Tuple>>::value) && ...)
-		);
+	template<tuple_like Tuple0, tuple_like... Tuple>
+		requires (!tc::range_with_iterators<Tuple0> || ... || !tc::range_with_iterators<Tuple>) // Prefer zip_adaptor for zip(std::array...)
+	[[nodiscard]] constexpr auto zip(Tuple0&& tuple0, Tuple&&... tuple) noexcept {
+		static_assert( ((std::tuple_size<std::remove_reference_t<Tuple0>>::value == std::tuple_size<std::remove_reference_t<Tuple>>::value) && ...) );
 		return tuple_detail::zip_impl(
 			std::make_index_sequence<std::tuple_size<std::remove_reference_t<Tuple0>>::value>(),
 			std::forward<Tuple0>(tuple0),
@@ -203,19 +210,36 @@ namespace tc {
 		);
 	}
 
+	template<typename TIndex, TIndex... Is>
+	[[nodiscard]] consteval tc::tuple<tc::constant<Is>...> index_sequence_as_tuple(std::integer_sequence<TIndex, Is...>) {
+		return {};
+	}
+
+	template<tuple_like Tuple> requires (!tc::range_with_iterators<Tuple>)
+	[[nodiscard]] constexpr auto enumerate(Tuple&& tuple) noexcept {
+		return tc::zip(
+			tc::index_sequence_as_tuple(std::make_integer_sequence<int, std::tuple_size<std::remove_reference_t<Tuple>>::value>()),
+			std::forward<Tuple>(tuple)
+		);
+	}
+
+
 	namespace tuple_detail {
 		template<std::size_t n, typename T>
 		T std_tuple_element_impl(tuple_member_adl::tuple_member<n, T> const&); // declaration only
+
+		template<typename Tuple>
+		concept tuple_or_derived = std::same_as<Tuple, std::remove_cvref_t<Tuple>> && requires { Tuple::tc_tuple_impl::size; };
 	}
 }
 
 namespace std {
 	// Structured bindings use std::tuple_size and std::tuple_element
-	template<typename... T>
-	struct tuple_size<tc::tuple<T...>> : tc::constant<sizeof...(T)> {};
+	template<tc::tuple_detail::tuple_or_derived Tuple>
+	struct tuple_size<Tuple> : tc::constant<Tuple::tc_tuple_impl::size> {};
 
-	template<std::size_t n, typename... T>
-	struct tuple_element<n, tc::tuple<T...>> {
-		using type = decltype(tc::tuple_detail::std_tuple_element_impl<n>(std::declval<tc::tuple<T...>>()));
+	template<std::size_t n, tc::tuple_detail::tuple_or_derived Tuple>
+	struct tuple_element<n, Tuple> {
+		using type = decltype(tc::tuple_detail::std_tuple_element_impl<n>(std::declval<Tuple>()));
 	};
 }

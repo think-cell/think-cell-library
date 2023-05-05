@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -26,8 +26,16 @@ namespace tc {
 		private:
 			T const m_exitscope;
 		};
+
+		struct make_scope_exit_impl {
+			template <typename T>
+			[[nodiscard]] constexpr scope_exit_impl<T> operator->*(T const& exitscope) && noexcept {
+				return scope_exit_impl<T>(exitscope);
+			}
+		};
 	}
 	using no_adl::scope_exit_impl;
+	using no_adl::make_scope_exit_impl;
 
 	DEFINE_TAG_TYPE(scoped_assign_tag)
 
@@ -107,32 +115,28 @@ namespace tc {
 	using no_adl::scoped_assigner_better;
 }
 
-#define restore_after_scope(var) tc::scoped_restorer< decltype((var)) > UNIQUE_IDENTIFIER(var);
-#define scoped_assign(var,value) tc::scoped_assigner< decltype((var)) > UNIQUE_IDENTIFIER((var),(value));
-#define scoped_assign_better(var, value, better) tc::scoped_assigner_better< decltype((var)) > UNIQUE_IDENTIFIER((var),(value),(better));
-#define scoped_assign_max(var, value) scoped_assign_better((var),(value),tc::fn_greater());
-#define scoped_change(var,value) tc::scoped_assigner< decltype((var)) > UNIQUE_IDENTIFIER(tc::scoped_change_tag, (var),(value));
+// Note about brackets:
+// * in the decltype, var is parenthesized to add a reference.
+// * in the constructor, var and __VA_ARGS__ is not parenthesized to disallow use of the comma operator.
+// * we use braces to create the object to prevent a function declaration.
+//
+// We do not have a semicolon in the declaration to force the caller to add one.
+#define tc_restore_after_scope(var)    tc::scoped_restorer< decltype((var)) > UNIQUE_IDENTIFIER{var}
+#define tc_scoped_assign(var, ...)     tc::scoped_assigner< decltype((var)) > UNIQUE_IDENTIFIER{var, __VA_ARGS__}
+#define tc_scoped_change(var, ...)	   tc::scoped_assigner< decltype((var)) > UNIQUE_IDENTIFIER{tc::scoped_change_tag, var, __VA_ARGS__}
+#define tc_scoped_assign_max(var, ...) tc::scoped_assigner_better< decltype((var)) > UNIQUE_IDENTIFIER{var, __VA_ARGS__,tc::fn_greater()}
 
 #if _MSC_VER_FULL <= 190023026
-	#define scoped_assign_for_baseclass_member(var,value) tc::scoped_assigner< decltype(var)& > UNIQUE_IDENTIFIER((var),(value));
-	#define restore_after_scope_for_baseclass_member(var) tc::scoped_restorer< decltype(var)& > UNIQUE_IDENTIFIER(var);
+	#define tc_scoped_assign_for_baseclass_member(var, ...)  tc::scoped_assigner< decltype(var)& > UNIQUE_IDENTIFIER{var, __VA_ARGS__}
+	#define tc_restore_after_scope_for_baseclass_member(var) tc::scoped_restorer< decltype(var)& > UNIQUE_IDENTIFIER{var}
 #else
 	#error "should be fixed: https://connect.microsoft.com/VisualStudio/Feedback/Details/2117239"
 #endif
 
-// scope_exit must not throw in order to avoid double throws. If exceptions are needed, implement scope_success/scope_failure.
-#define scope_exit_counter( unique, ... ) \
-	auto BOOST_PP_CAT(scope_exit_lambda_, unique) = [&]() noexcept { __VA_ARGS__; }; \
-	tc::scope_exit_impl< decltype( BOOST_PP_CAT(scope_exit_lambda_, unique) ) > \
-	BOOST_PP_CAT(scope_exit_struct_, unique)( BOOST_PP_CAT(scope_exit_lambda_, unique) );
+// tc_scope_exit must not throw in order to avoid double throws. If exceptions are needed, implement scope_success/scope_failure.
+#define tc_scope_exit auto UNIQUE_IDENTIFIER = tc::make_scope_exit_impl{} ->* [&]() noexcept -> void
 
-#define scope_exit( ... ) scope_exit_counter( __COUNTER__, __VA_ARGS__ )
-
-#define file_scope_exit_counter( unique, ... ) \
-	namespace { struct BOOST_PP_CAT(file_scope_exit_, unique) final { \
-		~ BOOST_PP_CAT(file_scope_exit_, unique) () { \
-			__VA_ARGS__; \
-		} \
-	} BOOST_PP_CAT(file_scope_exit_instance, unique); }
-
-#define file_scope_exit( ... ) file_scope_exit_counter( __COUNTER__, __VA_ARGS__ )
+// the empty namespace ensures the macro is only used at file scope
+#define tc_file_scope_exit \
+	namespace {} \
+	static constinit auto UNIQUE_IDENTIFIER = tc::make_scope_exit_impl{} ->* []() noexcept -> void

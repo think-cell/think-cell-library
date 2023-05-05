@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -10,86 +10,61 @@
 
 #include "noncopyable.h"
 #include "has_xxx.h"
+#include "tc_move.h"
 #include "type_traits_fwd.h"
 #include <atomic>
 
+// Defined as a macro, to preserve the short-circuiting semantics of && and ||
+// Example:
+//	bool b = ...;
+//	tc_inplace(b) && bool_convertible_condition()
+//	tc_inplace(b) || bool_convertible_condition()
 #define tc_inplace(expr) \
 	(expr)=VERIFYINITIALIZED(expr)
 
-TC_HAS_MEM_FN_XXX_TRAIT_DEF( negate, & )
-TC_HAS_MEM_FN_XXX_TRAIT_DEF( bitwise_not, & )
-TC_HAS_MEM_FN_XXX_TRAIT_DEF( logical_not, & )
 
 namespace tc {
-	namespace inplace_detail {
-		template< typename T > requires has_mem_fn_negate<T>::value
-		constexpr void negate(T& t) noexcept {
-			t.negate();
-		}
+	namespace inplace_adl {
 		template< typename T >
-		constexpr void negate(T& t) noexcept {
-			t=-t;
-		}
-		template< typename T >
-		void negate(std::atomic<T>& t) noexcept {
-			static_assert( !has_mem_fn_negate<T>::value );
-			T tCurrent = t.load();
-			while (!t.compare_exchange_weak(tCurrent, -tCurrent))
-				{}
-		}
-
-		template< typename T > requires has_mem_fn_bitwise_not<T>::value
-		constexpr void bitwise_not(T& t) noexcept {
-			t.bitwise_not();
-		}
-		template< typename T >
-		constexpr void bitwise_not(T& t) noexcept {
-			t = ~t;
-		}
-		template< typename T >
-		void bitwise_not(std::atomic<T>& t) noexcept {
-			static_assert(!has_mem_fn_bitwise_not<T>::value);
-			T tCurrent = t.load();
-			while (!t.compare_exchange_weak(tCurrent, ~tCurrent))
-				{}
-		}
-
-		template< typename T > requires has_mem_fn_logical_not<T>::value
-		constexpr void logical_not(T& t) noexcept {
-			t.logical_not();
-		}
-		template< typename T >
-		constexpr void logical_not(T& t) noexcept {
-			t = !t;
-		}
-		template< typename T >
-		void logical_not(std::atomic<T>& t) noexcept {
-			static_assert( !has_mem_fn_logical_not<T>::value );
-			T tCurrent = t.load();
-			while (!t.compare_exchange_weak(tCurrent, !tCurrent))
-				{}
-		}
-
-		namespace no_adl {
-			template< typename T >
-			struct [[nodiscard]] inplace final : tc::noncopyable {
-				constexpr inplace(T& t) noexcept:m_t(VERIFYINITIALIZED(t)){}
-				constexpr void operator-() const& noexcept {
-					negate(m_t); // allow ADL
-				}
-				constexpr void operator~() const& noexcept {
-					bitwise_not(m_t); // allow ADL
-				}
-				constexpr void operator!() const& noexcept {
-					logical_not(m_t); // allow ADL
-				}
-			private:
-				T& m_t;
-			};
-		}
-	};
-	template< typename T >
-	[[nodiscard]] constexpr auto inplace(T& t) noexcept{
-		return tc::inplace_detail::no_adl::inplace<T>(t);
+		struct [[nodiscard]] inplace final : tc::noncopyable {
+			constexpr explicit inplace(T& t) noexcept:m_t(VERIFYINITIALIZED(t)){}
+			T& m_t;
+		};
 	}
+	using inplace_adl::inplace;
+
+#pragma push_macro("DEFINE_INPLACE_OPERATOR")
+#define DEFINE_INPLACE_OPERATOR(op, name) \
+	TC_HAS_MEM_FN_XXX_CONCEPT_DEF( name, & ) \
+	\
+	namespace inplace_adl { \
+		template< typename T > \
+		constexpr void operator op(inplace<T> t) noexcept { \
+			t.m_t=op tc_move_always(t.m_t); \
+		} \
+		\
+		template< has_mem_fn_ ## name T > \
+		constexpr void operator op(inplace<T> t) noexcept { \
+			t.m_t.name(); \
+		} \
+		\
+		template< typename T > \
+		void operator op(inplace<std::atomic<T>> t) noexcept { \
+			static_assert( !has_mem_fn_ ## name<T> ); \
+			T tCurrent = t.m_t.load(std::memory_order_relaxed); \
+			while (!t.m_t.compare_exchange_weak(tCurrent, op tCurrent)) \
+				{} \
+		} \
+	} \
+	\
+	template<typename T> \
+	constexpr T name(T t) noexcept { \
+		op tc::inplace(t); \
+		return t; \
+	}
+
+	DEFINE_INPLACE_OPERATOR(-, negate)
+	DEFINE_INPLACE_OPERATOR(~, bitwise_not)
+	DEFINE_INPLACE_OPERATOR(!, logical_not)
+#pragma pop_macro("DEFINE_INPLACE_OPERATOR")
 }

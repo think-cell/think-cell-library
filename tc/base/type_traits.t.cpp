@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -61,11 +61,11 @@ namespace void_t_test {
 
 	TC_HAS_EXPR(func, (T), std::declval<T&>().func());
 
-	static_assert(has_func<WithFunction>::value);
-	static_assert(!has_func<WithoutFunction>::value);
+	static_assert(has_func<WithFunction>);
+	static_assert(!has_func<WithoutFunction>);
 
 	tc::constant<false> check_has_func1(...);
-	template< typename T > requires has_func<T>::value
+	template< typename T > requires has_func<T>
 	tc::constant<true> check_has_func1(T&& t);
 
 	static_assert(decltype(check_has_func1(std::declval<WithFunction>()))::value);
@@ -73,158 +73,156 @@ namespace void_t_test {
 
 	template< typename T>
 	tc::constant<false> check_has_func2(T&&);
-	template< typename T> requires has_func<T>::value
+	template< typename T> requires has_func<T>
 	tc::constant<true> check_has_func2(T&& t);
 
 	static_assert(decltype(check_has_func2(std::declval<WithFunction>()))::value);
 	static_assert(!decltype(check_has_func2(std::declval<WithoutFunction>()))::value);
 }
 
-static_assert( tc::is_safely_convertible<int, double>::value );
+static_assert( tc::safely_convertible_to<int, double> );
 
-static_assert( std::is_convertible<int, float>::value );
-static_assert( sizeof(int)!=sizeof(float) || !tc::is_safely_convertible<int, float>::value );
+static_assert( std::convertible_to<int, float> );
+static_assert( sizeof(int)!=sizeof(float) || !tc::safely_convertible_to<int, float> );
 
-static_assert( std::is_convertible<long long, double>::value );
-static_assert( sizeof(long long)!=sizeof(double) || !tc::is_safely_convertible<long long, double>::value );
+static_assert( std::convertible_to<long long, double> );
+static_assert( sizeof(long long)!=sizeof(double) || !tc::safely_convertible_to<long long, double> );
 
-static_assert( std::is_convertible<double, int>::value );
-static_assert( !tc::is_safely_convertible<double, int>::value );
+static_assert( std::convertible_to<double, int> );
+static_assert( !tc::safely_convertible_to<double, int> );
 
-static_assert( std::is_convertible<float, int>::value );
-static_assert( !tc::is_safely_convertible<float, int>::value );
+static_assert( std::convertible_to<float, int> );
+static_assert( !tc::safely_convertible_to<float, int> );
 
-static_assert( std::is_convertible<int, unsigned int>::value );
-static_assert( !tc::is_safely_convertible<int, unsigned int>::value );
+static_assert( std::convertible_to<int, unsigned int> );
+static_assert( !tc::safely_convertible_to<int, unsigned int> );
 
-static_assert( std::is_convertible<unsigned int, int>::value );
-static_assert( !tc::is_safely_convertible<unsigned int, int>::value );
+static_assert( std::convertible_to<unsigned int, int> );
+static_assert( !tc::safely_convertible_to<unsigned int, int> );
 
-static_assert(std::is_convertible<int*, bool>::value);
+static_assert(std::convertible_to<int*, bool>);
 static_assert(std::is_constructible<bool, int*>::value);
-#ifndef __clang__
-static_assert(!std::is_convertible<std::nullptr_t, bool>::value); // clang 10 still allows implicit convertion. TODO: clang 11 will disallow implicit convertion.
-#endif
+static_assert(!std::convertible_to<std::nullptr_t, bool>);
 static_assert(std::is_constructible<bool, std::nullptr_t>::value);
-static_assert(tc::is_safely_constructible<bool, int*>::value);
-static_assert(tc::is_safely_constructible<bool, std::nullptr_t>::value);
-static_assert(!tc::is_safely_convertible<int*, bool>::value);
-static_assert(!tc::is_safely_convertible<std::nullptr_t, bool>::value);
-static_assert(tc::is_safely_constructible<bool, bool>::value);
-static_assert(tc::is_safely_convertible<bool, bool>::value);
+static_assert(tc::safely_constructible_from<bool, int*>);
+static_assert(tc::safely_constructible_from<bool, std::nullptr_t>);
+static_assert(!tc::safely_convertible_to<int*, bool>);
+static_assert(!tc::safely_convertible_to<std::nullptr_t, bool>);
+static_assert(tc::safely_constructible_from<bool, bool>);
+static_assert(tc::safely_convertible_to<bool, bool>);
 
 // scoped enum (enum class)
 enum class TEnumClass { a, b, c };
 enum TEnum { x, y, z };
-static_assert( !tc::is_safely_convertible<int, TEnumClass>::value );
-static_assert( !tc::is_safely_convertible<TEnumClass, int>::value );
+static_assert( !tc::safely_convertible_to<int, TEnumClass> );
+static_assert( !tc::safely_convertible_to<TEnumClass, int> );
 static_assert( !tc::has_common_reference_prvalue_as_val<TEnumClass, int>);
 
 // unscoped enum (primitive enum)
 enum TPrimitiveEnum { a, b, c };
-static_assert( !tc::is_safely_convertible<int, TPrimitiveEnum>::value );
-static_assert( std::is_convertible<TPrimitiveEnum, std::underlying_type_t<TPrimitiveEnum> >::value );
-static_assert( !tc::is_safely_convertible<TPrimitiveEnum, std::underlying_type_t<TPrimitiveEnum>>::value );
+static_assert( !tc::safely_convertible_to<int, TPrimitiveEnum> );
+static_assert( std::convertible_to<TPrimitiveEnum, std::underlying_type_t<TPrimitiveEnum> > );
+static_assert( !tc::safely_convertible_to<TPrimitiveEnum, std::underlying_type_t<TPrimitiveEnum>> );
 static_assert( !tc::has_common_reference_prvalue_as_val<TPrimitiveEnum, int>);
 
 enum TPrimitiveEnum2 { l, m };
-static_assert( !tc::is_safely_convertible<TPrimitiveEnum, TPrimitiveEnum2>::value );
+static_assert( !tc::safely_convertible_to<TPrimitiveEnum, TPrimitiveEnum2> );
 static_assert( !tc::has_common_reference_prvalue_as_val<TPrimitiveEnum, TPrimitiveEnum2>);
 
 struct SBase {};
 struct SDerived final : SBase {};
-static_assert(std::is_convertible<SDerived, SBase>::value);
-static_assert(!tc::is_safely_convertible<SDerived, SBase>::value);
+static_assert(std::convertible_to<SDerived, SBase>);
+static_assert(!tc::safely_convertible_to<SDerived, SBase>);
 
-static_assert(tc::is_safely_convertible<SDerived&, SDerived>::value);
-static_assert(!tc::is_safely_convertible<SDerived&, SBase>::value);
-static_assert(tc::is_safely_convertible<SDerived&, SBase&>::value);
-static_assert(tc::is_safely_convertible<SDerived&, SBase const&>::value);
-static_assert(!tc::is_safely_convertible<SDerived&, SBase&&>::value);
-static_assert(tc::is_safely_convertible<SDerived&, SBase const&&>::value);
+static_assert(tc::safely_convertible_to<SDerived&, SDerived>);
+static_assert(!tc::safely_convertible_to<SDerived&, SBase>);
+static_assert(tc::safely_convertible_to<SDerived&, SBase&>);
+static_assert(tc::safely_convertible_to<SDerived&, SBase const&>);
+static_assert(!tc::safely_convertible_to<SDerived&, SBase&&>);
+static_assert(tc::safely_convertible_to<SDerived&, SBase const&&>);
 
-static_assert(tc::is_safely_convertible<SDerived const&, SDerived>::value);
-static_assert(!tc::is_safely_convertible<SDerived const&, SBase>::value);
-static_assert(!tc::is_safely_convertible<SDerived const&, SBase&>::value);
-static_assert(tc::is_safely_convertible<SDerived const&, SBase const&>::value);
-static_assert(!tc::is_safely_convertible<SDerived const&, SBase&&>::value);
-static_assert(tc::is_safely_convertible<SDerived const&, SBase const&&>::value);
+static_assert(tc::safely_convertible_to<SDerived const&, SDerived>);
+static_assert(!tc::safely_convertible_to<SDerived const&, SBase>);
+static_assert(!tc::safely_convertible_to<SDerived const&, SBase&>);
+static_assert(tc::safely_convertible_to<SDerived const&, SBase const&>);
+static_assert(!tc::safely_convertible_to<SDerived const&, SBase&&>);
+static_assert(tc::safely_convertible_to<SDerived const&, SBase const&&>);
 
-static_assert(tc::is_safely_convertible<SDerived, SDerived>::value);
-static_assert(!tc::is_safely_convertible<SDerived, SBase>::value);
-static_assert(!tc::is_safely_convertible<SDerived, SBase const&>::value);
-static_assert(!tc::is_safely_convertible<SDerived, SBase&>::value);
-static_assert(!tc::is_safely_convertible<SDerived, SBase&&>::value);
-static_assert(!tc::is_safely_convertible<SDerived, SBase const&&>::value);
+static_assert(tc::safely_convertible_to<SDerived, SDerived>);
+static_assert(!tc::safely_convertible_to<SDerived, SBase>);
+static_assert(!tc::safely_convertible_to<SDerived, SBase const&>);
+static_assert(!tc::safely_convertible_to<SDerived, SBase&>);
+static_assert(!tc::safely_convertible_to<SDerived, SBase&&>);
+static_assert(!tc::safely_convertible_to<SDerived, SBase const&&>);
 
-static_assert(tc::is_safely_convertible<SDerived&&, SDerived>::value);
-static_assert(!tc::is_safely_convertible<SDerived&&, SBase>::value);
-static_assert(!tc::is_safely_convertible<SDerived&&, SBase const&>::value);
-static_assert(!tc::is_safely_convertible<SDerived&&, SBase&>::value);
-static_assert(tc::is_safely_convertible<SDerived&&, SBase&&>::value);
-static_assert(tc::is_safely_convertible<SDerived&&, SBase const&&>::value);
+static_assert(tc::safely_convertible_to<SDerived&&, SDerived>);
+static_assert(!tc::safely_convertible_to<SDerived&&, SBase>);
+static_assert(!tc::safely_convertible_to<SDerived&&, SBase const&>);
+static_assert(!tc::safely_convertible_to<SDerived&&, SBase&>);
+static_assert(tc::safely_convertible_to<SDerived&&, SBase&&>);
+static_assert(tc::safely_convertible_to<SDerived&&, SBase const&&>);
 
-static_assert(tc::is_safely_convertible<SDerived const&&, SDerived>::value);
-static_assert(!tc::is_safely_convertible<SDerived const&&, SBase>::value);
-static_assert(!tc::is_safely_convertible<SDerived const&&, SBase const&>::value);
-static_assert(!tc::is_safely_convertible<SDerived const&&, SBase&>::value);
-static_assert(!tc::is_safely_convertible<SDerived const&&, SBase&&>::value);
-static_assert(tc::is_safely_convertible<SDerived const&&, SBase const&&>::value);
+static_assert(tc::safely_convertible_to<SDerived const&&, SDerived>);
+static_assert(!tc::safely_convertible_to<SDerived const&&, SBase>);
+static_assert(!tc::safely_convertible_to<SDerived const&&, SBase const&>);
+static_assert(!tc::safely_convertible_to<SDerived const&&, SBase&>);
+static_assert(!tc::safely_convertible_to<SDerived const&&, SBase&&>);
+static_assert(tc::safely_convertible_to<SDerived const&&, SBase const&&>);
 
 struct SToInt final {
 	operator int() const& noexcept;
 };
 
-static_assert(!std::is_convertible<SBase, int>::value);
-static_assert(std::is_convertible<SToInt, int>::value);
-static_assert(tc::is_safely_convertible<SToInt, int>::value);
+static_assert(!std::convertible_to<SBase, int>);
+static_assert(std::convertible_to<SToInt, int>);
+static_assert(tc::safely_convertible_to<SToInt, int>);
 
-static_assert(std::is_convertible<SToInt, int const&>::value);
-static_assert(!tc::is_safely_convertible<SToInt, int const&>::value);
+static_assert(std::convertible_to<SToInt, int const&>);
+static_assert(!tc::safely_convertible_to<SToInt, int const&>);
 
-static_assert(!tc::is_safely_convertible<SToInt, int&&>::value);
-static_assert(!tc::is_safely_convertible<SToInt, int const&&>::value);
-static_assert(!tc::is_safely_convertible<SToInt&, int&&>::value);
-static_assert(!tc::is_safely_convertible<SToInt&, int const&&>::value);
-static_assert(!tc::is_safely_convertible<SToInt&&, int&&>::value);
-static_assert(!tc::is_safely_convertible<SToInt&&, int const&&>::value);
+static_assert(!tc::safely_convertible_to<SToInt, int&&>);
+static_assert(!tc::safely_convertible_to<SToInt, int const&&>);
+static_assert(!tc::safely_convertible_to<SToInt&, int&&>);
+static_assert(!tc::safely_convertible_to<SToInt&, int const&&>);
+static_assert(!tc::safely_convertible_to<SToInt&&, int&&>);
+static_assert(!tc::safely_convertible_to<SToInt&&, int const&&>);
 
-static_assert(tc::is_safely_convertible<tc::string<char>&, tc::ptr_range<char>>::value);
-static_assert(tc::is_safely_convertible<tc::string<char>&, tc::ptr_range<char const>>::value);
-static_assert(!tc::is_safely_convertible<tc::string<char>, tc::ptr_range<char const>>::value);
-static_assert(!tc::is_safely_convertible<tc::string<char> const, tc::ptr_range<char const>>::value);
-static_assert(!tc::is_safely_convertible<tc::string<char>&&, tc::ptr_range<char const>>::value);
-static_assert(!tc::is_safely_convertible<tc::string<char> const&&, tc::ptr_range<char const>>::value);
-static_assert(tc::is_safely_convertible<tc::string<char> const&, tc::ptr_range<char const>>::value);
-static_assert(!tc::is_safely_convertible<char const*, tc::ptr_range<char>>::value);
-static_assert(tc::is_safely_convertible<char const*, tc::ptr_range<char const>>::value);
-static_assert(tc::is_safely_convertible<char const* &, tc::ptr_range<char const>>::value);
-static_assert(tc::is_safely_convertible<char const* &&, tc::ptr_range<char const>>::value);
-static_assert(tc::is_safely_convertible<int(&)[3], tc::ptr_range<int const>>::value);
-static_assert(tc::is_safely_convertible<int(&)[3], tc::ptr_range<int>>::value);
-static_assert(tc::is_safely_convertible<tc::ptr_range<int>, tc::ptr_range<int>>::value);
-static_assert(tc::is_safely_convertible<tc::ptr_range<int>, tc::ptr_range<int const>>::value);
-static_assert(tc::is_safely_convertible<tc::ptr_range<int>&&, tc::ptr_range<int const>>::value);
-static_assert(tc::is_safely_convertible<tc::ptr_range<int>&, tc::ptr_range<int const>>::value);
-static_assert(tc::is_safely_convertible<tc::ptr_range<int> const&, tc::ptr_range<int const>>::value);
-static_assert(!tc::is_safely_convertible<tc::ptr_range<char const>, decltype(tc::concat("abc", "def"))>::value);
-static_assert(!tc::is_safely_convertible<tc::ptr_range<char const>, tc::vector<int>>::value);
+static_assert(tc::safely_convertible_to<tc::string<char>&, tc::span<char>>);
+static_assert(tc::safely_convertible_to<tc::string<char>&, tc::span<char const>>);
+static_assert(!tc::safely_convertible_to<tc::string<char>, tc::span<char const>>);
+static_assert(!tc::safely_convertible_to<tc::string<char> const, tc::span<char const>>);
+static_assert(!tc::safely_convertible_to<tc::string<char>&&, tc::span<char const>>);
+static_assert(!tc::safely_convertible_to<tc::string<char> const&&, tc::span<char const>>);
+static_assert(tc::safely_convertible_to<tc::string<char> const&, tc::span<char const>>);
+static_assert(!tc::safely_convertible_to<char const*, tc::span<char>>);
+static_assert(tc::safely_convertible_to<char const*, tc::span<char const>>);
+static_assert(tc::safely_convertible_to<char const* &, tc::span<char const>>);
+static_assert(tc::safely_convertible_to<char const* &&, tc::span<char const>>);
+static_assert(tc::safely_convertible_to<int(&)[3], tc::span<int const>>);
+static_assert(tc::safely_convertible_to<int(&)[3], tc::span<int>>);
+static_assert(tc::safely_convertible_to<tc::span<int>, tc::span<int>>);
+static_assert(tc::safely_convertible_to<tc::span<int>, tc::span<int const>>);
+static_assert(tc::safely_convertible_to<tc::span<int>&&, tc::span<int const>>);
+static_assert(tc::safely_convertible_to<tc::span<int>&, tc::span<int const>>);
+static_assert(tc::safely_convertible_to<tc::span<int> const&, tc::span<int const>>);
+static_assert(!tc::safely_convertible_to<tc::span<char const>, decltype(tc::concat("abc", "def"))>);
+static_assert(!tc::safely_convertible_to<tc::span<char const>, tc::vector<int>>);
 
-static_assert(!tc::is_safely_convertible<tc::string<char>&, tc::ptr_range<char>&>::value);
-static_assert(!tc::is_safely_convertible<tc::string<char>&, tc::ptr_range<char> const&>::value);
+static_assert(!tc::safely_convertible_to<tc::string<char>&, tc::span<char>&>);
+static_assert(!tc::safely_convertible_to<tc::string<char>&, tc::span<char> const&>);
 
 #ifdef TC_MAC
-static_assert(tc::is_safely_constructible<void (^)(), void (^)()>::value);
-static_assert(!tc::is_safely_constructible<void (^)(), int (^)()>::value);
-static_assert(!tc::is_safely_constructible<void (^)(), void (^)(int)>::value);
-static_assert(tc::is_safely_constructible<void (^)(), nullptr_t>::value);
-static_assert(!tc::is_safely_constructible<void (^)(), int*>::value);
-static_assert(!tc::is_safely_constructible<void (^)(), void*>::value);
+static_assert(tc::safely_constructible_from<void (^)(), void (^)()>);
+static_assert(!tc::safely_constructible_from<void (^)(), int (^)()>);
+static_assert(!tc::safely_constructible_from<void (^)(), void (^)(int)>);
+static_assert(tc::safely_constructible_from<void (^)(), nullptr_t>);
+static_assert(!tc::safely_constructible_from<void (^)(), int*>);
+static_assert(!tc::safely_constructible_from<void (^)(), void*>);
 
 namespace {
 	using TVoidFunction = void (*)();
 }
-static_assert(!tc::is_safely_constructible<void (^)(), TVoidFunction>::value);
+static_assert(!tc::safely_constructible_from<void (^)(), TVoidFunction>);
 
 static_assert(tc::no_adl::is_objc_block<void (^)()>::value);
 static_assert(tc::no_adl::is_objc_block<void (^)(int, char, bool)>::value);
@@ -287,50 +285,50 @@ static_assert(
 
 static_assert(
 	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char const>&, tc::ptr_range<char const> const&>,
-		tc::ptr_range<char const> const&
+		tc::common_reference_xvalue_as_ref_t<tc::span<char const>&, tc::span<char const> const&>,
+		tc::span<char const> const&
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char>, tc::ptr_range<char const> const&>,
-		tc::ptr_range<char const>
+		tc::common_reference_xvalue_as_ref_t<tc::span<char>, tc::span<char const> const&>,
+		tc::span<char const>
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char const>, tc::ptr_range<char const> const&>,
-		tc::ptr_range<char const>
+		tc::common_reference_xvalue_as_ref_t<tc::span<char const>, tc::span<char const> const&>,
+		tc::span<char const>
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char const>, tc::string<char>&>,
-		tc::ptr_range<char const>
+		tc::common_reference_xvalue_as_ref_t<tc::span<char const>, tc::string<char>&>,
+		tc::span<char const>
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char>, tc::string<char> const&>,
-		tc::ptr_range<char const>
+		tc::common_reference_xvalue_as_ref_t<tc::span<char>, tc::string<char> const&>,
+		tc::span<char const>
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char>, tc::ptr_range<char>>,
-		tc::ptr_range<char>
+		tc::common_reference_xvalue_as_ref_t<tc::span<char>, tc::span<char>>,
+		tc::span<char>
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<char>, tc::ptr_range<char const>>,
-		tc::ptr_range<char const>
+		tc::common_reference_xvalue_as_ref_t<tc::span<char>, tc::span<char const>>,
+		tc::span<char const>
 	>::value
 );
 
@@ -358,35 +356,35 @@ static_assert(
 static_assert(
 	std::is_same<
 		tc::common_reference_xvalue_as_ref_t<int(&)[17], int(&)[18]>,
-		tc::ptr_range<int>
+		tc::span<int>
 	>::value
 );
 
 static_assert(
 	std::is_same<
 		tc::common_reference_xvalue_as_ref_t<int const(&)[17], int(&)[18]>,
-		tc::ptr_range<int const>
+		tc::span<int const>
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<int>, int(&)[19]>,
-		tc::ptr_range<int>
+		tc::common_reference_xvalue_as_ref_t<tc::span<int>, int(&)[19]>,
+		tc::span<int>
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<int> const, int(&)[19]>,
-		tc::ptr_range<int>
+		tc::common_reference_xvalue_as_ref_t<tc::span<int> const, int(&)[19]>,
+		tc::span<int>
 	>::value
 );
 
 static_assert(
 	std::is_same<
 		tc::common_reference_xvalue_as_ref_t<int(&)[17], int(&)[18], int(&)[19]>,
-		tc::ptr_range<int>
+		tc::span<int>
 	>::value
 );
 
@@ -400,21 +398,21 @@ static_assert(
 static_assert(
 	std::is_same<
 		tc::common_reference_xvalue_as_ref_t<tc::vector<char>&, tc::string<char>&>,
-		tc::ptr_range<char>
+		tc::span<char>
 	>::value
 );
 
 static_assert(
 	std::is_same<
 		tc::common_reference_xvalue_as_ref_t<tc::vector<char>&, tc::string<char> const&>,
-		tc::ptr_range<char const>
+		tc::span<char const>
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<const wchar_t (&)[6], tc::ptr_range<wchar_t>&&>,
-		tc::ptr_range<wchar_t const>
+		tc::common_reference_xvalue_as_ref_t<const wchar_t (&)[6], tc::span<wchar_t>&&>,
+		tc::span<wchar_t const>
 	>::value
 );
 
@@ -426,7 +424,7 @@ static_assert(
 );
 
 static_assert(
-	!tc::has_common_reference_xvalue_as_ref<tc::ptr_range<char>, tc::string<char>&&>
+	!tc::has_common_reference_xvalue_as_ref<tc::span<char>, tc::string<char>&&>
 );
 
 static_assert(
@@ -434,7 +432,7 @@ static_assert(
 );
 
 static_assert(
-	!tc::has_common_reference_xvalue_as_ref<char const*, tc::ptr_range<char>, tc::string<char> const&&>
+	!tc::has_common_reference_xvalue_as_ref<char const*, tc::span<char>, tc::string<char> const&&>
 );
 
 static_assert(
@@ -446,7 +444,7 @@ static_assert(
 );
 
 static_assert(
-	!tc::has_common_reference_xvalue_as_ref<tc::ptr_range<char const>, tc::string<char>>
+	!tc::has_common_reference_xvalue_as_ref<tc::span<char const>, tc::string<char>>
 );
 
 static_assert(
@@ -574,8 +572,8 @@ static_assert(
 
 static_assert(
 	std::is_same<
-		tc::common_reference_prvalue_as_val_t<tc::ptr_range<char const>>,
-		tc::ptr_range<char const>
+		tc::common_reference_prvalue_as_val_t<tc::span<char const>>,
+		tc::span<char const>
 	>::value
 );
 
@@ -588,7 +586,7 @@ static_assert(
 );
 
 static_assert(
-	!tc::has_common_reference_prvalue_as_val<tc::vector<char>&&, tc::string<char>&, tc::ptr_range<char const>>
+	!tc::has_common_reference_prvalue_as_val<tc::vector<char>&&, tc::string<char>&, tc::span<char const>>
 );
 
 static_assert(
@@ -618,20 +616,20 @@ static_assert(
 
 static_assert(
 	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<int>, tc::subrange<tc::vector<int>&>>,
-		tc::ptr_range<int>
+		tc::common_reference_xvalue_as_ref_t<tc::span<int>, tc::subrange<tc::vector<int>&>>,
+		tc::span<int>
 	>::value
 );
 
 STATICASSERTSAME(
-	tc::ptr_range_t<tc::subrange<tc::vector<int>>&>,
-	tc::ptr_range<int>
+	tc::span_t<tc::subrange<tc::vector<int>>&>,
+	tc::span<int>
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::ptr_range<int>, tc::subrange<tc::vector<int>>&>,
-		tc::ptr_range<int>
+		tc::common_reference_xvalue_as_ref_t<tc::span<int>, tc::subrange<tc::vector<int>>&>,
+		tc::span<int>
 	>::value
 );
 
@@ -667,7 +665,7 @@ static_assert(
 static_assert(
 	std::is_same<
 		tc::common_reference_prvalue_as_val_t<tc::vector<char>&, tc::string<char>&>,
-		tc::ptr_range<char>
+		tc::span<char>
 	>::value
 );
 
@@ -856,7 +854,7 @@ UNITTESTDEF(minTest) {
 				)
 			),
 			[&](auto it) noexcept {
-				auto_cref( elem, *it );
+				tc_auto_cref( elem, *it );
 				tc::discard(elem);
 			}
 		);
@@ -868,7 +866,7 @@ UNITTESTDEF(minTest) {
 	}
 
 
-	tc::projected(tc::fn_min(), TC_FN(createS))(0,1).foo();
+	tc::projected(tc::fn_min(), tc_fn(createS))(0,1).foo();
 
 
 	{
@@ -919,7 +917,7 @@ UNITTESTDEF(minTest) {
 	);
 }
 
-static_assert(!tc::is_safely_constructible<tc::string<wchar_t>, wchar_t const* const&, wchar_t const* const&>::value);
+static_assert(!tc::safely_constructible_from<tc::string<wchar_t>, wchar_t const* const&, wchar_t const* const&>);
 
 namespace is_instance_test {
 	template<typename, typename, typename> struct CTemplate1 : tc::nonmovable {};
@@ -928,15 +926,15 @@ namespace is_instance_test {
 	using CInstantiation1 = CTemplate1<int, bool, void>;
 	using CInstantiation2 = CTemplate2<bool, void, int>;
 
-	static_assert(tc::is_instance<CTemplate1, CInstantiation1>::value);
-	STATICASSERTSAME((tc::type::list<int, bool, void>), (typename tc::is_instance<CTemplate1, CInstantiation1>::arguments));
+	static_assert(tc::instance<CInstantiation1, CTemplate1>);
+	STATICASSERTSAME((tc::type::list<int, bool, void>), (typename tc::is_instance<CInstantiation1, CTemplate1>::arguments));
 
-	static_assert(!tc::is_instance<CTemplate1, CInstantiation2>::value);
+	static_assert(!tc::instance<CInstantiation2, CTemplate1>);
 
-	static_assert(!tc::is_instance<CTemplate2, CInstantiation1>::value);
+	static_assert(!tc::instance<CInstantiation1, CTemplate2>);
 
-	static_assert(tc::is_instance<CTemplate2, CInstantiation2>::value);
-	STATICASSERTSAME((tc::type::list<bool, void, int>), (typename tc::is_instance<CTemplate2, CInstantiation2>::arguments));
+	static_assert(tc::instance<CInstantiation2, CTemplate2>);
+	STATICASSERTSAME((tc::type::list<bool, void, int>), (typename tc::is_instance<CInstantiation2, CTemplate2>::arguments));
 }
 
 namespace is_instance2_test {
@@ -946,19 +944,19 @@ namespace is_instance2_test {
 	using CInstantiation1 = CTemplate1<int, bool, true>;
 	using CInstantiation2 = CTemplate2<bool, void, false>;
 
-	static_assert(tc::is_instance2<CTemplate1, CInstantiation1>::value);
-	STATICASSERTSAME(int, (typename tc::is_instance2<CTemplate1, CInstantiation1>::first_argument));
-	STATICASSERTSAME(bool, (typename tc::is_instance2<CTemplate1, CInstantiation1>::second_argument));
-	STATICASSERTEQUAL(true, (tc::is_instance2<CTemplate1, CInstantiation1>::third_argument));
+	static_assert(tc::instance2<CInstantiation1, CTemplate1>);
+	STATICASSERTSAME(int, (typename tc::is_instance2<CInstantiation1, CTemplate1>::first_argument));
+	STATICASSERTSAME(bool, (typename tc::is_instance2<CInstantiation1, CTemplate1>::second_argument));
+	STATICASSERTEQUAL(true, (tc::is_instance2<CInstantiation1, CTemplate1>::third_argument));
 
-	static_assert(!tc::is_instance2<CTemplate1, CInstantiation2>::value);
+	static_assert(!tc::instance2<CInstantiation2, CTemplate1>);
 
-	static_assert(!tc::is_instance2<CTemplate2, CInstantiation1>::value);
+	static_assert(!tc::instance2<CInstantiation1, CTemplate2>);
 
-	static_assert(tc::is_instance2<CTemplate2, CInstantiation2>::value);
-	STATICASSERTSAME(bool, (typename tc::is_instance2<CTemplate2, CInstantiation2>::first_argument));
-	STATICASSERTSAME(void, (typename tc::is_instance2<CTemplate2, CInstantiation2>::second_argument));
-	STATICASSERTEQUAL(false, (tc::is_instance2<CTemplate2, CInstantiation2>::third_argument));
+	static_assert(tc::instance2<CInstantiation2, CTemplate2>);
+	STATICASSERTSAME(bool, (typename tc::is_instance2<CInstantiation2, CTemplate2>::first_argument));
+	STATICASSERTSAME(void, (typename tc::is_instance2<CInstantiation2, CTemplate2>::second_argument));
+	STATICASSERTEQUAL(false, (tc::is_instance2<CInstantiation2, CTemplate2>::third_argument));
 }
 
 namespace is_instance_or_derived_test {
@@ -977,31 +975,31 @@ namespace is_instance_or_derived_test {
 	};
 	using CInstantiation2 = CTemplate2<bool, void>;
 
-	static_assert(tc::is_instance_or_derived<CTemplate1, CInstantiation1>::value);
-	STATICASSERTSAME((CTemplate1<int, bool>), (typename tc::is_instance_or_derived<CTemplate1, CInstantiation1>::base_instance));
-	STATICASSERTSAME((tc::type::list<int, bool>), (typename tc::is_instance_or_derived<CTemplate1, CInstantiation1>::arguments));
+	static_assert(tc::instance_or_derived<CInstantiation1, CTemplate1>);
+	STATICASSERTSAME((CTemplate1<int, bool>), (typename tc::is_instance_or_derived<CInstantiation1, CTemplate1>::base_instance));
+	STATICASSERTSAME((tc::type::list<int, bool>), (typename tc::is_instance_or_derived<CInstantiation1, CTemplate1>::arguments));
 
 #if defined(_MSC_VER) && !defined(__clang__)
-	static_assert(tc::is_instance_or_derived<CTemplate1 const volatile, CInstantiation1>::value);
-	STATICASSERTSAME((CTemplate1<int, bool>), (typename tc::is_instance_or_derived<CTemplate1 const volatile, CInstantiation1>::base_instance));
-	STATICASSERTSAME((tc::type::list<int, bool>), (typename tc::is_instance_or_derived<CTemplate1 const volatile, CInstantiation1>::arguments));
+	static_assert(tc::instance_or_derived<CInstantiation1, CTemplate1 const volatile>);
+	STATICASSERTSAME((CTemplate1<int, bool>), (typename tc::is_instance_or_derived<CInstantiation1, CTemplate1 const volatile>::base_instance));
+	STATICASSERTSAME((tc::type::list<int, bool>), (typename tc::is_instance_or_derived<CInstantiation1, CTemplate1 const volatile>::arguments));
 #endif
 
-	static_assert(tc::is_instance_or_derived<CTemplate1, CInstantiation1 const volatile>::value);
-	STATICASSERTSAME((CTemplate1<int, bool>), (typename tc::is_instance_or_derived<CTemplate1, CInstantiation1 const volatile>::base_instance));
-	STATICASSERTSAME((tc::type::list<int, bool>), (typename tc::is_instance_or_derived<CTemplate1, CInstantiation1 const volatile>::arguments));
+	static_assert(tc::instance_or_derived<CInstantiation1 const volatile, CTemplate1>);
+	STATICASSERTSAME((CTemplate1<int, bool>), (typename tc::is_instance_or_derived<CInstantiation1 const volatile, CTemplate1>::base_instance));
+	STATICASSERTSAME((tc::type::list<int, bool>), (typename tc::is_instance_or_derived<CInstantiation1 const volatile, CTemplate1>::arguments));
 
-	static_assert(tc::is_instance_or_derived<CTemplate1Int, CInstantiation1>::value);
-	STATICASSERTSAME((CTemplate1Int<bool>), (typename tc::is_instance_or_derived<CTemplate1Int, CInstantiation1>::base_instance));
-	STATICASSERTSAME((tc::type::list<bool>), (typename tc::is_instance_or_derived<CTemplate1Int, CInstantiation1>::arguments));
+	static_assert(tc::instance_or_derived<CInstantiation1, CTemplate1Int>);
+	STATICASSERTSAME((CTemplate1Int<bool>), (typename tc::is_instance_or_derived<CInstantiation1, CTemplate1Int>::base_instance));
+	STATICASSERTSAME((tc::type::list<bool>), (typename tc::is_instance_or_derived<CInstantiation1, CTemplate1Int>::arguments));
 
-	static_assert(!tc::is_instance_or_derived<CTemplate1, CInstantiation2>::value);
+	static_assert(!tc::instance_or_derived<CInstantiation2, CTemplate1>);
 
-	static_assert(!tc::is_instance_or_derived<CTemplate2, CInstantiation1>::value);
+	static_assert(!tc::instance_or_derived<CInstantiation1, CTemplate2>);
 
-	static_assert(tc::is_instance_or_derived<CTemplate2, CInstantiation2>::value);
-	STATICASSERTSAME((CTemplate2<bool, void>), (typename tc::is_instance_or_derived<CTemplate2, CInstantiation2>::base_instance));
-	STATICASSERTSAME((tc::type::list<bool, void>), (typename tc::is_instance_or_derived<CTemplate2, CInstantiation2>::arguments));
+	static_assert(tc::instance_or_derived<CInstantiation2, CTemplate2>);
+	STATICASSERTSAME((CTemplate2<bool, void>), (typename tc::is_instance_or_derived<CInstantiation2, CTemplate2>::base_instance));
+	STATICASSERTSAME((tc::type::list<bool, void>), (typename tc::is_instance_or_derived<CInstantiation2, CTemplate2>::arguments));
 
 	struct CPrivateInstantiation1 : private CTemplate1<int, int> {
 		operator CTemplate1<void, void>();
@@ -1009,31 +1007,33 @@ namespace is_instance_or_derived_test {
 		operator CTemplate1<void, void>*();
 	};
 
-	// static_assert(!tc::is_instance_or_derived<CTemplate1, CPrivateInstantiation1>::value);  // Does not compile.
-	static_assert(!tc::is_instance_or_derived<CTemplate1Int, CPrivateInstantiation1>::value);
-	static_assert(!tc::is_instance_or_derived<CTemplate2, CPrivateInstantiation1>::value);
+	// static_assert(!tc::instance_or_derived<CPrivateInstantiation1, CTemplate1>);  // Does not compile.
+	static_assert(!tc::instance_or_derived<CPrivateInstantiation1, CTemplate1Int>);
+	static_assert(!tc::instance_or_derived<CPrivateInstantiation1, CTemplate2>);
 }
 
 namespace is_instance_or_derived2_test {
+	IS_INSTANCE_OR_DERIVED_TRAIT(2, ((typename)(T1))((typename)(T2))((bool)(b)), using first_argument = T1; using second_argument = T2; static constexpr auto third_argument = b;)
+
 	template<typename, typename, bool> struct CTemplate1 : tc::nonmovable {};
 	template<typename, typename, bool> struct CTemplate2 : tc::nonmovable {};
 
 	using CInstantiation1 = CTemplate1<int, bool, true>;
 	using CInstantiation2 = CTemplate2<bool, void, false>;
 
-	static_assert(tc::is_instance_or_derived2<CTemplate1, CInstantiation1>::value);
-	STATICASSERTSAME(int, (tc::is_instance_or_derived2<CTemplate1, CInstantiation1>::first_argument));
-	STATICASSERTSAME(bool, (tc::is_instance_or_derived2<CTemplate1, CInstantiation1>::second_argument));
-	STATICASSERTEQUAL(true, (tc::is_instance_or_derived2<CTemplate1, CInstantiation1>::third_argument));
+	static_assert(instance_or_derived2<CInstantiation1, CTemplate1>);
+	STATICASSERTSAME(int, (is_instance_or_derived2<CInstantiation1, CTemplate1>::first_argument));
+	STATICASSERTSAME(bool, (is_instance_or_derived2<CInstantiation1, CTemplate1>::second_argument));
+	STATICASSERTEQUAL(true, (is_instance_or_derived2<CInstantiation1, CTemplate1>::third_argument));
 
-	static_assert(!tc::is_instance_or_derived2<CTemplate1, CInstantiation2>::value);
+	static_assert(!instance_or_derived2<CInstantiation2, CTemplate1>);
 
-	static_assert(!tc::is_instance_or_derived2<CTemplate2, CInstantiation1>::value);
+	static_assert(!instance_or_derived2<CInstantiation1, CTemplate2>);
 
-	static_assert(tc::is_instance_or_derived2<CTemplate2, CInstantiation2>::value);
-	STATICASSERTSAME(bool, (tc::is_instance_or_derived2<CTemplate2, CInstantiation2>::first_argument));
-	STATICASSERTSAME(void, (tc::is_instance_or_derived2<CTemplate2, CInstantiation2>::second_argument));
-	STATICASSERTEQUAL(false, (tc::is_instance_or_derived2<CTemplate2, CInstantiation2>::third_argument));
+	static_assert(instance_or_derived2<CInstantiation2, CTemplate2>);
+	STATICASSERTSAME(bool, (is_instance_or_derived2<CInstantiation2, CTemplate2>::first_argument));
+	STATICASSERTSAME(void, (is_instance_or_derived2<CInstantiation2, CTemplate2>::second_argument));
+	STATICASSERTEQUAL(false, (is_instance_or_derived2<CInstantiation2, CTemplate2>::third_argument));
 
 	template<typename T, bool b> struct CTemplate1Int : CTemplate1<int, T, b> {};
 
@@ -1043,12 +1043,12 @@ namespace is_instance_or_derived2_test {
 		operator CTemplate2<void, void, true>*() const&;
 	};
 
-	static_assert(tc::is_instance_or_derived2<CTemplate1, CInstantiation3>::value);
-	static_assert(!tc::is_instance_or_derived2<CTemplate2, CInstantiation3>::value);
+	static_assert(instance_or_derived2<CInstantiation3, CTemplate1>);
+	static_assert(!instance_or_derived2<CInstantiation3, CTemplate2>);
 
-	STATICASSERTSAME(int, (tc::is_instance_or_derived2<CTemplate1, CInstantiation3>::first_argument));
-	STATICASSERTSAME(double, (tc::is_instance_or_derived2<CTemplate1, CInstantiation3>::second_argument));
-	STATICASSERTEQUAL(false, (tc::is_instance_or_derived2<CTemplate1, CInstantiation3>::third_argument));
+	STATICASSERTSAME(int, (is_instance_or_derived2<CInstantiation3, CTemplate1>::first_argument));
+	STATICASSERTSAME(double, (is_instance_or_derived2<CInstantiation3, CTemplate1>::second_argument));
+	STATICASSERTEQUAL(false, (is_instance_or_derived2<CInstantiation3, CTemplate1>::third_argument));
 }
 
 namespace noncopyable_test {

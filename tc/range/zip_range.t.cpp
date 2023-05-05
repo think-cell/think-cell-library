@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -42,28 +42,28 @@ UNITTESTDEF(zip_range_supported_ops) {
 	tc::for_each(zip_rr, tc::noop());
 	tc::for_each(zip_rfgf, [](float&,int&,int&,int&) noexcept{});
 
-	static_assert(!tc::has_decrement_index<decltype(zip_ff)>::value);
-	static_assert(!tc::has_decrement_index<decltype(zip_fb)>::value);
-	static_assert(!tc::has_decrement_index<decltype(zip_fr)>::value);
-	static_assert(!tc::has_advance_index<decltype(zip_ff)>::value);
-	static_assert(!tc::has_advance_index<decltype(zip_fb)>::value);
-	static_assert(!tc::has_advance_index<decltype(zip_fr)>::value);
-	static_assert(!tc::has_distance_to_index<decltype(zip_ff)>::value);
-	static_assert(!tc::has_distance_to_index<decltype(zip_fb)>::value);
-	static_assert(!tc::has_distance_to_index<decltype(zip_fr)>::value);
+	static_assert(!tc::has_decrement_index<decltype(zip_ff)>);
+	static_assert(!tc::has_decrement_index<decltype(zip_fb)>);
+	static_assert(!tc::has_decrement_index<decltype(zip_fr)>);
+	static_assert(!tc::has_advance_index<decltype(zip_ff)>);
+	static_assert(!tc::has_advance_index<decltype(zip_fb)>);
+	static_assert(!tc::has_advance_index<decltype(zip_fr)>);
+	static_assert(!tc::has_distance_to_index<decltype(zip_ff)>);
+	static_assert(!tc::has_distance_to_index<decltype(zip_fb)>);
+	static_assert(!tc::has_distance_to_index<decltype(zip_fr)>);
 
-	static_assert(tc::has_decrement_index<decltype(zip_bb)>::value);
-	static_assert(tc::has_decrement_index<decltype(zip_br)>::value);
-	static_assert(!tc::has_advance_index<decltype(zip_bb)>::value);
-	static_assert(!tc::has_advance_index<decltype(zip_br)>::value);
-	static_assert(!tc::has_distance_to_index<decltype(zip_bb)>::value);
-	static_assert(!tc::has_distance_to_index<decltype(zip_br)>::value);
+	static_assert(tc::has_decrement_index<decltype(zip_bb)>);
+	static_assert(tc::has_decrement_index<decltype(zip_br)>);
+	static_assert(!tc::has_advance_index<decltype(zip_bb)>);
+	static_assert(!tc::has_advance_index<decltype(zip_br)>);
+	static_assert(!tc::has_distance_to_index<decltype(zip_bb)>);
+	static_assert(!tc::has_distance_to_index<decltype(zip_br)>);
 
-	static_assert(tc::has_decrement_index<decltype(zip_rr)>::value);
-	static_assert(tc::has_advance_index<decltype(zip_rr)>::value);
-	static_assert(tc::has_distance_to_index<decltype(zip_rr)>::value);
+	static_assert(tc::has_decrement_index<decltype(zip_rr)>);
+	static_assert(tc::has_advance_index<decltype(zip_rr)>);
+	static_assert(tc::has_distance_to_index<decltype(zip_rr)>);
 
-	static_assert(!tc::is_range_with_iterators<decltype(zip_rfgf)>::value);
+	static_assert(!tc::range_with_iterators<decltype(zip_rfgf)>);
 }
 
 UNITTESTDEF(zip_range_difference_type) {

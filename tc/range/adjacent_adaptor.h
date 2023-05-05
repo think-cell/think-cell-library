@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -16,21 +16,21 @@
 #include "../algorithm/size_bounded.h"
 
 namespace tc {
-	namespace adjacent_tuples_adaptor_adl {
-		template<typename Rng, std::size_t N, bool HasIterator = tc::is_range_with_iterators<Rng>::value>
-		struct adjacent_tuples_adaptor;
+	namespace adjacent_adaptor_adl {
+		template<typename Rng, std::size_t N, bool HasIterator = tc::range_with_iterators<Rng>>
+		struct adjacent_adaptor;
 
 		template<typename Rng, std::size_t N>
-		struct [[nodiscard]] adjacent_tuples_adaptor<Rng, N, false> : tc::range_adaptor_base_range<Rng> {
+		struct [[nodiscard]] adjacent_adaptor<Rng, N, false> : tc::range_adaptor_base_range<Rng> {
 			static_assert( 1 < N );
 			using tc::range_adaptor_base_range<Rng>::range_adaptor_base_range;
 
-			template<typename Self, typename Sink> requires tc::is_base_of_decayed<adjacent_tuples_adaptor, Self>::value
+			template<tc::decayed_derived_from<adjacent_adaptor> Self, typename Sink>
 			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
 				return internal_for_each(
 					std::forward<Self>(self),
 					std::forward<Sink>(sink),
-					std::make_index_sequence<N - (tc::is_range_with_iterators<Rng>::value ? 1 : 2)>()
+					std::make_index_sequence<N - (tc::range_with_iterators<Rng> ? 1 : 2)>()
 				);
 			}
 
@@ -47,7 +47,7 @@ namespace tc {
 		private:
 			template<typename Self, typename Sink, std::size_t... i /*=0,1,...,N-2*/>
 			static constexpr auto internal_for_each(Self&& self, Sink const sink, std::index_sequence<i...>) MAYTHROW {
-				if constexpr (tc::is_range_with_iterators<Rng>::value) {
+				if constexpr (tc::range_with_iterators<Rng>) {
 					auto GenerateAdjacentTuples = [&]() MAYTHROW {
 						auto const itEnd = tc::end(self.base_range());
 						auto it = tc::begin(self.base_range());
@@ -61,7 +61,7 @@ namespace tc {
 								if (it == itEnd) {
 									return tc::continue_if_not_break(sink, tc::forward_as_tuple(*tc_move_always(tc::at(ait, n)), *tc_move_always(tc::at(ait, (n + i + 1) % N))...)); // MAYTHROW
 								}
-								RETURN_IF_BREAK(tc::continue_if_not_break(sink, tc::forward_as_tuple(*tc_move_always(tc::at(ait, n)), *tc::at(ait, (n + i + 1) % N)...))); // MAYTHROW
+								tc_yield(sink, tc::forward_as_tuple(*tc_move_always(tc::at(ait, n)), *tc::at(ait, (n + i + 1) % N)...)); // MAYTHROW
 								tc::at(ait, n) = it;
 								++it;
 							}
@@ -75,7 +75,7 @@ namespace tc {
 				} else {
 					std::array<tc::storage_for<tc::range_value_t<decltype(std::declval<Self>().base_range())>>, N - 1> aoval;
 					std::size_t n = 0;
-					scope_exit( tc::for_each(tc::begin_next<tc::return_take>(aoval, tc::min(n, N - 1)), TC_MEM_FN(.dtor)) );
+					tc_scope_exit { tc::for_each(tc::begin_next<tc::return_take>(aoval, tc::min(n, N - 1)), tc_mem_fn(.dtor)); };
 
 					return tc::for_each(std::forward<Self>(self).base_range(), [&](auto&& u) MAYTHROW {
 						auto CallSink = [&]() MAYTHROW {
@@ -91,7 +91,7 @@ namespace tc {
 						if (n < N - 1) {
 							tc::at(aoval, n).ctor(tc_move_if_owned(u));
 						} else {
-							RETURN_IF_BREAK( CallSink() ); // MAYTHROW
+							tc_return_if_break( CallSink() ); // MAYTHROW
 							tc::renew(*tc::at(aoval, n % (N - 1)), tc_move_if_owned(u));
 						}
 						++n;
@@ -100,7 +100,7 @@ namespace tc {
 				}
 			}
 
-			template<typename Self, std::enable_if_t<tc::is_base_of_decayed<adjacent_tuples_adaptor, Self>::value>* = nullptr>
+			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, adjacent_adaptor>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
 			friend auto range_output_t_impl(Self&&) -> tc::type::list<tc::type::apply_t<tc::tuple,
 				tc::type::repeat_n_t<
 					N,
@@ -116,12 +116,12 @@ namespace tc {
 		};
 	}
 
-	namespace adjacent_tuples_adaptor_detail::no_adl {
+	namespace adjacent_adaptor_detail::no_adl {
 		template<typename Rng, std::size_t N>
-		struct adjacent_tuples_index {
-			constexpr adjacent_tuples_index() = default;
+		struct adjacent_index {
+			constexpr adjacent_index() = default;
 			template<std::size_t... I>
-			constexpr adjacent_tuples_index(Rng const& rng, index_t<std::remove_reference_t<Rng>> idx, std::index_sequence<I...>) noexcept
+			constexpr adjacent_index(Rng const& rng, index_t<std::remove_reference_t<Rng>> idx, std::index_sequence<I...>) noexcept
 				: m_aidx{idx, ((tc::at_end_index(rng, idx) ? tc::discard(I) : tc::increment_index(rng, idx)), idx)...}
 			{
 				STATICASSERTSAME(std::index_sequence<I...>, std::make_index_sequence<N - 1>);
@@ -130,29 +130,29 @@ namespace tc {
 			// If size(rng) < N, the single index has m_aidx = {begin_index(), ..., end_index(), ... end_index()}.
 			tc::index_t<std::remove_reference_t<Rng>> m_aidx[N];
 
-			friend constexpr bool operator==(adjacent_tuples_index const& lhs, adjacent_tuples_index const& rhs) noexcept {
+			friend constexpr bool operator==(adjacent_index const& lhs, adjacent_index const& rhs) noexcept {
 				return lhs.m_aidx[0] == rhs.m_aidx[0];
 			}
 		};
 	}
 
-	namespace adjacent_tuples_adaptor_adl {
+	namespace adjacent_adaptor_adl {
 		template<typename Rng, std::size_t N>
-		struct [[nodiscard]] adjacent_tuples_adaptor<Rng, N, true>
-			: adjacent_tuples_adaptor<Rng, N, false>
+		struct [[nodiscard]] adjacent_adaptor<Rng, N, true>
+			: adjacent_adaptor<Rng, N, false>
 			, tc::range_iterator_from_index<
-				adjacent_tuples_adaptor<Rng, N, true>,
-				adjacent_tuples_adaptor_detail::no_adl::adjacent_tuples_index<Rng, N>
+				adjacent_adaptor<Rng, N, true>,
+				adjacent_adaptor_detail::no_adl::adjacent_index<Rng, N>
 			>
 		{
 		private:
-			using this_type = adjacent_tuples_adaptor<Rng, N, true>;
+			using this_type = adjacent_adaptor<Rng, N, true>;
 
 		public:
 			using typename this_type::range_iterator_from_index::tc_index;
 			static constexpr bool c_bHasStashingIndex=std::disjunction<tc::has_stashing_index<std::remove_reference_t<Rng>>>::value;
 
-			using adjacent_tuples_adaptor<Rng, N, false>::adjacent_tuples_adaptor;
+			using adjacent_adaptor<Rng, N, false>::adjacent_adaptor;
 
 		private:
 			STATIC_FINAL_MOD(constexpr, begin_index)() const& noexcept -> tc_index {
@@ -163,16 +163,11 @@ namespace tc {
 				return tc::at_end_index(this->base_range(), idx.m_aidx[N - 1]);
 			}
 
-			STATIC_FINAL_MOD(
-				TC_FWD(
-					template<ENABLE_SFINAE, std::enable_if_t<
-						tc::has_end_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value &&
-						tc::has_decrement_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value
-					>* = nullptr>
-					constexpr
-				),
-				end_index
-			)() const& noexcept -> tc_index {
+			STATIC_FINAL_MOD(constexpr, end_index)() const& noexcept -> tc_index
+				requires
+					tc::has_end_index<std::remove_reference_t<Rng>> &&
+					tc::has_decrement_index<std::remove_reference_t<Rng>>
+			{
 				auto const idxBegin = this->base_begin_index();
 				auto idxBase = this->base_end_index();
 				tc_index idx;
@@ -199,12 +194,9 @@ namespace tc {
 			}
 
 			STATIC_FINAL_MOD(
-				TC_FWD(
-					template<ENABLE_SFINAE, std::enable_if_t<tc::has_decrement_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value>* = nullptr>
-					constexpr
-				),
+				constexpr,
 				decrement_index
-			)(tc_index& idx) const& noexcept -> void {
+			)(tc_index& idx) const& noexcept -> void requires tc::has_decrement_index<std::remove_reference_t<Rng>> {
 				// std::ranges::move_backward(tc::end_prev<tc::return_take>(idx.m_aidx), tc::end(idx.m_aidx));
 				for( std::size_t i = N - 1; 0 < i; ) {
 					--i;
@@ -218,7 +210,7 @@ namespace tc {
 				-> tc::tuple<decltype(tc::dereference_index(self.base_range(), idx.m_aidx[I]))...>
 			{
 				return {{
-					{{ tc::dereference_index(self.base_range(), idx.m_aidx[I]) }}...
+					{ tc::dereference_index(self.base_range(), idx.m_aidx[I]) }...
 				}};
 			}
 
@@ -231,32 +223,23 @@ namespace tc {
 			}
 
 			STATIC_FINAL_MOD(
-				TC_FWD(
-					template<ENABLE_SFINAE, std::enable_if_t<tc::has_advance_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value>* = nullptr>
-					constexpr
-				),
+				constexpr,
 				advance_index
-			)(tc_index& idx, typename boost::range_difference<Rng>::type d) const& MAYTHROW -> void {
-				idx = {this->base_range(), modified(idx.m_aidx[0], tc::advance_index(this->base_range(), _, d)), std::make_index_sequence<N - 1>()};
+			)(tc_index& idx, typename boost::range_difference<Rng>::type d) const& MAYTHROW -> void requires tc::has_advance_index<std::remove_reference_t<Rng>> {
+				idx = {this->base_range(), tc_modified(idx.m_aidx[0], tc::advance_index(this->base_range(), _, d)), std::make_index_sequence<N - 1>()};
 			}
 
 			STATIC_FINAL_MOD(
-				TC_FWD(
-					template<ENABLE_SFINAE, std::enable_if_t<tc::has_distance_to_index<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value>* = nullptr>
-					constexpr
-				),
+				constexpr,
 				distance_to_index
-			)(tc_index const& idxLhs, tc_index const& idxRhs) const& noexcept {
+			)(tc_index const& idxLhs, tc_index const& idxRhs) const& noexcept requires tc::has_distance_to_index<std::remove_reference_t<Rng>> {
 				return tc::distance_to_index(this->base_range(), idxLhs.m_aidx[0], idxRhs.m_aidx[0]);
 			}
 
 			STATIC_FINAL_MOD(
-				TC_FWD(
-					template<ENABLE_SFINAE, std::enable_if_t<tc::has_middle_point<std::remove_reference_t<SFINAE_TYPE(Rng)>>::value>* = nullptr>
-					constexpr
-				),
+				constexpr,
 				middle_point
-			)(tc_index& idxLhs, tc_index const& idxRhs) const& noexcept -> void {
+			)(tc_index& idxLhs, tc_index const& idxRhs) const& noexcept -> void requires tc::has_middle_point<std::remove_reference_t<Rng>> {
 				tc::middle_point(this->base_range(), idxLhs.m_aidx[0], idxRhs.m_aidx[0]);
 				idxLhs = {this->base_range(), idxLhs.m_aidx[0], std::make_index_sequence<N - 1>()};
 			}
@@ -264,19 +247,19 @@ namespace tc {
 	}
 
 	namespace no_adl {
-		template<typename Rng, std::size_t N>
-		struct constexpr_size_base<adjacent_tuples_adaptor_adl::adjacent_tuples_adaptor<Rng, N>, std::void_t<typename tc::constexpr_size<Rng>::type>>
+		template<tc::has_constexpr_size Rng, std::size_t N>
+		struct constexpr_size_impl<adjacent_adaptor_adl::adjacent_adaptor<Rng, N>>
 			: tc::constant<tc::constexpr_size<Rng>::value < N ? 0 : tc::constexpr_size<Rng>::value - (N - 1)>
 		{};
 
 		template<typename Rng, std::size_t N>
-		struct is_index_valid_for_move_constructed_range<adjacent_tuples_adaptor_adl::adjacent_tuples_adaptor<Rng, N, true>>
+		struct is_index_valid_for_move_constructed_range<adjacent_adaptor_adl::adjacent_adaptor<Rng, N, true>>
 			: tc::is_index_valid_for_move_constructed_range<Rng>
 		{};
 	}
 
 	template<std::size_t N, typename Rng>
-	constexpr adjacent_tuples_adaptor_adl::adjacent_tuples_adaptor<Rng, N> adjacent_tuples(Rng&& rng) noexcept {
+	constexpr adjacent_adaptor_adl::adjacent_adaptor<Rng, N> adjacent(Rng&& rng) noexcept {
 		return {tc::aggregate_tag, std::forward<Rng>(rng)};
 	}
 }

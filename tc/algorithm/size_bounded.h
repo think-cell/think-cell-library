@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -17,9 +17,9 @@
 namespace tc {
 	template< typename Rng, typename T>
 	[[nodiscard]] constexpr auto size_bounded(Rng const& rng, T const nBound) noexcept {
-		if constexpr( tc::has_size<Rng>::value ) {
+		if constexpr( tc::has_size<Rng> ) {
 			return tc::size(rng);
-		} else if constexpr( tc::is_range_with_iterators<Rng>::value ) {
+		} else if constexpr( tc::range_with_iterators<Rng> ) {
 			return advance_forward_bounded( tc::begin(rng), nBound, tc::end(rng) );
 		} else {
 			T n = 0;

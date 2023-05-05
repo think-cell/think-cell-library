@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -14,7 +14,7 @@
 #include "../algorithm/best_element.h"
 #include "../algorithm/algorithm.h"
 
-#include "adjacent_tuples_adaptor.h"
+#include "adjacent_adaptor.h"
 #include "cartesian_product_adaptor.h"
 #include "concat_adaptor.h"
 #include "filter_adaptor.h"
@@ -24,7 +24,7 @@
 
 namespace {
 
-static_assert( tc::is_range_of<tc::is_char, wchar_t const* const>::value );
+static_assert( tc::is_range_of<TRAITFROMCONCEPT(tc::char_type), wchar_t const* const>::value );
 
 //---- Basic ------------------------------------------------------------------------------------------------------------------
 UNITTESTDEF( basic ) {
@@ -173,10 +173,10 @@ UNITTESTDEF( zero_termination ) {
 }
 
 UNITTESTDEF( ensure_index_range_on_chars ) {
-	static_assert( tc::is_range_with_iterators<char*>::value );
-	static_assert( tc::is_range_with_iterators<char const*>::value );
-	static_assert( tc::is_range_with_iterators<char* &>::value );
-	static_assert( tc::is_range_with_iterators<char* const&>::value );
+	static_assert( tc::range_with_iterators<char*> );
+	static_assert( tc::range_with_iterators<char const*> );
+	static_assert( tc::range_with_iterators<char* &> );
+	static_assert( tc::range_with_iterators<char* const&> );
 
 	struct check_5_chars final {
 		void operator()( char ) {
@@ -260,10 +260,10 @@ struct GeneratorInt {
 	friend auto range_output_t_impl(GeneratorInt const&) -> tc::type::list<int>; // declaration only
 	template<typename Func>
 	tc::break_or_continue operator()(Func func) const& {
-		RETURN_IF_BREAK( tc::continue_if_not_break(func, 1));
-		RETURN_IF_BREAK( tc::continue_if_not_break(func, 6));
-		RETURN_IF_BREAK( tc::continue_if_not_break(func, 3));
-		RETURN_IF_BREAK( tc::continue_if_not_break(func, 4));
+		tc_yield(func, 1);
+		tc_yield(func, 6);
+		tc_yield(func, 3);
+		tc_yield(func, 4);
 		return tc::continue_;
 	}
 };
@@ -272,10 +272,10 @@ struct GeneratorLong {
 	friend auto range_output_t_impl(GeneratorLong const&) -> tc::type::list<long>; // declaration only
 	template<typename Func>
 	tc::break_or_continue operator()(Func func) const& {
-		RETURN_IF_BREAK( tc::continue_if_not_break(func, 1l));
-		RETURN_IF_BREAK( tc::continue_if_not_break(func, 6l));
-		RETURN_IF_BREAK( tc::continue_if_not_break(func, 3l));
-		RETURN_IF_BREAK( tc::continue_if_not_break(func, 4l));
+		tc_yield(func, 1l);
+		tc_yield(func, 6l);
+		tc_yield(func, 3l);
+		tc_yield(func, 4l);
 		return tc::continue_;
 	}
 
@@ -285,8 +285,8 @@ struct GeneratorGeneratorInt {
 	friend auto range_output_t_impl(GeneratorGeneratorInt const&) -> tc::type::list<GeneratorInt>; // declaration only
 	template<typename Func>
 	tc::break_or_continue operator()(Func func) const& {
-		RETURN_IF_BREAK( tc::continue_if_not_break(func, GeneratorInt()) );
-		RETURN_IF_BREAK( tc::continue_if_not_break(func, GeneratorInt()) );
+		tc_yield(func, GeneratorInt());
+		tc_yield(func, GeneratorInt());
 		return tc::continue_;
 	}
 };
@@ -298,9 +298,9 @@ struct GeneratorMutableInt {
 
 	template<typename Func>
 	tc::break_or_continue operator()(Func func) & {
-		RETURN_IF_BREAK( tc::continue_if_not_break(func, m_an[0]) );
-		RETURN_IF_BREAK( tc::continue_if_not_break(func, m_an[1]) );
-		RETURN_IF_BREAK( tc::continue_if_not_break(func, m_an[2]) );
+		tc_yield(func, m_an[0]);
+		tc_yield(func, m_an[1]);
+		tc_yield(func, m_an[2]);
 		return tc::continue_;
 	}
 };
@@ -546,6 +546,19 @@ namespace {
 		tc::for_each(tc::cartesian_product(rvaluerng, rvaluerng), [](auto&& x){
 			STATICASSERTSAME(decltype(x), (tc::tuple<int const&&, int&&>&&));
 		});
+
+		static auto constexpr an1 = std::array<int, 5>{ 0, 1, 2, 3, 4 };
+		static auto constexpr an2 = std::array<int, 3>{ 0, 1, 2 };
+		static auto constexpr rng = tc::cartesian_product(an1, an2);
+
+		GCC_WORKAROUND_STATIC_ASSERT( *++tc::begin(rng) == tc::make_tuple(0, 1) );
+		GCC_WORKAROUND_STATIC_ASSERT( *--tc::end(rng) == tc::make_tuple(4, 2) );
+		GCC_WORKAROUND_STATIC_ASSERT( tc::at(rng, 7) == tc::make_tuple(2, 1) );
+		GCC_WORKAROUND_STATIC_ASSERT( int(tc::begin(rng) - tc::end(rng)) == -15 );
+		GCC_WORKAROUND_STATIC_ASSERT( int(++tc::begin(rng) - --tc::end(rng)) == -13 );
+
+		GCC_WORKAROUND_STATIC_ASSERT( tc::find_unique<tc::return_element_index>(rng, tc::make_tuple(2, 1)) == 7 );
+		GCC_WORKAROUND_STATIC_ASSERT( tc::find_unique<tc::return_element>(rng, tc::make_tuple(2, 1)) - tc::begin(rng) == 7 );
 	}
 }
 
@@ -555,7 +568,7 @@ namespace {
 	namespace adjacent_tuples_iterator_test {
 		auto constexpr an = std::array<int, 5>{ 1, 2, 3, 4, 5 };
 		namespace non_empty {
-			auto constexpr rng = tc::adjacent_tuples<3>(an);
+			auto constexpr rng = tc::adjacent<3>(an);
 
 			static_assert( 3 == tc::size(rng) );
 			static_assert( *tc::begin(rng) == tc::make_tuple(1, 2, 3) );
@@ -574,7 +587,7 @@ namespace {
 			static_assert( *tc::middle_point(tc::begin(rng), tc::end(rng)) == tc::make_tuple(2,3,4) );
 		}
 		namespace empty {
-			auto constexpr rng = tc::adjacent_tuples<6>(an);
+			auto constexpr rng = tc::adjacent<6>(an);
 			static_assert( tc::empty(rng) );
 			static_assert( tc::begin(rng) == tc::end(rng) );
 			static_assert( tc::begin(rng) == tc::end_sentinel() );

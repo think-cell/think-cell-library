@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -15,10 +15,10 @@
 
 UNITTESTDEF(GeneratorRangeTakeWhile) {
 	auto GeneratorRange = tc::generator_range_output<int>([](auto const& sink) noexcept -> tc::break_or_continue {
-		RETURN_IF_BREAK(tc::continue_if_not_break(sink, 1));
-		RETURN_IF_BREAK(tc::continue_if_not_break(sink, 2));
+		tc_yield(sink, 1);
+		tc_yield(sink, 2);
 		_ASSERTFALSE;
-		RETURN_IF_BREAK(tc::continue_if_not_break(sink, 3));
+		tc_yield(sink, 3);
 		return tc::continue_;
 	});
 

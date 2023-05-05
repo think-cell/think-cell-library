@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -29,7 +29,7 @@ namespace tc {
 			} else { \
 				static_assert( \
 					std::is_same<Result, tc::decay_t<Lhs>>::value \
-					|| !is_compound_available<tc::decay_t<Lhs>, Rhs&&>::value, \
+					|| !is_compound_available<tc::decay_t<Lhs>, Rhs&&>, \
 					"conversion_t provides a conversion, despite " #op "= being offered by the original type" \
 				); \
 				return _; \
@@ -57,15 +57,15 @@ namespace tc {
 		struct TC_EMPTY_BASES name : std::conditional_t<std::is_void<Base>::value, tc::empty_chain<name<void>>, Base> { \
 		private: \
 			template< typename Lhs, typename Rhs > \
-			using is_compound_available = tc::generic_operator_helper::has_mem_fn_compound_ ##name<Lhs&, Rhs>; \
+			static constexpr bool is_compound_available = tc::generic_operator_helper::has_mem_fn_compound_ ##name<Lhs&, Rhs>; \
 			template< typename Lhs, typename Rhs > \
 			using conversion_t = typename binary_operator_conversions::internal_##name##_conversion_type<tc::decay_t<Lhs>, tc::decay_t<Rhs>>::type; \
 			/*If we're not forwarding an rvalue, we're calling the operator on the result of tc::decay_copy(Lhs&), which is tc::decay_t<Lhs>& \
 				If we're forwarding an rvalue, we're calling the operator on remove_reference_t<Lhs>&. But is_same<tc::decay_t<Lhs>, remove_reference_t<Lhs>>::value. */ \
 			template< typename Lhs, typename Rhs > \
 			using is_operation_available = tc::constant< \
-				tc::is_base_of<name, conversion_t<Lhs, Rhs>>::value \
-				&& is_compound_available<conversion_t<Lhs, Rhs>, Rhs>::value \
+				tc::derived_from<conversion_t<Lhs, Rhs>, name> \
+				&& is_compound_available<conversion_t<Lhs, Rhs>, Rhs> \
 			>; \
 		public: \
 			GENERIC_OP_BODY( op, _.operator op##=(std::forward<Rhs>(rhs)) ); \
@@ -75,21 +75,21 @@ namespace tc {
 		struct TC_EMPTY_BASES external_ ##name : std::conditional_t<std::is_void<Base>::value, tc::empty_chain<external_ ##name <void>>, Base> { \
 		private: \
 			template< typename Lhs, typename Rhs > \
-			using is_compound_available = tc::generic_operator_helper::has_compound_ ##name<Lhs&, Rhs>; \
+			static constexpr bool is_compound_available = tc::generic_operator_helper::has_compound_ ##name<Lhs&, Rhs>; \
 			template< typename Lhs, typename Rhs > \
 			using conversion_t = tc::decay_t<Lhs>; \
 			static_assert( std::is_fundamental<Other>::value, "external_" #name " is only meant for fundamental types" ); \
 			STATICASSERTSAME( tc::decay_t<Other>, Other ); \
 			template< typename Lhs, typename Rhs > \
 			using is_operation_available = tc::constant< \
-				tc::is_base_of<Other, std::remove_reference_t<Lhs>>::value \
-				&& tc::is_base_of<external_ ##name<Other, Base>, std::remove_reference_t<Rhs>>::value \
+				tc::derived_from<std::remove_reference_t<Lhs>, Other> \
+				&& tc::derived_from<std::remove_reference_t<Rhs>, external_ ##name<Other, Base>> \
 				/* Same reasoning as in the internal operator */ \
-				&& is_compound_available<tc::decay_t<Lhs>, Rhs>::value \
+				&& is_compound_available<tc::decay_t<Lhs>, Rhs> \
 			>; \
 		public: \
 			GENERIC_OP_BODY( op, { \
-				static_assert(!tc::generic_operator_helper::has_mem_fn_compound_ ##name<decltype((_)), decltype(std::forward<Rhs>(rhs))>::value); \
+				static_assert(!tc::generic_operator_helper::has_mem_fn_compound_ ##name<decltype((_)), decltype(std::forward<Rhs>(rhs))>); \
 				_ op##= std::forward<Rhs>(rhs); \
 			} ); \
 		}; \
@@ -208,7 +208,7 @@ namespace tc {
 	namespace no_adl { \
 		template<typename Base = void, std::size_t nTransformDepth = 0, typename PrePostOperation = prepostopdefault> \
 		struct TC_EMPTY_BASES scalar_ ## name : std::conditional_t<std::is_void<Base>::value, tc::empty_chain<scalar_ ## name<void, nTransformDepth, PrePostOperation>>, Base> { \
-			template<typename Lhs, typename Rhs> requires tc::is_base_of_decayed<scalar_ ## name, Lhs>::value && requires { \
+			template<tc::decayed_derived_from<scalar_ ## name> Lhs, typename Rhs> requires requires { \
 				std::declval<Lhs>().template transform<nTransformDepth>(std::declval<scalar_binary_op_detail::no_adl::func<fnop, Rhs>>()); \
 			} \
 			[[nodiscard]] friend constexpr decltype(auto) operator op(Lhs&& lhs, Rhs const& rhs) noexcept { \
@@ -218,7 +218,7 @@ namespace tc {
 				return _; \
 			} \
 			\
-			template<typename Lhs, typename Rhs> requires tc::is_base_of_decayed<scalar_ ## name, Lhs>::value && requires { \
+			template<tc::decayed_derived_from<scalar_ ## name> Lhs, typename Rhs> requires requires { \
 				tc::for_each(std::declval<Lhs&>(), std::declval<scalar_binary_op_detail::no_adl::func<fnassignop, Rhs>>()); \
 			} \
 			friend constexpr Lhs& operator op ## =(Lhs& lhs, Rhs const& rhs) noexcept { \

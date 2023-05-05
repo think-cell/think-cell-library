@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -13,11 +13,11 @@
 
 #define TEST_ENUM(offset, constants, underlying) \
 	namespace { namespace BOOST_PP_CAT(enum_test_, __COUNTER__) { \
-		DEFINE_ENUM_WITH_OFFSET(Enum, en, offset, constants); \
+		TC_DEFINE_ENUM_WITH_OFFSET(Enum, en, offset, constants); \
 		static_assert( std::is_signed<std::underlying_type_t<Enum>>::value ); \
 		STATICASSERTEQUAL( sizeof(std::underlying_type_t<Enum>), sizeof(underlying) ); \
-		STATICASSERTEQUAL( tc::underlying_cast(tc::contiguous_enum<Enum>::begin()), offset ); \
-		STATICASSERTEQUAL( tc::underlying_cast(tc::contiguous_enum<Enum>::end()), offset + BOOST_PP_SEQ_SIZE(constants) ); \
+		STATICASSERTEQUAL( tc::to_underlying(tc::contiguous_enum<Enum>::begin()), offset ); \
+		STATICASSERTEQUAL( tc::to_underlying(tc::contiguous_enum<Enum>::end()), offset + BOOST_PP_SEQ_SIZE(constants) ); \
 	} }
 
 #ifdef __clang__
@@ -46,7 +46,7 @@ TEST_ENUM(-129, CONSTANTS192, std::int16_t);
 TEST_ENUM(0, CONSTANTS192, std::int16_t);
 
 namespace {
-DEFINE_ENUM_WITH_OFFSET(ETest, etest, 1234, (A)(B)(C)(D)(E)(F));
+TC_DEFINE_ENUM_WITH_OFFSET(ETest, etest, 1234, (A)(B)(C)(D)(E)(F));
 constexpr auto etestEND = tc::contiguous_enum<ETest>::end();
 
 UNITTESTDEF(enumset_index_inc_dec) {

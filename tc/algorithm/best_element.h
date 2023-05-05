@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -18,7 +18,7 @@
 namespace tc {
 
 	template< typename RangeReturn, typename Better, typename Rng>
-	[[nodiscard]] decltype(auto) best_element_impl(Better better, Rng&& rng) MAYTHROW {
+	[[nodiscard]] constexpr decltype(auto) best_element_impl(Better better, Rng&& rng) MAYTHROW {
 		if constexpr( RangeReturn::requires_iterator ) {
 			auto const itEnd=tc::end(rng); // MAYTHROW
 			decltype(tc::begin(rng)) ait[2]={ tc::begin(rng) }; // MAYTHROW
@@ -30,7 +30,7 @@ namespace tc {
 				for(;;){
 					for( int i=0; i!=2; ++i ) { // we expect the compiler to unroll this loop
 						// aoref[i] is constructed, aoref[1-i] is not constructed
-						scope_exit( aoref[i].dtor() ); // also required in case of exception
+						tc_scope_exit { aoref[i].dtor(); }; // also required in case of exception
 						ait[1-i]=ait[i];
 						for(;;) {
 							// aoref[i] is constructed, aoref[1-i] is not constructed

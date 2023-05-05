@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -39,10 +39,10 @@ namespace tc {
 	template<typename T> requires tc::contiguous_enum<T>::value
 	constexpr tc::interval<T> all_values_interval<T> = tc::interval<T>(tc::contiguous_enum<T>::begin(), tc::contiguous_enum<T>::end());
 
-	template<typename T> requires std::is_integral<T>::value
+	template<std::integral T>
 	constexpr tc::interval<T> all_values_interval<T> = tc::interval<T>(std::numeric_limits<T>::lowest(), std::numeric_limits<T>::max());
 
-	template<typename T> requires std::is_floating_point<T>::value
+	template<std::floating_point T>
 	constexpr tc::interval<T> all_values_interval<T> = tc::interval<T>(-std::numeric_limits<T>::infinity(), std::numeric_limits<T>::infinity());
 
 	template<typename Clock, typename Duration>
@@ -50,16 +50,14 @@ namespace tc {
 
 #ifdef TC_PRIVATE
 	template< typename T >
-	struct is_chrono_like : std::disjunction<
-		tc::is_instance<std::chrono::time_point, T>,
-		tc::is_instance<std::chrono::duration, T>
-	>{};
+	concept chrono_like =
+		tc::instance<T, std::chrono::time_point> ||
+		tc::instance<T, std::chrono::duration>;
 
 	template< typename T >
-	struct is_floating_point_or_chrono_like : std::disjunction<
-		is_floating_point_like<T>,
-		is_chrono_like<T>
-	>{};
+	concept floating_point_or_chrono_like =
+		tc::floating_point_like<T> ||
+		chrono_like<T>;
 #endif
 
 	namespace no_adl {
@@ -87,7 +85,7 @@ namespace tc {
 
 	template<typename T>
 	constexpr void nextafter_inplace(T& t) noexcept {
-		if constexpr( std::is_floating_point<T>::value ) {
+		if constexpr( std::floating_point<T> ) {
 			t = std::nextafter(t, std::numeric_limits<T>::infinity());
 		} else {
 			++t;
@@ -96,7 +94,7 @@ namespace tc {
 
 	template<typename T>
 	constexpr void nextbefore_inplace(T& t) noexcept {
-		if constexpr( std::is_floating_point<T>::value ) {
+		if constexpr( std::floating_point<T> ) {
 			t = std::nextafter(t, -std::numeric_limits<T>::infinity());
 		} else {
 			--t;
@@ -139,7 +137,7 @@ namespace tc {
 		private:
 			using newT = tc::decay_t<T>;
 			using difference_type = typename std::conditional_t<
-				tc::has_minus<T>::value
+				tc::has_minus<T>
 				,/*?*/tc::no_adl::difference<T const&> //Evaluation of ::type must be delayed, because it only compiles if the predicate is true
 				,/*:*/boost::mpl::identity<void>
 			>::type;
@@ -161,12 +159,12 @@ namespace tc {
 				switch_no_default(lohi) {
 					case tc::lo: {
 						auto end = pos + std::forward<TExtent>(extent);
-						static_assert(tc::is_safely_convertible<decltype(end)&&, T>::value, "Cannot initialize an interval with an unsafe conversion");
+						static_assert(tc::safely_convertible_to<decltype(end)&&, T>, "Cannot initialize an interval with an unsafe conversion");
 						return interval<T>(std::forward<TPos>(pos), tc_move(end));
 					}
 					case tc::hi: {
 						auto begin = pos - std::forward<TExtent>(extent);
-						static_assert(tc::is_safely_convertible<decltype(begin)&&, T>::value, "Cannot initialize an interval with an unsafe conversion");
+						static_assert(tc::safely_convertible_to<decltype(begin)&&, T>, "Cannot initialize an interval with an unsafe conversion");
 						return interval<T>(tc_move(begin), std::forward<TPos>(pos));
 					}
 				}
@@ -178,8 +176,8 @@ namespace tc {
 				// make use of the precondition center(a + c, b + c) = c + center(a, b)
 				auto begin = std::forward<TPos>(pos) - tc::internal_lower_half<bGeneralized>(extent);
 				auto end = begin + std::forward<TExtent>(extent);
-				static_assert( tc::is_safely_convertible<decltype(begin)&&, T>::value );
-				static_assert( tc::is_safely_convertible<decltype(end)&&, T>::value );
+				static_assert( tc::safely_convertible_to<decltype(begin)&&, T> );
+				static_assert( tc::safely_convertible_to<decltype(end)&&, T> );
 				return interval<T>( tc_move(begin), tc_move(end) );
 			}
 
@@ -224,7 +222,7 @@ namespace tc {
 			}
 
 			constexpr void expand_to_integer() & noexcept {
-				static_assert(std::is_floating_point<T>::value);
+				static_assert(std::floating_point<T>);
 				// Rounding an empty interval may make it non-empty, which might not be intended.
 				_ASSERTE(!empty());
 				(*this)[tc::lo] = std::floor((*this)[tc::lo]);
@@ -299,7 +297,7 @@ namespace tc {
 
 			template<typename Self, typename S>
 			static tc::apply_cvref_t<T, Self&&> opposite_boundary_(Self&& self, S&& s) noexcept {
-				return tc_move_if_owned(self)[tc::not_if(self[tc::lo] == s || (_ASSERTE(self[tc::hi] == s), true), tc::hi)];
+				return tc_move_if_owned(self)[tc::not_if(self[tc::lo] == s || (_ASSERTE(self[tc::hi] == s), false), tc::lo)];
 			}
 
 		public:
@@ -312,16 +310,16 @@ namespace tc {
 			[[nodiscard]] constexpr tc::common_type_t<T, T2&&> clamp_exclusive(T2&& t) const& noexcept {
 				static_assert(
 #ifdef TC_PRIVATE
-					!tc::is_floating_point_or_chrono_like<tc::decay_t<decltype(t)>>::value,
+					!tc::floating_point_or_chrono_like<tc::decay_t<decltype(t)>>,
 #else
-					!tc::is_floating_point_like<tc::decay_t<decltype(t)>>::value,
+					!tc::floating_point_like<tc::decay_t<decltype(t)>>,
 #endif
 					"For floating-point-like types, use clamp_inclusive and clearly state what you want"
 				);
 				if( t<(*this)[tc::lo] ) {
 					return (*this)[tc::lo];
 				} else {
-					return tc::min(modified((*this)[tc::hi], --_), std::forward<T2>(t));
+					return tc::min(tc_modified((*this)[tc::hi], --_), std::forward<T2>(t));
 				}
 			}
 
@@ -341,13 +339,13 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 
 			[[nodiscard]] constexpr difference_type saturated_length() const& noexcept {
 				// This should also work for unsigned integers (returning length clamped to [0..max]), but this probably wouldn't be an intended behavior
-				static_assert(tc::is_actual_integer<T>::value && std::is_signed<T>::value);
+				static_assert(tc::actual_integer<T> && std::is_signed<T>::value);
 				return (*this)[tc::lo] < 0
 					? (*this)[tc::hi] < std::numeric_limits<T>::max() + (*this)[tc::lo] ? (*this)[tc::hi] - (*this)[tc::lo] : std::numeric_limits<T>::max()
 					: std::numeric_limits<T>::lowest() + (*this)[tc::lo] < (*this)[tc::hi] ? (*this)[tc::hi] - (*this)[tc::lo] : std::numeric_limits<T>::lowest();
 			}
 
-			//returns a value X such that modified(intvl, _.ensure_length(this->length())).contains(*this + X)
+			//returns a value X such that tc_modified(intvl, _.ensure_length(this->length())).contains(*this + X)
 			[[nodiscard]] constexpr difference_type OffsetToFit(interval<T> const& intvl) const& noexcept {
 				_ASSERTE( !empty_inclusive() ); // intvl[tc::lo]==intvl[tc::hi] is treated like intvl very small
 				if( (*this)[tc::lo] < intvl[tc::lo] ) {
@@ -365,12 +363,12 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 					}
 					return t;
 				} else {
-					RETURN_CAST( 0 );
+					tc_return_cast( 0 );
 				}
 			}
 
 			constexpr void FitInsideOf(interval<T> const& intvl) & noexcept {
-				auto_cref(tLength, length());
+				tc_auto_cref(tLength, length());
 				if(!(tLength < intvl.length())) {
 					*this = intvl;
 				} else if((*this)[tc::lo] < intvl[tc::lo]) {
@@ -456,7 +454,13 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 				return (*this)[tc::lo] < intvl[tc::hi] && intvl[tc::lo] < (*this)[tc::hi];
 			}
 
-			template<typename Rhs> requires tc::is_instance_or_derived<tc::interval, Rhs>::value
+			template<typename S>
+			[[nodiscard]] constexpr bool intersects_inclusive(interval<S> const& intvl) const& noexcept {
+				// no special treatment for empty or inverse intervals
+				return !(intvl[tc::hi]<(*this)[tc::lo]) && !((*this)[tc::hi]<intvl[tc::lo]);
+			}
+
+			template<tc::instance_or_derived<tc::interval> Rhs>
 			constexpr interval<T>& operator&=(Rhs&& rhs) & noexcept {
 				static_assert(
 					std::is_same<newT, tc::range_value_t<Rhs>>::value,
@@ -477,7 +481,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 
 			template<typename U>
 			constexpr void include(U&& u) & noexcept {
-				static_assert( tc::is_safely_convertible<U&&, newT>::value );
+				static_assert( tc::safely_convertible_to<U&&, newT> );
 				_ASSERTE( EmptyInterval()==*this || !empty() );
 				newT t = std::forward<U>(u);
 				tc::assign_min( (*this)[tc::lo], t );
@@ -492,7 +496,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 				tc::assign_max( (*this)[tc::hi], std::forward<U>(u) );
 			}
 
-			template<typename Rhs> requires tc::is_instance_or_derived<tc::interval, Rhs>::value
+			template<tc::instance_or_derived<tc::interval> Rhs>
 			constexpr interval<T>& operator|=(Rhs&& rhs) & noexcept {
 				static_assert(
 					std::is_same<newT, tc::range_value_t<Rhs>>::value,
@@ -646,7 +650,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 
 	template<typename T>
 	[[nodiscard]] constexpr auto make_singleton_interval(T&& value) noexcept {
-		return interval<tc::decay_t<T>>(std::forward<T>(value), modified(value, tc::nextafter_inplace(_)));
+		return interval<tc::decay_t<T>>(std::forward<T>(value), tc_modified(value, tc::nextafter_inplace(_)));
 	}
 
 	template<typename T>
@@ -654,8 +658,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 		return_decltype_MAYTHROW(tc::make_interval(std::forward<T>(value), tc::decay_copy(value)))
 
 	namespace interval_adl {
-		template<typename Lhs, typename Rhs>
-			requires tc::is_instance_or_derived<interval, Lhs>::value && tc::is_instance_or_derived<interval, Rhs>::value
+		template<tc::instance_or_derived<tc::interval> Lhs, tc::instance_or_derived<tc::interval> Rhs>
 		[[nodiscard]] constexpr auto operator&(Lhs&& lhs, Rhs&& rhs) noexcept {
 			static_assert(
 				std::is_same<tc::range_value_t<Lhs>, tc::range_value_t<Rhs>>::value,
@@ -669,9 +672,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 			);
 		}
 
-		template<typename Lhs, typename Rhs> requires
-			tc::is_instance_or_derived<interval, Lhs>::value &&
-			tc::is_instance_or_derived<interval, Rhs>::value
+		template<tc::instance_or_derived<tc::interval> Lhs, tc::instance_or_derived<tc::interval> Rhs>
 		[[nodiscard]] constexpr auto operator|(Lhs&& lhs, Rhs&& rhs) noexcept {
 			static_assert(
 				std::is_same<tc::range_value_t<Lhs>, tc::range_value_t<Rhs>>::value,
@@ -743,8 +744,8 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 
 			template <typename OtherSrc, typename OtherDst>
 			explicit linear_interval_transform(linear_interval_transform<OtherSrc,OtherDst> const& func) noexcept
-				: MEMBER_INIT_CAST( m_intvlsrc, func.m_intvlsrc )
-				, MEMBER_INIT_CAST( m_intvldst, func.m_intvldst )
+				: tc_member_init_cast( m_intvlsrc, func.m_intvlsrc )
+				, tc_member_init_cast( m_intvldst, func.m_intvldst )
 			{}
 
 			linear_interval_transform(tc::interval<Src> const& intvlsrc, tc::interval<Dst> const& intvldst) noexcept
@@ -756,10 +757,10 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 					m_intvldst.swap();
 				}
 				_ASSERT( m_intvlsrc[tc::lo] != m_intvlsrc[tc::hi] || m_intvldst[tc::lo] == m_intvldst[tc::hi] );
-				if constexpr( std::is_floating_point<Src>::value ) {
+				if constexpr( std::floating_point<Src> ) {
 					_ASSERT( std::isfinite(m_intvlsrc.length()) );
 				}
-				if constexpr( std::is_floating_point<Dst>::value ) {
+				if constexpr( std::floating_point<Dst> ) {
 					_ASSERT( std::isfinite(m_intvldst.length()) );
 				}
 			}
@@ -772,7 +773,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 				consistency: !src.contains_inclusive(t) || dst.contains_inclusive(f(t))
 			*/
 			[[nodiscard]] Dst operator()(Src const& src) const& noexcept {
-				if constexpr( tc::is_floating_point_like<Dst>::value ) {
+				if constexpr( tc::floating_point_like<Dst> ) {
 					auto const sign = tc::not_if(m_intvlsrc.midpoint() < src, tc::sign::pos); // Because midpoint() is rounded down, src has to be strictly greater than it before we use hi interval end (important for integral Src).
 					return tc::best(
 						tc::directed(tc::fn_less(), tc::negate_if(m_intvldst.empty_inclusive(), sign)),
@@ -904,7 +905,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 
 	namespace interval_set_adl {
 		template<typename T, typename TInterval, typename SetOrVectorImpl>
-		struct interval_set : private
+		struct interval_set :
 			tc::setlike<>
 		{
 		private:
@@ -1020,7 +1021,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 			}
 
 			void erase(T const& t) & noexcept {
-				erase(TInterval(t, modified(t, ++_)));
+				erase(TInterval(t, tc_modified(t, ++_)));
 			}
 
 			bool intersects(TInterval const& intvl) const& noexcept {
@@ -1117,7 +1118,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 
 				auto itinterval = m_cont.upper_bound(t);
 
-				if( itinterval != tc::begin(m_cont) && t < (*modified(itinterval, --_))[tc::hi] ) {
+				if( itinterval != tc::begin(m_cont) && t < (*tc_modified(itinterval, --_))[tc::hi] ) {
 					return t;
 				} else {
 					return (*itinterval)[tc::lo];
@@ -1133,10 +1134,25 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 			}
 
 			T const& closest_missing(T const& t, tc::lohi lohi) const& noexcept {
-				if (auto_cref(itinterval, upper_bound<tc::return_element_before_or_null>(t))) {
+				if (tc_auto_cref(itinterval, upper_bound<tc::return_element_before_or_null>(t))) {
 					if( t < (*itinterval)[tc::hi] ) {
 						return (*itinterval)[lohi];
 					}
+				}
+				return t;
+			}
+
+			T closest_missing_above(T t, T const& tLength) const& noexcept {
+				auto itinterval = upper_bound<tc::return_element_before_or_null>(t);
+				if (itinterval) {
+					t = tc::max(t, (*itinterval)[tc::hi]);
+					++itinterval;
+				} else {
+					itinterval = tc::begin(m_cont);
+				}
+				while(itinterval != tc::end(m_cont) && (*itinterval)[tc::lo] < t + tLength) {
+					t = (*itinterval)[tc::hi];
+					++itinterval;
 				}
 				return t;
 			}
@@ -1177,13 +1193,13 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 			}
 
 			T strict_closest(T const& t) const& noexcept {
-				static_assert(std::is_integral<T>::value);
+				static_assert(std::integral<T>);
 				_ASSERT( !tc::empty(m_cont) );
 
 				auto itintervalSup = m_cont.upper_bound(t);
 				if( itintervalSup == tc::begin(m_cont) ) return (*itintervalSup)[tc::lo];
 
-				T const& tInfEnd = (*modified(itintervalSup, --_))[tc::hi];
+				T const& tInfEnd = (*tc_modified(itintervalSup, --_))[tc::hi];
 				if( t < tInfEnd ) {
 					return t;
 				} else {
@@ -1311,7 +1327,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 					while(itintervalA!=tc::end(m_cont) && itintervalB!=tc::end(intvlset.m_cont)) {
 						TInterval intvl=*itintervalA & *itintervalB;
 						if( !intvl.empty() ) {
-							RETURN_IF_BREAK( tc::continue_if_not_break( func, *itintervalA, *itintervalB, intvl ));
+							tc_yield( func, *itintervalA, *itintervalB, intvl);
 						}
 						if((*itintervalA)[tc::hi] < (*itintervalB)[tc::hi]) {
 							++itintervalA;
@@ -1326,12 +1342,12 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 			template<typename OtherSetOrVectorImpl>
 			bool intersects(interval_set<T, TInterval, OtherSetOrVectorImpl> const& intvlset ) const& noexcept {
 				bool bIntersects = false;
-				for_each_intersecting_interval(intvlset, 
+				for_each_intersecting_interval(intvlset,
 					[&]( tc::unused, tc::unused, tc::unused) noexcept {
-						_ASSERT(!bIntersects);
-						bIntersects=true;
+						VERIFY(tc::change(bIntersects, true));
 						return tc::constant<tc::break_>();
-					});
+					}
+				);
 				return bIntersects;
 			}
 
@@ -1384,7 +1400,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 			}
 
 			T accumulated_length() const& noexcept {
-				return tc::accumulate( tc::transform( m_cont, TC_MEM_FN(.length) ), tc::implicit_cast<T>(0), tc::fn_assign_plus() );
+				return tc::accumulate( tc::transform( m_cont, tc_mem_fn(.length) ), tc::implicit_cast<T>(0), tc::fn_assign_plus() );
 			}
 		};
 	}
@@ -1396,11 +1412,11 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 				_ASSERTDEBUG(tc::is_sorted(*rngintvl, tc::projected(tc::fn_less(), [](auto const& intvl) noexcept { return intvl[tc::lo]; })));
 				auto itintvlOverlapBegin=tc::begin(*rngintvl);
 				auto itintvlLastOverlap=itintvlOverlapBegin;
-				RETURN_IF_BREAK(tc::for_each(tc::make_range_of_iterators(tc::begin_next<tc::return_drop>(*rngintvl)), [&](auto const& itintvlCurr) noexcept {
-					auto_cref(intvlLastOverlap, *itintvlLastOverlap);
-					auto_cref(intvlCurr, *itintvlCurr);
+				tc_return_if_break(tc::for_each(tc::make_range_of_iterators(tc::begin_next<tc::return_drop>(*rngintvl)), [&](auto const& itintvlCurr) noexcept {
+					tc_auto_cref(intvlLastOverlap, *itintvlLastOverlap);
+					tc_auto_cref(intvlCurr, *itintvlCurr);
 					if(intvlLastOverlap[tc::hi] < intvlCurr[tc::lo]) {
-						RETURN_IF_BREAK(tc::continue_if_not_break(sink, resultwrapper(*rngintvl, itintvlOverlapBegin, itintvlCurr, itintvlLastOverlap)));
+						tc_yield(sink, resultwrapper(*rngintvl, itintvlOverlapBegin, itintvlCurr, itintvlLastOverlap));
 						itintvlOverlapBegin=itintvlCurr;
 						itintvlLastOverlap=itintvlCurr;
 					} else if(intvlLastOverlap[tc::hi] < intvlCurr[tc::hi]) {
@@ -1408,7 +1424,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 					}
 					return tc::continue_;
 				}));
-				RETURN_IF_BREAK( tc::continue_if_not_break(sink, resultwrapper(*rngintvl, itintvlOverlapBegin, tc::end(*rngintvl), itintvlLastOverlap)) );
+				tc_yield(sink, resultwrapper(*rngintvl, itintvlOverlapBegin, tc::end(*rngintvl), itintvlLastOverlap));
 			}
 			return tc::continue_;
 		};

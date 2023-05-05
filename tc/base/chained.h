@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -24,7 +24,7 @@ namespace tc {
 			// TODO: We would like to verify specifically that T is a class or lambda, but unfortunately
 			// there is no trait to test for the latter. For now, just blacklist (function-)pointers here,
 			// as other types are not callable, anyway.
-			static_assert(!std::is_pointer<T>::value, "Do not pass raw function pointer as functor. Use TC_FN instead.");
+			static_assert(!std::is_pointer<T>::value, "Do not pass raw function pointer as functor. Use tc_fn instead.");
 			using type=T;
 		};
 

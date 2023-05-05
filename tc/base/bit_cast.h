@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -155,19 +155,15 @@ namespace tc {
 		using type = unsigned char const*;
 	};
 
-	template<typename Dst>
-	[[nodiscard]] Dst bit_cast_range(tc::ptr_range<unsigned char const> src) noexcept {
+	template<typename Dst, tc::contiguous_range Src>
+	[[nodiscard]] Dst bit_cast_range(Src const& src) noexcept {
+		tc_auto_cref(rng, tc::range_as_blob(src));
 		STATICASSERTSAME(std::remove_cvref_t<Dst>, Dst);
-		_ASSERTEQUAL(tc::size(src), sizeof(Dst));
+		_ASSERTEQUAL(tc::size(rng), sizeof(Dst));
 		static_assert(std::is_trivially_copyable< Dst >::value);
 		Dst dst;
-		std::memcpy(std::addressof(dst), tc::ptr_begin(src), sizeof(dst));
+		std::memcpy(std::addressof(dst), tc::ptr_begin(rng), sizeof(dst));
 		return dst;
-	}
-
-	template<typename Dst, typename Src> requires tc::has_ptr_begin<Src>::value
-	[[nodiscard]] Dst bit_cast_range(Src const& src) noexcept {
-		return tc::bit_cast_range<Dst>(tc::range_as_blob(src));
 	}
 
 	// no danger of aliasing

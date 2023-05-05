@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2022 think-cell Software GmbH
+// Copyright (C) 2016-2023 think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -9,19 +9,22 @@
 #include "../base/assert_defs.h"
 #include "convert_enc.h"
 
-template <typename Char>
-[[nodiscard]] bool constexpr IsSingle(Char const ch) noexcept {
-	return tc::is_single_codeunit(ch) && !tc::is_leading_codeunit(ch) && !tc::is_trailing_codeunit(ch);
-}
+namespace {
+	// Only one of is_single_codeunit, is_leading_codeunit, and is_trailing_codeunit should be true for a code unit. These predicates help asserting this.
+	template <typename Char>
+	[[nodiscard]] bool constexpr IsSingle(Char const ch) noexcept {
+		return tc::is_single_codeunit(ch) && !tc::is_leading_codeunit(ch) && !tc::is_trailing_codeunit(ch);
+	}
 
-template <typename Char>
-[[nodiscard]] bool constexpr IsLeading(Char const ch) noexcept {
-	return !tc::is_single_codeunit(ch) && tc::is_leading_codeunit(ch) && !tc::is_trailing_codeunit(ch);
-}
+	template <typename Char>
+	[[nodiscard]] bool constexpr IsLeading(Char const ch) noexcept {
+		return !tc::is_single_codeunit(ch) && tc::is_leading_codeunit(ch) && !tc::is_trailing_codeunit(ch);
+	}
 
-template <typename Char>
-[[nodiscard]] bool constexpr IsTrailing(Char const ch) noexcept {
-	return !tc::is_single_codeunit(ch) && !tc::is_leading_codeunit(ch) && tc::is_trailing_codeunit(ch);
+	template <typename Char>
+	[[nodiscard]] bool constexpr IsTrailing(Char const ch) noexcept {
+		return !tc::is_single_codeunit(ch) && !tc::is_leading_codeunit(ch) && tc::is_trailing_codeunit(ch);
+	}
 }
 
 // UTF-8
