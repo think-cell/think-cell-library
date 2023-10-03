@@ -10,39 +10,36 @@
 
 #include "../base/assert_defs.h"
 #include "../base/generic_macros.h"
+#include "../base/reference_or_value.h"
+#include "../base/casts.h"
 #include "../algorithm/append.h"
 
 namespace tc {
+	template<typename Rng, typename Char>
+	concept has_c_str = requires(Rng&& rng) {
+		{ tc::as_c_str(rng) } -> tc::safely_convertible_to<Char*>;
+	};
+
 	namespace no_adl {
-		template< typename Char, typename Rng, typename Enable = void >
-		struct has_convertible_as_c_str final
-		: tc::constant<false> {};
-
 		template< typename Char, typename Rng >
-		struct has_convertible_as_c_str< Char, Rng, std::enable_if_t<tc::safely_convertible_to<decltype(tc::as_c_str(std::declval<Rng>())), Char*>> > final
-		: tc::constant<true> {};
-
-		template< typename Char, typename Str >
-		struct [[nodiscard]] make_c_str_impl final {
-			explicit make_c_str_impl(Str&& str) noexcept: m_str(std::forward<Str>(str)) {}
+		struct [[nodiscard]] make_c_str_impl final : private tc::reference_or_value<Rng> {
+			explicit make_c_str_impl(Rng&& rng) noexcept: tc::reference_or_value<Rng>(tc::aggregate_tag, std::forward<Rng>(rng)) {}
 
 			// We don't want make_c_str_impl to be able to implicitly cast to bool. Deleting operator bool() won't work because
 			// a deleted function is still considered in overload resolution and will cause ambiguity between foo(bool) and foo(char const*).
 			template<typename T> requires std::is_same<T, Char const*>::value
 			operator T() const /*no &*/ noexcept {
-				return tc::as_c_str(m_str);
+				return tc::as_c_str(**this);
 			}
 
 			template<typename T> requires std::is_same<T, Char*>::value
 			operator T() /*no &*/ noexcept {
-				return tc::as_c_str(m_str);
+				return tc::as_c_str(**this);
 			}
 			
 			operator tc::span<Char const>() const /*no &*/ noexcept {
-				return m_str;
+				return **this;
 			}
-		private:
-			Str m_str;
 		};
 	}
 
@@ -54,7 +51,7 @@ namespace tc {
 	//   3. Explicitly specified <Char> could be omitted if the char pointer type deduced from the first rng is convertible to destination c string
 	//   4. make_mutable_c_str(<Char>): create a value or reference holder which is castable to mutable c string
 
-	template< typename Char, typename Rng0 > requires tc::no_adl::has_convertible_as_c_str<Char const, Rng0>::value
+	template< typename Char, tc::has_c_str<Char const> Rng0 >
 	auto make_c_str(Rng0&& rng0) noexcept {
 		static_assert(tc::decayed<Char>);
 		return tc::no_adl::make_c_str_impl<Char const, Rng0>(std::forward<Rng0>(rng0));
@@ -76,7 +73,7 @@ namespace tc {
 		return tc::make_c_str<tc::range_value_t<decltype(tc::concat(std::declval<Rng0>(), std::declval<Rng>()...))>>(std::forward<Rng0>(rng0), std::forward<Rng>(rng)...);
 	}
 
-	template< typename Char, typename Rng0 > requires tc::no_adl::has_convertible_as_c_str<Char, Rng0>::value
+	template< typename Char, tc::has_c_str<Char> Rng0 >
 	auto make_mutable_c_str(Rng0&& rng0) noexcept {
 		static_assert(tc::decayed<Char>);
 		return tc::no_adl::make_c_str_impl<Char, Rng0>(std::forward<Rng0>(rng0));

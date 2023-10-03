@@ -11,11 +11,13 @@
 #include "../algorithm/algorithm.h"
 #include "reverse_adaptor.h"
 
+#include <list>
+
 UNITTESTDEF(tc_reverse_random_access) {
-	TEST_RANGE_EQUAL(as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)), tc::reverse(as_constexpr(tc::make_array(tc::aggregate_tag, 3,2,1))));
+	TEST_RANGE_EQUAL(tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)), tc::reverse(tc_as_constexpr(tc::make_array(tc::aggregate_tag, 3,2,1))));
 
 	// test iterators:
-	auto rng = as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3));
+	auto rng = tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3));
 	auto revrng = tc::reverse(rng);
 	auto it = tc::begin(revrng);
 	_ASSERTEQUAL(*it++, 3);
@@ -64,7 +66,7 @@ UNITTESTDEF(tc_reverse_bidirectional) {
 	_ASSERTEQUAL(*it++, 1);
 	_ASSERTEQUAL(tc::end(rngrev), it);
 
-	TEST_RANGE_EQUAL(tc::reverse(rng), as_constexpr(tc::make_array(tc::aggregate_tag, 3,2,1)));
+	TEST_RANGE_EQUAL(tc::reverse(rng), tc_as_constexpr(tc::make_array(tc::aggregate_tag, 3,2,1)));
 	TEST_RANGE_EQUAL(tc::reverse(tc::reverse(rng)), rng);
 }
 
@@ -82,7 +84,7 @@ UNITTESTDEF(tc_reverse_base_bound) {
 
 UNITTESTDEF(tc_reverse_drop_first_last_inplace) {
 	tc::vector<int> vecn{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9 };
-	auto&& rngnReverse = tc::reverse(tc::make_view(vecn));
+	auto&& rngnReverse = tc::reverse(tc::all(vecn));
 
 	tc::drop_first_inplace(rngnReverse, 0);
 	TEST_RANGE_EQUAL(rngnReverse, (tc::vector<int>{9, 8, 7, 6, 5, 4, 3, 2, 1, 0}));

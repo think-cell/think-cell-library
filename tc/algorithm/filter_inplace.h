@@ -10,7 +10,7 @@
 
 #include "../base/assert_defs.h"
 #include "../range/meta.h"
-#include "../range/subrange.h"
+#include "../range/range_return.h"
 #include "../container/container_traits.h"
 #include "../storage_for.h"
 #include "restrict_size_decrement.h"
@@ -31,12 +31,10 @@ namespace tc {
 		has_mem_fn_hash_function<Cont>
 	struct range_filter<Cont> : tc::noncopyable {
 		static_assert(tc::decayed<Cont>);
-		using iterator = tc::iterator_t<Cont>;
-		using const_iterator = iterator; // no deep constness (analog to subrange)
 
 	private:
 		Cont& m_cont;
-		iterator m_itOutputEnd;
+		tc::iterator_t<Cont> m_itOutputEnd;
 
 	public:
 		explicit constexpr range_filter(Cont& cont) noexcept
@@ -44,7 +42,7 @@ namespace tc {
 			, m_itOutputEnd(tc::begin(cont))
 		{}
 
-		constexpr range_filter(Cont& cont, iterator const& itStart) noexcept
+		constexpr range_filter(Cont& cont, tc::iterator_t<Cont> const& itStart) noexcept
 			: m_cont(cont)
 			, m_itOutputEnd(itStart)
 		{}
@@ -53,7 +51,7 @@ namespace tc {
 			tc::take_inplace(m_cont, m_itOutputEnd);
 		}
 
-		constexpr void keep(iterator it) & noexcept {
+		constexpr void keep(tc::iterator_t<Cont> it) & noexcept {
 #ifdef _CHECKS
 			auto const nDistance = std::distance(m_itOutputEnd, it);
 			_ASSERTE( 0<=nDistance );
@@ -67,11 +65,11 @@ namespace tc {
 		// range interface for output range
 		// no deep constness (analog to subrange)
 
-		constexpr iterator begin() const& noexcept {
-			return tc::begin(tc::as_mutable(m_cont));
+		constexpr auto begin() const& noexcept {
+			return tc::begin(m_cont);
 		}
 
-		constexpr iterator end() const& noexcept {
+		constexpr auto end() const& noexcept {
 			return m_itOutputEnd;
 		}
 
@@ -83,58 +81,16 @@ namespace tc {
 		}
 	};
 
-	template<has_mem_fn_splice_after Cont>
-	struct range_filter<Cont> : Cont, private tc::noncopyable {
-		static_assert(tc::dependent_false<Cont>::value, "Careful: currently unused and without unit test");
-
-		static_assert(tc::decayed<Cont>);
-		using typename Cont::iterator;
-		using const_iterator = iterator; // no deep constness (analog to subrange)
-
-	private:
-		Cont& m_contInput;
-		iterator m_itLastOutput;
-
-	public:
-		explicit constexpr range_filter(Cont& cont) noexcept
-			: m_contInput(cont)
-			, m_itLastOutput(cont.before_begin())
-		{}
-
-		explicit constexpr range_filter(Cont& cont, iterator const& itStart) noexcept
-			: range_filter(cont)
-		{
-			for(;;) {
-				auto it=tc::begin(m_contInput);
-				if( it==itStart ) break;
-				this->splice_after(m_itLastOutput,m_contInput.before_begin());
-				m_itLastOutput=it;
-			}
-		}
-
-		constexpr ~range_filter() {
-			m_contInput=tc_move_always( tc::base_cast<Cont>(*this) );
-		}
-
-		constexpr void keep(iterator it) & noexcept {
-			while( it!=tc::begin(m_contInput) ) m_contInput.pop_front();
-			this->splice_after(m_itLastOutput,m_contInput.before_begin());
-			m_itLastOutput=it;
-		}
-	};
-
 	template<has_mem_fn_splice Cont>
 	struct range_filter<Cont> : Cont, private tc::noncopyable {
 		static_assert(tc::decayed<Cont>);
 		Cont& m_contInput;
-		using typename Cont::iterator;
-		using const_iterator = iterator; // no deep constness (analog to subrange)
 
 		explicit constexpr range_filter(Cont& cont) noexcept
 			: m_contInput(cont)
 		{}
 
-		constexpr range_filter(Cont& cont, iterator const& itStart) noexcept
+		constexpr range_filter(Cont& cont, tc::iterator_t<Cont> const& itStart) noexcept
 			: m_contInput(cont)
 		{
 			this->splice( tc::end(*this), m_contInput, tc::begin(m_contInput), itStart );
@@ -144,7 +100,7 @@ namespace tc {
 			m_contInput=tc_move_always( tc::base_cast<Cont>(*this) );
 		}
 
-		constexpr void keep(iterator it) & noexcept {
+		constexpr void keep(tc::iterator_t<Cont> it) & noexcept {
 			_ASSERTE( it!=tc::end(m_contInput) );
 			this->splice( 
 				tc::end(*this),
@@ -157,16 +113,14 @@ namespace tc {
 	template<typename Cont> requires range_filter_by_move_element<Cont>::value
 	struct range_filter<Cont> : tc::noncopyable {
 		static_assert(tc::decayed<Cont>);
-		using iterator = tc::iterator_t<Cont>;
-		using const_iterator = iterator; // no deep constness (analog to subrange)
 
 	protected:
 		Cont& m_cont;
-		iterator m_itOutput;
+		tc::iterator_t<Cont> m_itOutput;
 
 	private:
 #ifdef _CHECKS
-		iterator m_itFirstValid;
+		tc::iterator_t<Cont> m_itFirstValid;
 #endif
 
 	public:
@@ -178,7 +132,7 @@ namespace tc {
 #endif
 		{}
 
-		explicit constexpr range_filter(Cont& cont, iterator itStart) noexcept
+		explicit constexpr range_filter(Cont& cont, tc::iterator_t<Cont> itStart) noexcept
 			: m_cont(cont)
 			, m_itOutput(itStart)
 #ifdef _CHECKS
@@ -190,7 +144,7 @@ namespace tc {
 			tc::take_inplace( m_cont, m_itOutput );
 		}
 
-		constexpr void keep(iterator it) & noexcept {
+		constexpr void keep(tc::iterator_t<Cont> it) & noexcept {
 #ifdef _CHECKS
 			// Filter without reordering 
 			_ASSERTE( 0<=std::distance(m_itFirstValid, it) );
@@ -207,11 +161,11 @@ namespace tc {
 		// range interface for output range
 		// no deep constness (analog to subrange)
 
-		constexpr iterator begin() const& noexcept {
-			return tc::begin(tc::as_mutable(m_cont));
+		constexpr auto begin() const& noexcept {
+			return tc::begin(m_cont);
 		}
 
-		constexpr iterator end() const& noexcept {
+		constexpr auto end() const& noexcept {
 			return m_itOutput;
 		}
 
@@ -226,48 +180,6 @@ namespace tc {
 			tc::renew(*m_itOutput, std::forward<Ts>(ts)...);
 			++m_itOutput;
 		}
-	};
-
-	template<typename Cont> requires range_filter_by_move_element<Cont>::value
-	struct range_filter<tc::subrange<Cont&>> {
-		using iterator = tc::iterator_t<Cont>;
-		using const_iterator = iterator; // no deep constness (analog to subrange)
-
-		explicit constexpr range_filter(tc::subrange< Cont& >& rng) noexcept : m_rng(rng) {
-			_ASSERTE(tc::end(m_rng) == tc::end(Container())); // otherwise, we would need to keep [ end(m_rng), end(Container()) ) inside dtor
-			m_orngfilter.ctor(Container(), tc::begin(rng));
-		}
-
-		constexpr void keep(iterator it) & noexcept {
-			m_orngfilter->keep(it);
-		}
-
-		constexpr iterator begin() const& noexcept {
-			return tc::begin(m_rng);
-		}
-
-		constexpr iterator end() const& noexcept {
-			return tc::end(*m_orngfilter);
-		}
-
-		constexpr void pop_back() & noexcept {
-			_ASSERTE(tc::end(*this) != tc::begin(*this));
-			m_orngfilter->pop_back();
-		}
-
-		constexpr ~range_filter() {
-			auto& cont = Container();
-			auto const nIndexBegin = tc::begin(m_rng) - tc::begin(cont);
-			m_orngfilter.dtor(); // erases cont tail and invalidates iterators in m_rng
-			m_rng = tc::begin_next<tc::return_drop>(cont, nIndexBegin);
-		}
-
-		constexpr Cont& Container() const& noexcept {
-			return tc::implicit_cast<Cont&>(m_rng.base_range());
-		}
-
-		tc::subrange< Cont& >& m_rng;
-		tc::storage_for< tc::range_filter<Cont> > m_orngfilter;
 	};
 
 	/////////////////////////////////////////////////////

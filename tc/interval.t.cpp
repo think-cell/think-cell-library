@@ -50,7 +50,7 @@ UNITTESTDEF(interval_center) {
 #if TC_PRIVATE
 	tc::chrono::sys_days const tp = tc::chrono::year_month_day(2000,1,1).time_point();
 
-	auto AddDays=[](tc::chrono::sys_days const& tpBase, int nDays) noexcept {
+	auto AddDays=[](tc::chrono::sys_days const& tpBase, int const nDays) noexcept {
 		return tpBase + tc::chrono::days(nDays);
 	};
 #endif
@@ -161,7 +161,7 @@ UNITTESTDEF(minmax_interval) {
 }
 
 UNITTESTDEF(linear_interval_transform) {
-	auto const Test = [](auto srcLo, auto srcHi, auto dstLo, auto dstHi, auto... pairsrcdst) noexcept {
+	static auto constexpr Test = [](auto srcLo, auto srcHi, auto dstLo, auto dstHi, auto... pairsrcdst) noexcept {
 		tc::linear_interval_transform const intvltrans(tc::interval(srcLo, srcHi), tc::interval(dstLo, dstHi));
 		tc::for_each(
 			tc::forward_as_tuple(

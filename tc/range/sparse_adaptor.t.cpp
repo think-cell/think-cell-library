@@ -16,5 +16,5 @@ UNITTESTDEF(sparse_range) {
 	auto const rngb = tc::sparse_range(tc::make_array(tc::aggregate_tag, std::make_pair(0u, true), std::make_pair(3u, true)), 6, false);
 	_ASSERT(tc::equal(rngb, abVals));
 	int iVal = 0;
-	tc::for_each(rngb, [&](bool b) noexcept { _ASSERTEQUAL(b, abVals[iVal++]); });
+	tc::for_each(rngb, [&](bool const b) noexcept { _ASSERTEQUAL(b, abVals[iVal++]); });
 }

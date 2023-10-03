@@ -34,21 +34,21 @@ namespace tc {
 				);
 			}
 
-			template<ENABLE_SFINAE>
-			[[nodiscard]] constexpr auto size() const& noexcept -> decltype(tc::size_raw(SFINAE_VALUE(this)->base_range())) {
-				auto n = tc::size_raw(this->base_range());
-				if( n < N ) {
-					return 0;
-				} else {
-					return n - (N - 1);
-				}
+			[[nodiscard]] constexpr auto size() const& MAYTHROW requires tc::has_size<Rng> {
+				return tc::compute_range_adaptor_size<[]<typename SizeT>(SizeT const n) noexcept {
+					if( n < N ) {
+						return tc::explicit_cast<SizeT>(0);
+					} else {
+						return tc::explicit_cast<SizeT>(n - (N - 1));
+					}
+				}>(this->base_range());
 			}
 
 		private:
 			template<typename Self, typename Sink, std::size_t... i /*=0,1,...,N-2*/>
 			static constexpr auto internal_for_each(Self&& self, Sink const sink, std::index_sequence<i...>) MAYTHROW {
 				if constexpr (tc::range_with_iterators<Rng>) {
-					auto GenerateAdjacentTuples = [&]() MAYTHROW {
+					auto const GenerateAdjacentTuples = [&]() MAYTHROW {
 						auto const itEnd = tc::end(self.base_range());
 						auto it = tc::begin(self.base_range());
 						auto ait=tc::explicit_cast<std::array<
@@ -67,7 +67,7 @@ namespace tc {
 							}
 						}
 					};
-					return CONDITIONAL_PRVALUE_AS_VAL(
+					return tc_conditional_prvalue_as_val(
 						tc::size_bounded(self.base_range(), N)<N,
 						tc::constant<tc::continue_>(),
 						GenerateAdjacentTuples() // MAYTHROW
@@ -78,7 +78,7 @@ namespace tc {
 					tc_scope_exit { tc::for_each(tc::begin_next<tc::return_take>(aoval, tc::min(n, N - 1)), tc_mem_fn(.dtor)); };
 
 					return tc::for_each(std::forward<Self>(self).base_range(), [&](auto&& u) MAYTHROW {
-						auto CallSink = [&]() MAYTHROW {
+						auto const CallSink = [&]() MAYTHROW {
 							return tc::continue_if_not_break( // MAYTHROW
 								sink,
 								tc::forward_as_tuple(
@@ -246,17 +246,8 @@ namespace tc {
 		};
 	}
 
-	namespace no_adl {
-		template<tc::has_constexpr_size Rng, std::size_t N>
-		struct constexpr_size_impl<adjacent_adaptor_adl::adjacent_adaptor<Rng, N>>
-			: tc::constant<tc::constexpr_size<Rng>::value < N ? 0 : tc::constexpr_size<Rng>::value - (N - 1)>
-		{};
-
-		template<typename Rng, std::size_t N>
-		struct is_index_valid_for_move_constructed_range<adjacent_adaptor_adl::adjacent_adaptor<Rng, N, true>>
-			: tc::is_index_valid_for_move_constructed_range<Rng>
-		{};
-	}
+	template<typename Rng, std::size_t N>
+	constexpr auto enable_stable_index_on_move<adjacent_adaptor_adl::adjacent_adaptor<Rng, N, true>> = tc::stable_index_on_move<Rng>;
 
 	template<std::size_t N, typename Rng>
 	constexpr adjacent_adaptor_adl::adjacent_adaptor<Rng, N> adjacent(Rng&& rng) noexcept {

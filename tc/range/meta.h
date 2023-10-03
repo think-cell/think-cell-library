@@ -12,39 +12,46 @@
 #include "../base/type_traits_fwd.h"
 #include "../base/functors.h"
 #include "../base/tag_type.h"
+#include "../base/casts.h"
 #include "../container/string.h"
-#include "range_fwd.h"
+#include "../tuple.h"
 
+#include <boost/range/has_range_iterator.hpp>
 #include <type_traits>
 #include <iterator>
+#include <ranges>
+#include <boost/range/traversal.hpp>
 
 namespace tc {
 	namespace begin_end_adl {
 		DEFINE_ADL_TAG_TYPE(begin_end_tag);
 	}
 
-	template<typename Rng>
+	template <typename Rng>
+	concept borrowed_range_impl = (std::is_lvalue_reference<Rng>::value || std::ranges::enable_borrowed_range<std::remove_cvref_t<Rng>>);
+
+	template<tc::borrowed_range_impl Rng>
 	[[nodiscard]] constexpr auto begin(Rng&& rng) return_decltype_MAYTHROW(
 		// Rng has member begin
-		std::forward<Rng>(rng).begin()
+		rng.begin()
 	)
 
-	template<typename Rng>
+	template<tc::borrowed_range_impl Rng>
 	[[nodiscard]] constexpr auto begin(Rng&& rng) return_decltype_MAYTHROW(
 		// Rng has free begin found by tag
-		begin(begin_end_adl::begin_end_tag, std::forward<Rng>(rng))
+		begin(begin_end_adl::begin_end_tag, rng)
 	)
 
-	template<typename Rng>
+	template<tc::borrowed_range_impl Rng>
 	[[nodiscard]] constexpr auto end(Rng&& rng) return_decltype_MAYTHROW(
 		// Rng has member end
-		std::forward<Rng>(rng).end()
+		rng.end()
 	)
 
-	template<typename Rng>
+	template<tc::borrowed_range_impl Rng>
 	[[nodiscard]] constexpr auto end(Rng&& rng) return_decltype_MAYTHROW(
 		// Rng has free end found by tag
-		end(begin_end_adl::begin_end_tag, std::forward<Rng>(rng))
+		end(begin_end_adl::begin_end_tag, rng)
 	)
 
 	template<typename Rng>
@@ -53,7 +60,35 @@ namespace tc {
 	using sentinel_t = decltype(tc::end(std::declval<Rng&>()));
 
 	template<typename Rng>
-	concept common_range = std::same_as<tc::iterator_t<Rng>, tc::sentinel_t<Rng>>;
+	concept range_with_iterators = requires {
+		typename tc::iterator_t<Rng>;
+		typename tc::sentinel_t<Rng>;
+	};
+
+	template<typename Rng>
+	concept common_range = tc::range_with_iterators<Rng> && std::same_as<tc::iterator_t<Rng>, tc::sentinel_t<Rng>>;
+
+	// `Rng` models `tc::borrowed_range` iff the validity of iterators of `Rng` is not tied to the lifetime of the `Rng` object:
+	// * references to containers (not containers themselves)
+	// * tc::span
+	// * ...
+	template<typename Rng>
+	concept borrowed_range = tc::range_with_iterators<Rng> && tc::borrowed_range_impl<Rng>;
+
+	// For convenience, you can specialize `tc::enable_borrowed_range` instead of `std::ranges::enable_borrowed_range` which doesn't require opening up a separate namespace.
+	// (There is a specialization of `std::ranges::enable_borrowed_range` at the end of the file.)
+	template<typename Rng>
+	constexpr auto enable_borrowed_range = nullptr; // primary is "disabled"
+
+	namespace detail {
+		template<typename Rng, typename Required>
+		concept has_traversal = tc::range_with_iterators<Rng> && std::convertible_to<typename boost::range_traversal<Rng>::type, Required>;
+	}
+
+	template<typename Rng>
+	concept bidirectional_range = detail::has_traversal<Rng, boost::iterators::bidirectional_traversal_tag>;
+	template<typename Rng>
+	concept random_access_range = detail::has_traversal<Rng, boost::iterators::random_access_traversal_tag>;
 
 	// Note that we cannot use std::contiguous_iterator yet as it is broken on our version of libcxx.
 	// So instead we just check the iterator category as a proxy.
@@ -83,11 +118,15 @@ namespace tc {
 		concept contiguous_iterator = std::is_pointer_v<It> || std::is_base_of_v<std::contiguous_iterator_tag, iterator_concept<It>>;
 	}
 	template <typename Rng>
-	concept contiguous_range = contiguous_range_detail::contiguous_iterator<tc::iterator_t<Rng>>;
+	concept contiguous_range = tc::range_with_iterators<Rng> && contiguous_range_detail::contiguous_iterator<tc::iterator_t<Rng>>;
 #else
 	template <typename Rng>
-	concept contiguous_range = std::contiguous_iterator<tc::iterator_t<Rng>>;
+	concept contiguous_range = tc::range_with_iterators<Rng> && std::contiguous_iterator<tc::iterator_t<Rng>>;
 #endif
+
+	template <typename ... Rng>
+	concept ranges_with_common_reference
+		= (... && tc::range_with_iterators<Rng>) && tc::has_common_reference_prvalue_as_val<std::iter_reference_t<tc::iterator_t<Rng>>...>;
 
 	namespace range_output_t_adl {
 		DEFINE_ADL_TAG_TYPE(adl_tag);
@@ -192,22 +231,10 @@ namespace tc {
 
 	namespace no_adl {
 		template<typename Rng>
-		struct constexpr_size_impl {};
-
-		template<typename T, std::size_t N>
-		struct constexpr_size_impl<T[N]> : tc::constant<N - (tc::char_type<T> ? 1 : 0)> {};
-
-		template<typename T, T... t>
-		struct constexpr_size_impl<std::integer_sequence<T, t...>> : tc::constant<sizeof...(t)> {};
-
-		template<typename Tuple> requires requires { std::tuple_size<Tuple>::value; } && (!requires { tc::begin(std::declval<Tuple>()); })
-		struct constexpr_size_impl<Tuple>: tc::constant<std::tuple_size<Tuple>::value> {};
+		struct constexpr_size_impl;
 	}
 	template<typename Rng>
-	using constexpr_size = no_adl::constexpr_size_impl<std::remove_cvref_t<Rng>>;
-
-	template<typename Rng>
-	concept has_constexpr_size = requires { tc::constexpr_size<Rng>::value; };
+	concept has_constexpr_size = requires { no_adl::constexpr_size_impl<std::remove_cvref_t<Rng>>::value; };
 
 	template<typename T>
 	[[nodiscard]] constexpr std::size_t strlen( T const* pt ) noexcept {
@@ -246,11 +273,12 @@ namespace tc {
 		}
 		template<typename T, std::size_t N>
 		constexpr T* end_array_impl(T (&at)[N]) noexcept {
-			constexpr auto nSize = tc::constexpr_size<T[N]>::value;
 			if constexpr (tc::char_type<T>) {
-				_ASSERTE( tc::strlen(at) == nSize );
+				_ASSERTE( tc::strlen(at) == N - 1 );
+				return at + N - 1;
+			} else {
+				return at + N;
 			}
-			return at + nSize;
 		}
 		template<typename T, std::size_t N>
 		constexpr T* end(begin_end_tag_t, T (&at)[N]) noexcept {
@@ -270,73 +298,58 @@ namespace tc {
 			return pairit.second;
 		}
 	}
+
+	template <typename It>
+	constexpr auto enable_borrowed_range<std::pair<It, It>> = true;
+}
+
+namespace boost {
+	template<typename Rng> requires std::same_as<Rng, std::remove_cvref_t<Rng>> && requires { typename tc::iterator_t<Rng>; }
+	struct range_mutable_iterator<Rng> {
+		using type = tc::iterator_t<Rng>;
+	};
+
+	template<typename Rng> requires std::same_as<Rng, std::remove_cvref_t<Rng>> && requires { typename tc::iterator_t<std::add_const_t<Rng>>; }
+	struct range_const_iterator<Rng> {
+		using type = tc::iterator_t<std::add_const_t<Rng>>;
+	};
 }
 
 #pragma push_macro("CHAR_RANGE")
 #define CHAR_RANGE( xchar ) \
-namespace boost { \
-	template<> \
-	struct range_mutable_iterator<xchar*> { \
-		using type = xchar*; \
-	}; \
-	template<> \
-	struct range_const_iterator<xchar*> { \
-		using type = xchar*; \
-	}; \
-	template<> \
-	struct range_mutable_iterator<xchar const*> { \
-		using type = xchar const*; \
-	}; \
-	template<> \
-	struct range_const_iterator<xchar const*> { \
-		using type = xchar const*; \
-	}; \
-	template<std::size_t N> \
-	struct range_mutable_iterator<xchar[N]> { \
-		using type = xchar*; \
-	}; \
-	template<std::size_t N> \
-	struct range_const_iterator<xchar[N]> { \
-		using type = xchar const*; \
-	}; \
-	/* support array-of-unknown-bounds incomplete type */ \
-	template<> \
-	struct range_mutable_iterator<xchar[]> { \
-		using type = xchar*; \
-	}; \
-	template<> \
-	struct range_const_iterator<xchar[]> { \
-		using type = xchar const*; \
-	}; \
-} \
 namespace tc { \
 	namespace begin_end_adl { \
 		/* Note: We cannot use overloading to differentiate xchar* and xchar(&)[N]. */ \
 		template<typename CharPtrConvertible> requires \
 			tc::safely_convertible_to<CharPtrConvertible, xchar*> \
 				&& (!tc::has_constexpr_size<CharPtrConvertible>) \
-		constexpr xchar* begin(begin_end_tag_t, CharPtrConvertible&& pchc) noexcept { \
+		constexpr xchar* begin(begin_end_tag_t, CharPtrConvertible& pchc) noexcept { \
 			return pchc; \
 		} \
 		template<typename CharPtrConvertible> requires \
 			tc::safely_convertible_to<CharPtrConvertible, xchar const*> \
 				&& (!tc::safely_convertible_to<CharPtrConvertible, xchar*>) \
 				&& (!tc::has_constexpr_size<CharPtrConvertible>) \
-		constexpr xchar const* begin(begin_end_tag_t, CharPtrConvertible&& pchc) noexcept { \
+		constexpr xchar const* begin(begin_end_tag_t, CharPtrConvertible& pchc) noexcept { \
 			return pchc; \
 		} \
 		template<typename CharPtrConvertible> requires \
 			tc::safely_convertible_to<CharPtrConvertible, xchar const*> \
 				&& (!tc::has_constexpr_size<CharPtrConvertible>) \
-		constexpr tc::zero_termination_sentinel end(begin_end_tag_t, CharPtrConvertible&& pchc) noexcept { \
-			_ASSERT( pchc ); \
+		constexpr tc::zero_termination_sentinel end(begin_end_tag_t, CharPtrConvertible& pchc) noexcept { \
+			_ASSERT( tc::implicit_cast<xchar const*>(pchc) ); \
 			return {}; \
 		} \
 	} \
+	template <> \
+	inline constexpr auto enable_borrowed_range<xchar*> = true; \
+	template <> \
+	inline constexpr auto enable_borrowed_range<xchar const*> = true; \
 }
 
 CHAR_RANGE(char)
 CHAR_RANGE(wchar_t)
+CHAR_RANGE(char8_t)
 CHAR_RANGE(char16_t)
 CHAR_RANGE(char32_t)
 
@@ -355,23 +368,23 @@ namespace tc{
 
 namespace tc_begin_end_no_adl {
 	template< typename Rng >
-	auto adl_begin(Rng&& rng) return_decltype_MAYTHROW(
+	auto adl_begin(Rng& rng) return_decltype_MAYTHROW(
 		// Rng has free begin found by ADL
-		begin( std::forward<Rng>(rng) )
+		begin( rng )
 	)
 
 	template< typename Rng >
-	auto adl_end(Rng&& rng) return_decltype_MAYTHROW(
+	auto adl_end(Rng& rng) return_decltype_MAYTHROW(
 		// Rng has free end found by ADL
-		end( std::forward<Rng>(rng) )
+		end( rng )
 	)
 }
 
 namespace tc {
 	template <typename Rng>
-	auto cyclic_next(tc::iterator_t<Rng> it, Rng&& rng) noexcept {
+	auto cyclic_next(tc::iterator_t<Rng> it, Rng& rng) noexcept {
 		++it;
-		return tc::end(rng)==it ? tc::begin(std::forward<Rng>(rng)) : it;
+		return tc::end(rng)==it ? tc::begin(rng) : it;
 	}
 }
 
@@ -390,21 +403,82 @@ namespace tc {
 namespace boost {
 	template< typename Rng >
 	auto begin(Rng&& rng) return_decltype_MAYTHROW(
-		tc::begin( std::forward<Rng>(rng) )
+		tc::begin( rng )
 	)
 
 	template< typename Rng >
 	auto end(Rng&& rng) return_decltype_MAYTHROW(
-		tc::end( std::forward<Rng>(rng) )
+		tc::end( rng )
 	)
 
 	template< typename Rng >
-	auto const_begin(Rng&& rng) return_decltype_MAYTHROW(
-		tc::begin( std::forward<Rng>(rng) )
+	auto const_begin(Rng const& rng) return_decltype_MAYTHROW(
+		tc::begin( rng )
 	)
 
 	template< typename Rng >
-	auto const_end(Rng&& rng) return_decltype_MAYTHROW(
-		tc::end( std::forward<Rng>(rng) )
+	auto const_end(Rng const& rng) return_decltype_MAYTHROW(
+		tc::end( rng )
 	)
+}
+
+//////////////////////////////////////////////
+// std.range compatiblity
+namespace std::ranges {
+	template <typename Rng> requires (std::same_as<decltype(tc::enable_borrowed_range<Rng>), const bool>)
+	constexpr bool enable_borrowed_range<Rng> = tc::enable_borrowed_range<Rng>;
+}
+
+//////////////////////////////////////////////
+// range customizations for tuple_like types
+namespace tc {
+	namespace no_adl {
+		template<typename Tuple> requires requires { std::tuple_size<Tuple>::value; } && (!requires { tc::begin(std::declval<Tuple>()); })
+		struct constexpr_size_impl<Tuple>: tc::least_uint_constant<std::tuple_size<Tuple>::value> {};
+	}
+
+	namespace tuple_detail {
+		template<std::size_t I, tuple_like... Tuple>
+		constexpr auto zip_get(Tuple&&... tuple) noexcept {
+			// Tuple elements are tc::apply_cvref_t<std::tuple_element_t<I, std::remove_cvref_t<Tuple>>, Tuple>... unless tuple is tc::tuple and element types is empty.
+			return tc::tuple<std::conditional_t<
+				std::is_rvalue_reference<std::tuple_element_t<I, std::remove_cvref_t<Tuple>>>::value,
+				decltype(tc::get<I>(std::declval<Tuple>())),
+				tc::remove_rvalue_reference_t<decltype(tc::get<I>(std::declval<Tuple>()))>
+			>...>{{
+				{tc::get<I>(std::forward<Tuple>(tuple))}...
+			}};
+		}
+
+		template<std::size_t... I, tuple_like... Tuple>
+		constexpr auto zip_impl(std::index_sequence<I...>, Tuple&&... tuple) noexcept {
+			return tc::tuple<decltype(tuple_detail::zip_get<I>(std::forward<Tuple>(tuple)...))...>{{ // tc::make_tuple without extra copy
+				{tuple_detail::zip_get<I>(std::forward<Tuple>(tuple)...)}...
+			}};
+		}
+	}
+
+	template<tuple_like Tuple0, tuple_like... Tuple>
+		requires (!tc::range_with_iterators<Tuple0> || ... || !tc::range_with_iterators<Tuple>) // Prefer zip_adaptor for zip(std::array...)
+	[[nodiscard]] constexpr auto zip(Tuple0&& tuple0, Tuple&&... tuple) noexcept {
+		static_assert( ((std::tuple_size<std::remove_reference_t<Tuple0>>::value == std::tuple_size<std::remove_reference_t<Tuple>>::value) && ...) );
+		return tuple_detail::zip_impl(
+			std::make_index_sequence<std::tuple_size<std::remove_reference_t<Tuple0>>::value>(),
+			std::forward<Tuple0>(tuple0),
+			std::forward<Tuple>(tuple)...
+		);
+	}
+
+	template<typename TIndex, TIndex... Is>
+	[[nodiscard]] consteval tc::tuple<tc::constant<Is>...> index_sequence_as_tuple(std::integer_sequence<TIndex, Is...>) {
+		return {};
+	}
+
+	template<tuple_like Tuple> requires (!tc::range_with_iterators<Tuple>)
+	[[nodiscard]] constexpr auto enumerate(Tuple&& tuple) noexcept {
+		return tc::zip(
+			tc::index_sequence_as_tuple(std::make_integer_sequence<int, std::tuple_size<std::remove_reference_t<Tuple>>::value>()),
+			std::forward<Tuple>(tuple)
+		);
+	}
 }

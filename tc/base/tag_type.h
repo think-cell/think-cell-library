@@ -54,6 +54,7 @@
 namespace tc {
 	DEFINE_TAG_TYPE(aggregate_tag) // tag to distinguish constructors that aggregate their single argument from templated copy constructors
 	DEFINE_TAG_TYPE(func_tag)
+	DEFINE_TEMPLATE_TAG_TYPE(type_tag)
 
 	// tc_define_fn(func) always defines a function void func(define_fn_dummy_t)
 	// If that function did not exist, -> decltype( func(...) ) would not be

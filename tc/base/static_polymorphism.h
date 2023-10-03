@@ -10,6 +10,11 @@
 
 #include "assert_defs.h"
 #include <type_traits>
+#include "tag_type.h"
+
+namespace tc {
+	DEFINE_TAG_TYPE(unchecked_derived_cast_tag)
+}
 
 #define STATIC_VIRTUAL_METHOD_NAME( Name ) \
 	Name ## _ImplDoNotCallDirectly
@@ -20,50 +25,42 @@
 #define STATIC_VIRTUAL_FALLBACK_NAME( Name ) \
 	Name ## _FallbackDoNotCallDirectly
 
-#define STATIC_VIRTUAL_FORWARD_IMPL( Mod, Name, Decoration ) \
+#define STATIC_VIRTUAL_FORWARD_IMPL( Name, Decoration, DerivedCast, MaybeUncheckedDerivedCastTagWithComma ) \
 	template<typename Derived_=Derived, typename... Args> \
-	Mod \
-	auto Name(Args&&... args) Decoration return_decltype_xvalue_by_ref_MAYTHROW( \
-		STATIC_VIRTUAL_DISPATCH_IMPL_NAME(Name)(static_cast<Derived_ Decoration>(tc::derived_cast<Derived_>(*MSVC_WORKAROUND_THIS)), std::forward<Args>(args)...) \
+	constexpr auto Name(Args&&... args) Decoration return_decltype_xvalue_by_ref_MAYTHROW( \
+		STATIC_VIRTUAL_DISPATCH_IMPL_NAME(Name)(static_cast<Derived_ Decoration>( DerivedCast<Derived_>(*MSVC_WORKAROUND_THIS)), MaybeUncheckedDerivedCastTagWithComma std::forward<Args>(args)...) \
 	)
 
-#define STATIC_VIRTUAL_FORWARD_ALL_IMPL( Mod, Name ) \
-	using Name ## _derived_type = Derived; \
-	using Name ## _declaring_type = this_type; \
-	STATIC_VIRTUAL_FORWARD_IMPL( Mod, Name, & ) \
-	STATIC_VIRTUAL_FORWARD_IMPL( Mod, Name, const& ) \
-	STATIC_VIRTUAL_FORWARD_IMPL( Mod, Name, && ) \
-	STATIC_VIRTUAL_FORWARD_IMPL( Mod, Name, const&& )
-
-#define STATIC_VIRTUAL_MOD( Mod, Name ) \
-	template<typename Derived_, typename... Args> \
-	static \
-	Mod \
-	auto STATIC_VIRTUAL_DISPATCH_IMPL_NAME(Name)(Derived_&& derived, Args&&... args) return_decltype_xvalue_by_ref_MAYTHROW( \
-		std::forward<Derived_>(derived).STATIC_VIRTUAL_METHOD_NAME(Name)(std::forward<Args>(args)...) \
-	) \
-	STATIC_VIRTUAL_FORWARD_ALL_IMPL( Mod, Name )
+#define STATIC_VIRTUAL_FORWARD_ALL_IMPL( Name, DerivedCast, MaybeUncheckedDerivedCastTagWithComma ) \
+	STATIC_VIRTUAL_FORWARD_IMPL( Name, &, DerivedCast, TC_FWD(MaybeUncheckedDerivedCastTagWithComma) ) \
+	STATIC_VIRTUAL_FORWARD_IMPL( Name, const&, DerivedCast, TC_FWD(MaybeUncheckedDerivedCastTagWithComma) ) \
+	STATIC_VIRTUAL_FORWARD_IMPL( Name, &&, DerivedCast, TC_FWD(MaybeUncheckedDerivedCastTagWithComma) ) \
+	STATIC_VIRTUAL_FORWARD_IMPL( Name, const&&, DerivedCast, TC_FWD(MaybeUncheckedDerivedCastTagWithComma) )
 
 #define STATIC_VIRTUAL( Name ) \
-	STATIC_VIRTUAL_MOD( BOOST_PP_EMPTY(), Name ) 
+	template<typename Derived_, typename... Args> \
+	static \
+	constexpr auto STATIC_VIRTUAL_DISPATCH_IMPL_NAME(Name)(Derived_&& derived, Args&&... args) return_decltype_xvalue_by_ref_MAYTHROW( \
+		std::forward<Derived_>(derived).STATIC_VIRTUAL_METHOD_NAME(Name)(std::forward<Args>(args)...) \
+	) \
+	using Name ## _derived_type = Derived; \
+	using Name ## _declaring_type = this_type; \
+	STATIC_VIRTUAL_FORWARD_ALL_IMPL( Name, tc::derived_cast, BOOST_PP_EMPTY() )
 
-#define STATIC_VIRTUAL_CONSTEXPR( Name ) \
-	STATIC_VIRTUAL_MOD( constexpr, Name )
+#define UNCHECKED_STATIC_VIRTUAL( Name ) \
+	STATIC_VIRTUAL( Name ) \
+	STATIC_VIRTUAL_FORWARD_ALL_IMPL( Name, tc::unchecked_derived_cast, TC_FWD(tc::unchecked_derived_cast_tag,) )
 
 // force implementation as static method, using STATIC_FINAL_MOD(static, Name) 
-#define STATIC_STATIC_VIRTUAL_MOD( Mod, Name ) \
+#define STATIC_STATIC_VIRTUAL( Name ) \
 	using Name ## _derived_type = Derived; \
 	using Name ## _declaring_type = this_type; \
 	template<typename Derived_=Derived, typename... Args_> \
-	Mod \
-	static auto Name(Args_&& ...args) return_decltype_xvalue_by_ref_MAYTHROW( \
+	static constexpr auto Name(Args_&& ...args) return_decltype_xvalue_by_ref_MAYTHROW( \
 		Derived_:: STATIC_VIRTUAL_METHOD_NAME(Name) (std::forward<Args_>(args)...) \
 	)
 
-#define STATIC_STATIC_VIRTUAL( Name ) \
-	STATIC_STATIC_VIRTUAL_MOD( BOOST_PP_EMPTY(), Name )
-
-#define STATIC_VIRTUAL_WITH_DEFAULT_IMPL_MOD(Mod, Name) \
+#define STATIC_VIRTUAL_WITH_DEFAULT_IMPL_MOD( Mod, Name ) \
 	STATIC_VIRTUAL( Name ) \
 	Mod \
 	auto STATIC_VIRTUAL_METHOD_NAME( Name )
@@ -94,9 +91,6 @@
 	__VA_ARGS__ \
 	auto STATIC_VIRTUAL_METHOD_NAME( Name )
 
-#define STATIC_OVERRIDE_MOD_BASE(Name, ...) \
-	STATIC_OVERRIDE_MOD_DECLARING_BASE(this_type::Name ## _declaring_type, Name, __VA_ARGS__)
-
 #define STATIC_OVERRIDE_MOD_DECLARING(Mod, Declaring, Name) \
 	STATIC_OVERRIDE_MOD_DECLARING_BASE(TC_FWD(Declaring), Name, \
 		static_assert( \
@@ -117,7 +111,7 @@
 
 #define STATIC_VIRTUAL_WITH_FALLBACK_MOD(Mod, Name) \
 	template<typename Derived_, typename... Args> requires (!requires { std::declval<Derived_>().STATIC_VIRTUAL_METHOD_NAME(Name)( std::declval<Args>()... ); }) \
-	static \
+	static constexpr \
 	auto STATIC_VIRTUAL_DISPATCH_IMPL_NAME(Name)(Derived_&& derived, Args&&... args) return_decltype_xvalue_by_ref_MAYTHROW( \
 		std::forward<Derived_>(derived).STATIC_VIRTUAL_FALLBACK_NAME(Name)(std::forward<Args>(args)...) \
 	) \

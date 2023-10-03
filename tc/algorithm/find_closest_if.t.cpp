@@ -12,7 +12,7 @@
 UNITTESTDEF(find_closest_if) {
 	struct IntCompareOnce final : boost::noncopyable {
 		IntCompareOnce(int n) noexcept :m_n(n) { }
-		bool operator==(int n) const& noexcept {
+		bool operator==(int const n) const& noexcept {
 			_ASSERT( tc::change(m_bCompared, true) );
 			return m_n==n;
 		}
@@ -21,7 +21,7 @@ UNITTESTDEF(find_closest_if) {
 		bool mutable m_bCompared = false;
 	};
 
-	auto find=[](auto const& rngn, int iStart, int nTarget, int nComparisonsMax) noexcept {
+	auto find=[](auto const& rngn, int const iStart, int const nTarget, int const nComparisonsMax) noexcept {
 		int nComparisons = 0;
 		return tc::find_closest_if_with_index<tc::return_element_index_or_npos>(rngn, iStart, /*bSkipSelf*/false, [&](IntCompareOnce const& n) noexcept {
 			_ASSERT(++nComparisons<=nComparisonsMax);

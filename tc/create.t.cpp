@@ -32,13 +32,13 @@ UNITTESTDEF( create_range ) {
 
 	tc::string<char> str = "string";
 
-	auto arr_r = tc::make_view(arr); TEST_RANGE_LENGTH(arr_r, 7);
-	auto v_r = tc::slice(v); TEST_RANGE_LENGTH(v_r, 8);
+	auto arr_r = tc::all(arr); TEST_RANGE_LENGTH(arr_r, 7);
+	auto v_r = tc::all(v); TEST_RANGE_LENGTH(v_r, 8);
 
 	auto sub_r = tc::slice_by_interval(v_r, tc::make_interval(2, 5)); TEST_RANGE_LENGTH(sub_r, 3);
 	TEST_RANGE_EQUAL(exp_sub_r, sub_r);
 
-	auto str_r = tc::slice(str); TEST_RANGE_LENGTH(str_r, 6);
+	auto str_r = tc::all(str); TEST_RANGE_LENGTH(str_r, 6);
 
 	auto wchar_ir = tc::slice_by_interval(mwch, tc::make_interval(0, 8)); TEST_RANGE_LENGTH(wchar_ir, 8);
 }

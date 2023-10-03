@@ -90,6 +90,23 @@ namespace tc {
 				pred
 			);
 		}
+
+		template<typename Rng, typename Value>
+		[[nodiscard]] decltype(auto) contains_exclusive_range(Rng&& rng, tc::interval<Value> const& intvlval) noexcept {
+			return lower_bound<tc::return_take>(
+				upper_bound<tc::return_drop>(std::forward<Rng>(rng),intvlval[tc::lo]),
+				intvlval[tc::hi]
+			);
+		}
+
+		template<typename Rng, typename Value, typename SortPredicate>
+		[[nodiscard]] decltype(auto) contains_exclusive_range(Rng&& rng, tc::interval<Value> const& intvlval, SortPredicate&& pred) noexcept {
+			return lower_bound<tc::return_take>(
+				upper_bound<tc::return_drop>(std::forward<Rng>(rng),intvlval[tc::lo],pred),
+				intvlval[tc::hi],
+				pred
+			);
+		}
 	}
 	using namespace range;
 }

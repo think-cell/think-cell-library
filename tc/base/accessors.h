@@ -47,19 +47,19 @@ namespace tc {
 	TC_EXPAND(TC_EXPAND(BOOST_PP_IF(BOOST_PP_GREATER(BOOST_PP_VARIADIC_SIZE(__VA_ARGS__), 1), DEFINE_MEMBER_WITH_INIT, DEFINE_MEMBER_WITHOUT_INIT))(TC_FWD(type), __VA_ARGS__))
 
 #define DEFINE_ACCESSORS_BASE(type, funcname, invariant, name) \
-	constexpr typename tc::no_adl::accessor_return_type<type>::const_ref_type funcname() const& noexcept { invariant(name); return name; } \
+	[[nodiscard]] constexpr typename tc::no_adl::accessor_return_type<type>::const_ref_type funcname() const& noexcept { invariant(name); return name; } \
 	\
 	template<ENABLE_SFINAE> requires /*dummy constraint making this function preferred in overload resolution over the deleted function below*/true \
-	constexpr typename tc::no_adl::accessor_return_type<SFINAE_TYPE(type)>::ref_ref_type funcname() && noexcept { invariant(name); return tc_move(name); } \
+	[[nodiscard]] constexpr typename tc::no_adl::accessor_return_type<SFINAE_TYPE(type)>::ref_ref_type funcname() && noexcept { invariant(name); return tc_move(name); } \
 	\
 	template<ENABLE_SFINAE> /* needed to stay behind non-deleted function in overload resolution */ \
-	constexpr type&& funcname() && noexcept = delete; /* Visual Studio gives improper error message if it returns a dummy type */ \
+	[[nodiscard]] constexpr type&& funcname() && noexcept = delete; /* Visual Studio gives improper error message if it returns a dummy type */ \
 	\
 	template<ENABLE_SFINAE> requires true \
-	constexpr typename tc::no_adl::accessor_return_type<SFINAE_TYPE(type)>::const_ref_ref_type funcname() const&& noexcept { invariant(name); return std::move(name); } \
+	[[nodiscard]] constexpr typename tc::no_adl::accessor_return_type<SFINAE_TYPE(type)>::const_ref_ref_type funcname() const&& noexcept { invariant(name); return std::move(name); } \
 	\
 	template<ENABLE_SFINAE> \
-	constexpr type const&& funcname() const&& noexcept = delete; /* Visual Studio gives improper error message if it returns a dummy type */
+	[[nodiscard]] constexpr type const&& funcname() const&& noexcept = delete; /* Visual Studio gives improper error message if it returns a dummy type */
 
 #define DEFINE_MEMBER_INVARIANT(...) ([&](auto const& _) constexpr noexcept { \
 	_ASSERTINITIALIZED(_); \

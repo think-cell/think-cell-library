@@ -10,7 +10,6 @@
 
 #include "assert_defs.h"
 #include "as_lvalue.h"
-#include "../range/range_fwd.h"
 #include "../algorithm/for_each.h"
 
 namespace tc {
@@ -89,7 +88,7 @@ namespace tc {
 				
 			template <typename Func> requires
 				(!tc::decayed_derived_from<Func, function_ref_base>)
-				&& tc::is_invocable<std::remove_reference_t<Func>&, Args...>::value
+				&& tc::invocable<std::remove_reference_t<Func>&, Args...>
 				&& (
 					std::convertible_to<decltype(tc::invoke(std::declval<std::remove_reference_t<Func>&>(), std::declval<Args>()...)), Ret>
 					|| std::is_same<Ret, tc::break_or_continue>::value

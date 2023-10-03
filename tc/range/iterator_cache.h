@@ -32,9 +32,9 @@ namespace tc {
 				return *this;
 			}
 
-			constexpr auto operator*() const & return_decltype_noexcept( *m_ref )
+			constexpr auto operator*() const& return_decltype_noexcept( *m_ref )
 			constexpr auto operator*() && return_decltype_xvalue_by_ref_noexcept( *tc_move(m_ref) )
-			constexpr auto operator*() const && noexcept = delete;
+			constexpr auto operator*() const&& noexcept = delete;
 		};
 	}
 	using no_adl::iterator_cache;

@@ -30,74 +30,84 @@ namespace tc {
 	// Basic building block for all ranges.
 	// Comes in two variations, one for generator ranges, one for iterator ranges. 
 	//
-	namespace range_iterator_from_index_impl {
-
-		template<
-			typename Derived,
-			typename Index
-		>
-		struct TC_EMPTY_BASES range_iterator_from_index {
+	namespace no_adl {
+		template <typename Derived, typename Index>
+		struct TC_EMPTY_BASES index_range_interface {
 		private:
-			using this_type = range_iterator_from_index;
+			using this_type = index_range_interface;
 		public:
-			////////////////////////////////////////////////////////
-			// simulate iterator interface on top of index interface
-
 			using tc_index = Index;
 
-			using iterator = index_iterator< Derived, false >;
-			using const_iterator = index_iterator< Derived, true >;
-			STATIC_VIRTUAL_CONSTEXPR(begin_index)
-			STATIC_VIRTUAL_CONSTEXPR(end_index)
-			STATIC_VIRTUAL_CONSTEXPR(at_end_index)
-			STATIC_VIRTUAL_CONSTEXPR(increment_index)
-			STATIC_VIRTUAL_CONSTEXPR(decrement_index)
-			STATIC_VIRTUAL_CONSTEXPR(dereference_index)
-			STATIC_VIRTUAL_CONSTEXPR(advance_index)
-			STATIC_VIRTUAL_CONSTEXPR(index_to_address)
-			STATIC_VIRTUAL_CONSTEXPR(distance_to_index)
-			STATIC_VIRTUAL_CONSTEXPR(middle_point)
+			STATIC_VIRTUAL(begin_index)
+			STATIC_VIRTUAL(end_index)
+			STATIC_VIRTUAL(increment_index)
+			STATIC_VIRTUAL(decrement_index)
+			STATIC_VIRTUAL(dereference_index)
+			STATIC_VIRTUAL(advance_index)
+			STATIC_VIRTUAL(index_to_address)
+			STATIC_VIRTUAL(distance_to_index)
+			STATIC_VIRTUAL(middle_point)
 
-			constexpr const_iterator make_iterator( tc_index idx ) const& noexcept {
-				return const_iterator(tc::derived_cast<Derived>(MSVC_WORKAROUND_THIS), tc_move(idx));
-			}
-
-			constexpr const_iterator begin() const&
-				return_MAYTHROW(make_iterator(begin_index()))
-
-			template<typename Derived_=Derived, std::enable_if_t<!has_mem_fn_end_index<Derived_> || !tc::is_equality_comparable<Index>::value>* = nullptr>
-			constexpr end_sentinel end() const& noexcept {
-				return {};
-			}
-
-			template<typename Derived_ = Derived, std::enable_if_t<has_mem_fn_end_index<Derived_> && tc::is_equality_comparable<Index>::value>* = nullptr>
-			constexpr const_iterator end() const&
-				return_MAYTHROW(make_iterator(end_index()))
-
-			constexpr iterator make_iterator( tc_index idx ) & noexcept {
-				return iterator(tc::derived_cast<Derived>(MSVC_WORKAROUND_THIS),tc_move(idx));
-			}
-
-			constexpr iterator begin() &
-				return_MAYTHROW(make_iterator(begin_index()))
-
-			template<typename Derived_ = Derived, std::enable_if_t<has_mem_fn_end_index<Derived_> && tc::is_equality_comparable<Index>::value>* = nullptr>
-			constexpr iterator end() &
-				return_MAYTHROW(make_iterator(end_index()))
-
-			constexpr bool empty() const&
-				return_MAYTHROW(at_end_index(begin_index()))
-
-			STATIC_OVERRIDE_MOD(
+			STATIC_VIRTUAL_WITH_DEFAULT_IMPL_MOD(
 				TC_FWD(
-					template<typename Derived_ = Derived, std::enable_if_t<has_mem_fn_end_index<Derived_> && tc::is_equality_comparable<Index>::value>* = nullptr>
+					template<typename Derived_ = Derived> requires has_mem_fn_end_index<Derived_> && tc::is_equality_comparable<Index>::value
 					constexpr
 				),
 			at_end_index)(tc_index const& idx) const&
 				return_MAYTHROW(end_index() == idx)
+
 		};
 	}
-	using range_iterator_from_index_impl::range_iterator_from_index;
+	using no_adl::index_range_interface;
+
+	namespace no_adl {
+		// simulate iterator interface on top of index interface
+		template <typename Derived, typename Index>
+		struct TC_EMPTY_BASES range_iterator_from_index : index_range_interface<Derived, Index> {
+		private:
+			using iterator = index_iterator<Derived, false>;
+			using const_iterator = index_iterator<Derived, true>;
+
+		public:
+			constexpr iterator make_iterator(auto&& idx) & noexcept {
+				return iterator(*tc::derived_cast<Derived>(MSVC_WORKAROUND_THIS),tc_move_if_owned(idx));
+			}
+			constexpr const_iterator make_iterator(auto&& idx) const& noexcept {
+				return const_iterator(*tc::derived_cast<Derived>(MSVC_WORKAROUND_THIS), tc_move_if_owned(idx));
+			}
+
+			constexpr iterator begin() &
+				return_MAYTHROW(make_iterator(this->begin_index()))
+			constexpr const_iterator begin() const&
+				return_MAYTHROW(make_iterator(this->begin_index()))
+
+
+			template<typename Derived_ = Derived>
+				requires tc::has_mem_fn_end_index<Derived_> && tc::is_equality_comparable<Index>::value
+			constexpr iterator end() &
+				return_MAYTHROW(make_iterator(this->end_index()))
+			template<typename Derived_ = Derived>
+				requires tc::has_mem_fn_end_index<Derived_> && tc::is_equality_comparable<Index>::value
+			constexpr const_iterator end() const&
+				return_MAYTHROW(make_iterator(this->end_index()))
+
+			template<typename Derived_ = Derived> // no requires, so lower priority
+			constexpr end_sentinel end() const& noexcept {
+				return {};
+			}
+
+			template<typename It>
+			constexpr static decltype(auto) iterator2index(It&& it) noexcept {
+				if constexpr(std::same_as<Index, std::remove_cvref_t<It>>) {
+					return std::forward<It>(it);
+				} else {
+					static_assert(std::same_as<Index, std::remove_cvref_t<decltype(it.m_idx)>>);
+					return (std::forward<It>(it).m_idx);
+				}
+			}
+		};
+	}
+	using no_adl::range_iterator_from_index;
 
 	namespace no_adl {
 		template<typename Rng>
@@ -150,14 +160,6 @@ namespace tc {
 			tc::for_each(
 				std::forward<Self>(self).base_range(),
 				std::forward<Self>(self).adapted_sink(std::forward<Sink>(sink), /*bReverse*/tc::constant<false>())
-			)
-		)
-
-		template<typename Self, typename Sink, typename std::remove_reference_t<Self>::is_generator_range_adaptor* = nullptr>
-		constexpr auto for_each_reverse_impl(Self&& self, Sink&& sink) return_decltype_MAYTHROW(
-			tc::for_each(
-				tc::reverse(std::forward<Self>(self).base_range()),
-				std::forward<Self>(self).adapted_sink(std::forward<Sink>(sink), /*bReverse*/tc::constant<true>())
 			)
 		)
 	}
@@ -240,99 +242,192 @@ namespace tc {
 	}
 	using range_output_from_base_range_adl::range_output_from_base_range;
 
+	//-------------------------------------------------------------------------------------------------------------------------
+	// iterator/index based ranges
+	//
+	// they derive from the generator case, because the generator interface can transparently and efficiently be added
+	// to any iterator or index based range.
+	//
+	namespace index_range_adaptor_flags_adl {
+		// Cannot use tc::enumset due to cyclic dependency.
+		enum class index_range_adaptor_flags {
+			inherit_none = 0,
+
+			inherit_begin = 1 << 0,
+			inherit_end = 1 << 1,
+			inherit_begin_end = inherit_begin | inherit_end,
+
+			inherit_dereference = 1 << 2,
+			inherit_traversal = 1 << 3,
+			inherit_behavior = inherit_dereference | inherit_traversal,
+
+			inherit_all = inherit_begin_end | inherit_behavior,
+		};
+		TC_BITMASK_OPS(index_range_adaptor_flags)
+	}
+	using index_range_adaptor_flags_adl::index_range_adaptor_flags;
+
 	namespace no_adl {
-		//-------------------------------------------------------------------------------------------------------------------------
-		// iterator/index based ranges
-		//
-		// they derive from the generator case, because the generator interface can transparently and efficiently be added
-		// to any iterator or index based range.
-		//
+		namespace index_range_adaptor_detail {
+			template <typename Derived, typename Rng, bool InheritBehavior>
+			struct iterator_range_interface : tc::range_iterator_from_index<Derived, tc::index_t<Rng>> {};
+
+			template <typename Derived, typename Rng>
+				requires tc::range_with_iterators<Rng>
+			struct iterator_range_interface<Derived, Rng, true> : tc::index_range_interface<Derived, tc::index_t<Rng>> {
+			private:
+				using iterator = tc::iterator_t<decltype(*std::declval<tc::reference_or_value<Rng>&>())>;
+				using const_iterator = tc::iterator_t<decltype(*std::declval<tc::reference_or_value<Rng> const&>())>;
+				
+				struct sentinel {
+					Derived const* self;
+
+					constexpr bool operator==(auto const& it) const MAYTHROW {
+						return tc::at_end_index(*self, tc::iterator2index<Rng>(it));
+					}
+				};
+
+			public:
+				constexpr iterator make_iterator(auto&& idx) & return_MAYTHROW(
+					tc::make_iterator(tc::derived_cast<Derived>(MSVC_WORKAROUND_THIS)->base_range(), tc_move_if_owned(idx))
+				)
+				constexpr const_iterator make_iterator(auto&& idx) const& return_MAYTHROW(
+					tc::make_iterator(tc::derived_cast<Derived>(MSVC_WORKAROUND_THIS)->base_range(), tc_move_if_owned(idx))
+				)
+
+				constexpr iterator begin() &
+					return_MAYTHROW(make_iterator(this->begin_index()))
+				constexpr const_iterator begin() const&
+					return_MAYTHROW(make_iterator(this->begin_index()))
+
+				template<typename Derived_ = Derived>
+					requires tc::has_mem_fn_end_index<Derived_>
+				constexpr iterator end() &
+					return_MAYTHROW(make_iterator(this->end_index()))
+				template<typename Derived_ = Derived>
+					requires tc::has_mem_fn_end_index<Derived_>
+				constexpr const_iterator end() const&
+					return_MAYTHROW(make_iterator(this->end_index()))
+
+				template<typename Derived_ = Derived> // no requires, so lower priority
+				constexpr auto end() const& noexcept {
+					return sentinel{tc::derived_cast<Derived>(MSVC_WORKAROUND_THIS)};
+				}
+
+				template<typename It>
+				constexpr static decltype(auto) iterator2index(It&& it) noexcept {
+					return tc::iterator2index<Rng>(std::forward<It>(it));
+				}
+			};
+		}
 
 		template<
-			typename Derived 
-			, typename Rng
-			, typename Base = tc::range_adaptor_base_range<Rng>
-			, typename MaximumTraversal = boost::iterators::random_access_traversal_tag // This is used to ensure that filter_adaptor is never random access
-			, bool WithMiddlePoint = true
+			typename Derived,
+			typename Rng, index_range_adaptor_flags Flags,
+			typename Base = tc::range_adaptor_base_range<Rng>
 		>
 		struct TC_EMPTY_BASES index_range_adaptor
 			: Base
-			, range_iterator_from_index<
-				Derived,
-				tc::index_t<std::remove_reference_t<Rng>>
+			, index_range_adaptor_detail::iterator_range_interface<
+				Derived, Rng,
+				(Flags & index_range_adaptor_flags::inherit_behavior) == index_range_adaptor_flags::inherit_behavior
 			>
 		{
 		private:
 			using this_type = index_range_adaptor;
-			
+
 		public:
-			constexpr index_range_adaptor()=default;
-
+			constexpr index_range_adaptor() = default;
 			using Base::Base;
-			using tc_index = tc::index_t<std::remove_reference_t<Rng>>;
+
+			using tc_index = tc::index_t<Rng>;
 			static constexpr bool c_bHasStashingIndex=tc::has_stashing_index<std::remove_reference_t<Rng>>::value;
+
 		private:
-			STATIC_OVERRIDE_MOD(constexpr,begin_index)() const& return_MAYTHROW(
-				this->base_begin_index()
-			)
+			static constexpr auto inherit_begin = static_cast<bool>(Flags & index_range_adaptor_flags::inherit_begin);
 
-			STATIC_OVERRIDE_MOD(template<ENABLE_SFINAE> constexpr,end_index)() const& return_decltype_MAYTHROW(
-				SFINAE_VALUE(this)->base_end_index()
-			)
-
-			STATIC_OVERRIDE_MOD(constexpr,at_end_index)(tc_index const& idx) const& return_MAYTHROW(
-				tc::at_end_index(this->base_range(),idx)
-			)
-
-			STATIC_OVERRIDE_MOD(constexpr,dereference_index)(tc_index const& idx) & return_decltype_xvalue_by_ref_MAYTHROW(
-				tc::dereference_index(this->base_range(),idx)
-			)
-
-			STATIC_OVERRIDE_MOD(constexpr,dereference_index)(tc_index const& idx) const& return_decltype_xvalue_by_ref_MAYTHROW(
-				tc::dereference_index(this->base_range(),idx)
-			)
-
-			STATIC_OVERRIDE_MOD(constexpr,increment_index)(tc_index& idx) const& return_MAYTHROW(
-				tc::increment_index(this->base_range(),idx)
-			)
-
-			STATIC_OVERRIDE_MOD(constexpr, decrement_index)(tc_index& idx) const& MAYTHROW -> void
-				requires
-					tc::has_decrement_index<std::remove_reference_t<Rng>> &&
-					boost::iterators::detail::is_traversal_at_least<MaximumTraversal, boost::iterators::bidirectional_traversal_tag>::value
+			STATIC_OVERRIDE_MOD(constexpr,begin_index)() const& MAYTHROW
+				requires inherit_begin
 			{
-				tc::decrement_index(this->base_range(),idx);
+				return this->base_begin_index();
 			}
 
-			STATIC_OVERRIDE_MOD(constexpr, advance_index)(tc_index& idx, typename boost::range_difference<Rng>::type d) const& MAYTHROW -> void
-				requires
-					tc::has_advance_index<std::remove_reference_t<Rng>> &&
-					boost::iterators::detail::is_traversal_at_least<MaximumTraversal, boost::iterators::random_access_traversal_tag>::value
+		private:
+			static constexpr auto inherit_end = static_cast<bool>(Flags & index_range_adaptor_flags::inherit_end);
+
+			STATIC_OVERRIDE_MOD(constexpr,end_index)() const& MAYTHROW
+				requires inherit_end && tc::has_end_index<Rng>
 			{
-				tc::advance_index(this->base_range(),idx,d);
+				return this->base_end_index();
+			}
+
+			STATIC_OVERRIDE_MOD(constexpr,at_end_index)(tc_index const& idx) const& MAYTHROW
+				requires inherit_end
+			{
+				return tc::at_end_index(this->base_range(),idx);
+			}
+
+		private:
+			static constexpr auto inherit_dereference = static_cast<bool>(Flags & index_range_adaptor_flags::inherit_dereference);
+
+			STATIC_OVERRIDE_MOD(constexpr,dereference_index)(tc_index const& idx) & MAYTHROW -> decltype(tc::dereference_index(this->base_range(), idx))
+				requires inherit_dereference
+			{
+				return tc::dereference_index(this->base_range(),idx);
+			}
+			STATIC_OVERRIDE_MOD(constexpr,dereference_index)(tc_index const& idx) const& MAYTHROW -> decltype(tc::dereference_index(this->base_range(), idx))
+				requires inherit_dereference
+			{
+				return tc::dereference_index(this->base_range(),idx);
 			}
 
 			STATIC_OVERRIDE_MOD(constexpr, index_to_address)(tc_index const& idx) & MAYTHROW
-				requires tc::has_index_to_address<std::remove_reference_t<Rng>>
+				requires inherit_dereference && tc::has_index_to_address<std::remove_reference_t<Rng>>
 			{
 				return tc::index_to_address(this->base_range(), idx);
 			}
 			STATIC_OVERRIDE_MOD(constexpr, index_to_address)(tc_index const& idx) const& MAYTHROW
-				requires tc::has_index_to_address<std::remove_reference_t<Rng>>
+				requires inherit_dereference && tc::has_index_to_address<std::remove_reference_t<Rng>>
 			{
 				return tc::index_to_address(this->base_range(), idx);
 			}
 
-			STATIC_OVERRIDE_MOD(constexpr, distance_to_index)(tc_index const& idxLhs, tc_index const& idxRhs) const& noexcept
-				requires
-					tc::has_distance_to_index<std::remove_reference_t<Rng>> &&
-					boost::iterators::detail::is_traversal_at_least<MaximumTraversal, boost::iterators::random_access_traversal_tag>::value
+		public:
+			constexpr decltype(auto) dereference_untransform(tc_index const& idx) const& noexcept
+				requires inherit_dereference
+			{
+				return this->base_range().dereference_untransform(idx);
+			}
+
+		private:
+			static constexpr auto inherit_traversal = static_cast<bool>(Flags & index_range_adaptor_flags::inherit_traversal);
+
+			STATIC_OVERRIDE_MOD(constexpr,increment_index)(tc_index& idx) const& MAYTHROW
+				requires inherit_traversal
+			{
+				tc::increment_index(this->base_range(),idx);
+			}
+
+			STATIC_OVERRIDE_MOD(constexpr, decrement_index)(tc_index& idx) const& MAYTHROW
+				requires inherit_traversal && tc::has_decrement_index<std::remove_reference_t<Rng>>
+			{
+				tc::decrement_index(this->base_range(),idx);
+			}
+
+			STATIC_OVERRIDE_MOD(constexpr, advance_index)(tc_index& idx, typename boost::range_difference<Rng>::type d) const& MAYTHROW
+				requires inherit_traversal && tc::has_advance_index<std::remove_reference_t<Rng>>
+			{
+				tc::advance_index(this->base_range(),idx,d);
+			}
+
+			STATIC_OVERRIDE_MOD(constexpr, distance_to_index)(tc_index const& idxLhs, tc_index const& idxRhs) const& MAYTHROW
+				requires inherit_traversal && tc::has_distance_to_index<std::remove_reference_t<Rng>>
 			{
 				return tc::distance_to_index(this->base_range(),idxLhs,idxRhs);
 			}
 
-			STATIC_OVERRIDE_MOD(constexpr, middle_point)( tc_index & idxBegin, tc_index const& idxEnd ) const& noexcept -> void
-				requires WithMiddlePoint && tc::has_middle_point<std::remove_reference_t<Rng>>
+			STATIC_OVERRIDE_MOD(constexpr, middle_point)( tc_index & idxBegin, tc_index const& idxEnd ) const& MAYTHROW
+				requires inherit_traversal && tc::has_middle_point<std::remove_reference_t<Rng>>
 			{
 				tc::middle_point(this->base_range(),idxBegin,idxEnd);
 			}
@@ -389,7 +484,7 @@ namespace tc {
 }
 
 namespace tc::no_adl {
-	template<typename... T>
+	template<typename... T> requires (requires { typename tc::value_t<T>; } && ...)
 	struct value_type_impl<tc::tuple<T...>> final {
 		using type = tc::tuple<tc::value_t<T>...>;
 	};

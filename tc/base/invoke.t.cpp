@@ -12,8 +12,8 @@
 namespace {
 	[[maybe_unused]] void static_tests() noexcept {
 		auto rvalue_sink = [](int, double&&, char const&) noexcept {};
-		static_assert(!tc::is_invocable<decltype(rvalue_sink), int, double&, char>::value);
-		static_assert(!tc::is_invocable<decltype(rvalue_sink), std::tuple<int, double&, char>>::value);
+		static_assert(!tc::invocable<decltype(rvalue_sink), int, double&, char>);
+		static_assert(!tc::invocable<decltype(rvalue_sink), std::tuple<int, double&, char>>);
 
 		tc::invoke(rvalue_sink, 0, 0., 'a');
 		tc::invoke(rvalue_sink, std::make_tuple(0, 0., 'a'));
@@ -21,9 +21,9 @@ namespace {
 		tc::invoke(rvalue_sink, std::make_tuple(0, std::make_tuple(std::make_tuple(0.), 'a')));
 
 		auto lvalue_sink = [](int, double&, char const&) noexcept {};
-		static_assert(!tc::is_invocable<decltype(lvalue_sink), int, double, char>::value);
-		static_assert(!tc::is_invocable<decltype(lvalue_sink), std::tuple<int, double, char>>::value);
-		static_assert(!tc::is_invocable<decltype(lvalue_sink), std::tuple<int&&, double&&, char&&>>::value);
+		static_assert(!tc::invocable<decltype(lvalue_sink), int, double, char>);
+		static_assert(!tc::invocable<decltype(lvalue_sink), std::tuple<int, double, char>>);
+		static_assert(!tc::invocable<decltype(lvalue_sink), std::tuple<int&&, double&&, char&&>>);
 
 		int a0 = 0;
 		double a1 = 0.;

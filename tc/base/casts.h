@@ -65,16 +65,29 @@ namespace tc {
 	// derived_cast
 	
 	namespace derived_cast_detail {
+		template<typename To, typename From>
+		constexpr void check_derived_cast(From const& obj) noexcept {
+			if constexpr (!std::is_same<To, From>::value && std::is_polymorphic<From>::value) {
+				_ASSERT(dynamic_cast<To const*>(std::addressof(obj)));
+			}
+		}
+
 		namespace derived_cast_internal_default {
-			template<typename To, typename From>
-			[[nodiscard]] constexpr same_cvref_t< To, From&&> derived_cast_internal_impl( tc::type::identity<To>, From&& t ) noexcept {
+			template<typename To, typename From, bool bChecked>
+			[[nodiscard]] constexpr same_cvref_t< To, From&&> derived_cast_internal_impl(tc::type::identity<To>, From&& t, std::bool_constant<bChecked>) noexcept {
 				static_assert( tc::derived_from<To, std::remove_reference_t<From>>, "derived_cast is for downcasts only.");
+				if constexpr (bChecked) {
+					check_derived_cast<To>(t);
+				}
 				return static_cast< apply_cvref_t< To, From&&> >(t);
 			}
 
-			template<typename To, typename From>
-			[[nodiscard]] constexpr same_cvref_t< To, From>* derived_cast_internal_impl( tc::type::identity<To>, From* pt ) noexcept {
+			template<typename To, typename From, bool bChecked>
+			[[nodiscard]] constexpr same_cvref_t< To, From>* derived_cast_internal_impl(tc::type::identity<To>, From* pt, std::bool_constant<bChecked>) noexcept {
 				static_assert( tc::derived_from<To, std::remove_pointer_t<From>>, "derived_cast is for downcasts only.");
+				if constexpr (bChecked) {
+					if (nullptr != pt) check_derived_cast<To>(*pt);
+				}
 				return static_cast< apply_cvref_t< To, From>* >(pt);
 			}
 		}
@@ -85,7 +98,13 @@ namespace tc {
 	template<typename To, typename From>
 	[[nodiscard]] constexpr decltype(auto) derived_cast(From&& t) noexcept {
 		STATICASSERTSAME(std::remove_reference_t<To>, To);
-		return tc::derived_cast_detail::derived_cast_internal(tc::type::identity<To>(), std::forward<From>(t));
+		return tc::derived_cast_detail::derived_cast_internal(tc::type::identity<To>(), std::forward<From>(t), /*bChecked*/tc::constant<true>());
+	}
+
+	template<typename To, typename From>
+	[[nodiscard]] constexpr decltype(auto) unchecked_derived_cast(From&& t) noexcept {
+		STATICASSERTSAME(std::remove_reference_t<To>, To);
+		return tc::derived_cast_detail::derived_cast_internal(tc::type::identity<To>(), std::forward<From>(t), /*bChecked*/tc::constant<false>());
 	}
 
 	/////////////////////////////////////////////
@@ -260,58 +279,45 @@ MODIFY_WARNINGS_END
 	}
 
 	/////////////////////////////////////////////
-	// reluctant_static_cast
-	// Returns a reference to its argument whenever possible, otherwise performs an explicit conversion.
-
-	template<typename TTarget, tc::decayed_derived_from<TTarget> TSource>
-	[[nodiscard]] TSource&& reluctant_static_cast(TSource&& src) noexcept {
-		STATICASSERTSAME(std::remove_cvref_t<TTarget>, TTarget);
-		return std::forward<TSource>(src);
-	}
-
-	template<typename TTarget, typename TSource>
-	[[nodiscard]] TTarget reluctant_static_cast(TSource&& src) noexcept {
-		STATICASSERTSAME(std::remove_cvref_t<TTarget>, TTarget);
-		return static_cast<TTarget>(std::forward<TSource>(src));
-	}
-
-	/////////////////////////////////////////////
 	// as_c_str
+	namespace as_c_str_default {
+		template< typename Char, typename Traits, typename Alloc >
+		[[nodiscard]] Char const* as_c_str_impl(std::basic_string< Char, Traits, Alloc > const& str) noexcept
+		{
+			return str.data(); // since C++ 11, performs same function as c_str(). cannot use tc::ptr_begin to avoid circular dependency
+		}
 
-	template< typename Char, typename Traits, typename Alloc >
-	[[nodiscard]] Char const* as_c_str(std::basic_string< Char, Traits, Alloc > const& str) noexcept
-	{
-		return str.data(); // since C++ 11, performs same function as c_str()
+		template< typename Char, typename Traits, typename Alloc >
+		[[nodiscard]] Char* as_c_str_impl(std::basic_string< Char, Traits, Alloc >& str) noexcept
+		{
+			return str.data(); // since C++ 11, performs same function as c_str(). cannot use tc::ptr_begin to avoid circular dependency
+		}
+
+		template< typename Char, typename Traits, typename Alloc >
+		[[nodiscard]] Char* as_c_str_impl(std::basic_string< Char, Traits, Alloc >&& str) noexcept
+		{
+			return str.data(); // since C++ 11, performs same function as c_str(). cannot use tc::ptr_begin to avoid circular dependency
+		}
+
+		template<tc::char_type Char>
+		[[nodiscard]] constexpr Char const* as_c_str_impl(Char const* psz) noexcept {
+			return psz;
+		}
+
+		template<tc::char_type Char>
+		[[nodiscard]] constexpr Char* as_c_str_impl(Char* psz) noexcept {
+			return psz;
+		}
+
+	#ifdef TC_PRIVATE
+		// Prevents implicit conversion from std::vector<wchar_t> to boost::filesystem::path on Windows, which causes a dangling pointer to be returned
+		template<typename T> requires std::is_same<T, boost::filesystem::path>::value
+		[[nodiscard]] inline boost::filesystem::path::value_type const* as_c_str_impl(T const& fspath) noexcept {
+			return fspath.c_str();
+		}
+	#endif
 	}
 
-	template< typename Char, typename Traits, typename Alloc >
-	[[nodiscard]] Char* as_c_str(std::basic_string< Char, Traits, Alloc >& str) noexcept
-	{
-		return str.data(); // since C++ 11, performs same function as c_str()
-	}
-
-	template< typename Char, typename Traits, typename Alloc >
-	[[nodiscard]] Char* as_c_str(std::basic_string< Char, Traits, Alloc >&& str) noexcept
-	{
-		return str.data(); // since C++ 11, performs same function as c_str()
-	}
-
-	template<tc::char_type Char>
-	[[nodiscard]] constexpr Char const* as_c_str(Char const* psz) noexcept {
-		return psz;
-	}
-
-	template<tc::char_type Char>
-	[[nodiscard]] constexpr Char* as_c_str(Char* psz) noexcept {
-		return psz;
-	}
-
-#ifdef TC_PRIVATE
-	// Prevents implicit conversion from std::vector<wchar_t> to boost::filesystem::path on Windows, which causes a dangling pointer to be returned
-	template<typename T> requires std::is_same<T, boost::filesystem::path>::value
-	[[nodiscard]] inline boost::filesystem::path::value_type const* as_c_str(T const& fspath) noexcept {
-		return fspath.c_str();
-	}
-#endif
+	DEFINE_TMPL_FUNC_WITH_CUSTOMIZATIONS(as_c_str)
 }
 

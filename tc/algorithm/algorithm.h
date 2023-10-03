@@ -72,36 +72,10 @@ namespace tc {
 		});
 	}
 	template< typename Rng, typename Less = tc::fn_less>
-	[[nodiscard]] constexpr bool is_sorted(Rng const& rng, Less less = Less()) noexcept {
-		return !tc::any_of(tc::adjacent<2>(rng), [&](auto const& first, auto const& second) noexcept {
-			return less(second, first);
+	[[nodiscard]] constexpr bool is_sorted(Rng const& rng, Less less = Less()) MAYTHROW {
+		return !tc::any_of(tc::adjacent<2>(rng), [&](auto const& first, auto const& second) MAYTHROW {
+			return less(second, first); // MAYTHROW
 		});
-	}
-
-	template< typename Rng, typename Equal = tc::fn_equal_to >
-	[[nodiscard]] constexpr bool all_same(Rng const& rng, Equal equal = Equal()) noexcept {
-		if constexpr( tc::range_with_iterators<Rng> ) {
-			auto const itBegin=tc::begin(rng);
-			auto const itEnd=tc::end(rng);
-			if(itBegin==itEnd) return true;
-			auto const itNext=tc_modified(itBegin, ++_);
-			if(itNext==itEnd) return true;
-			tc_auto_cref( front, *itBegin );
-			return all_of(
-				tc::drop(rng, itNext),
-				[&](auto const& _) noexcept { return equal(front, _); }
-			);
-		} else {
-			std::optional<tc::range_value_t<Rng const&>> oFirst;
-			return tc::continue_ == tc::for_each(rng, [&](auto&& val) noexcept {
-				if (oFirst) {
-					return tc::continue_if(equal(*oFirst, val));
-				} else {
-					oFirst.emplace(tc_move_if_owned(val));
-					return tc::continue_;
-				}
-			});
-		}
 	}
 
 	/////////////////////////////////
@@ -266,7 +240,7 @@ namespace tc {
 				);
 			}
 
-			sorted_index_adaptor(sorted_index_adaptor&& rng) noexcept requires tc::is_index_valid_for_move_constructed_range<Rng>::value // reference_or_value is movable for const Rng as well
+			sorted_index_adaptor(sorted_index_adaptor&& rng) noexcept requires tc::stable_index_on_move<Rng> // reference_or_value is movable for const Rng as well
 				: range_adaptor_base_range<Rng>(tc_move(rng))
 				, m_vecidx(tc_move(rng).m_vecidx)
 			{
@@ -347,11 +321,11 @@ namespace tc {
 		struct [[nodiscard]] untransform_adaptor
 			:  tc::index_range_adaptor<
 				untransform_adaptor<Rng>,
-				Rng
+				Rng, tc::index_range_adaptor_flags::inherit_begin_end | tc::index_range_adaptor_flags::inherit_traversal
 			>
 		{
 		private:
-			using base_ = tc::index_range_adaptor<untransform_adaptor<Rng>, Rng>;
+			using base_ = typename untransform_adaptor::index_range_adaptor;
 
 		public:
 			using typename base_::tc_index;
@@ -464,7 +438,7 @@ namespace tc {
 	}
 
 	template<typename Cont, typename Less=tc::fn_less>
-	constexpr void ordered_unique_inplace( Cont& cont, Less less=Less() ) noexcept {
+	constexpr void ordered_unique_inplace( Cont& cont, Less less=Less() ) MAYTHROW {
 		_ASSERTDEBUG( tc::is_sorted( cont, less ) );
 		tc::adjacent_unique_inplace( cont, std::not_fn( tc_move(less) ) );
 	}
@@ -481,34 +455,30 @@ namespace tc {
 		tc::ordered_unique_inplace( cont, tc_move(less) );
 	}
 
-	template<typename Rng, typename Less, typename Func>
-	auto ordered_for_each_occurrence(Rng&& rng, Less&& less, Func func) noexcept {
-		return tc::for_each(tc::ordered_unique_range( std::forward<Rng>(rng), std::forward<Less>(less)), [&](auto const& rngSub) noexcept {
-			return tc::continue_if_not_break( func, std::make_pair(
+	template<typename Rng, typename Less>
+	auto ordered_unique_begin_and_count(Rng&& rng, Less&& less) noexcept {
+		return tc::transform(tc::ordered_unique_range( std::forward<Rng>(rng), std::forward<Less>(less)), [&](auto const& rngSub) noexcept {
+			return std::make_pair(
 				tc::begin(rngSub),
 				tc::implicit_cast<typename boost::range_size< std::remove_reference_t<Rng> >::type >(tc::size_linear(rngSub))
-			) );
+			);
 		});
 	}
 
 	template<typename RangeReturn, typename Rng>
 	[[nodiscard]] auto plurality_element(Rng&& rng) noexcept {
-		if(tc::empty(rng)) {
+		auto vecitSorted = tc::sorted_iterator_range(rng, tc::fn_less()); // do not inline, oit->first points into vecitSorted
+		if(auto oit = tc::max_element<tc::return_value_or_none>(
+			tc::ordered_unique_begin_and_count(
+				vecitSorted,
+				tc::projected(tc::fn_less(), fn_indirection())
+			),
+			tc_member(.second)
+		)) {
+			return RangeReturn::pack_element(tc_move_always(*oit->first), std::forward<Rng>(rng));
+		} else {
 			return RangeReturn::pack_no_element(std::forward<Rng>(rng));
 		}
-		auto const rng2=tc::sorted_iterator_range(rng, tc::fn_less());
-
-		auto it = *( tc::accumulate(
-			[&](auto const& func) noexcept {
-				return tc::ordered_for_each_occurrence(rng2, tc::projected(tc::fn_less(), fn_indirection()), func);
-			},
-			std::pair<
-				tc::iterator_t<decltype(rng2)>,
-				typename boost::range_size<decltype(rng2)>::type
-			>(), // value-initialized, second=0
-			tc::fn_assign_better(tc::projected(tc::fn_greater(), tc_member(.second)))
-		).first );
-		return RangeReturn::pack_element(it, std::forward<Rng>(rng));
 	}
 
 	template< typename RangeReturn, typename Rng, typename Pred >
@@ -525,8 +495,14 @@ namespace tc {
 
 	template< typename Rng, typename Pred >
 	[[nodiscard]] decltype(auto) trim_if(Rng&& rng, Pred&& pred) MAYTHROW {
-		auto rngTrimmed = tc::trim_right_if<tc::return_take>( std::forward<Rng>(rng), pred );
-		return tc::trim_left_if<tc::return_drop>( tc_move(rngTrimmed), std::forward<Pred>(pred) );
+		decltype(auto) rngTrimmed = tc::trim_right_if<tc::return_take>( tc_move_if_owned(rng), pred );
+		if constexpr (std::is_reference<decltype(rngTrimmed)>::value) {
+			_ASSERTEQUAL(std::addressof(rngTrimmed), std::addressof(rng));
+			return tc::trim_left_if<tc::return_drop>( tc_move_if_owned(rngTrimmed), tc_move_if_owned(pred) );
+		} else {
+			static_assert(tc::instance<decltype(rngTrimmed), tc::subrange>);
+			return tc::decay_copy(tc::trim_left_if<tc::return_drop>( tc_move(rngTrimmed), tc_move_if_owned(pred) ));
+		}
 	}
 
 	template< typename RangeReturn, typename Rng, typename RngTrim >
@@ -685,7 +661,7 @@ namespace tc {
 
 		template<typename Cont, typename Func>
 		Cont get_truncating_buffer_allowing_nulls(Func func) noexcept {
-			return tc::get_buffer_detail::get_buffer_allowing_nulls<Cont>([&](auto pBuffer, auto nBufferSize) noexcept {
+			return tc::get_buffer_detail::get_buffer_allowing_nulls<Cont>([&](auto pBuffer, auto const nBufferSize) noexcept {
 				auto nSize = func(pBuffer, nBufferSize);
 				if (nSize == nBufferSize) {
 					return nSize+1; // Any return value larger than nBufferSize causes a retry with a larger buffer
@@ -863,7 +839,7 @@ namespace tc {
 	template<typename Rng, typename Less=tc::fn_less>
 	[[nodiscard]] constexpr auto constexpr_sort_unique(Rng&& rng, Less&& less=Less()) noexcept {
 		return tc_modified(
-			tc::make_static_vector<tc::constexpr_size<Rng>::value>(std::forward<Rng>(rng)),
+			tc::make_static_vector<tc::constexpr_size<Rng>()>(std::forward<Rng>(rng)),
 			tc::sort_unique_inplace(_, std::forward<Less>(less))
 		);
 	}
@@ -884,64 +860,63 @@ namespace tc {
 	template< typename RangeReturn, typename SetType, typename T, typename Less >
 	void binary_find_unique(tc::unordered_set<SetType> const& rng, T const& t, Less less) noexcept = delete;
 
-	template< typename RangeReturn, typename Rng, typename T, typename Pred >
-	[[nodiscard]] decltype(auto) binary_find_unique(Rng&& rng, T const& t, Pred predLessOr3way) noexcept {
-		// The result of tc::binary_find_unique must be unambiguous. In general, this means that rng is strictly
-		// ordered. In some cases, it is convenient to allow multiple occurrences of the same item in
-		// rng, which is not a problem as long as these items are not searched for.
+	namespace binary_find_first_or_unique_adl {
+		template< typename RangeReturn, bool c_bAssertUniqueness, typename Rng, typename T, typename Pred >
+		[[nodiscard]] decltype(auto) binary_find_first_or_unique(Rng&& rng, T const& t, Pred predLessOr3way) noexcept {
+			// The result of tc::binary_find_unique must be unambiguous. In general, this means that rng is strictly
+			// ordered. In some cases, it is convenient to allow multiple occurrences of the same item in
+			// rng, which is not a problem as long as these items are not searched for.
 
-		// preserve order of arguments for 3way predicates
-		static constexpr bool c_b3way = tc::is_comparison_category<decltype(predLessOr3way(tc::front(rng), t))>;
-		auto it=[&]() noexcept {
-			if constexpr(c_b3way) {
-				return tc::lower_bound<tc::return_border>( rng, t, tc::lessfrom3way(std::ref(predLessOr3way)) );
-			} else {
-				_ASSERTDEBUG( tc::is_sorted(rng, predLessOr3way) );
-				return tc::lower_bound<tc::return_border>( rng, t, std::ref(predLessOr3way) );
-			}
-		}();
-		if( it==tc::end( rng ) ) {
-			return RangeReturn::pack_no_element(std::forward<Rng>(rng));
-		} else {
-			auto Greater = [&](auto const& elem) noexcept {
+			// preserve order of arguments for 3way predicates
+			static constexpr bool c_b3way = tc::is_comparison_category<decltype(predLessOr3way(tc::front(rng), t))>;
+			auto it=[&]() noexcept {
 				if constexpr(c_b3way) {
-					return std::is_gt(predLessOr3way(elem, t));
+					_ASSERTDEBUG( tc::is_sorted(rng, tc::lessfrom3way(std::ref(predLessOr3way))) );
+					return tc::lower_bound<tc::return_border>( rng, t, tc::lessfrom3way(std::ref(predLessOr3way)) );
 				} else {
-					return predLessOr3way(t, elem);
+					_ASSERTDEBUG( tc::is_sorted(rng, predLessOr3way) );
+					return tc::lower_bound<tc::return_border>( rng, t, std::ref(predLessOr3way) );
 				}
-			};
-			auto && ref=*it;
-			if (Greater(tc::as_const(ref))) {
+			}();
+			if( it==tc::end( rng ) ) {
 				return RangeReturn::pack_no_element(std::forward<Rng>(rng));
 			} else {
-		#ifdef _CHECKS
-				auto itNext = tc_modified(it, ++_);
-				_ASSERT( tc::end(rng)==itNext || Greater(tc::as_const(*itNext)));
-		#endif
-				return RangeReturn::pack_element(it,std::forward<Rng>(rng),tc_move_if_owned(ref));
+				auto const Greater = [&](auto const& elem) noexcept {
+					if constexpr(c_b3way) {
+						return std::is_gt(predLessOr3way(elem, t));
+					} else {
+						return predLessOr3way(t, elem);
+					}
+				};
+				auto && ref=*it;
+				if (Greater(tc::as_const(ref))) {
+					return RangeReturn::pack_no_element(std::forward<Rng>(rng));
+				} else {
+#ifdef _CHECKS
+					if constexpr(c_bAssertUniqueness) {
+						auto itNext = tc_modified(it, ++_);
+						_ASSERT( tc::end(rng)==itNext || Greater(tc::as_const(*itNext)));
+					}
+#endif
+					return RangeReturn::pack_element(it,std::forward<Rng>(rng),tc_move_if_owned(ref));
+				}
 			}
 		}
 	}
-
+	
+	template< typename RangeReturn, typename Rng, typename T, typename Pred >
+	[[nodiscard]] decltype(auto) binary_find_unique(Rng&& rng, T const& t, Pred predLessOr3way) noexcept {
+		return binary_find_first_or_unique_adl::binary_find_first_or_unique<RangeReturn, /*c_bAssertUniqueness*/ true>(tc_move_if_owned(rng), t, tc_move(predLessOr3way));
+	}
+	
 	template< typename RangeReturn, typename Rng, typename T >
 	[[nodiscard]] decltype(auto) binary_find_unique(Rng&& rng, T const& t) noexcept {
 		return tc::binary_find_unique<RangeReturn>( std::forward<Rng>(rng), t, tc::fn_less() );
 	}
 
-	template< typename RangeReturn, typename Rng, typename T, typename Less >
-	[[nodiscard]] decltype(auto) binary_find_first(Rng&& rng, T const& t, Less less) noexcept {
-		_ASSERTDEBUG( tc::is_sorted(rng, less) );
-		auto it=tc::lower_bound<tc::return_border>( rng, t, less );
-		if (it == tc::end(rng)) {
-			return RangeReturn::pack_no_element(std::forward<Rng>(rng));
-		} else {
-			auto && ref = *it;
-			if (less(t, tc::as_const(ref))) {
-				return RangeReturn::pack_no_element(std::forward<Rng>(rng));
-			} else {
-				return RangeReturn::pack_element(it, std::forward<Rng>(rng), tc_move_if_owned(ref));
-			}
-		}
+	template< typename RangeReturn, typename Rng, typename T, typename Pred >
+	[[nodiscard]] decltype(auto) binary_find_first(Rng&& rng, T const& t, Pred predLessOr3way) noexcept {
+		return binary_find_first_or_unique_adl::binary_find_first_or_unique<RangeReturn, /*c_bAssertUniqueness*/ false>(tc_move_if_owned(rng), t, tc_move(predLessOr3way));
 	}
 
 	template< typename RangeReturn, typename Rng, typename T >
@@ -1043,7 +1018,7 @@ namespace tc {
 		};
 	}
 
-	template< typename RngA, typename RngB, typename Comp, typename SinkA, typename SinkB, typename SinkAB >
+	template< typename RngA, tc::range_with_iterators RngB, typename Comp, typename SinkA, typename SinkB, typename SinkAB >
 	auto interleave_2(RngA&& rnga, RngB&& rngb, Comp const comp, SinkA const sinka, SinkB const sinkb, SinkAB const sinkab) MAYTHROW -> tc::common_type_t<
 		decltype(tc::for_each(rnga,
 			std::declval<no_adl::interleave_2_sink<decltype(tc::begin(rngb)), decltype(tc::end(rngb)), Comp, SinkA, SinkB, SinkAB>>()
@@ -1063,6 +1038,23 @@ namespace tc {
 			++itb;
 		}
 		return tc::constant<tc::continue_>();
+	}
+
+	template< tc::range_with_iterators RngA, typename RngB, typename Comp, typename SinkA, typename SinkB, typename SinkAB >
+		requires (!tc::range_with_iterators<RngB>)
+	auto interleave_2(RngA&& rnga, RngB&& rngb, Comp&& comp, SinkA&& sinka, SinkB&& sinkb, SinkAB&& sinkab) MAYTHROW {
+		return tc::interleave_2(
+			std::forward<RngB>(rngb),
+			std::forward<RngA>(rnga),
+			[comp=tc::decay_copy(std::forward<Comp>(comp))](auto const& elemb, auto const& elema) noexcept {
+				return tc::negate(comp(elema, elemb));
+			},
+			std::forward<SinkB>(sinkb),
+			std::forward<SinkA>(sinka),
+			[sinkab=tc::decay_copy(std::forward<SinkAB>(sinkab))](auto&& elemb, auto&& elema) noexcept {
+				return sinkab(tc_move_if_owned(elema), tc_move_if_owned(elemb));
+			}
+		);
 	}
 
 	namespace no_adl {

@@ -10,7 +10,6 @@
 
 #include "../base/assert_defs.h"
 #include "../algorithm/compare.h"
-#include "range_fwd.h"
 #include "range_adaptor.h"
 #include "meta.h"
 #include "repeat_n.h"
@@ -48,7 +47,7 @@ namespace tc {
 			template<typename Func>
 			auto operator()(Func func) const& MAYTHROW {
 				std::size_t n=0;
-				auto GenerateDefaultUpTo = [&](std::size_t nEnd) MAYTHROW {
+				auto const GenerateDefaultUpTo = [&](std::size_t const nEnd) MAYTHROW {
 					_ASSERT( n <= nEnd );
 					auto bc=tc::for_each(tc::repeat_n(nEnd - n, *m_default), func); // MAYTHROW
 					n = nEnd;

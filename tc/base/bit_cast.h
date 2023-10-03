@@ -10,13 +10,123 @@
 
 #include "casts.h"
 #include "../range/subrange.h"
+#include "../array.h"
 #include <boost/range/algorithm/copy.hpp>
 
 //-----------------------------------------------------------------------------------------------------------------------------
 
 namespace tc {
+
+	//--------------------------------------------------------------------------------------------------------------------------
+	// as_blob
+	// reinterprets a range of items as a range of bytes
+
+	// We use unsigned char for uninterpreted memory.
+	// - The type used must support aliasing, so the only candidates are char, signed char and unsigned char.
+	// - char is bad because we interpret char as UTF-8 and char* as zero-terminated range.
+	// - unsigned char is better than signed char because the binary representation of signs may vary between platforms.
+	// - char is bad because it is either signed or unsigned, so it has the same problem.
+	// - unsigned char is better than std::uint8_t because the latter must be 8 bit, but we mean the smallest addressable unit, which is char and may be larger (or smaller?) on other platforms.
+
+	static_assert(!tc::range_with_iterators< void const* >);
+
+	template<tc::contiguous_range Rng>
+	[[nodiscard]] auto range_as_blob(Rng&& rng) noexcept {
+		using cv_value_type = std::remove_pointer_t<decltype(tc::ptr_begin(rng))>;
+		static_assert( std::is_trivially_copyable< cv_value_type >::value, "as_blob only works on std::is_trivially_copyable types" );
+		if constexpr(tc::safely_constructible_from<tc::span<cv_value_type>, Rng>) {
+			return tc::make_iterator_range(
+				reinterpret_cast<same_cvref_t<unsigned char, cv_value_type>*>(tc::ptr_begin(rng)),
+				reinterpret_cast<same_cvref_t<unsigned char, cv_value_type>*>(tc::ptr_end(rng))
+			);
+		} else {
+			// not inside blob_range_t because templates cannot be declared inside of a local class
+			static auto constexpr as_blob_ptr=[](auto ptr) noexcept {
+				return reinterpret_cast<same_cvref_t<unsigned char, std::remove_pointer_t<decltype(ptr)>>*>(ptr);
+			};
+			struct blob_range_t final {
+				explicit blob_range_t(Rng&& rng) noexcept : m_rng(tc_move(rng)) {}
+				auto begin() & noexcept { return as_blob_ptr(tc::ptr_begin(m_rng)); }
+				auto begin() const& noexcept { return as_blob_ptr(tc::ptr_begin(m_rng)); }
+				auto end() & noexcept { return as_blob_ptr(tc::ptr_end(m_rng)); }
+				auto end() const& noexcept { return as_blob_ptr(tc::ptr_end(m_rng)); }
+			private:
+				static_assert(!std::is_reference<Rng>::value);
+				std::remove_cv_t<Rng> m_rng;
+			};
+			return blob_range_t(tc_move(rng));
+		}
+	}
+
+	namespace no_adl {
+		template<typename Sink>
+		struct range_as_blob_sink { // no final: verify_sink_result_impl derives
+		private:
+			// range_as_blob_sink is only used inline in range_as_blob below, and m_sink is only passed to tc::for_each, so holding by lvalue reference ok
+			Sink& m_sink;
+
+		public:
+			explicit range_as_blob_sink(Sink& sink) noexcept: m_sink(sink) {}
+
+			// chunk must be defined before operator() - otherwise MSVC will not allow it to occur in the return type of operator()
+			template<tc::contiguous_range Rng>
+			auto chunk(Rng&& rng) const& return_decltype_MAYTHROW (
+				tc::for_each(tc::range_as_blob(tc_move_if_owned(rng)), m_sink)
+			)
+
+			template<typename T>
+			auto operator()(T&& t) const& return_decltype_MAYTHROW (
+				chunk(tc::single(/* no std::forward<T> */ t))
+			)
+		};
+	}
+
+	template<typename Rng>
+	[[nodiscard]] auto range_as_blob(Rng&& rng) noexcept {
+		return [rng=tc::make_reference_or_value(tc_move_if_owned(rng))](auto&& sink) MAYTHROW {
+			return tc::for_each(*rng, no_adl::range_as_blob_sink<std::remove_reference_t<decltype(sink)>>(sink));
+		};
+	}
+
+	template<typename T> requires std::is_trivially_copyable<std::remove_reference_t<T>>::value
+	[[nodiscard]] auto as_blob(T&& t) noexcept {
+		return tc::range_as_blob( tc::single( std::forward<T>(t) ) );
+	}
+
+	namespace assert_no_overlap_impl {
+		void assert_no_overlap(auto const& lhs, auto const& rhs) noexcept {
+			_ASSERT(
+				reinterpret_cast<std::size_t>(tc::ptr_end(lhs)) <= reinterpret_cast<std::size_t>(tc::ptr_begin(rhs)) ||
+				reinterpret_cast<std::size_t>(tc::ptr_end(rhs)) <= reinterpret_cast<std::size_t>(tc::ptr_begin(lhs))
+			);
+		}
+	}
+	template< typename Lhs, typename Rhs>
+	void assert_no_overlap(Lhs const& lhs, Rhs const& rhs) noexcept {
+		assert_no_overlap_impl::assert_no_overlap(tc::single(lhs), tc::single(rhs));
+		if constexpr( tc::contiguous_range<Lhs> && tc::contiguous_range<Rhs> ) {
+			assert_no_overlap_impl::assert_no_overlap(lhs, rhs);
+		}
+	}
+
 	/////////////////////////////////////////////
 	// bit_cast
+
+	namespace no_adl {
+		struct any_ptr_ref final: tc::nonmovable {
+		private:
+			void* m_pv;
+		public:
+			explicit any_ptr_ref(void* pv) noexcept: m_pv(pv) {}
+
+			template<typename T> requires std::same_as<std::remove_cvref_t<T>, T> && std::is_trivially_copyable<T>::value
+			operator T() && noexcept {
+				T t;
+				std::memcpy(std::addressof(t), m_pv, sizeof(t));
+				return t;
+			}
+		};
+	}
 
 	namespace any_ptr_adl {
 		struct any_ptr final {
@@ -26,6 +136,14 @@ namespace tc {
 			any_ptr( void* pv ) noexcept
 			:	m_pv(pv)
 			{}
+
+			explicit operator bool() const& noexcept {
+				return m_pv;
+			}
+
+			auto operator*() const& noexcept {
+				return tc::no_adl::any_ptr_ref(m_pv);
+			}
 
 			template<typename T> requires std::is_pointer<T>::value || std::is_member_pointer<T>::value
 			operator T() const& noexcept {
@@ -187,4 +305,3 @@ namespace tc {
 		return typename aliasing_ptr<std::remove_pointer_t<Dst>>::type(reinterpret_cast<Dst>(src));
 	}
 }
-

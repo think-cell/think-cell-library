@@ -7,20 +7,10 @@
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
+#include "array.h" // tc::single
 #include "container/container.h" // tc::vector
 
 namespace tc {
-
-	// this is for testing only, equivalent to slice(rng, begin(rng), end(rng)), but also works correctly on temporaries
-	template< typename Rng >
-	tc::make_subrange_result_t< Rng > slice(Rng&& rng) noexcept {
-		return tc::make_subrange_result_t< Rng >( std::forward<Rng>(rng), tc::begin(rng), tc::end(rng) );
-	}
-
-	// Do we want/need something like this as a generic tool?
-	template<typename Rng>
-	auto const_slice(Rng const& rng) return_decltype_noexcept(slice(rng)) 
-
 	// create a generator range that gives the same values as the rng it takes (for testing)
 	template<typename Rng> 
 	constexpr auto make_generator_range(Rng&& rng) noexcept {
@@ -104,7 +94,12 @@ namespace tc {
 
 			template<typename Elem>
 			break_or_continue operator()(Elem&& e) noexcept {
-				os << e << ", ";
+				if constexpr (requires (OStream& os, Elem& e) { os << e; }) {
+					os << e;
+				} else {
+					os << "???";
+				}
+				os << ", ";
 				--elems;
 				if( elems > 0 ) {
 					return continue_;
@@ -120,7 +115,7 @@ namespace tc {
 	}
 
 	template<typename Rng>
-	auto dbg_print_rng(Rng&& rng, std::size_t max_elems = 50) noexcept {
+	auto dbg_print_rng(Rng&& rng, std::size_t const max_elems = 50) noexcept {
 		std::stringstream os;
 		os << "[";
 		for_each(rng, std::ref(tc::as_lvalue(detail::print_elem<std::stringstream>(os, max_elems))) );

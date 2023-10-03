@@ -24,15 +24,16 @@
 #include <cstdint>
 
 namespace tc {
-	template <typename Enum>
-	void contiguous_enum_impl(Enum const&) = delete;
+	template<typename T>
+	concept contiguous_enum_type = tc::enum_type<T> && requires(T const& value) {
+		contiguous_enum_impl(value);
+	};
 
 	namespace no_adl {
 		template <typename Enum>
 		struct contiguous_enum : tc::constant<false> {};
 
-		template <typename Enum>
-			requires requires(Enum const& e) { contiguous_enum_impl(e); }
+		template <contiguous_enum_type Enum>
 		struct contiguous_enum<Enum> : tc::constant<true> {
 			using impl = decltype(contiguous_enum_impl(std::declval<Enum>()));
 
@@ -47,9 +48,6 @@ namespace tc {
 		};
 	}
 	using no_adl::contiguous_enum;
-
-	template<typename T>
-	concept contiguous_enum_type = tc::enum_type<T> && contiguous_enum<T>::value;
 
 	template<typename Enum, typename Integer>
 	[[nodiscard]] constexpr bool is_enum_value_or_end(Integer const& n) noexcept { // reference to avoid error C4701: potentially uninitialized local variable
@@ -134,10 +132,10 @@ constexpr Enum& operator^=(Enum& _Left, Enum _Right) \
 \
 [[nodiscard]] constexpr bool HasAllOf(Enum _Left, Enum _Right) \
 {	/* return _Left HasAllOf _Right */\
-	return !(~_Left & _Right); \
+	return !static_cast<bool>(~_Left & _Right); \
 }\
 \
-std::strong_ordering operator<=>(Enum, Enum) = delete; \
+std::weak_ordering operator<=>(Enum, Enum) = delete; \
 bool operator<(Enum, Enum) = delete; \
 bool operator<=(Enum, Enum) = delete; \
 bool operator>=(Enum, Enum) = delete; \
@@ -184,7 +182,7 @@ namespace tc {
 	[[nodiscard]] inline bool check_initialized_impl(Enum const& e) noexcept { /*reference to avoid error C4701: potentially uninitialized local variable*/ \
 		return tc::is_enum_value_or_end<Enum>(tc::to_underlying(e)); \
 	} \
-	[[nodiscard]] constexpr boost::int_max_value_t< tc::enum_count<Enum>::value >::least operator-(Enum e1, Enum e2) noexcept { \
+	[[nodiscard]] constexpr boost::int_max_value_t< tc::enum_count<Enum>::value >::least operator-(Enum const e1, Enum const e2) noexcept { \
 		return static_cast<boost::int_max_value_t< tc::enum_count<Enum>::value >::least>(tc::to_underlying(e1)-tc::to_underlying(e2)); \
 	} \
 	template<ENABLE_SFINAE> \
@@ -260,7 +258,7 @@ namespace tc {
 
 namespace tc::enum_detail {
 	template<typename IntOffset>
-	constexpr auto max_value_for_underlying_type(IntOffset nOffset, int nConstants) noexcept {
+	constexpr auto max_value_for_underlying_type(IntOffset nOffset, int const nConstants) noexcept {
 		static_assert( std::is_signed<IntOffset>::value, "unsigned underlying type not supported" );
 		// Assume two's complement.
 		// -1 - nOffset, like ~nOffset never overflows.

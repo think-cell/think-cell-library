@@ -11,14 +11,12 @@
 #include "return_decltype.h"
 #include "tag_type.h"
 #include "utility.h"
+#include "explicit_cast_fwd.h"
 
 #include <tuple>
 #include <type_traits>
 
 namespace tc {
-	template<typename T>
-	concept tuple_like = tc::actual_integer<decltype(std::tuple_size<std::remove_reference_t<T>>::value)>;
-
 	namespace invoke_no_adl {
 		//////////////////////////////////////////////////////////////////////////
 		// expanded
@@ -163,14 +161,29 @@ namespace tc {
 	}
 
 	//////////////////////////////////////////////////////////////////////////
-	// is_invocable
-	namespace invoke_no_adl {
-		template <typename, typename Func, typename... Args>
-		struct is_invocable /*final*/ : tc::constant<false> {};
-
-		template <typename Func, typename... Args>
-		struct is_invocable<tc::void_t<decltype(tc::invoke(std::declval<Func>(), std::declval<Args>()...))>, Func, Args...> /*final*/ : tc::constant<true> {};
-	}
+	// concepts
 	template <typename Func, typename... Args>
-	using is_invocable = invoke_no_adl::is_invocable<void, Func, Args...>;
+	concept invocable = requires(Func&& f, Args&&... args) { tc::invoke(std::forward<Func>(f), std::forward<Args>(args)...); };
+	template <typename Func, typename... Args>
+	concept nothrow_invocable = tc::invocable<Func, Args...> && noexcept(tc::invoke(std::declval<Func>(), std::declval<Args>()...));
+
+	template <typename Func, typename T>
+	concept predicate = tc::invocable<Func const&, std::remove_cvref_t<T> const&>
+		&& requires(Func const& f, std::remove_cvref_t<T> const& t) { tc::explicit_cast<bool>(tc::invoke(f, t)); };
+	template <typename Func, typename T>
+	concept nothrow_predicate = tc::predicate<Func, T> && tc::nothrow_invocable<Func const&, std::remove_cvref_t<T> const&>;
+
+	template <typename Func, typename T>
+	concept constant_predicate = tc::predicate<Func, T>
+		&& requires(Func const& f, std::remove_cvref_t<T> const& t) { tc::explicit_cast<bool>(decltype(tc::invoke(f, t))::value); };
+
+	template <typename Func, typename T>
+	concept constant_predicate_true = tc::constant_predicate<Func, T>
+		&& tc::explicit_cast<bool>(decltype(tc::invoke(std::declval<Func const&>(), std::declval<std::remove_cvref_t<T> const&>()))::value);
+	template <typename Func, typename T>
+	concept constant_predicate_false = tc::constant_predicate<Func, T>
+		&& !tc::explicit_cast<bool>(decltype(tc::invoke(std::declval<Func const&>(), std::declval<std::remove_cvref_t<T> const&>()))::value);
+
+	template <typename Func, typename T>
+	concept runtime_predicate = tc::predicate<Func, T> && (!tc::constant_predicate<Func, T>);
 }

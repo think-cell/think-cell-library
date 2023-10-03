@@ -49,31 +49,35 @@ namespace tc {
 		};
 
 		template<typename Rng>
-		using index_t=typename index<Rng>::type;
+		using index_t=typename index<std::remove_reference_t<Rng>>::type;
 		
 	}
 	using no_adl::index_t;
 
 	template<typename Rng>
-		requires (!tc::has_index<Rng>)
+		requires (!tc::has_index<Rng>) && tc::borrowed_range<Rng>
 	constexpr auto begin_index(Rng&& rng) return_decltype_MAYTHROW(
-		tc::begin(std::forward<Rng>(rng))
+		tc::begin(rng)
 	)
 
 	template<tc::has_index Rng>
 	constexpr auto begin_index(Rng&& rng) return_decltype_MAYTHROW(
-		std::forward<Rng>(rng).begin_index()
+		rng.begin_index()
 	)
+
+	template <typename Rng>
+	concept index_range
+		= tc::range_with_iterators<Rng> || (tc::has_index<Rng> && requires(Rng&& rng) { tc::begin_index(std::forward<Rng>(rng)); });
 
 	template<tc::common_range Rng>
-		requires (!tc::has_index<Rng>)
+		requires (!tc::has_index<Rng>) && tc::borrowed_range<Rng>
 	constexpr auto end_index(Rng&& rng) return_decltype_MAYTHROW(
-		tc::end(std::forward<Rng>(rng))
+		tc::end(rng)
 	)
 
 	template<tc::has_index Rng>
 	constexpr auto end_index(Rng&& rng) return_decltype_MAYTHROW(
-		std::forward<Rng>(rng).end_index()
+		rng.end_index()
 	)
 
 	template<typename Rng, typename It>
@@ -140,23 +144,29 @@ namespace tc {
 		template<tc::has_index Rng>
 		struct has_stashing_index<Rng> : tc::constant<Rng::c_bHasStashingIndex>  {
 			static_assert( !std::is_reference<Rng>::value );
-		};		
-
-		template<typename Rng>
-		struct is_index_valid_for_move_constructed_range : std::is_lvalue_reference<Rng> {};
-
-		template<typename It>
-		struct is_index_valid_for_move_constructed_range<tc::iterator_base<It>> : tc::constant<true> {};
-
-		template<tc::char_type Char>
-		struct is_index_valid_for_move_constructed_range<Char*> : tc::constant<true> {};
-
-		template<typename T, typename Alloc>
-		struct is_index_valid_for_move_constructed_range<std::vector<T, Alloc>> : tc::constant<true> {}; // end iterator is not guaranteed by the standard but we assume it's still valid
+		};
 	}
 	using no_adl::is_stashing_element;
 	using no_adl::has_stashing_index;
-	using no_adl::is_index_valid_for_move_constructed_range;
+
+	/////////////////////////////////////////////
+	// stable index range
+	// If `tc::stable_index_on_move<Rng>`, `Rng` has indices and an index is not invalidated when the `Rng` object is moved.
+	// This is true for:
+	// * borrowed ranges, where the iterator indices are completely decoupled from `Rng` anyway
+	// * `std::vector` (but not `std::string` due to SSO)
+	// * ...
+	template <typename Rng>
+	constexpr auto enable_stable_index_on_move = false;
+
+	template <typename Rng>
+	concept stable_index_on_move
+		= tc::index_range<Rng> && (std::is_lvalue_reference<Rng>::value || enable_stable_index_on_move<std::remove_cvref_t<Rng>>);
+
+	template <typename Rng> requires tc::borrowed_range<Rng>
+	constexpr auto enable_stable_index_on_move<Rng> = true;
+	template <typename T, typename Alloc>
+	constexpr auto enable_stable_index_on_move<std::vector<T, Alloc>> = true; // end iterator is not guaranteed by the standard but we assume it's still valid
 
 	/////////////////////////////////////////////
 	// bidirectional index ranges
@@ -202,12 +212,13 @@ namespace tc {
 	}
 
 	template<tc::has_index Rng, typename Index, typename Difference>
-	constexpr void advance_index(Rng const& rng, Index& idx, Difference&& d) MAYTHROW {
-		rng.advance_index(idx, std::forward<Difference>(d));
-	}
+	constexpr auto advance_index(Rng const& rng, Index& idx, Difference&& d) return_decltype_MAYTHROW(
+		rng.advance_index(idx, std::forward<Difference>(d))
+	)
 
 	TC_HAS_MEM_FN_XXX_CONCEPT_DEF(advance_index, const&, std::declval<typename T::tc_index &>(), std::declval<T const&>().distance_to_index(std::declval<typename T::tc_index const&>(), std::declval<typename T::tc_index const&>()))
 	TC_HAS_EXPR(advance_index, (Rng), tc::advance_index(std::declval<Rng const&>(), std::declval<index_t<Rng> &>(), tc::distance_to_index(std::declval<Rng const&>(), std::declval<index_t<Rng> const&>(), std::declval<index_t<Rng> const&>())));
+
 
 	/////////////////////////////////////////////
 	// contiguous index ranges
@@ -233,7 +244,15 @@ namespace tc {
 	/////////////////////////////////////////////
 	// index ranges with middle point
 	namespace iterator {
+		#ifdef __clang__
+			#pragma clang diagnostic push
+			#pragma clang diagnostic ignored "-Wundefined-inline"
+			#pragma clang diagnostic ignored "-Wundefined-internal"
+		#endif
 		template<typename It> constexpr It middle_point(It const&, It const&) noexcept;
+		#ifdef __clang__
+			#pragma clang diagnostic pop
+		#endif
 	}
 
 	template<typename Rng, typename ItLhs, typename ItRhs>
@@ -243,66 +262,15 @@ namespace tc {
 	}
 
 	template<tc::has_index Rng, typename IndexLhs, typename IndexRhs >
-	constexpr void middle_point(Rng const& rng, IndexLhs& idxLhs, IndexRhs const& idxRhs) MAYTHROW {
-		rng.middle_point(idxLhs,idxRhs);
-	}
+	constexpr auto middle_point(Rng const& rng, IndexLhs& idxLhs, IndexRhs const& idxRhs) return_decltype_MAYTHROW(
+		rng.middle_point(idxLhs,idxRhs)
+	)
 
 	TC_HAS_MEM_FN_XXX_CONCEPT_DEF(middle_point, const&, std::declval<typename T::tc_index &>(), std::declval<typename T::tc_index const&>());
 	TC_HAS_EXPR(middle_point, (Rng), tc::middle_point(std::declval<Rng const&>(), std::declval<index_t<Rng> &>(), std::declval<index_t<Rng> const&>()));
 
 	/////////////////////////////////////////////
 	// make_iterator
-	namespace no_adl {
-		template< typename It >
-		struct TC_EMPTY_BASES iterator_base {
-			using iterator = It;
-			using const_iterator = It;
-			using tc_index = It;
-
-			static constexpr bool c_bHasStashingIndex=tc::is_stashing_element<It>::value;
-
-			static constexpr typename std::iterator_traits<iterator>::reference dereference_index(tc_index const& idx) noexcept {
-				return *idx;
-			}
-
-			static constexpr void increment_index(tc_index& idx) noexcept {
-				++idx;
-			}
-
-			static constexpr void decrement_index(tc_index& idx) noexcept {
-				--idx;
-			}
-
-			static constexpr void advance_index(tc_index& idx, typename std::iterator_traits<iterator>::difference_type d) noexcept {
-				idx+=d;
-			}
-
-			template <ENABLE_SFINAE>
-#ifdef _LIBCPP_VERSION
-				requires tc::contiguous_range_detail::contiguous_iterator<It>
-#else
-				requires std::contiguous_iterator<It>
-#endif
-			static constexpr auto index_to_address(SFINAE_TYPE(tc_index) const& idx) MAYTHROW {
-				return std::to_address(idx);
-			}
-
-			template<ENABLE_SFINAE>
-			static constexpr auto distance_to_index(SFINAE_TYPE(tc_index) const& idxLhs, tc_index const& idxRhs) return_decltype_NOEXCEPT(
-				idxRhs - idxLhs
-			)
-
-			static constexpr void middle_point( tc_index & idxBegin, tc_index const& idxEnd ) noexcept {
-				idxBegin=tc::iterator::middle_point( idxBegin, idxEnd );
-			}
-
-			static constexpr iterator make_iterator( tc_index idx ) noexcept {
-				return idx;
-			}
-		};
-	}
-	using no_adl::iterator_base;
-
 	template<typename Rng, typename It > requires (!tc::has_index< std::remove_reference_t<Rng> >)
 	constexpr decltype(auto) make_iterator(Rng&&, It&& it) noexcept {
 		return std::forward<It>(it);

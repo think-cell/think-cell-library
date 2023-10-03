@@ -14,6 +14,7 @@
 #include "../algorithm/size_linear.h"
 #include "range_adaptor.h"
 #include "transform_adaptor.h"
+#include "reverse_adaptor.h"
 
 namespace tc {
 	void join();
@@ -31,14 +32,15 @@ namespace tc {
 				std::is_lvalue_reference<std::iter_reference_t<tc::iterator_t<RngRng>>>::value
 			> {};
 
-			template<typename RngRng>
-			using rng_constexpr_size = tc::constexpr_size<tc::type::apply_t<
+			template <typename RngRng, typename CommonOutput = tc::type::apply_t<
 				tc::common_reference_xvalue_as_ref_t,
 				tc::type::transform_t<
 					tc::range_output_t<RngRng>,
 					std::add_rvalue_reference_t
-				>
-			>>;
+				>>
+			>
+				requires tc::has_constexpr_size<CommonOutput>
+			auto constexpr rng_constexpr_size = tc::constexpr_size<CommonOutput>;
 		}
 
 		template<typename RngRng, bool bHasIterator = join_adaptor_detail::is_joinable_with_iterators<RngRng>::value>
@@ -84,11 +86,12 @@ namespace tc {
 				return join_sink<tc::decay_t<Sink>, bReverse>{std::forward<Sink>(sink)};
 			}
 
-			template<ENABLE_SFINAE>
-			constexpr auto size() const& return_decltype_noexcept(
-				// Use tc::mul and boost::multiprecision::number?
-				tc::size_raw(SFINAE_VALUE(this)->base_range()) * join_adaptor_detail::rng_constexpr_size<decltype(SFINAE_VALUE(this)->base_range())>::value
-			)
+			constexpr auto size() const& MAYTHROW
+				requires tc::has_size<RngRng> && requires(join_adaptor const& join) { join_adaptor_detail::rng_constexpr_size<decltype(join.base_range())>; } {
+				return tc::compute_range_adaptor_size<[](auto const n) noexcept {
+					return tc::as_unsigned(n * join_adaptor_detail::rng_constexpr_size<decltype(std::declval<join_adaptor>().base_range())>());
+				}>(this->base_range());
+			}
 
 			template<ENABLE_SFINAE>
 			constexpr auto size_linear() const& return_decltype_noexcept(
@@ -197,14 +200,11 @@ namespace tc {
 				return tc::get<0>(idx);
 			}
 		};
-
-		template<tc::has_constexpr_size RngRng> requires requires {	join_adaptor_detail::rng_constexpr_size<decltype(std::declval<join_adaptor<RngRng> const&>().base_range())>::value; }
-		struct constexpr_size_impl<join_adaptor<RngRng>>
-			: tc::constant<tc::constexpr_size<RngRng>::value * join_adaptor_detail::rng_constexpr_size<decltype(std::declval<join_adaptor<RngRng> const&>().base_range())>::value
-			>
-		{};
 	}
 	using no_adl::join_adaptor;
+
+	template<typename RngRng>
+	constexpr auto enable_stable_index_on_move<join_adaptor<RngRng, true>> = tc::stable_index_on_move<RngRng>;
 
 	namespace join_default {
 		template<typename RngRng>
@@ -214,9 +214,4 @@ namespace tc {
 	}
 
 	DEFINE_TMPL_FUNC_WITH_CUSTOMIZATIONS(join)
-
-	namespace no_adl {
-		template<typename RngRng>
-		struct is_index_valid_for_move_constructed_range<join_adaptor<RngRng, true>> : tc::is_index_valid_for_move_constructed_range<RngRng> {};
-	}
 }

@@ -11,7 +11,9 @@
 #include "base/enum.h"
 #include "base/tag_type.h"
 #include "base/as_lvalue.h"
+#include "algorithm/algorithm.h"
 #include "algorithm/compare.h"
+#include "container/cont_assign.h"
 #include "range/iota_range.h"
 #include "range/zip_range.h"
 #include "range/cartesian_product_adaptor.h"
@@ -34,10 +36,11 @@ namespace tc {
 				return tc::end(c_rngsete);
 			}
 
-			using const_iterator = decltype(tc::begin(c_rngsete));
-			using iterator = const_iterator;
+			static constexpr auto size() {
+				return tc::least_uint_constant<2>{};
+			}
 
-			static constexpr std::size_t index_of(bool b) noexcept {
+			static constexpr std::size_t index_of(bool const b) noexcept {
 				return tc::to_underlying(b);
 			}
 #ifdef _MSC_VER
@@ -45,32 +48,6 @@ namespace tc {
 			static auto constexpr _natvis_begin = false; // natvis visualizations cannot call functions even if they are constexpr.
 #endif
 		};
-
-		template<>
-		struct constexpr_size_impl<all_values<bool>> : tc::constant<tc::explicit_cast<std::uint8_t>(2)> {};
-
-		template<>
-		struct [[nodiscard]] all_values<std::strong_ordering> final {
-			static auto constexpr c_rngsetorders = tc::make_array(tc::aggregate_tag, std::strong_ordering::less, std::strong_ordering::equal, std::strong_ordering::greater);
-
-		public:
-			static constexpr auto begin() noexcept {
-				return tc::begin(c_rngsetorders);
-			}
-			static constexpr auto end() noexcept {
-				return tc::end(c_rngsetorders);
-			}
-
-			using const_iterator = decltype(tc::begin(c_rngsetorders));
-			using iterator = const_iterator;
-
-			static constexpr std::size_t index_of(std::strong_ordering order) noexcept {
-				return tc::find_unique<tc::return_element_index>(c_rngsetorders, order);
-			}
-		};
-
-		template<>
-		struct constexpr_size_impl<all_values<std::strong_ordering>> : tc::constant<tc::explicit_cast<std::uint8_t>(3)> {};
 
 		template<>
 		struct [[nodiscard]] all_values<std::weak_ordering> final {
@@ -84,16 +61,14 @@ namespace tc {
 				return tc::end(c_rngsetorders);
 			}
 
-			using const_iterator = decltype(tc::begin(c_rngsetorders));
-			using iterator = const_iterator;
+			static constexpr auto size() noexcept {
+				return tc::least_uint_constant<3>{};
+			}
 
 			static constexpr std::size_t index_of(std::weak_ordering order) noexcept {
 				return tc::find_unique<tc::return_element_index>(c_rngsetorders, order);
 			}
 		};
-
-		template<>
-		struct constexpr_size_impl<all_values<std::weak_ordering>> : tc::constant<tc::explicit_cast<std::uint8_t>(3)> {};
 
 		template<>
 		struct [[nodiscard]] all_values<std::partial_ordering> final {
@@ -107,16 +82,14 @@ namespace tc {
 				return tc::end(c_rngsetorders);
 			}
 
-			using const_iterator = decltype(tc::begin(c_rngsetorders));
-			using iterator = const_iterator;
+			static constexpr auto size() noexcept {
+				return tc::least_uint_constant<4>{};
+			}
 
 			static constexpr std::size_t index_of(std::partial_ordering order) noexcept {
 				return tc::find_unique<tc::return_element_index>(c_rngsetorders, order);
 			}
 		};
-
-		template<>
-		struct constexpr_size_impl<all_values<std::partial_ordering>> : tc::constant<tc::explicit_cast<std::uint8_t>(4)> {};
 		
 		template<typename... Ts>
 		struct [[nodiscard]] all_values<tc::tuple<Ts...>> final : decltype(tc::cartesian_product(tc::all_values<Ts>()...)) {
@@ -124,9 +97,6 @@ namespace tc {
 				return tc::find_unique<tc::return_element_index>(tc::cartesian_product(tc::all_values<Ts>()...), tpl);
 			}
 		};
-
-		template<typename... Ts>
-		struct constexpr_size_impl<all_values<tc::tuple<Ts...>>> : tc::constant<tc::size_raw(tc::cartesian_product(tc::all_values<Ts>()...))> {};
 	}
 
 	// all_values are views
@@ -192,9 +162,9 @@ namespace tc {
 				: tc_member_init_cast( m_a, tc::aggregate_tag, std::forward<First>(first), std::forward<Second>(second), std::forward<Args>(args)... )
 			{}
 
-			template< typename Func > requires tc::is_invocable<Func&, Key>::value
+			template< typename Func > requires tc::invocable<Func&, Key>
 			constexpr dense_map(tc::func_tag_t, Func func) MAYTHROW
-				: tc_member_init_cast( m_a, tc::func_tag, [&func](std::size_t n) MAYTHROW -> Value { // force return of Value
+				: tc_member_init_cast( m_a, tc::func_tag, [&func](std::size_t const n) MAYTHROW -> Value { // force return of Value
 					//STATICASSERTSAME(decltype(tc_at_nodebug(c_rngkey, n))&&, Key&&); does not hold, if c_rngkey is all_values<tuple<...>>
 					// TODO Remove static_cast<Key> below after we change counting_iterator::operator*() to return small trivial by value.
 					static_assert(
@@ -205,7 +175,7 @@ namespace tc {
 				} )
 			{}
 
-			template< typename Func > requires (!tc::is_invocable<Func&, Key>::value)
+			template< typename Func > requires (!tc::invocable<Func&, Key>)
 			constexpr dense_map(tc::func_tag_t, Func func) MAYTHROW
 				: dense_map(tc::func_tag, [&](auto const key) MAYTHROW -> Value {
 					return {tc::func_tag, [&](auto const... keys) return_decltype_MAYTHROW( tc::invoke(func, key, keys...) )};
@@ -240,8 +210,8 @@ namespace tc {
 			template< typename ValuePri, typename ValueSec >
 			constexpr dense_map(Key keyPri, ValuePri&& valPri, ValueSec&& valSec) MAYTHROW :
 				dense_map(
-					CONDITIONAL_RVALUE_AS_REF(tc_front_nodebug(c_rngkey) == keyPri, std::forward<ValuePri>(valPri), std::forward<ValueSec>(valSec)),
-					CONDITIONAL_RVALUE_AS_REF(tc_front_nodebug(c_rngkey) == keyPri, std::forward<ValueSec>(valSec), std::forward<ValuePri>(valPri))
+					tc_conditional_rvalue_as_ref(tc_front_nodebug(c_rngkey) == keyPri, std::forward<ValuePri>(valPri), std::forward<ValueSec>(valSec)),
+					tc_conditional_rvalue_as_ref(tc_front_nodebug(c_rngkey) == keyPri, std::forward<ValueSec>(valSec), std::forward<ValuePri>(valPri))
 				)
 			{}
 			template <typename Value2>
@@ -304,34 +274,26 @@ namespace tc {
 				return static_cast<Value const&&>((*this)[key]);
 			}
 
-			template<ENABLE_SFINAE>
-			[[nodiscard]] constexpr auto data() & return_decltype_noexcept(
-				SFINAE_VALUE(m_a).data()
-			)
-
-			template<ENABLE_SFINAE>
-			[[nodiscard]] constexpr auto data() const& return_decltype_noexcept(
-				SFINAE_VALUE(m_a).data()
-			)
-
 			// comparison
 			template<typename Key_, typename LHS, typename RHS>
 			friend constexpr bool operator==( dense_map<Key_, LHS> const& lhs, dense_map<Key_, RHS> const& rhs ) noexcept;
 
 			// iterators
-			using iterator = tc::iterator_t< Array >;
-			using const_iterator = tc::iterator_t< Array const >;
-			constexpr const_iterator begin() const& noexcept {
+			constexpr auto begin() const& noexcept {
 				return tc::begin(m_a);
 			}
-			constexpr const_iterator end() const& noexcept {
+			constexpr auto end() const& noexcept {
 				return tc::end(m_a);
 			}
-			constexpr iterator begin() & noexcept {
+			constexpr auto begin() & noexcept {
 				return tc::begin(m_a);
 			}
-			constexpr iterator end() & noexcept {
+			constexpr auto end() & noexcept {
 				return tc::end(m_a);
+			}
+
+			static constexpr auto size() noexcept {
+				return tc::constexpr_size<tc::all_values<Key>>;
 			}
 			
 #ifdef _DEBUG
@@ -363,13 +325,6 @@ namespace tc {
 
 	} // namespace dense_map_adl
 	using dense_map_adl::dense_map;
-
-	namespace no_adl {
-		template<tc::instance_or_derived<tc::dense_map> DenseMapOrDerived>
-		struct constexpr_size_impl<DenseMapOrDerived>
-			: constexpr_size<tc::all_values<tc::type::front_t<typename tc::is_instance_or_derived<DenseMapOrDerived, dense_map>::arguments>>>
-		{};
-	} // namespace no_adl
 
 	template <typename Map, typename T>
 	concept indexed_by = std::same_as<typename Map::dense_map_key_type, T>;
@@ -443,8 +398,9 @@ namespace tc {
 				return tc::end(c_rngmapkv);
 			}
 
-			using const_iterator = decltype(tc::begin(c_rngmapkv));
-			using iterator = const_iterator;
+			static constexpr auto size() noexcept {
+				return tc::constexpr_size<baserng>;
+			}
 
 			static constexpr std::size_t index_of(tc::dense_map<Key, Value> const& mapkv) noexcept {
 				return c_baserng.index_of(tc::apply([&](auto... key) { return tc::make_tuple(mapkv[key]...); }, tc::all_constants<Key>));
@@ -454,11 +410,6 @@ namespace tc {
 			static auto constexpr _natvis_begin = false; // natvis visualizations cannot call functions even if they are constexpr.
 #endif
 		};
-
-		template<typename Key, typename Value>
-		struct constexpr_size_impl<tc::all_values<tc::dense_map<Key,Value>>>
-			: tc::constant<tc::pow(tc::constexpr_size<tc::all_values<Value>>::value, tc::constexpr_size<tc::all_values<Key>>::value)>
-		{};
 	}
 
 	namespace less_key_adl {
@@ -468,7 +419,9 @@ namespace tc {
 		}
 	}
 
-	template<tc::instance_or_derived<tc::dense_map> DenseMap, tc::instance_or_derived<tc::dense_map>... DenseMaps>
+	template<typename DenseMap, typename... DenseMaps> requires
+		tc::instance_or_derived<std::remove_reference_t<DenseMap>, tc::dense_map> &&
+		(... && tc::instance_or_derived<std::remove_reference_t<DenseMaps>, tc::dense_map>)
 	[[nodiscard]] constexpr auto zip(DenseMap&& dm, DenseMaps&&... dms) noexcept {
 		static_assert((tc::indexed_by<std::remove_reference_t<DenseMaps>, typename std::remove_reference_t<DenseMap>::dense_map_key_type> && ...));
 
@@ -481,10 +434,28 @@ namespace tc {
 		});
 	}
 
-	template<tc::instance_or_derived<tc::dense_map> DenseMap>
+	template<typename DenseMap> requires tc::instance_or_derived<std::remove_reference_t<DenseMap>, tc::dense_map>
 	[[nodiscard]] constexpr auto enumerate(DenseMap&& dm) noexcept {
 		using Key = typename std::remove_reference_t<DenseMap>::dense_map_key_type;
 		return tc::zip(tc::dense_map<Key, Key>(tc::func_tag, tc::identity()), std::forward<DenseMap>(dm));
+	}
+
+	namespace dense_map_adl {
+		template<
+			typename NestedDenseMap,
+			typename FirstKey = typename std::remove_reference_t<NestedDenseMap>::dense_map_key_type,
+			typename SecondKey = typename std::remove_reference_t<tc::range_value_t<NestedDenseMap>>::dense_map_key_type
+		>
+		auto join_impl(NestedDenseMap&& dm) noexcept
+			-> tc::dense_map<
+				tc::tuple<FirstKey, SecondKey>,
+				tc::xvalue_decay_t<decltype(std::declval<NestedDenseMap>()[std::declval<FirstKey>()][std::declval<SecondKey>()])>
+			>
+		{
+			return {tc::func_tag, [&](auto const key0, auto const key1) return_decltype_xvalue_by_ref_noexcept(
+				std::forward<NestedDenseMap>(dm)[key0][key1]
+			)};
+		}
 	}
 }
 

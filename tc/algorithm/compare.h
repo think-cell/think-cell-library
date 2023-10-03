@@ -39,24 +39,9 @@ namespace tc {
 }
 
 namespace tc {
-	// we do not allow std::partial_ordering by tc::explicit_cast it to std::weak_ordering in tc::compare
+	// we always use tc::compare to perform 3 way comparison and tc::compare tc::explicit_cast std::strong_ordering/partial_ordering result to std::weak_ordering
 	template<typename Cat>
-	concept is_comparison_category = std::same_as<std::common_comparison_category_t<Cat, std::weak_ordering>, std::weak_ordering>;
-
-	namespace no_adl {
-		template<typename TypeList, typename=void>
-		struct common_comparison_category;
-
-		template<typename... T>
-		struct common_comparison_category<tc::type::list<T...>, std::enable_if_t<(... && tc::is_comparison_category<T>)>> final {
-			using type = std::common_comparison_category_t<T...>;
-			static_assert(tc::is_comparison_category<type>);
-		};
-	}
-
-	// provides a common type if every T is either std::weak_ordering or std::strong_ordering
-	template<typename... T>
-	using common_comparison_category_t = typename tc::no_adl::common_comparison_category<tc::type::list<T...>>::type;
+	concept is_comparison_category = std::same_as<Cat, std::weak_ordering>;
 
 	namespace no_adl {
 		// class T derives from tc::equal_from_three_way if T has a user defined operator<=> and implements operator== with operator<=>
@@ -82,7 +67,7 @@ namespace tc {
 			template<typename T> requires std::same_as<T, comparable>
 			friend constexpr bool operator==(T const&, T const&) noexcept { return true; }
 			template<typename T> requires std::same_as<T, comparable>
-			friend constexpr auto operator<=>(T const&, T const&) noexcept { return std::strong_ordering::equal; }
+			friend constexpr auto operator<=>(T const&, T const&) noexcept { return std::weak_ordering::equivalent; }
 		};
 	}
 	using no_adl::equal_from_three_way;
@@ -124,15 +109,12 @@ namespace tc {
 	concept has_operator_3way_compare = requires(Lhs const& lhs, Rhs const& rhs) { lhs<=>rhs; };
 
 	template<typename Lhs, typename Rhs>
-	constexpr auto compare(Lhs const& lhs, Rhs const& rhs) noexcept(noexcept(lhs<=>rhs)) requires has_operator_3way_compare<Lhs, Rhs> && (!tc::comparable_pointers<Lhs, Rhs>) {
-		if constexpr (std::same_as<decltype(lhs<=>rhs), std::partial_ordering>) {
-			// 1. floating point comparison
-			// 2. library types comparison may return std::partial_ordering if they contain floating point values. e.g. std::vector, std::pair, std::variant, std::tuple
-			return tc::explicit_cast<std::weak_ordering>(lhs<=>rhs);
-		} else {
-			static_assert(tc::is_comparison_category<decltype(lhs<=>rhs)>);
-			return lhs<=>rhs;
-		}
+	constexpr std::weak_ordering compare(Lhs const& lhs, Rhs const& rhs) noexcept(noexcept(lhs<=>rhs)) requires has_operator_3way_compare<Lhs, Rhs> && (!tc::comparable_pointers<Lhs, Rhs>) {
+		// We tc::explicit_cast std::partial_ordering/std::strong_ordering result to std::weak_ordering.
+		// Comparisons that return std::partial_ordering:
+		// 1. floating point comparison
+		// 2. library types comparison may return std::partial_ordering if they contain floating point values. e.g. std::vector, std::pair, std::variant, std::tuple
+		tc_return_cast(lhs<=>rhs);
 	}
 
 	// similar to Synthesized three-way comparison except with tc::less instead of operator<
@@ -221,7 +203,7 @@ namespace tc {
 			return tc::is_neq(order);
 		}), std::weak_ordering::equal);
 #else // constexpr workaround
-		tc::range_value_t<Rng> order=std::strong_ordering::equivalent;
+		tc::range_value_t<Rng> order=std::weak_ordering::equivalent;
 		tc::for_each(rng, [&](auto const& order2) noexcept {
 			if(tc::is_neq(order2)) {
 				order = order2;
@@ -247,19 +229,19 @@ namespace tc {
 			for(;;) {
 				if( itLhs==itLhsEnd ) {
 					if constexpr(eprefixEQUIVALENT==eprefix) {
-						return std::strong_ordering::equivalent; // if lhs is a prefix of rhs this is considered equivalent
+						return std::weak_ordering::equivalent; // if lhs is a prefix of rhs this is considered equivalent
 					} else {
 						if( itRhs==itRhsEnd ) {
-							return std::strong_ordering::equivalent;
+							return std::weak_ordering::equivalent;
 						} else {
 							_ASSERTE(eprefixALLOW==eprefix);
-							return std::strong_ordering::less; // lhs shorter than rhs, thus <
+							return std::weak_ordering::less; // lhs shorter than rhs, thus <
 						}
 					}
 				}
 				if( itRhs==itRhsEnd ) {
 					_ASSERTE(eprefixFORBID!=eprefix);
-					return std::strong_ordering::greater; // rhs shorter than lhs, thus >
+					return std::weak_ordering::greater; // rhs shorter than lhs, thus >
 				}
 				tc_return_if_not_equal( fnCompare( *itLhs, *itRhs ) );
 				++itLhs;
@@ -299,13 +281,13 @@ namespace std { // ADL
 	}
 
 	template< typename First, typename Second >
-	[[nodiscard]] constexpr auto operator<=>(std::pair<First, Second> const& lhs, std::pair<First, Second> const& rhs ) noexcept -> tc::common_comparison_category_t<
-		decltype(tc::compare(lhs.first, rhs.first)),
-		decltype(tc::compare(lhs.second, rhs.second))
-	> {
+	[[nodiscard]] constexpr auto operator<=>(std::pair<First, Second> const& lhs, std::pair<First, Second> const& rhs) noexcept requires requires {
+		tc::compare(lhs.first, rhs.first);
+		tc::compare(lhs.second, rhs.second);
+	} {
 		tc_compare_expr( _.first );
 		tc_compare_expr( _.second );
-		return std::strong_ordering::equivalent;
+		return std::weak_ordering::equivalent;
 	}
 	
 	template<typename T, typename Alloc>
@@ -320,22 +302,21 @@ namespace std { // ADL
 	
 	template<typename... T>
 	[[nodiscard]] constexpr auto operator<=>(std::variant<T...> const& lhs, std::variant<T...> const& rhs) noexcept
-		-> tc::common_comparison_category_t<decltype(tc::compare(std::declval<T const&>(), std::declval<T const&>()))...>
+		requires requires { typename tc::type::list<decltype(tc::compare(std::declval<T const&>(), std::declval<T const&>()))...>; }
 	{
 		if(lhs.valueless_by_exception() && rhs.valueless_by_exception()) {
-			return std::strong_ordering::equal;
+			return std::weak_ordering::equivalent;
 		} else if(lhs.valueless_by_exception()) {
-			return std::strong_ordering::less;
+			return std::weak_ordering::less;
 		} else if(rhs.valueless_by_exception()) {
-			return std::strong_ordering::greater;
+			return std::weak_ordering::greater;
 		} else {
 			tc_compare_expr(_.index());
-			using result_t = tc::common_comparison_category_t<decltype(tc::compare(std::declval<T const&>(), std::declval<T const&>()))...>;
 			return tc::fn_visit(
-				[]<typename TVal>(TVal const& valLhs, TVal const& valRhs) noexcept -> result_t {
+				[]<typename TVal>(TVal const& valLhs, TVal const& valRhs) noexcept {
 					return tc::compare(valLhs, valRhs);
 				},
-				tc::never_called<result_t>()
+				tc::never_called<std::weak_ordering>()
 			)(lhs, rhs);
 		}
 	}
@@ -346,13 +327,13 @@ namespace std { // ADL
 	}
 
 	template<typename T>
-	constexpr std::strong_ordering operator<=>(std::optional<T> const& opt, std::nullopt_t) noexcept {
+	constexpr std::weak_ordering operator<=>(std::optional<T> const& opt, std::nullopt_t) noexcept {
 		return tc::compare(static_cast<bool>(opt), false);
 	}
 
 	template<typename T, typename U, std::enable_if_t<!tc::instance<U, std::optional>>* = nullptr>
 	constexpr auto operator<=>(std::optional<T> const& opt, U const& value) noexcept -> decltype(tc::compare(*opt, value)) {
-		return opt ? tc::compare(*opt, value) : std::strong_ordering::less;
+		return opt ? tc::compare(*opt, value) : std::weak_ordering::less;
 	}
 }
 #endif
@@ -418,11 +399,11 @@ namespace tc {
 	}
 
 	namespace tuple_adl {
-		template<typename... T, typename... U>
+		template<typename... T, typename... U> requires requires { typename tc::type::list<decltype(tc::compare(std::declval<T const&>(), std::declval<U const&>()))...>; }
 		constexpr auto operator<=>(tc::tuple<T...> const& lhs, tc::tuple<U...> const& rhs) noexcept {
 			STATICASSERTEQUAL(sizeof...(T), sizeof...(U));
 			return tc::lexicographical_compare_3way(
-				tc::transform(std::index_sequence_for<T...>(), [&](auto nconstIndex) noexcept -> tc::common_comparison_category_t<decltype(tc::compare(std::declval<std::remove_reference_t<T> const&>(), std::declval<std::remove_reference_t<U> const&>()))...> {
+				tc::transform(std::index_sequence_for<T...>(), [&](auto const nconstIndex) noexcept -> std::weak_ordering {
 					return tc::compare(tc::get<nconstIndex()>(lhs), tc::get<nconstIndex()>(rhs));
 				})
 			);

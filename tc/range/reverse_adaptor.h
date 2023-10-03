@@ -11,7 +11,6 @@
 #include "../base/assert_defs.h"
 #include "../base/modified.h"
 #include "../algorithm/size.h"
-#include "range_fwd.h"
 #include "range_adaptor.h"
 #include "meta.h"
 #include "subrange.h"
@@ -37,6 +36,9 @@ namespace tc {
 	}
 
 	namespace reverse_adaptor_adl {
+		template<typename Rng, bool HasIterators = tc::range_with_iterators<Rng>>
+		struct reverse_adaptor;
+
 		template<typename Rng>
 		struct [[nodiscard]] reverse_adaptor<Rng, false> : tc::range_adaptor_base_range<Rng>, tc::range_output_from_base_range {
 			using tc::range_adaptor_base_range<Rng>::range_adaptor_base_range;
@@ -73,6 +75,10 @@ namespace tc {
 			using typename reverse_adaptor::range_iterator_from_index::tc_index;
 			using reverse_adaptor<Rng, false>::reverse_adaptor;
 			static constexpr bool c_bHasStashingIndex=tc::has_stashing_index<std::remove_reference_t<Rng>>::value;
+
+			constexpr auto size() const& MAYTHROW requires tc::has_size<Rng> {
+				return tc::compute_range_adaptor_size<tc::identity{}>(this->base_range());
+			}
 
 		private:
 			STATIC_FINAL(begin_index)() const& noexcept -> tc_index {
@@ -159,7 +165,7 @@ namespace tc {
 				return *idx;
 			}
 		private:
-			STATIC_FINAL(middle_point)(tc_index & idx, tc_index const& idxEnd ) const& noexcept -> void {
+			STATIC_FINAL(middle_point)(tc_index & idx, tc_index const& idxEnd ) const& noexcept -> void requires tc::has_middle_point<Rng> {
 				auto idxBeginBase = border_base_index(idxEnd);
 				tc::middle_point(this->base_range(), idxBeginBase, border_base_index(idx));
 				idx = idxBeginBase;
@@ -176,18 +182,24 @@ namespace tc {
 			}
 		};
 	}
-
-	template<typename Rng>
-	struct no_adl::constexpr_size_impl<tc::reverse_adaptor<Rng>> : tc::constexpr_size<Rng> {};
+	using reverse_adaptor_adl::reverse_adaptor;
 
 	template<typename Rng>
 	constexpr auto reverse(Rng&& rng) return_ctor_noexcept(
-		reverse_adaptor< Rng >,
+		tc::reverse_adaptor< Rng >,
 		(aggregate_tag, std::forward<Rng>(rng))
 	)
 	
-	namespace no_adl {
-		template<typename Rng>
-		struct is_index_valid_for_move_constructed_range<tc::reverse_adaptor<Rng, true>> : tc::is_index_valid_for_move_constructed_range<Rng> {};
+	template<typename Rng>
+	constexpr auto enable_stable_index_on_move<tc::reverse_adaptor<Rng, true>> = tc::stable_index_on_move<Rng>;
+
+	namespace generator_range_adl {
+		template<typename Self, typename Sink, typename std::remove_reference_t<Self>::is_generator_range_adaptor* = nullptr>
+		constexpr auto for_each_reverse_impl(Self&& self, Sink&& sink) return_decltype_MAYTHROW(
+			tc::for_each(
+				tc::reverse(std::forward<Self>(self).base_range()),
+				std::forward<Self>(self).adapted_sink(std::forward<Sink>(sink), /*bReverse*/tc::constant<true>())
+			)
+		)
 	}
 }

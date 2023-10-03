@@ -270,7 +270,7 @@ namespace tc {
 		)
 
 		template<typename Tuple, typename Sink,
-			std::enable_if_t<tc::instance_or_derived<Tuple, std::tuple>>* = nullptr,
+			std::enable_if_t<tc::instance_or_derived<std::remove_reference_t<Tuple>, std::tuple>>* = nullptr,
 			typename IndexList = typename for_each_detail::integer_sequence_to_type_list<std::make_index_sequence<std::tuple_size<std::remove_reference_t<Tuple>>::value>>::type
 		>
 		constexpr auto for_each_impl(adl_tag_t, Tuple&& tuple, Sink&& sink) return_decltype_MAYTHROW(
@@ -300,7 +300,7 @@ namespace tc {
 		template<template<typename...> typename TupleT, typename Tuple>
 		using type = tc::type::unique_t<tc::type::transform_t<
 			tc::type::transform_t<
-				typename tc::is_instance_or_derived<Tuple, TupleT>::arguments,
+				typename tc::is_instance_or_derived<std::remove_reference_t<Tuple>, TupleT>::arguments,
 				tc::type::rcurry<tc::apply_cvref_t, Tuple>::template type
 			>,
 			tc::remove_rvalue_reference_t

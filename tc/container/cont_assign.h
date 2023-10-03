@@ -25,7 +25,9 @@ namespace tc {
 
 	namespace cont_assign_default {
 		namespace detail {
-			template<typename Cont, typename Rng0, tc::appendable<Cont&>... Rng> requires std::same_as<std::remove_cvref_t<Cont>, Rng0> && tc::safely_assignable_from<Cont&, Rng0&&>
+			template<typename Cont, typename Rng0, tc::appendable<Cont&>... Rng>
+				requires (!std::same_as<tc::iterator_t<Cont>, tc::iterator_t<Cont const>>) // we assume "deep const" <=> "assignment assigns elements"
+					&& std::same_as<std::remove_cvref_t<Cont>, Rng0> && tc::safely_assignable_from<Cont&, Rng0&&>
 			constexpr void cont_assign_impl(Cont&& cont, Rng0&& rng0, Rng&&... rng) MAYTHROW {
 				cont=std::forward<Rng0>(rng0);
 				if constexpr(0<sizeof...(Rng)) {

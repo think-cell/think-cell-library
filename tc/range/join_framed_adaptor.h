@@ -21,14 +21,14 @@ namespace tc {
 			(tc::for_each(std::forward<Rng>(rng), [&](auto&& t) MAYTHROW {
 				using T = decltype(t);
 				return tc_break_or_continue_sequence(
-					(CONDITIONAL_PRVALUE_AS_VAL(tc::change(bEmpty, false),
+					(tc_conditional_prvalue_as_val(tc::change(bEmpty, false),
 						tc_internal_continue_if_not_break(funcBegin()),
 						tc_internal_continue_if_not_break(funcSeparator())
 					))
 					(tc::continue_if_not_break(funcElement, std::forward<T>(t)))
 				);
 			}))
-			(CONDITIONAL_PRVALUE_AS_VAL(!bEmpty,
+			(tc_conditional_prvalue_as_val(!bEmpty,
 				tc_internal_continue_if_not_break(funcEnd()),
 				tc::constant<tc::continue_>()
 			))

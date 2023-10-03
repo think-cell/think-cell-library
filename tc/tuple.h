@@ -10,7 +10,6 @@
 
 #include "base/invoke.h"
 #include "base/tc_move.h"
-#include "range/range_fwd.h"
 
 namespace tc {
 	// std::tuple from Microsofts STL is using a recursive implementation which is very slow.
@@ -87,7 +86,9 @@ namespace tc {
 			// We use std::remove_reference_t<Tuple>::tc_tuple_impl::size to restrict the argument Tuple&& to be tc::tuple in overloads found via adl.
 			static constexpr std::size_t size = sizeof...(T);
 
-			template<ENABLE_SFINAE, typename Src> requires (std::tuple_size<std::remove_cvref_t<Src>>::value == sizeof...(T))
+			template<ENABLE_SFINAE, typename Src> requires
+				(std::tuple_size<std::remove_cvref_t<Src>>::value == sizeof...(T)) &&
+				(!tc::derived_from<std::remove_reference_t<Src>, tc_tuple_impl>) // make sure default assignment operator wins in overload resolution. e.g. tc::tuple is a mutable member.
 			constexpr auto/*=void, returning tuple& may turn xvalue into lvalue*/ operator=(Src&& src) /*no &*/ return_decltype_MAYTHROW(
 				(void(tc::get<n>(*SFINAE_VALUE(this)) = tc::get<n>(std::forward<Src>(src))), ...) // assignment MAYTHROW
 			)
@@ -177,52 +178,6 @@ namespace tc {
 			std::forward<Tuple>(tuple)
 		);
 	}
-
-	namespace tuple_detail {
-		template<std::size_t I, tuple_like... Tuple>
-		constexpr auto zip_get(Tuple&&... tuple) noexcept {
-			// Tuple elements are tc::apply_cvref_t<std::tuple_element_t<I, std::remove_cvref_t<Tuple>>, Tuple>... unless tuple is tc::tuple and element types is empty.
-			return tc::tuple<std::conditional_t<
-				std::is_rvalue_reference<std::tuple_element_t<I, std::remove_cvref_t<Tuple>>>::value,
-				decltype(tc::get<I>(std::declval<Tuple>())),
-				tc::remove_rvalue_reference_t<decltype(tc::get<I>(std::declval<Tuple>()))>
-			>...>{{
-				{tc::get<I>(std::forward<Tuple>(tuple))}...
-			}};
-		}
-
-		template<std::size_t... I, tuple_like... Tuple>
-		constexpr auto zip_impl(std::index_sequence<I...>, Tuple&&... tuple) noexcept {
-			return tc::tuple<decltype(tuple_detail::zip_get<I>(std::forward<Tuple>(tuple)...))...>{{ // tc::make_tuple without extra copy
-				{tuple_detail::zip_get<I>(std::forward<Tuple>(tuple)...)}...
-			}};
-		}
-	}
-
-	template<tuple_like Tuple0, tuple_like... Tuple>
-		requires (!tc::range_with_iterators<Tuple0> || ... || !tc::range_with_iterators<Tuple>) // Prefer zip_adaptor for zip(std::array...)
-	[[nodiscard]] constexpr auto zip(Tuple0&& tuple0, Tuple&&... tuple) noexcept {
-		static_assert( ((std::tuple_size<std::remove_reference_t<Tuple0>>::value == std::tuple_size<std::remove_reference_t<Tuple>>::value) && ...) );
-		return tuple_detail::zip_impl(
-			std::make_index_sequence<std::tuple_size<std::remove_reference_t<Tuple0>>::value>(),
-			std::forward<Tuple0>(tuple0),
-			std::forward<Tuple>(tuple)...
-		);
-	}
-
-	template<typename TIndex, TIndex... Is>
-	[[nodiscard]] consteval tc::tuple<tc::constant<Is>...> index_sequence_as_tuple(std::integer_sequence<TIndex, Is...>) {
-		return {};
-	}
-
-	template<tuple_like Tuple> requires (!tc::range_with_iterators<Tuple>)
-	[[nodiscard]] constexpr auto enumerate(Tuple&& tuple) noexcept {
-		return tc::zip(
-			tc::index_sequence_as_tuple(std::make_integer_sequence<int, std::tuple_size<std::remove_reference_t<Tuple>>::value>()),
-			std::forward<Tuple>(tuple)
-		);
-	}
-
 
 	namespace tuple_detail {
 		template<std::size_t n, typename T>

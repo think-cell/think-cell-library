@@ -12,7 +12,6 @@
 #include "../base/static_polymorphism.h"
 #include "../algorithm/compare.h"
 #include "../algorithm/empty.h"
-#include "range_fwd.h"
 #include "range_adaptor.h"
 #include "meta.h"
 #include "subrange.h"
@@ -157,7 +156,7 @@ namespace tc {
 							return self.m_equals(valLast, tc::as_const(elem)); // MAYTHROW
 						});
 						ovalLast.emplace(tc_move_if_owned(elem));
-						return CONDITIONAL_PRVALUE_AS_VAL(bSkip, tc::constant<tc::continue_>(), tc::continue_if_not_break(sink, *ovalLast) /*MAYTHROW*/);
+						return tc_conditional_prvalue_as_val(bSkip, tc::constant<tc::continue_>(), tc::continue_if_not_break(sink, *ovalLast) /*MAYTHROW*/);
 					});
 				}
 			}
@@ -225,10 +224,8 @@ namespace tc {
 	}
 	using unique_adaptor_adl::unique_adaptor;
 
-	namespace no_adl {
-		template<typename Rng, typename Equals>
-		struct is_index_valid_for_move_constructed_range<unique_adaptor<Rng, Equals, true>> : tc::is_index_valid_for_move_constructed_range<Rng> {};
-	}
+	template<typename Rng, typename Equals>
+	constexpr auto enable_stable_index_on_move<unique_adaptor<Rng, Equals, true>> = tc::stable_index_on_move<Rng>;
 
 	namespace subrange_range_adaptor_detail::no_adl {
 		template<typename IndexBase>
@@ -285,7 +282,7 @@ namespace tc {
 		private:
 			using this_type = partition_range_adaptor;
 		protected:
-			STATIC_VIRTUAL_CONSTEXPR(FindPartitionEnd) // (index_t<Rng>&) -> void
+			STATIC_VIRTUAL(FindPartitionEnd) // (index_t<Rng>&) -> void
 		private:
 			STATIC_OVERRIDE_MOD(constexpr, begin_index)() const& noexcept -> tc_index {
 				auto const idxBegin = this->base_begin_index();
@@ -360,9 +357,6 @@ namespace tc {
 		};
 
 		template<typename Rng, typename Equals>
-		struct is_index_valid_for_move_constructed_range<unique_range_front_adaptor<Rng, Equals>> : tc::is_index_valid_for_move_constructed_range<Rng> {};
-
-		template<typename Rng, typename Equals>
 		struct [[nodiscard]] unique_range_adjacent_adaptor : partition_range_adaptor<unique_range_adjacent_adaptor<Rng, Equals>, Rng>
 		{
 		private:
@@ -392,25 +386,27 @@ namespace tc {
 				unique_adaptor_detail::decrement_index(this->base_range(), idx.m_idxBegin, m_equals);
 			}
 		};
-
-		template<typename Rng, typename Equals>
-		struct is_index_valid_for_move_constructed_range<unique_range_adjacent_adaptor<Rng, Equals>> : tc::is_index_valid_for_move_constructed_range<Rng> {};
 	}
 
 	using no_adl::unique_range_front_adaptor;
 	using no_adl::unique_range_adjacent_adaptor;
 
+	template<typename Rng, typename Equals>
+	constexpr auto enable_stable_index_on_move<unique_range_front_adaptor<Rng, Equals>> = tc::stable_index_on_move<Rng>;
+	template<typename Rng, typename Equals>
+	constexpr auto enable_stable_index_on_move<unique_range_adjacent_adaptor<Rng, Equals>> = tc::stable_index_on_move<Rng>;
+
 	template<
 		typename Rng,
 		typename Equals
 	>
-	auto front_unique_range(Rng&& rng, Equals&& equals) return_ctor_noexcept(
+	constexpr auto front_unique_range(Rng&& rng, Equals&& equals) return_ctor_noexcept(
 		TC_FWD(unique_range_front_adaptor< Rng, tc::decay_t<Equals> >),
 		(std::forward<Rng>(rng), std::forward<Equals>(equals))
 	)
 
 	template< typename Rng >
-	auto front_unique_range(Rng&& rng) return_decltype_noexcept(
+	constexpr auto front_unique_range(Rng&& rng) return_decltype_noexcept(
 		front_unique_range(std::forward<Rng>(rng),tc::fn_equal_to())
 	)
 

@@ -18,7 +18,7 @@ namespace tc {
 		template<typename Rng>
 		constexpr auto empty(Rng&& rng) noexcept {
 			if constexpr(has_constexpr_size<Rng>) {
-				return [&]() return_decltype_noexcept(0==constexpr_size<Rng>::value);
+				return [&]() return_decltype_noexcept(0==constexpr_size<Rng>());
 			} else if constexpr(has_mem_fn_empty<Rng>) {
 				return [&]() return_MAYTHROW(tc_move_if_owned(rng).empty());
 			} else if constexpr(tc::range_with_iterators<Rng>) {

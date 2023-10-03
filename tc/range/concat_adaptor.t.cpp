@@ -29,36 +29,36 @@ UNITTESTDEF(concat_void_generator_test) {
 	);
 
 	tc::vector<int> vecn;
-	auto PushBack = [&](int n) noexcept { tc::cont_emplace_back(vecn, n); };
+	auto const PushBack = [&](int const n) noexcept { tc::cont_emplace_back(vecn, n); };
 
 	tc::for_each(rng, PushBack);
 	tc::for_each(tc::as_const(rng), PushBack);
 	tc::for_each(tc_move(rng), PushBack);
 
-	TEST_RANGE_EQUAL(vecn, as_constexpr(tc::make_array(tc::aggregate_tag, 1, 5, 1, 5, 1, 5)));
+	TEST_RANGE_EQUAL(vecn, tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1, 5, 1, 5, 1, 5)));
 }
 
 UNITTESTDEF(concat_break_or_continue_generator_test) {
 	auto rng = tc::concat(
 		tc::single(2),
-		tc::make_generator_range(tc::make_vector(as_constexpr(tc::make_array(tc::aggregate_tag, 1, 3)))),
+		tc::make_generator_range(tc::make_vector(tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1, 3)))),
 		tc::single(5)
 	);
 
 	tc::vector<int> vecn;
-	auto PushBack = [&](int n) noexcept { tc::cont_emplace_back(vecn, n); return tc::continue_if(1 != n); };
+	auto const PushBack = [&](int const n) noexcept { tc::cont_emplace_back(vecn, n); return tc::continue_if(1 != n); };
 
 	tc::for_each(rng, PushBack);
 	tc::for_each(tc::as_const(rng), PushBack);
 	tc::for_each(tc_move(rng), PushBack);
 
-	TEST_RANGE_EQUAL(vecn, as_constexpr(tc::make_array(tc::aggregate_tag, 2, 1, 2, 1, 2, 1)));
+	TEST_RANGE_EQUAL(vecn, tc_as_constexpr(tc::make_array(tc::aggregate_tag, 2, 1, 2, 1, 2, 1)));
 }
 
 UNITTESTDEF(concat_index_test) {
 	auto rng =
 		tc::concat(
-			as_constexpr(tc::make_array(tc::aggregate_tag, 2, 3, 4)),
+			tc_as_constexpr(tc::make_array(tc::aggregate_tag, 2, 3, 4)),
 			tc::single(1),
 			tc::single(5)
 		);
@@ -80,16 +80,16 @@ UNITTESTDEF(concat_index_test) {
 		tc::filter(
 			tc::reverse(
 				tc::concat(
-					as_constexpr(tc::make_array(tc::aggregate_tag, 1, 3, 4)),
+					tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1, 3, 4)),
 					tc::single(1),
 					tc::single(5)
 				)),
-			[](int i) noexcept { return i % 2 == 1; }
+			[](int const i) noexcept { return i % 2 == 1; }
 		),
-		[&](int i) noexcept { tc::cont_emplace_back(vecn, i); return 3 == i ? tc::break_ : tc::continue_; }
+		[&](int const i) noexcept { tc::cont_emplace_back(vecn, i); return 3 == i ? tc::break_ : tc::continue_; }
 	));
 
-	TEST_RANGE_EQUAL(vecn, as_constexpr(tc::make_array(tc::aggregate_tag, 5, 1, 3)));
+	TEST_RANGE_EQUAL(vecn, tc_as_constexpr(tc::make_array(tc::aggregate_tag, 5, 1, 3)));
 	TEST_RANGE_LENGTH(rng, 5);
 }
 
@@ -118,20 +118,20 @@ UNITTESTDEF(concat_different_value_types_test) {
 	auto rng =
 		tc::concat(
 			tc::single(1),
-			as_constexpr(tc::make_array(tc::aggregate_tag, S{2}, S{3}, S{4})),
+			tc_as_constexpr(tc::make_array(tc::aggregate_tag, S{2}, S{3}, S{4})),
 			tc::single(5)
 		);
 
 	struct SFunctor {
 		tc::vector<int> m_vec;
 
-		void operator()(int i) & noexcept { tc::cont_emplace_back(m_vec, i); }
+		void operator()(int const i) & noexcept { tc::cont_emplace_back(m_vec, i); }
 		void operator()(S s) & noexcept { tc::cont_emplace_back(m_vec, s.m_i); }
 	} functor;
 
 	tc::for_each(rng, std::ref(functor));
 
-	TEST_RANGE_EQUAL(functor.m_vec, as_constexpr(tc::make_array(tc::aggregate_tag, 1, 2, 3, 4, 5)));
+	TEST_RANGE_EQUAL(functor.m_vec, tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1, 2, 3, 4, 5)));
 }
 
 UNITTESTDEF(concat_empty_test) {
@@ -145,7 +145,7 @@ UNITTESTDEF(concat_shallow_const_test) {
 	STATICASSERTSAME(decltype(*tc::begin(rng)), int&);
 
 	*tc::begin(rng) = 2;
-	TEST_RANGE_EQUAL(rng, as_constexpr(tc::make_array(tc::aggregate_tag, 2, 2)));
+	TEST_RANGE_EQUAL(rng, tc_as_constexpr(tc::make_array(tc::aggregate_tag, 2, 2)));
 }
 
 UNITTESTDEF(concat_deep_const_test) {
@@ -259,11 +259,11 @@ STATICASSERTSAME(char, tc::range_value_t<decltype(tc::concat("abc", "def"))>);
 STATICASSERTSAME(char, tc::range_value_t<decltype(tc::concat("abc", tc::as_dec(10)))>);
 STATICASSERTSAME(char, tc::range_value_t<decltype(tc::concat(tc::as_dec(10), "abc", tc::string<char>("de")))>);
 STATICASSERTSAME(char, tc::range_value_t<decltype(tc::concat(tc::as_dec(10), "abc", tc::concat("xy", tc::as_dec(5)), tc::string<char>("de")))>);
-STATICASSERTSAME(int, tc::range_value_t<decltype(tc::transform(tc::concat("ab", UTF16("cd")), tc::fn_static_cast<int>()))>);
+STATICASSERTSAME(int, tc::range_value_t<decltype(tc::transform(tc::concat("ab", tc_utf16("cd")), tc::fn_static_cast<int>()))>);
 static_assert(!tc::has_range_value<decltype(tc::concat("xy", tc::as_dec(5), L"a"))>::value);
 static_assert(!tc::has_range_value<decltype(tc::concat("abc", tc::as_dec(10), tc::concat("xy", tc::as_dec(5), L"a"), tc::string<char>("de")))>::value);
 static_assert(tc::has_range_value<decltype(tc::concat(tc::as_dec(5), tc::as_dec(10)))>::value);
-static_assert(!tc::has_range_value<decltype(tc::transform(tc::concat("ab", UTF16("cd")), tc::fn_increment()))>::value);
+static_assert(!tc::has_range_value<decltype(tc::transform(tc::concat("ab", tc_utf16("cd")), tc::fn_increment()))>::value);
 static_assert(tc::is_concat_range<decltype(tc::concat(tc::as_dec(5), "abc"))>::value);
 static_assert(tc::is_concat_range<decltype(tc::concat("abc", L"def"))>::value);
 static_assert(tc::is_concat_range<decltype(tc::concat("abc", tc::string<char>("def")))>::value);

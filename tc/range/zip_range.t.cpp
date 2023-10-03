@@ -13,9 +13,36 @@
 
 namespace
 {
-	template<typename BaseRange, typename Traversal>
-	struct traversal_override_adaptor : tc::index_range_adaptor<traversal_override_adaptor<BaseRange, Traversal>, BaseRange &, tc::range_adaptor_base_range<BaseRange>, Traversal> {
-		traversal_override_adaptor(BaseRange & base_range) : traversal_override_adaptor::index_range_adaptor(tc::aggregate_tag, base_range) {}
+	template<typename Rng, typename Traversal>
+	struct traversal_override_adaptor
+		: tc::index_range_adaptor<traversal_override_adaptor<Rng, Traversal>, Rng&, tc::index_range_adaptor_flags::inherit_all>
+	{
+		using this_type = traversal_override_adaptor;
+		using base_ = typename traversal_override_adaptor::index_range_adaptor;
+		using tc_index = typename base_::tc_index;
+
+		traversal_override_adaptor(Rng& rng) : base_(tc::aggregate_tag, rng) {}
+
+		STATIC_FINAL(decrement_index)(tc_index& idx) const& MAYTHROW
+			requires tc::has_decrement_index<Rng>
+				&& boost::iterators::detail::is_traversal_at_least<Traversal, boost::iterators::bidirectional_traversal_tag>::value
+		{
+			tc::decrement_index(this->base_range(), idx);
+		}
+
+		STATIC_FINAL_MOD(constexpr, advance_index)(tc_index& idx, typename boost::range_difference<Rng>::type d) const& MAYTHROW -> void
+			requires tc::has_advance_index<Rng>
+				&& boost::iterators::detail::is_traversal_at_least<Traversal, boost::iterators::random_access_traversal_tag>::value
+		{
+			tc::advance_index(this->base_range(),idx,d);
+		}
+
+		STATIC_FINAL_MOD(constexpr, distance_to_index)(tc_index const& idxLhs, tc_index const& idxRhs) const& noexcept
+			requires tc::has_distance_to_index<Rng>
+				&& boost::iterators::detail::is_traversal_at_least<Traversal, boost::iterators::random_access_traversal_tag>::value
+		{
+			return tc::distance_to_index(this->base_range(),idxLhs,idxRhs);
+		}
 	};
 }
 
@@ -62,6 +89,11 @@ UNITTESTDEF(zip_range_supported_ops) {
 	static_assert(tc::has_decrement_index<decltype(zip_rr)>);
 	static_assert(tc::has_advance_index<decltype(zip_rr)>);
 	static_assert(tc::has_distance_to_index<decltype(zip_rr)>);
+
+	_ASSERTEQUAL(tc::size(zip_fr), 5);
+	_ASSERTEQUAL(tc::size(zip_br), 5);
+	_ASSERTEQUAL(tc::size(zip_rr), 5);
+	_ASSERTEQUAL(tc::size(zip_rfgf), 5);
 
 	static_assert(!tc::range_with_iterators<decltype(zip_rfgf)>);
 }

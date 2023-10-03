@@ -52,7 +52,7 @@ UNITTESTDEF(dense_map_with_non_moveable_type) {
 
 #ifndef _MSC_VER // MSVC support for guaranteed copy elision seems to be incomplete.
 	// https://developercommunity.visualstudio.com/t/chained-copy-elision-with-function-resul/1404507
-	[[maybe_unused]] auto anoncopyFromTransform = tc::make_dense_map<MyEnum>(47, 11).transform([](int n) {
+	[[maybe_unused]] auto anoncopyFromTransform = tc::make_dense_map<MyEnum>(47, 11).transform([](int const n) {
 		return NonCopyNonMoveable(n);
 	});
 #endif
@@ -82,7 +82,7 @@ namespace {
 }
 
 UNITTESTDEF(test_dense_map_recursive_func_tag) {
-	tc::dense_map<MyEnum, tc::dense_map<MyEnum, tc::dense_map<bool, int>>> aaan(tc::func_tag, [n = 0](auto e1, auto e2, bool b3) mutable noexcept {
+	tc::dense_map<MyEnum, tc::dense_map<MyEnum, tc::dense_map<bool, int>>> aaan(tc::func_tag, [n = 0](auto e1, auto e2, bool const b3) mutable noexcept {
 		return n++ | tc::to_underlying(e1) << 6 | tc::to_underlying(e2) << 5 | tc::to_underlying(b3) << 4;
 	});
 
@@ -127,11 +127,11 @@ UNITTESTDEF(test_make_array_from_range) {
 }
 
 UNITTESTDEF(test_dense_map_with_ordering_key) {
-	constexpr tc::dense_map<std::strong_ordering, int> dm1(1,2,3);
-	static_assert(dm1[std::strong_ordering::less] == 1);
-	static_assert(dm1[std::strong_ordering::equivalent] == 2);
-	static_assert(dm1[std::strong_ordering::equal] == 2);
-	static_assert(dm1[std::strong_ordering::greater] == 3);
+	constexpr tc::dense_map<std::weak_ordering, int> dm1(1,2,3);
+	static_assert(dm1[std::weak_ordering::less] == 1);
+	static_assert(dm1[std::weak_ordering::equivalent] == 2);
+	static_assert(dm1[std::weak_ordering::equivalent] == 2);
+	static_assert(dm1[std::weak_ordering::greater] == 3);
 	static_assert(tc::equal(dm1, tc::iota(1, 4)));
 
 	constexpr tc::dense_map<std::weak_ordering, int> dm2(1,2,3);

@@ -398,14 +398,22 @@ static_assert(
 static_assert(
 	std::is_same<
 		tc::common_reference_xvalue_as_ref_t<tc::vector<char>&, tc::string<char>&>,
-		tc::span<char>
+		std::conditional_t<
+			std::same_as<tc::iterator_t<tc::vector<char>>, tc::iterator_t<tc::string<char>>>,
+			tc::iterator_range<tc::iterator_t<tc::vector<char>>>,
+			tc::span<char>
+		>
 	>::value
 );
 
 static_assert(
 	std::is_same<
 		tc::common_reference_xvalue_as_ref_t<tc::vector<char>&, tc::string<char> const&>,
-		tc::span<char const>
+		std::conditional_t<
+			std::same_as<tc::iterator_t<tc::vector<char>>, tc::iterator_t<tc::string<char>>>,
+			tc::iterator_range<tc::iterator_t<tc::vector<char> const>>,
+			tc::span<char const>
+		>
 	>::value
 );
 
@@ -595,28 +603,28 @@ static_assert(
 
 static_assert(
 	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::vector<int>&, tc::subrange<tc::vector<int>&>>,
-		tc::subrange<tc::vector<int>&>
+		tc::common_reference_xvalue_as_ref_t<tc::static_vector<int, 3>&, tc::subrange<tc::static_vector<int, 3>&>>,
+		tc::subrange<tc::static_vector<int, 3>&>
 	>::value
 );
 
 static_assert(
 	std::is_same <
-		tc::common_reference_xvalue_as_ref_t<tc::vector<int>&, tc::subrange<tc::vector<int>>&>,
-		tc::subrange<tc::vector<int>&>
+		tc::common_reference_xvalue_as_ref_t<tc::static_vector<int, 3>&, tc::subrange<tc::static_vector<int, 3>>&>,
+		tc::subrange<tc::static_vector<int, 3>&>
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::subrange<tc::vector<int>&>, tc::subrange<tc::vector<int>>&>,
-		tc::subrange<tc::vector<int>&>
+		tc::common_reference_xvalue_as_ref_t<tc::subrange<tc::static_vector<int, 3>&>, tc::subrange<tc::static_vector<int, 3>>&>,
+		tc::subrange<tc::static_vector<int, 3>&>
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_xvalue_as_ref_t<tc::span<int>, tc::subrange<tc::vector<int>&>>,
+		tc::common_reference_xvalue_as_ref_t<tc::span<int>, tc::subrange<tc::static_vector<int, 3>&>>,
 		tc::span<int>
 	>::value
 );
@@ -635,38 +643,64 @@ static_assert(
 
 static_assert(
 	std::is_same<
-		tc::common_reference_prvalue_as_val_t<tc::vector<int>&, tc::subrange<tc::vector<int>&>>,
-		tc::subrange<tc::vector<int>&>
+		tc::common_reference_prvalue_as_val_t<tc::static_vector<int, 3>&, tc::subrange<tc::static_vector<int, 3>&>>,
+		tc::subrange<tc::static_vector<int, 3>&>
 	>::value
 );
 
 static_assert(
 	std::is_same <
-		tc::common_reference_prvalue_as_val_t<tc::vector<int>&, tc::subrange<tc::vector<int>>&>,
-		tc::subrange<tc::vector<int>&>
+		tc::common_reference_prvalue_as_val_t<tc::static_vector<int, 3>&, tc::subrange<tc::static_vector<int, 3>>&>,
+		tc::subrange<tc::static_vector<int, 3>&>
 	>::value
 );
 
 static_assert(
 	std::is_same<
-		tc::common_reference_prvalue_as_val_t<tc::subrange<tc::vector<int>&>, tc::subrange<tc::vector<int>>&>,
-		tc::subrange<tc::vector<int>&>
+		tc::common_reference_prvalue_as_val_t<tc::subrange<tc::static_vector<int, 3>&>, tc::subrange<tc::static_vector<int, 3>>&>,
+		tc::subrange<tc::static_vector<int, 3>&>
 	>::value
 );
 
 static_assert(
-	!tc::has_common_reference_xvalue_as_ref<tc::vector<int>&, tc::subrange<tc::vector<int>>>
+	!tc::has_common_reference_xvalue_as_ref<tc::static_vector<int, 3>&, tc::subrange<tc::static_vector<int, 3>>>
 );
 
 static_assert(
-	!tc::has_common_reference_xvalue_as_ref<tc::vector<int>, tc::subrange<tc::vector<int>&>>
+	!tc::has_common_reference_xvalue_as_ref<tc::static_vector<int, 3>, tc::subrange<tc::static_vector<int, 3>&>>
 );
 
 static_assert(
 	std::is_same<
 		tc::common_reference_prvalue_as_val_t<tc::vector<char>&, tc::string<char>&>,
-		tc::span<char>
+		std::conditional_t<
+			std::same_as<tc::iterator_t<tc::vector<char>>, tc::iterator_t<tc::string<char>>>,
+			tc::iterator_range<tc::iterator_t<tc::vector<char>>>,
+			tc::span<char>
+		>
 	>::value
+);
+
+namespace
+{
+	struct my_vector
+	{
+		tc::vector<int> impl;
+
+		auto begin() & { return tc::begin(impl); }
+		auto end() & { return tc::begin(impl); }
+	};
+}
+
+static_assert(
+	std::is_same<
+		tc::common_reference_prvalue_as_val_t<tc::vector<int>&, my_vector&>,
+		tc::iterator_range<tc::iterator_t<tc::vector<int>>>
+	>::value
+);
+
+static_assert(
+	!tc::has_common_reference_prvalue_as_val<tc::vector<int>&, my_vector>
 );
 
 namespace {
@@ -698,11 +732,11 @@ struct S{
 		_ASSERT(tc::end(g_sets) != g_sets.find(this));
 	}
 
-	void foo() const & {
+	void foo() const& {
 		_ASSERT(tc::end(g_sets) != g_sets.find(this));
 	}
 
-	void foo() const && {
+	void foo() const&& {
 		_ASSERT(tc::end(g_sets) != g_sets.find(this));
 	}
 
@@ -846,7 +880,7 @@ UNITTESTDEF(minTest) {
 				tc::transform(
 					tc::transform(
 						tc::iota(0,1),
-						[&](int n) noexcept -> S&& {
+						[&](int const n) noexcept -> S&& {
 							return std::move(s2[n]);
 						}
 					),
@@ -873,7 +907,7 @@ UNITTESTDEF(minTest) {
 		S s2[2];
 		tc::projected(
 			tc::fn_min(),
-			[&](int n) noexcept -> S&& {
+			[&](int const n) noexcept -> S&& {
 				return std::move(s2[n]);
 			}
 		)(0,1).foo();
@@ -976,6 +1010,8 @@ namespace is_instance_or_derived_test {
 	using CInstantiation2 = CTemplate2<bool, void>;
 
 	static_assert(tc::instance_or_derived<CInstantiation1, CTemplate1>);
+	static_assert(!tc::instance_or_derived<CInstantiation1&, CTemplate1>);
+	static_assert(!tc::is_instance_or_derived<CInstantiation1&, CTemplate1>::value);
 	STATICASSERTSAME((CTemplate1<int, bool>), (typename tc::is_instance_or_derived<CInstantiation1, CTemplate1>::base_instance));
 	STATICASSERTSAME((tc::type::list<int, bool>), (typename tc::is_instance_or_derived<CInstantiation1, CTemplate1>::arguments));
 

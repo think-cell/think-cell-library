@@ -40,6 +40,7 @@ namespace tc {
 	using no_adl::noop;
 	using no_adl::never_called;
 	using no_adl::constexpr_function;
+	using no_adl::identity;
 }
 
 // MAKE_CONSTEXPR_FUNCTION is guaranteed a constexpr function.
@@ -53,7 +54,7 @@ namespace tc {
 			}; \
 		} else { \
 			return [](auto&& ...) constexpr noexcept -> decltype(auto) { \
-				return as_constexpr(__VA_ARGS__); \
+				return tc_as_constexpr(__VA_ARGS__); \
 			}; \
 		} \
 	}()	

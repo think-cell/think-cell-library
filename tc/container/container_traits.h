@@ -30,8 +30,8 @@ namespace tc {
 
 TC_HAS_MEM_FN_XXX_CONCEPT_DEF( sort, &)
 TC_HAS_MEM_FN_XXX_CONCEPT_DEF( reverse, &)
-TC_HAS_MEM_FN_XXX_CONCEPT_DEF( splice, &, std::declval<typename T::const_iterator>(), std::declval<T>() ) // pretty good indication that datastructure is list-like: assume erase(itBegin,itEnd) is cheap and preserves iterators
-TC_HAS_MEM_FN_XXX_CONCEPT_DEF( splice_after, &, std::declval<typename T::const_iterator>(), std::declval<T>() ) // pretty good indication that datastructure is forward_list-like
+TC_HAS_MEM_FN_XXX_CONCEPT_DEF( splice, &, std::declval<tc::iterator_t<T const>>(), std::declval<T>() ) // pretty good indication that datastructure is list-like: assume erase(itBegin,itEnd) is cheap and preserves iterators
+TC_HAS_MEM_FN_XXX_CONCEPT_DEF( splice_after, &, std::declval<tc::iterator_t<T const>>(), std::declval<T>() ) // pretty good indication that datastructure is forward_list-like
 TC_HAS_MEM_FN_XXX_CONCEPT_DEF( lower_bound, const&, std::declval<typename T::key_type const&>() ) // pretty good indication that datastructure is tree-like: assume erase(itBegin,itEnd) is cheap and preserves iterators
 TC_HAS_MEM_FN_XXX_CONCEPT_DEF( assign, &, std::declval<tc::range_value_t<T&> const*>(), std::declval<tc::range_value_t<T&> const*>() )
 TC_HAS_MEM_FN_XXX_CONCEPT_DEF( size, /*not const&, files might flush*/ )

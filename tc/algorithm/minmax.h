@@ -43,7 +43,7 @@ namespace tc {
 					return operator()(std::forward<T0>(t0), std::forward<Args>(args)...);
 				} else {
 					STATICASSERTSAME(decltype(b), bool);
-					return CONDITIONAL_PRVALUE_AS_VAL(
+					return tc_conditional_prvalue_as_val(
 						b,
 						/*t1 is better*/operator()(std::forward<T1>(t1), std::forward<Args>(args)...),
 						/*t0 is better or equal*/operator()(std::forward<T0>(t0), std::forward<Args>(args)...)

@@ -34,7 +34,7 @@ namespace tc {
 				return tc::constant<tc::continue_>();
 			}
 			if (tc::back(aitLimit) == tc::back(ait)) {
-				for (; tc::front(ait) != tc::front(aitLimit); ) {
+				while (tc::front(ait) != tc::front(aitLimit)) {
 					--tc::front(ait);
 					tc_yield(func, tc::begin_next<tc::return_take>(tc::as_const(ait)));
 				}
@@ -48,7 +48,7 @@ namespace tc {
 
 
 	template < typename RangeReturn, typename Rng, typename It, typename Pred = tc::identity>
-	[[nodiscard]] constexpr decltype(auto) find_closest_if(Rng&& rng, It it, bool bSkipSelf, Pred pred = Pred()) noexcept {
+	[[nodiscard]] constexpr decltype(auto) find_closest_if(Rng&& rng, It it, bool const bSkipSelf, Pred pred = Pred()) noexcept {
 		tc::storage_for<tc::iterator_cache<It>> oitc;
 		if (tc::break_ == tc::for_each_iterator_pair_outwards(rng, tc_move(it), bSkipSelf, [&](auto const& rngit) noexcept {
 			return tc::for_each(rngit, [&](auto const& it) noexcept {
@@ -66,7 +66,7 @@ namespace tc {
 	}
 
 	template < typename RangeReturn, typename Rng, typename Index, typename Pred = tc::identity>
-	[[nodiscard]] decltype(auto) find_closest_if_with_index(Rng&& rng, Index&& n, bool bSkipSelf, Pred&& pred = Pred()) noexcept {
+	[[nodiscard]] decltype(auto) find_closest_if_with_index(Rng&& rng, Index&& n, bool const bSkipSelf, Pred&& pred = Pred()) noexcept {
 		return find_closest_if<RangeReturn>(std::forward<Rng>(rng), tc::begin_next<tc::return_border>(rng, std::forward<Index>(n)), bSkipSelf, std::forward<Pred>(pred));
 	}
 }

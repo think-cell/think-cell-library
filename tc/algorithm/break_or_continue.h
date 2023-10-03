@@ -15,8 +15,6 @@
 #include "../base/derivable.h"
 #include "../base/invoke.h"
 
-#include "accumulator.h"
-
 #include <type_traits>
 #include <functional>
 
@@ -84,6 +82,11 @@ namespace tc {
 
 	//// continue_if_not_break ///////////////////////////////////////////////////////////////////////////
 	// Func returns break_or_continue
+
+	template <typename Sink, typename ... Args>
+	concept sinkable = tc::invocable<std::remove_cvref_t<Sink> const&, Args...>;
+	template <typename Sink, typename ... Args>
+	concept nothrow_sinkable = tc::sinkable<Sink, Args...> && tc::nothrow_invocable<std::remove_cvref_t<Sink> const&, Args...>;
 
 	template<typename Sink, typename... Args>
 	constexpr auto continue_if_not_break(Sink const& sink, Args&&... args) return_decltype_MAYTHROW(
@@ -198,7 +201,7 @@ namespace tc {
 
 	using no_adl::move_only_function;
 
-	inline bool cyclic_improve_impl(int n, int& nSkipRule) noexcept {
+	inline bool cyclic_improve_impl(int const n, int& nSkipRule) noexcept {
 		return false;
 	}
 

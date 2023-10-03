@@ -25,7 +25,7 @@ namespace tc {
 				return m_b;
 			}
 
-			constexpr void operator()(bool b) & noexcept {
+			constexpr void operator()(bool const b) & noexcept {
 				tc_inplace(m_b) || b;
 			}
 

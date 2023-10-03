@@ -96,11 +96,11 @@ UNITTESTDEF(merge_ranges_with_unique_range_2) {
 		tc::merge_many(
 			tc::transform(
 				tc::iota(0,5),
-				[&](int n) noexcept {
+				[&](int const n) noexcept {
 					return tc::ordered_unique_range(
 						tc::zip(
-							tc::make_view(vecvecn[n]),
-							tc::make_view(vecvecn2[n])
+							tc::all(vecvecn[n]),
+							tc::all(vecvecn2[n])
 						),
 						lesspred
 					);

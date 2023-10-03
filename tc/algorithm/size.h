@@ -15,8 +15,7 @@
 #include "../base/generic_macros.h"
 #include "../base/tag_type.h"
 #include "../container/container_traits.h"
-
-#include <boost/range/traversal.hpp>
+#include "../range/meta.h"
 
 #include <limits>
 
@@ -164,16 +163,6 @@ namespace tc {
 		}
 	}
 
-	namespace detail {
-		template<typename Rng, typename Required>
-		concept has_traversal = tc::range_with_iterators<Rng> && std::convertible_to<typename boost::range_traversal<Rng>::type, Required>;
-	}
-
-	template<typename Rng>
-	concept bidirectional_range = detail::has_traversal<Rng, boost::iterators::bidirectional_traversal_tag>;
-	template<typename Rng>
-	concept random_access_range = detail::has_traversal<Rng, boost::iterators::random_access_traversal_tag>;
-
 	template< typename T >
 	[[nodiscard]] constexpr auto make_size_proxy(T t) noexcept {
 		if constexpr( tc::actual_integer<T> ) {
@@ -215,6 +204,32 @@ namespace tc {
 		struct common_type_decayed<T0, tc::size_proxy<T1>> : tc::common_type_decayed<tc::size_proxy<T1>, T0> {};
 	}
 
+	////////////////////////////////
+	// tc::constexpr_size
+	namespace no_adl {
+		template<typename Rng>
+		struct constexpr_size_impl;
+
+		// Rng has a size function that returns an integral_constant.
+		template <typename Rng> requires requires { decltype(std::declval<Rng&>().size())::value; }
+		struct constexpr_size_impl<Rng> : decltype(std::declval<Rng&>().size()) {};
+
+		template<typename T, std::size_t N>
+		struct constexpr_size_impl<T[N]> : tc::least_uint_constant<N - (tc::char_type<T> ? 1 : 0)> {};
+
+		template<typename T, T... t>
+		struct constexpr_size_impl<std::integer_sequence<T, t...>> : tc::least_uint_constant<sizeof...(t)> {};
+	}
+
+	template <typename Rng> requires has_constexpr_size<Rng>
+	constexpr auto constexpr_size = []() noexcept {
+		using type = no_adl::constexpr_size_impl<std::remove_cvref_t<Rng>>;
+		static_assert(std::derived_from<type, tc::least_uint_constant<type::value>>);
+		return tc::least_uint_constant<type::value>{};
+	}();
+
+	////////////////////////////////
+	// tc::size
 	namespace size_raw_internal {
 		// tc::size() requires a range with either:
 		//  - a constexpr_size_impl specialization which provide size as a compile time constant
@@ -225,7 +240,7 @@ namespace tc {
 			has_constexpr_size<Rng> || has_mem_fn_size<Rng> || (random_access_range<Rng&> && tc::common_range<Rng>)
 		constexpr auto size_raw(Rng&& rng) noexcept {
 			if constexpr( has_constexpr_size<Rng> ) {
-				return [&]() return_decltype_noexcept(constexpr_size<Rng>::value);
+				return [&]() return_decltype_noexcept(constexpr_size<Rng>());
 			} else if constexpr( has_mem_fn_size<Rng> ) {
 				return [&]() return_MAYTHROW(tc_move_if_owned(rng).size()); // .size() may throw for files
 			} else {
@@ -242,6 +257,7 @@ namespace tc {
 		size_raw_internal::size_raw(tc_move_if_owned(rng))()
 	)
 
+	// Note: This overload is only necessary for the assertion - the size is otherwise computed the same by constexpr_size.
 	template<tc::char_type T, std::size_t N>
 	[[nodiscard]] constexpr auto size_raw(T const (&ach)[N]) noexcept {
 		_ASSERTE(tc::strlen(ach)==N-1); // VERIFYEQUAL is not constexpr
@@ -255,5 +271,16 @@ namespace tc {
 
 	TC_HAS_EXPR(size, (T), size_raw(std::declval<T>()))
 	DEFINE_FN2(tc::size_raw, fn_size_raw)
+
+	template <auto Fn, typename ... Rng>
+	[[nodiscard]] constexpr auto compute_range_adaptor_size(Rng&&... rng) MAYTHROW {
+		if constexpr ((tc::has_constexpr_size<Rng> && ...)) {
+			tc::actual_unsigned_integer auto constexpr value = Fn(tc::constexpr_size<Rng>()...);
+			return tc::least_uint_constant<value>{};
+		} else {
+			tc::actual_unsigned_integer auto const value = Fn(tc::size_raw(tc_move_if_owned(rng))...);
+			return value;
+		}
+	}
 }
 

@@ -46,6 +46,9 @@
 	#ifndef _ASSERTNORETURN
 		#define _ASSERTNORETURN _ASSERT
 	#endif
+	#ifndef _ASSERTNORETURNFALSE
+		#define _ASSERTNORETURNFALSE _ASSERTFALSE
+	#endif
 	#ifndef _ASSERTNOTIFY
 		#define _ASSERTNOTIFY _ASSERT
 	#endif
@@ -97,7 +100,7 @@
 				return std::forward<Expr>(expr);
 			}
 		}
-		#define VERIFY( expr ) ErrorHandling::Verify(expr)
+		#define VERIFY ErrorHandling::Verify
 	#endif
 	#ifndef VERIFYPRED
 		#include <utility>

@@ -23,7 +23,7 @@ TC_DEFINE_ENUM_WITH_OFFSET(EAlign, ealign, -1,
 )
 
 namespace EAlign_adl {
-	[[nodiscard]] constexpr EAlign operator-(EAlign ealign) noexcept {
+	[[nodiscard]] constexpr EAlign operator-(EAlign const ealign) noexcept {
 		return ealignLOW+(ealignHIGH-ealign);
 	}
 }

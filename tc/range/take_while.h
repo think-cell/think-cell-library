@@ -12,13 +12,16 @@
 #include "../base/tc_move.h"
 #include "../base/conditional.h"
 #include "../base/invoke.h"
+#include "../base/trivial_functors.h"
 
 #include "range_adaptor.h"
 #include "meta.h"
-#include "range_fwd.h"
 
 namespace tc {
 	namespace no_adl {
+		template< typename Pred, typename Rng, bool HasIterator=tc::range_with_iterators< Rng > >
+		struct take_while_adaptor;
+
 		template< typename Pred, typename Rng >
 		struct [[nodiscard]] take_while_adaptor<Pred, Rng, false> : tc::range_adaptor_base_range<Rng>, tc::range_output_from_base_range {
 		protected:
@@ -55,7 +58,7 @@ namespace tc {
 		struct [[nodiscard]] take_while_adaptor<Pred, Rng, true>
 			: tc::index_range_adaptor<
 				take_while_adaptor<Pred, Rng, true>,
-				Rng,
+				Rng, tc::index_range_adaptor_flags::inherit_begin | tc::index_range_adaptor_flags::inherit_behavior,
 				take_while_adaptor<Pred, Rng, false>
 			>
 		{
@@ -73,7 +76,7 @@ namespace tc {
 			STATIC_FINAL_MOD(constexpr, end_index)() const& = delete;  // let range_iterator_from_index::end return end_sentinel
 
 			STATIC_FINAL_MOD(constexpr, at_end_index)(tc_index const& idx) const& return_MAYTHROW(
-				this->template at_end_index<base_>(idx) || !tc::invoke(this->m_pred, tc::as_const(this->dereference_index(idx)))
+				tc::at_end_index(this->base_range(), idx) || !tc::invoke(this->m_pred, tc::as_const(this->dereference_index(idx)))
 			)
 
 		public:
@@ -82,13 +85,12 @@ namespace tc {
 			}
 		};
 	}
+	using no_adl::take_while_adaptor;
+
+	template<typename Pred, typename Rng>
+	constexpr auto enable_stable_index_on_move<tc::take_while_adaptor<Pred, Rng, true>> = tc::stable_index_on_move<Rng>;
 
 	template<typename Rng, typename Pred = tc::identity>
 	constexpr auto take_while(Rng&& rng, Pred&& pred = Pred())
-		return_ctor_noexcept( TC_FWD( take_while_adaptor<tc::decay_t<Pred>, Rng>), (std::forward<Rng>(rng),std::forward<Pred>(pred)) )
-
-	namespace no_adl {
-		template<typename Pred, typename Rng>
-		struct is_index_valid_for_move_constructed_range<tc::take_while_adaptor<Pred, Rng, true>>: tc::is_index_valid_for_move_constructed_range<Rng> {};
-	}
+		return_ctor_noexcept( TC_FWD( tc::take_while_adaptor<tc::decay_t<Pred>, Rng>), (std::forward<Rng>(rng),std::forward<Pred>(pred)) )
 }

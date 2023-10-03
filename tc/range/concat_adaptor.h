@@ -19,25 +19,21 @@
 #include "../algorithm/empty.h"
 #include "../tuple.h"
 
-#include "range_fwd.h"
 #include "range_adaptor.h"
 #include "index_range.h"
 #include "meta.h"
 #include "transform.h"
 #include "iota_range.h"
 #include "transform_adaptor.h"
+#include "reverse_adaptor.h"
 
 namespace tc {
 	namespace concat_adaptor_adl {
 		template<bool HasIterator, typename... Rng>
 		struct concat_adaptor_impl;
 	}
-
 	template<typename... Rng>
-	concept concatenable_with_iterators = tc::has_common_reference_prvalue_as_val<std::iter_reference_t<tc::iterator_t<Rng>>...>;
-
-	template<typename... Rng>
-	using concat_adaptor = concat_adaptor_adl::concat_adaptor_impl<concatenable_with_iterators<Rng...>, Rng...>;
+	using concat_adaptor = concat_adaptor_adl::concat_adaptor_impl<tc::ranges_with_common_reference<Rng...>, Rng...>;
 
 	namespace no_adl {
 		template<typename Rng>
@@ -103,16 +99,12 @@ namespace tc {
 				return tc::size_raw(tc::get<nconstIndex()>(m_tupleadaptbaserng).base_range());
 			}
 		public:
-			constexpr auto size() const& noexcept requires (... && tc::has_size<Rng>) {
-				return 
-					tc::accumulate(
-						tc::transform(
-							std::index_sequence_for<Rng...>(),
-							[&](auto nconstIndex) noexcept { return BaseRangeSize(nconstIndex); }
-						),
-						tc::explicit_cast<tc::common_type_t<decltype(tc::size_raw(std::declval<Rng>()))...>>(0),
-						tc::fn_assign_plus()
-					);
+			constexpr auto size() const& MAYTHROW requires (... && tc::has_size<Rng>) {
+				return tc::apply([](auto const& ... rng) MAYTHROW {
+					return tc::compute_range_adaptor_size<[](auto const ... n) noexcept {
+						return tc::as_unsigned((... + n));
+					}>(rng.base_range()...);
+				}, m_tupleadaptbaserng);
 			}
 
 			constexpr bool empty() const& noexcept {
@@ -202,7 +194,7 @@ namespace tc {
 			constexpr void correct_index(tc_index& idx) const& noexcept {
 				tc::for_each(
 					tc::make_integer_sequence<std::size_t, IndexFrom, sizeof...(Rng)>(),
-					[&](auto nconstIndex) noexcept {
+					[&](auto const nconstIndex) noexcept {
 						if (tc::at_end_index( tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(), tc::get<nconstIndex()>(idx))) {
 							idx = create_begin_index(tc::constant<nconstIndex() + 1>());
 							return tc::continue_;
@@ -232,7 +224,7 @@ namespace tc {
 				_ASSERT(!this->at_end_index(idx));
 
 				tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
-					[&](auto nconstIndex) noexcept { 
+					[&](auto const nconstIndex) noexcept { 
 						tc::increment_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(), tc::get<nconstIndex()>(idx));
 						correct_index<nconstIndex()>(idx);
 					},
@@ -248,10 +240,10 @@ namespace tc {
 					tc::is_equality_comparable<tc_index>::value
 			{
 				tc::invoke_with_constant<std::make_index_sequence<sizeof...(Rng)+1>>(
-					[&](auto nconstIndexStart) noexcept {
+					[&](auto const nconstIndexStart) noexcept {
 						tc::for_each(
 							tc::make_reverse_integer_sequence<int, 0, nconstIndexStart() + 1>(),
-							[&](auto nconstIndex) noexcept {
+							[&](auto const nconstIndex) noexcept {
 								if constexpr (sizeof...(Rng) == nconstIndex()) {
 									 idx = create_end_index(tc::constant<nconstIndex() - 1>());
 									 return tc::continue_;
@@ -277,7 +269,7 @@ namespace tc {
 MODIFY_WARNINGS(((suppress)(4544))) // 'Func2': default template argument ignored on this template declaration
 			STATIC_FINAL_MOD(constexpr, dereference_index)(tc_index const& idx) const& noexcept -> decltype(auto) {
 				return tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
-					[&](auto nconstIndex) constexpr noexcept -> decltype(auto) { // return_decltype leads to ICE
+					[&](auto const nconstIndex) constexpr noexcept -> decltype(auto) { // return_decltype leads to ICE
 						return tc::dereference_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(), tc::get<nconstIndex()>(idx));
 					},
 					idx.index()
@@ -286,7 +278,7 @@ MODIFY_WARNINGS(((suppress)(4544))) // 'Func2': default template argument ignore
 
 			STATIC_FINAL_MOD(constexpr, dereference_index)(tc_index const& idx) & noexcept -> decltype(auto) {
 				return tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
-					[&](auto nconstIndex) constexpr noexcept -> decltype(auto) { // return_decltype leads to ICE
+					[&](auto const nconstIndex) constexpr noexcept -> decltype(auto) { // return_decltype leads to ICE
 						return tc::dereference_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(), tc::get<nconstIndex()>(idx));
 					},
 					idx.index()
@@ -300,11 +292,11 @@ MODIFY_WARNINGS(((suppress)(4544))) // 'Func2': default template argument ignore
 					(... && tc::has_advance_index<std::remove_reference_t<Rng>>)
 			{
 				tc::invoke_with_constant<std::make_index_sequence<sizeof...(Rng)+1>>(
-					[&](auto nconstIndexStart) noexcept {
+					[&](auto const nconstIndexStart) noexcept {
 						if (d < 0) {
 							tc::for_each(
 								tc::make_reverse_integer_sequence<int, 0, nconstIndexStart() + 1>(),
-								[&](auto nconstIndex) noexcept {
+								[&](auto const nconstIndex) noexcept {
 									if constexpr (sizeof...(Rng) == nconstIndex()) {
 										idx = create_end_index(tc::constant<nconstIndex() - 1>());
 										return tc::continue_;
@@ -346,7 +338,7 @@ MODIFY_WARNINGS(((suppress)(4544))) // 'Func2': default template argument ignore
 						} else {
 							tc::for_each(
 								tc::make_integer_sequence<std::size_t, nconstIndexStart(), sizeof...(Rng)>(),
-								[&](auto nconstIndex) noexcept {
+								[&](auto const nconstIndex) noexcept {
 									using range_difference_t = typename boost::range_difference<decltype(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range())>::type;
 									if constexpr (nconstIndex() == sizeof...(Rng)-1) {
 										tc::advance_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(),
@@ -387,7 +379,7 @@ MODIFY_WARNINGS(((suppress)(4544))) // 'Func2': default template argument ignore
 			{
 				if (idxLhs.index() == idxRhs.index()) {
 					return tc::invoke_with_constant<std::make_index_sequence<sizeof...(Rng)+1>>(
-						[&](auto nconstIndex) noexcept -> difference_type {
+						[&](auto const nconstIndex) noexcept -> difference_type {
 							if constexpr (nconstIndex() == sizeof...(Rng)) {
 								return 0;
 							} else {
@@ -401,21 +393,21 @@ MODIFY_WARNINGS(((suppress)(4544))) // 'Func2': default template argument ignore
 						return tc::accumulate(
 							tc::transform(
 								tc::iota(lhs.index() + 1, rhs.index()),
-								[&](auto nIndex) noexcept {
+								[&](auto const nIndex) noexcept {
 									return tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
-										[&](auto nconstIndex) noexcept { return tc::explicit_cast<difference_type>(this->BaseRangeSize(nconstIndex)); },
+										[&](auto const nconstIndex) noexcept { return tc::explicit_cast<difference_type>(this->BaseRangeSize(nconstIndex)); },
 										nIndex
 									);
 								}
 							),
 							tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
-								[&](auto nconstIndex) noexcept -> difference_type {
+								[&](auto const nconstIndex) noexcept -> difference_type {
 									return tc::distance_to_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(), tc::get<nconstIndex()>(lhs), tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_end_index());
 								},
 								lhs.index()
 							) + 
 							tc::invoke_with_constant<std::make_index_sequence<sizeof...(Rng)+1>>(
-								[&](auto nconstIndex) noexcept -> difference_type {
+								[&](auto const nconstIndex) noexcept -> difference_type {
 									if constexpr(nconstIndex() == sizeof...(Rng)) {
 										return 0;
 									} else {
@@ -438,17 +430,9 @@ MODIFY_WARNINGS(((suppress)(4544))) // 'Func2': default template argument ignore
 		};
 	}
 
-	namespace no_adl {
-		template<bool HasIterator, tc::has_constexpr_size... Rng>
-		struct constexpr_size_impl<tc::concat_adaptor_adl::concat_adaptor_impl<HasIterator, Rng...>>
-			: tc::constant<(... + tc::constexpr_size<Rng>::value)>
-		{};
-
-		template<typename... Rng>
-		struct is_index_valid_for_move_constructed_range<tc::concat_adaptor_adl::concat_adaptor_impl<true, Rng...>>
-			: std::conjunction<tc::is_index_valid_for_move_constructed_range<Rng>...>
-		{};
-	}
+	template<typename... Rng>
+	constexpr auto enable_stable_index_on_move<tc::concat_adaptor_adl::concat_adaptor_impl<true, Rng...>>
+		= (tc::stable_index_on_move<Rng> && ...);
 
 	namespace no_adl {
 		struct fn_concat_impl final {

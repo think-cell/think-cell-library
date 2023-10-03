@@ -8,14 +8,16 @@
 
 #pragma once
 #include <string>
+#include <string_view>
 #include "../base/type_traits_fwd.h"
+#include "../base/return_decltype.h"
 
 namespace tc {
 	namespace no_adl {
-		template<typename Char, typename=void>
+		template<typename Char>
 		struct char_traits_selector;
 
-		template<typename Char> requires tc::char_type<Char> && (!(std::is_same<Char, char>::value && std::is_signed<char>::value))
+		template<typename Char> requires tc::char_like<Char> && (!(std::is_same<Char, char>::value && std::is_signed<char>::value))
 		struct char_traits_selector<Char> final {
 			using type = std::char_traits<Char>;
 		};
@@ -53,4 +55,10 @@ namespace tc {
 	// Therefore we introduce tc::string with tc::char_traits as the CharTraits to make comparisons between char ranges consistent.
 	template<typename Char, typename Alloc=std::allocator<Char>>
 	using string = std::basic_string<Char, tc::char_traits<Char>, Alloc>;
+
 }
+
+template <typename Alloc> requires std::is_signed<char>::value
+struct std::hash<std::basic_string<char, tc::char_traits<char>, Alloc>> {
+	auto operator()(std::basic_string<char, tc::char_traits<char>, Alloc> const& str) const& return_decltype_MAYTHROW(std::hash<std::string_view>{}(std::string_view(str.data(), str.size())))
+};

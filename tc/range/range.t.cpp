@@ -112,8 +112,8 @@ namespace {
 UNITTESTDEF( generator_range ) {
    TEST_init_hack(tc::vector, int, vexp, {0, 2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40, 42, 44, 46, 48});
 
-   TEST_RANGE_EQUAL(vexp, tc::filter( void_range(generator_range()), [](int i) noexcept { return i%2==0; } ));
-   TEST_RANGE_EQUAL(tc::filter( void_range(generator_range()), [](int i) noexcept { return i%2==0; } ), vexp);
+   TEST_RANGE_EQUAL(vexp, tc::filter( void_range(generator_range()), [](int const i) noexcept { return i%2==0; } ));
+   TEST_RANGE_EQUAL(tc::filter( void_range(generator_range()), [](int const i) noexcept { return i%2==0; } ), vexp);
 }
 
 //---- Generator Range (with break) -------------------------------------------------------------------------------------------
@@ -135,9 +135,9 @@ UNITTESTDEF( N3752 ) {
 
    auto r =  tc::filter( tc::filter( tc::filter(
                                 v,
-                                [](int i) noexcept { return i%2!=0; } ),
-                                [](int i) noexcept { return i%3!=0; } ),
-                                [](int i) noexcept { return i%5!=0; } );
+                                [](int const i) noexcept { return i%2!=0; } ),
+                                [](int const i) noexcept { return i%3!=0; } ),
+                                [](int const i) noexcept { return i%5!=0; } );
 
    TEST_init_hack(tc::vector, int, vexp, {1, 7, 11, 13, 17, 19});
    TEST_RANGE_EQUAL(vexp, r);
@@ -249,7 +249,7 @@ UNITTESTDEF( construct_array_from_range ) {
 	auto an=tc::explicit_cast<std::array<int, 10>>(rng);
 	auto anCopy=an;
 	tc::array<int&, 10> anRef(an);
-	tc::for_each(rng, [&](int n) {
+	tc::for_each(rng, [&](int const n) {
 		_ASSERTEQUAL(tc::at(an, n), n);
 		_ASSERTEQUAL(tc::at(anCopy, n), n);
 		_ASSERTEQUAL(tc::at(anRef, n), n);
@@ -421,7 +421,7 @@ UNITTESTDEF(filter_with_generator_range) {
 		tc::max_element<tc::return_value>(
 			tc::filter(
 				GeneratorInt(),
-				[](int n) noexcept {return 1==n%2;}
+				[](int const n) noexcept {return 1==n%2;}
 			)
 		),
 		3
@@ -438,7 +438,7 @@ UNITTESTDEF(filter_with_generator_range) {
 		tc::max_element<tc::return_value>(
 			tc::transform(
 				GeneratorInt(),
-				[](int n) noexcept {return -n;}
+				[](int const n) noexcept {return -n;}
 			)
 		),
 		-1
@@ -446,7 +446,7 @@ UNITTESTDEF(filter_with_generator_range) {
 
 	auto const tr1 = tc::transform(
 		GeneratorInt(),
-		[](int n) noexcept {return -n;}
+		[](int const n) noexcept {return -n;}
 	);
 
 	static_assert(
@@ -458,7 +458,7 @@ UNITTESTDEF(filter_with_generator_range) {
 
 	auto const filtered = tc::filter(
 		GeneratorInt(),
-		[](int n) noexcept {return n>0;}
+		[](int const n) noexcept {return n>0;}
 	);
 	static_assert(
 		std::is_same<
@@ -518,7 +518,7 @@ UNITTESTDEF(filter_with_generator_range) {
 }
 
 UNITTESTDEF(make_constexpr_array_test) {
-	constexpr auto const& an = as_constexpr(tc::make_array(tc::aggregate_tag, 1, 2, 3));
+	constexpr auto const& an = tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1, 2, 3));
 	static_assert(tc::at(an, 0) == 1);
 	static_assert(tc::at(an, 1) == 2);
 	static_assert(tc::at(an, 2) == 3);
@@ -542,7 +542,7 @@ namespace {
 		tc::for_each(tc::cartesian_product(tc::as_const(an), tc::as_const(an)), [](auto&& x){
 			STATICASSERTSAME(decltype(x), (tc::tuple<int const&, const int&>&&));
 		});
-		auto rvaluerng = [](auto sink) { sink(1); };
+		auto const rvaluerng = [](auto sink) { sink(1); };
 		tc::for_each(tc::cartesian_product(rvaluerng, rvaluerng), [](auto&& x){
 			STATICASSERTSAME(decltype(x), (tc::tuple<int const&&, int&&>&&));
 		});

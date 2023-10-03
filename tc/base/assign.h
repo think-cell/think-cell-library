@@ -166,7 +166,7 @@ constexpr auto assign_better( Better better, Var&& var, Val&& val ) noexcept {
 		[&](tc::constant<false> b) noexcept {
 			return b;
 		},
-		[&](bool b) noexcept {
+		[&](bool const b) noexcept {
 			if (b) {
 				static_assert( tc::safely_assignable_from<Var&&, Val&&> );
 				std::forward<Var>(var) = std::forward<Val>(val);
@@ -237,13 +237,6 @@ void change_with_or(Var&& var, Val&& val, bool& bChanged) noexcept {
 
 tc_define_fn( assign_max );
 tc_define_fn( assign_min );
-
-template< typename Better >
-[[nodiscard]] constexpr auto fn_assign_better(Better&& better) noexcept {
-	return [better=std::forward<Better>(better)](auto&& var, auto&& val0, auto&&... val) noexcept {
-		return tc::assign_better(better, tc_move_if_owned(var), tc_move_if_owned(val0), tc_move_if_owned(val)...);
-	};
-}
 
 ////////////////////////////////////
 // change for float/double

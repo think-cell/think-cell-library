@@ -36,7 +36,7 @@ namespace tc {
 			constexpr auto operator()(Sink sink) const& MAYTHROW {
 				tc::decay_t<T> accu = *m_init;
 				return tc_break_or_continue_sequence(
-					(CONDITIONAL_PRVALUE_AS_VAL(
+					(tc_conditional_prvalue_as_val(
 						c_bIncludeInit,
 						tc::continue_if_not_break(sink, tc::as_const(accu)),
 						tc::constant<tc::continue_>()
@@ -48,12 +48,11 @@ namespace tc {
 				);
 			}
 
-			template<ENABLE_SFINAE>
-			constexpr auto size() const& noexcept -> tc::decay_t<decltype(tc::size_raw(SFINAE_VALUE(this)->base_range()))> {
-				return tc_modified(
-					tc::size_raw(this->base_range()),
-					if constexpr( c_bIncludeInit ) ++_;
-				);
+			constexpr auto size() const& MAYTHROW requires tc::has_size<Rng> {
+				return tc::compute_range_adaptor_size<[](auto n) noexcept {
+					if constexpr (c_bIncludeInit) ++n;
+					return n;
+				}>(this->base_range());
 			}
 		};
 	}

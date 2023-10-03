@@ -28,33 +28,6 @@ namespace {
 		void(tc::explicit_cast<SCopy>(tc::vector<int>{}));
 	}
 
-UNITTESTDEF( quantifiers ) {
-
-	tc::vector<int> v{1,2,3,4,5,6,7};
-
-	tc::vector<int> all_even{2,4,6,8};
-	tc::vector<int> all_odd{3,5,7,9};
-
-	auto even = [](int i) noexcept { return i%2==0; };
-
-	int const existing_value = 5;
-	int const non_existing_value = 9;
-
-	auto const_range = tc::slice(tc::as_const(v)); TEST_RANGE_LENGTH(const_range, 7);
-
-	_ASSERT( tc::find_first<tc::return_bool>(const_range, existing_value));
-	_ASSERT(!tc::find_first<tc::return_bool>(const_range, non_existing_value));
-
-	_ASSERT(! tc::all_of(const_range, even));
-	_ASSERT(  tc::any_of(const_range, even));
-
-	_ASSERT(  tc::all_of(all_even, even));
-	_ASSERT(  tc::any_of(all_even, even));
-
-	_ASSERT(! tc::all_of(all_odd, even));
-	_ASSERT(! tc::any_of(all_odd, even));
-}
-
 UNITTESTDEF( sort_accumulate_each_unique_range_2 ) {
 	struct SValAccu final {
 		SValAccu(int val, int accu) noexcept : m_val(val), m_accu(accu) {}
@@ -102,10 +75,10 @@ UNITTESTDEF(filter_no_self_assignment_of_rvalues) {
 
 UNITTESTDEF( trim_leftright_if ) {
 	tc::vector<int> v{1,2,3,4,5,6,7,7,7};
-	auto rng = tc::trim_left_if<tc::return_drop>(v, [] (int n) noexcept {return n<4;});
+	auto rng = tc::trim_left_if<tc::return_drop>(v, [] (int const n) noexcept {return n<4;});
 	_ASSERT(tc::begin(rng) != tc::end(rng));
 	_ASSERTEQUAL(tc::size(rng), 6);
-	_ASSERTEQUAL(tc::size(tc::trim_right_if<tc::return_take>(rng, [] (int n) noexcept {return n==7;})), 3);
+	_ASSERTEQUAL(tc::size(tc::trim_right_if<tc::return_take>(rng, [] (int const n) noexcept {return n==7;})), 3);
 }
 
 UNITTESTDEF( is_sorted ) {
@@ -145,43 +118,10 @@ UNITTESTDEF( is_sorted ) {
 
 UNITTESTDEF( make_vector_on_r_vector_is_identity ) {
 	tc::vector<int> v{1,2,3};
-	auto pvecdata = v.data();
+	auto pvecdata = tc::ptr_begin(v);
 
 	auto vNew = tc::make_vector(tc_move(v));
-	_ASSERTEQUAL(vNew.data(), pvecdata);
-}
-
-UNITTESTDEF(rangefilter_on_subrange) {
-	tc::vector<int> vecn={2,3,3,0, /*rngn starts here*/ 3,4,5,6,4,5,6,7};
-	auto rngn=tc::begin_next<tc::return_drop>(vecn, 4);
-
-	{
-		tc::sort_unique_inplace(rngn); // uses range_filter<tc::subrange<tc::vector<int>&> > internally
-		int const anExpected[]={2,3,3,0, /*rngn starts here*/ 3,4,5,6,7};
-		_ASSERT(tc::equal(vecn, anExpected));
-		_ASSERTEQUAL(tc::begin(rngn), tc::begin_next<tc::return_border>(vecn,4));
-		_ASSERTEQUAL(tc::end(rngn), tc::end(vecn));
-	}
-
-	{
-		{
-			tc::range_filter<tc::subrange<tc::vector<int>&> > filter(rngn);
-			auto it=tc::begin(rngn);
-			filter.keep(it++);
-			filter.keep(it++);
-			filter.keep(it++);
-			int i=0;
-			while(tc::begin(filter)!=tc::end(filter)) {
-				tc::drop_last_inplace(filter);
-				++i;
-			}
-			_ASSERTEQUAL(i,3);
-		}
-		int const anExpected[]={2,3,3,0, /*rngn starts here*/};
-		_ASSERT(tc::equal(vecn, anExpected));
-		_ASSERTEQUAL(tc::begin(rngn), tc::begin_next<tc::return_border>(vecn,4));
-		_ASSERTEQUAL(tc::end(rngn), tc::end(vecn));
-	}
+	_ASSERTEQUAL(tc::ptr_begin(vNew), pvecdata);
 }
 
 UNITTESTDEF(is_strictly_sorted){
@@ -231,7 +171,7 @@ UNITTESTDEF(Naryinterleave) {
 	);
 
 	_ASSERT(tc::equal(
-		tc::transform(vecnBCopy, [](int n) noexcept {return n+100;}),
+		tc::transform(vecnBCopy, [](int const n) noexcept {return n+100;}),
 		vecnB
 	));
 }
@@ -273,7 +213,7 @@ UNITTESTDEF(NaryinterleaveBreak) {
 	);
 
 	_ASSERT(tc::equal(
-		tc::transform(vecnBCopy, [](int n) noexcept {return n < 7 ? n + 100 : n; }),
+		tc::transform(vecnBCopy, [](int const n) noexcept {return n < 7 ? n + 100 : n; }),
 		vecnB
 	));
 }
@@ -337,7 +277,7 @@ UNITTESTDEF(plurality_element_test) {
 	auto const str3 = "a";
 	_ASSERTEQUAL(tc::begin(str3),tc::plurality_element<tc::return_element>(str3));
 	int an[] = {1,2,3,4,3,4,3,5,6};
-	_ASSERTEQUAL(std::optional(4), tc::plurality_element<tc::return_value_or_none>(tc::filter(an, [](auto n) noexcept { return n % 2 == 0; })));
+	_ASSERTEQUAL(std::optional(4), tc::plurality_element<tc::return_value_or_none>(tc::filter(an, [](auto const n) noexcept { return n % 2 == 0; })));
 }
 
 static_assert(std::is_move_constructible<decltype(tc::sort(std::declval<tc::string<char> const&>()))>::value);
@@ -361,7 +301,7 @@ UNITTESTDEF(constexpr_sort_test) {
 	std::mt19937 gen; // same sequence of numbers each time for reproducibility
 	std::uniform_int_distribution<> dist(0, 63);
 
-	auto Test = [](auto rngn) noexcept {
+	static auto constexpr Test = [](auto rngn) noexcept {
 		auto vecn = tc::explicit_cast<tc::vector<int>>(rngn);
 		_ASSERTEQUAL(tc_modified(vecn, tc::sort_inplace(_)), tc_modified(vecn, tc::constexpr_sort_inplace_detail::constexpr_sort_inplace(tc::begin(_), tc::end(_), tc::fn_less())));
 	};

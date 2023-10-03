@@ -19,7 +19,7 @@
 #include "../static_vector.h"
 
 #include "ascii.h"
-#include "value_restrictive.h"
+#include "char.h"
 
 #include <boost/version.hpp>
 
@@ -111,6 +111,25 @@ namespace tc {
 	}
 
 	namespace no_adl {
+		template <typename Expr>
+		struct x3parser : Expr {
+			constexpr x3parser(Expr expr) : Expr(tc_move(expr)) {}
+
+			template <typename Rng>
+			[[nodiscard]] constexpr auto operator()(Rng const& rng) const MAYTHROW {
+				typename Expr::attribute_type result;
+				if (tc::parse(rng, *this > x3::eoi, result)) {
+					return std::optional(result);
+				} else {
+					return std::optional<typename Expr::attribute_type>();
+				}
+			}
+		};
+	}
+	template <typename Expr>
+	constexpr auto x3parser(Expr&& expr) return_ctor_MAYTHROW(no_adl::x3parser<std::remove_cvref_t<Expr>>, (tc_move_if_owned(expr)))
+
+	namespace no_adl {
 		template<typename Char>
 		struct char_encoding;
 
@@ -121,20 +140,20 @@ namespace tc {
 			static constexpr bool ischar(int) noexcept {
 				return true;
 			}
-			static ::boost::uint32_t toucs4(int ch) noexcept { // for debug only
+			static ::boost::uint32_t toucs4(int const ch) noexcept { // for debug only
 				return ch;
 			}
 		};
 
 		template<tc::char_type T, T tFirst, T tLast>
-		struct char_encoding<tc::value_restrictive<T, tFirst, tLast>> final {
-			using char_type = tc::value_restrictive<T, tFirst, tLast>;
+		struct char_encoding<tc::restricted_enum<T, tFirst, tLast>> final {
+			using char_type = tc::restricted_enum<T, tFirst, tLast>;
 
 			template<tc::char_like Char>
 			static constexpr bool ischar(Char ch) noexcept {
-				return char_type(tFirst) <= ch && ch <= char_type(tLast); // We reuse the SFINAE from the comparison operators of value_restrictive.
+				return char_type(tFirst) <= ch && ch <= char_type(tLast); // We reuse the SFINAE from the comparison operators of restricted_enum.
 			}
-			static ::boost::uint32_t toucs4(int ch) noexcept { // for debug only
+			static ::boost::uint32_t toucs4(int const ch) noexcept { // for debug only
 				return ch;
 			}
 		};
@@ -250,7 +269,7 @@ namespace tc {
 
 	namespace no_adl {
 		template<typename T>
-		struct value_restrictive_parser final : x3::char_parser<value_restrictive_parser<T>> {
+		struct restricted_enum_parser final : x3::char_parser<restricted_enum_parser<T>> {
 			using attribute_type = T;
 			static bool const has_attribute = true;
 
@@ -261,12 +280,12 @@ namespace tc {
 
 			template<typename U>
 			bool parse_match(U const u) const& noexcept {
-				return T(T::c_tFirst) <= u && u <= T(T::c_tLast); // We reuse the SFINAE from the comparison operators of value_restrictive.
+				return T(T::c_tFirst) <= u && u <= T(T::c_tLast); // We reuse the SFINAE from the comparison operators of restricted_enum.
 			}
 		};
 	}
 	template<typename T, T tFirst, T tLast>
-	inline constexpr auto one<value_restrictive<T, tFirst, tLast>> = no_adl::value_restrictive_parser<value_restrictive<T, tFirst, tLast>>();
+	inline constexpr auto one<restricted_enum<T, tFirst, tLast>> = no_adl::restricted_enum_parser<restricted_enum<T, tFirst, tLast>>();
 
 	inline constexpr auto asciidigit = tc::one<tc::char_asciidigit>;
 	inline constexpr auto asciilower = tc::one<tc::char_asciilower>;
@@ -306,13 +325,10 @@ namespace tc {
 			using attribute_type = x3::unused_type;
 			static bool const has_attribute = false;
 
-			template <typename CharType, typename Context>
-			bool test(CharType const& ch, Context&) const& noexcept {
-				// in C locale, it is:
-				// ' '	(0x20) space (SPC)
-				// '\t'	(0x09) horizontal tab (TAB)
+			template <typename CharType>
+			static bool test(CharType const& ch, tc::unused /*context*/) noexcept {
 				// TODO: support unicode?
-				return tc::char_ascii(' ')==ch || tc::char_ascii('\t')==ch;
+				return tc::isasciiblank(ch);
 			}
 		};
 
@@ -320,17 +336,10 @@ namespace tc {
 			using attribute_type = x3::unused_type;
 			static bool const has_attribute = false;
 
-			template <typename CharType, typename Context>
-			bool test(CharType const& ch, Context&) const& noexcept {
-				// in C locale, it is:
-				// ' '	(0x20) space (SPC)
-				// '\t'	(0x09) horizontal tab (TAB)
-				// '\n'	(0x0a) newline (LF)
-				// '\v'	(0x0b) vertical tab (VT)
-				// '\f'	(0x0c) feed (FF)
-				// '\r'	(0x0d) carriage return (CR)
+			template <typename CharType>
+			static bool test(CharType const& ch, tc::unused /*context*/) noexcept {
 				// TODO: support unicode?
-				return tc::char_ascii(' ')==ch || (tc::char_ascii('\t')<=ch && ch<=tc::char_ascii('\r'));
+				return tc::isasciispace(ch);
 			}
 		};
 	}
@@ -353,7 +362,7 @@ namespace tc {
 }
 
 namespace tc {
-	inline constexpr auto asciixdigit = asciidigit | tc::one<tc::value_restrictive<char, 'A', 'F'>> | tc::one<tc::value_restrictive<char, 'a', 'f'>>;
+	inline constexpr auto asciixdigit = asciidigit | tc::one<tc::restricted_enum<char, 'A', 'F'>> | tc::one<tc::restricted_enum<char, 'a', 'f'>>;
 
 	template<typename Char, typename T>
 	using symbols = x3::symbols_parser<tc::char_encoding<Char>, T>;
@@ -492,6 +501,14 @@ namespace boost::spirit::x3::traits
 		{
 			tc::append(c, tc::make_iterator_range(first, last));
 			return true;
+		}
+	};
+	template <typename T, tc::static_vector_size_t N>
+	struct is_empty_container<tc::static_vector<T, N>, void>
+	{
+		static bool call(tc::static_vector<T, N> const& c) noexcept
+		{
+			return tc::empty(c);
 		}
 	};
 }

@@ -18,6 +18,7 @@
 #include <map>
 #include <unordered_map>
 #include <unordered_set>
+#include <list>
 
 #if defined(TC_PRIVATE) && !defined(__cpp_lib_generic_unordered_lookup)
 	#include <boost/multi_index_container.hpp>

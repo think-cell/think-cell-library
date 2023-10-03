@@ -11,13 +11,13 @@
 #include "../base/assert_defs.h"
 #include "../algorithm/compare.h"
 #include "../algorithm/algorithm.h"
-#include "range_fwd.h"
 #include "filter_adaptor.h"
 
 namespace tc {
 	namespace intersection_difference_adaptor_adl {
 		template<
 			bool bIntersection,
+			bool bSubset,
 			typename Comp,
 			typename Rng0,
 			typename Rng1
@@ -60,52 +60,27 @@ namespace tc {
 			};
 
 		public:
-			template<tc::decayed_derived_from<intersection_difference_adaptor> Self, typename Sink> requires
-				tc::range_with_iterators<Rng1>
+			template<tc::decayed_derived_from<intersection_difference_adaptor> Self, typename Sink>
 			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
-				if constexpr (bIntersection) {
-					return tc::interleave_2(
-						*tc::get<0>(std::forward<Self>(self).m_tplbaserng),
-						*tc::get<1>(std::forward<Self>(self).m_tplbaserng),
-						std::forward<Self>(self).m_comp,
-						tc::noop(),
-						tc::noop(),
-						FForwardFirstArgOnly<tc::decay_t<Sink>>{std::forward<Sink>(sink)}
-					);
-				} else {
-					return tc::interleave_2(
-						*tc::get<0>(std::forward<Self>(self).m_tplbaserng),
-						*tc::get<1>(std::forward<Self>(self).m_tplbaserng),
-						std::forward<Self>(self).m_comp,
-						std::forward<Sink>(sink),
-						tc::noop(),
-						tc::noop()
-					);
-				}
-			}
-
-			template<tc::decayed_derived_from<intersection_difference_adaptor> Self, typename Sink> requires
-				tc::range_with_iterators<Rng0> && (!tc::range_with_iterators<Rng1>)
-			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
-				auto const predReverse = [pred=tc::decay_copy(std::forward<Self>(self).m_comp)](auto const& lhs, auto const& rhs) noexcept {
-					return tc::negate(pred(rhs, lhs));
+				auto const NotInRng0 = [](tc::unused) noexcept {
+					_ASSERT(!bSubset);
 				};
 				if constexpr (bIntersection) {
 					return tc::interleave_2(
-						*tc::get<1>(std::forward<Self>(self).m_tplbaserng),
 						*tc::get<0>(std::forward<Self>(self).m_tplbaserng),
-						predReverse,
+						*tc::get<1>(std::forward<Self>(self).m_tplbaserng),
+						std::forward<Self>(self).m_comp,
 						tc::noop(),
-						tc::noop(),
+						NotInRng0,
 						FForwardFirstArgOnly<tc::decay_t<Sink>>{std::forward<Sink>(sink)}
 					);
 				} else {
 					return tc::interleave_2(
-						*tc::get<1>(std::forward<Self>(self).m_tplbaserng),
 						*tc::get<0>(std::forward<Self>(self).m_tplbaserng),
-						predReverse,
-						tc::noop(),
+						*tc::get<1>(std::forward<Self>(self).m_tplbaserng),
+						std::forward<Self>(self).m_comp,
 						std::forward<Sink>(sink),
+						NotInRng0,
 						tc::noop()
 					);
 				}
@@ -142,26 +117,17 @@ namespace tc {
 		return set_intersect_or_difference<false>(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1));
 	}
 
-	template<typename Rng0, typename Rng1, typename Comp>
-	auto intersect(Rng0&& rng0, Rng1&& rng1, Comp&& comp) return_ctor_noexcept(
-		TC_FWD(intersection_difference_adaptor<true, tc::decay_t<Comp>, Rng0, Rng1>),
-		(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1), std::forward<Comp>(comp))
+#pragma push_macro("DEFINE_INTERSECT_DIFFERENCE")
+#define DEFINE_INTERSECT_DIFFERENCE(name, bIntersect, bSubset) \
+	template<typename Rng0, typename Rng1, typename Comp = tc::fn_compare> \
+	auto name(Rng0&& rng0, Rng1&& rng1, Comp&& comp = Comp()) return_ctor_noexcept( \
+		TC_FWD(intersection_difference_adaptor<bIntersect, bSubset, tc::decay_t<Comp>, Rng0, Rng1>), \
+		(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1), std::forward<Comp>(comp)) \
 	)
 
-	template<typename Rng0, typename Rng1>
-	auto intersect(Rng0&& rng0, Rng1&& rng1) return_decltype_noexcept(
-		intersect(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1), tc::fn_compare())
-	)
-
-	template<typename Rng0, typename Rng1, typename Comp>
-	auto difference(Rng0&& rng0, Rng1&& rng1, Comp&& comp) return_ctor_noexcept(
-		TC_FWD(intersection_difference_adaptor<false, tc::decay_t<Comp>, Rng0, Rng1>),
-		(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1), std::forward<Comp>(comp))
-	)
-
-	template<typename Rng0, typename Rng1>
-	auto difference(Rng0&& rng0, Rng1&& rng1) return_decltype_noexcept(
-		difference(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1), tc::fn_compare())
-	)
-
+	DEFINE_INTERSECT_DIFFERENCE(intersect, true, false)
+	DEFINE_INTERSECT_DIFFERENCE(subset_intersect, true, true)
+	DEFINE_INTERSECT_DIFFERENCE(difference, false, false)
+	DEFINE_INTERSECT_DIFFERENCE(subset_difference, false, true)
+#pragma pop_macro("DEFINE_INTERSECT_DIFFERENCE")
 }

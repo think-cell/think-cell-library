@@ -11,33 +11,40 @@
 #include "../container/container.h" // tc::vector
 #include "../interval.h"
 #include "subrange.h"
+#include "range_return.h"
 #include "union_adaptor.h"
 #include "unique_range_adaptor.h"
 #include "intersection_adaptor.h"
 
 #include <type_traits>
+#include <string_view> // for test only
 
 namespace {
+	// non-borrowed ranges are subranges
+	STATICASSERTSAME(tc::make_subrange_result_t<std::string>, tc::subrange<std::string>);
+	// borrowed range are iterator_ranges
+	STATICASSERTSAME(tc::make_subrange_result_t<std::string&>, tc::iterator_range_t<std::string&>);
+	STATICASSERTSAME(tc::make_subrange_result_t<std::string_view>, tc::iterator_range_t<std::string_view>);
+	STATICASSERTSAME(tc::make_subrange_result_t<std::string_view&>, tc::iterator_range_t<std::string_view>);
+	// unwrapping
+	STATICASSERTSAME(tc::make_subrange_result_t<tc::subrange<std::string>>, tc::subrange<std::string>);
+	STATICASSERTSAME(tc::make_subrange_result_t<tc::subrange<std::string>&>, tc::iterator_range_t<std::string&>);
+	STATICASSERTSAME(tc::make_subrange_result_t<tc::span<char const>>, tc::span<char const>);
 	STATICASSERTSAME(tc::make_subrange_result_t<tc::span<char const>&>, tc::span<char const>);
 
-	using SRVI = tc::make_subrange_result_t<tc::vector<int>&>;
-	using CSRVI = tc::make_subrange_result_t<tc::vector<int> const&>;
-
-	using SSRVI = tc::make_subrange_result_t<tc::make_subrange_result_t<tc::vector<int>&>>;
-	using CSSRVI = tc::make_subrange_result_t<tc::make_subrange_result_t<tc::vector<int> const&>>;
 
 	UNITTESTDEF( subrange_array ) {
 
 		int arr[4] = {1,2,3,4};
 		auto arr_rng = tc::slice_by_interval(arr, tc::make_interval(1, 3));
 
-		void(tc::implicit_cast<tc::subrange<tc::iterator_base<int *>>>(arr_rng));
-		void(tc::implicit_cast<tc::subrange<tc::iterator_base<int const*>>>(arr_rng));
+		void(tc::implicit_cast<tc::subrange<tc::universal_range<int *>>>(arr_rng));
+		void(tc::implicit_cast<tc::subrange<tc::universal_range<int const*>>>(arr_rng));
 	}
 
 
 	UNITTESTDEF( const_subrange_char_ptr ) {
-		tc::subrange<tc::iterator_base<char const*>>{"test"};
+		tc::subrange<tc::universal_range<char const*>>{"test"};
 	}
 
 	//-------------------------------------------------------------------------------------------------------------------------
@@ -57,8 +64,8 @@ namespace {
 
 	UNITTESTDEF( const_subrange ) {
 		tc::vector<int> v;
-		auto srvi = tc::slice(v);
-		auto csrvi = tc::slice(tc::as_const(v));
+		auto srvi = tc::all(v);
+		auto csrvi = tc::all(tc::as_const(v));
 
 		(void) srvi;
 		(void) csrvi;
@@ -73,11 +80,11 @@ namespace {
 
 		tc::vector<int> v;
 
-		auto srvi = tc::slice(v);
-		auto csrvi = tc::slice(tc::as_const(v));
+		auto srvi = tc::all(v);
+		auto csrvi = tc::all(tc::as_const(v));
 
-		auto ssrvi = tc::slice(tc::slice(v));
-		auto cssrvi = tc::slice(tc::slice(tc::as_const(v)));
+		auto ssrvi = tc::all(tc::all(v));
+		auto cssrvi = tc::all(tc::all(tc::as_const(v)));
 
 		STATICASSERTSAME(decltype(ssrvi), decltype(srvi), "Sub-sub-range does not flatten to sub-range (decltype)");
 		STATICASSERTSAME(decltype(cssrvi), decltype(csrvi), "const sub-sub-range does not flatten to const sub-range (decltype)");
@@ -87,11 +94,11 @@ namespace {
 
 		tc::vector<int> v;
 
-		auto srvi = tc::slice(v);
-		auto csrvi = tc::slice(tc::as_const(v));
+		auto srvi = tc::all(v);
+		auto csrvi = tc::all(tc::as_const(v));
 
-		auto ssrvi = tc::slice(srvi);
-		auto cssrvi = tc::slice(csrvi);
+		auto ssrvi = tc::all(srvi);
+		auto cssrvi = tc::all(csrvi);
 
 		// sanity checks
 		STATICASSERTSAME(decltype(srvi), SRVI, "make_subrange_result gives wrong result");
@@ -109,8 +116,8 @@ namespace {
 		TEST_init_hack(tc::vector, int, v, {1,2,3,4,5,6,7,8,9});
 		TEST_init_hack(tc::vector, int, exp36, {4,5,6});
 
-		auto sr = tc::slice(v);
-		auto csr = tc::slice(tc::as_const(v));
+		auto sr = tc::all(v);
+		auto csr = tc::all(tc::as_const(v));
 
 		// use range_difference to specify bounds
 		auto ssr1 = tc::slice_by_interval(sr, tc::make_interval(3, 6));
@@ -121,41 +128,29 @@ namespace {
 
 	}
 
-	UNITTESTDEF( sub_subrange_crazy_manual ) {
-
-		tc::vector<int> v;
-
-		// don't try that at work! - Seriously: subrange is build to work correctly in a variety of situations,
-		// but normally it should not be necessary to manually utter the type. Use slice and make_subrange_result instead.
-		// if you do need to say the type (e.g. when deducting sth.)  ...
-		//_ASSERT(false);
-		tc::subrange<tc::vector<int>&>{v}; // create a sub range from unrelated range
-		static_cast<void>(tc::subrange<tc::vector<int>&>(tc::subrange<tc::vector<int>&>(v))); // copy sub range
-	}
-
 	UNITTESTDEF(union_range_tests) {
 		TEST_RANGE_EQUAL(
-			as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,4)),
+			tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,4)),
 			tc::union_range(
-				as_constexpr(tc::make_array(tc::aggregate_tag, 1,4)),
-				as_constexpr(tc::make_array(tc::aggregate_tag, 2,3))
+				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,4)),
+				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 2,3))
 			)
 		);
 
 		TEST_RANGE_EQUAL(
-			as_constexpr(tc::make_array(tc::aggregate_tag, 4,3,2,1,0)),
+			tc_as_constexpr(tc::make_array(tc::aggregate_tag, 4,3,2,1,0)),
 			tc::union_range(
-				as_constexpr(tc::make_array(tc::aggregate_tag, 4,2,0)),
-				as_constexpr(tc::make_array(tc::aggregate_tag, 3,2,1)),
-				[](int lhs, int rhs) noexcept {return tc::compare(rhs,lhs);}
+				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 4,2,0)),
+				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 3,2,1)),
+				[](int const lhs, int const rhs) noexcept {return tc::compare(rhs,lhs);}
 			)
 		);
 
 		_ASSERTEQUAL(
 			*tc::upper_bound<tc::return_border>(
 				tc::union_range(
-					as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,4)),
-					as_constexpr(tc::make_array(tc::aggregate_tag, 2,3))
+					tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,4)),
+					tc_as_constexpr(tc::make_array(tc::aggregate_tag, 2,3))
 				),
 				2
 			),
@@ -164,13 +159,13 @@ namespace {
 
 		{
 			auto rng = tc::union_range(
-				as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,3,4,4,5)),
-				as_constexpr(tc::make_array(tc::aggregate_tag, 1,1,1,3,4,4,4))
+				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,3,4,4,5)),
+				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,1,1,3,4,4,4))
 			);
 
 			TEST_RANGE_EQUAL(
 				rng,
-				as_constexpr(tc::make_array(tc::aggregate_tag, 1,1,1,2,3,3,4,4,4,5))
+				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,1,1,2,3,3,4,4,4,5))
 			);
 
 			{
@@ -189,8 +184,8 @@ namespace {
 		}
 		{
 			auto rng = tc::union_range(
-				as_constexpr(tc::make_array(tc::aggregate_tag, 1,1,1,1,1,1,1,1,1)),
-				as_constexpr(tc::make_array(tc::aggregate_tag, 1,1))
+				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,1,1,1,1,1,1,1,1)),
+				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,1))
 			);
 			auto it = tc::lower_bound<tc::return_border>(rng,1);
 			_ASSERTEQUAL(*it,1);
@@ -199,7 +194,7 @@ namespace {
 
 	UNITTESTDEF(union_range_generator) {
 		TEST_RANGE_EQUAL(
-			as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,5,6)),
+			tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,5,6)),
 			tc::union_range(
 				[](auto sink) noexcept -> tc::break_or_continue {
 					tc_yield(sink, 1);
@@ -207,7 +202,7 @@ namespace {
 					tc_yield(sink, 5);
 					return tc::continue_;
 				},
-				as_constexpr(tc::make_array(tc::aggregate_tag, 2,6))
+				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 2,6))
 			)
 		);
 
@@ -221,7 +216,7 @@ namespace {
 		);
 
 		TEST_RANGE_EQUAL(
-			as_constexpr(tc::make_array(tc::aggregate_tag, 1.1,3.1,5.1)),
+			tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1.1,3.1,5.1)),
 			vecf
 		);
 	}
@@ -229,25 +224,25 @@ namespace {
 	UNITTESTDEF(subrange_with_tranform) {
 
 		tc::vector<int> vecn{1,2,3};
-		auto rgntrnsfn = tc::transform(vecn, [](int n) noexcept {return n*n;});
+		auto rgntrnsfn = tc::transform(vecn, [](int const n) noexcept {return n*n;});
 
 		TEST_RANGE_EQUAL(
 			tc::slice(rgntrnsfn, tc::begin(rgntrnsfn), tc::end(rgntrnsfn)),
-			as_constexpr(tc::make_array(tc::aggregate_tag, 1,4,9))
+			tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,4,9))
 		);
 
 		TEST_RANGE_EQUAL(
-			as_constexpr(tc::make_array(tc::aggregate_tag,  1, 2, 3 )),
+			tc_as_constexpr(tc::make_array(tc::aggregate_tag,  1, 2, 3 )),
 			tc::untransform(tc::slice(rgntrnsfn, tc::begin(rgntrnsfn), tc::end(rgntrnsfn)))
 		);
 
 		TEST_RANGE_EQUAL(
 			tc::single(2),
-			tc::untransform(tc::equal_range(tc::transform(vecn, [](int n) noexcept {return n*n; }), 4))
+			tc::untransform(tc::equal_range(tc::transform(vecn, [](int const n) noexcept {return n*n; }), 4))
 		);
 
 		{
-			auto rng = tc::transform(tc::filter(vecn, [](int n) noexcept {return n<3;}), [](int n) noexcept {return n*n; });
+			auto rng = tc::transform(tc::filter(vecn, [](int const n) noexcept {return n<3;}), [](int const n) noexcept {return n*n; });
 
 			TEST_RANGE_EQUAL(
 				tc::single(2),
@@ -257,44 +252,44 @@ namespace {
 
 		{
 			// r-value transform with l-value range
-			auto&& rng = tc::untransform(tc::transform(vecn, [](int n) noexcept {return n*n;}));
+			auto&& rng = tc::untransform(tc::transform(vecn, [](int const n) noexcept {return n*n;}));
 			_ASSERTEQUAL(tc::size(vecn), 3);
 			_ASSERTEQUAL(std::addressof(*tc::begin(rng)), std::addressof(*tc::begin(vecn)));
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
 			// rewrite the following line to ::value once VC++ compiler bug is resolved https://developercommunity.visualstudio.com/content/problem/1088659/class-local-to-function-template-erroneously-cant.html
 			static_assert(!std::is_const_v<std::remove_reference_t<decltype(rng)>>);
 			TEST_RANGE_EQUAL(
-				as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
+				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
 				rng
 			);
 		}
 
 		{
 			// r-value transform with l-value const range
-			auto&& rng = tc::untransform(tc::transform(tc::as_const(vecn), [](int n) noexcept {return n*n;}));
+			auto&& rng = tc::untransform(tc::transform(tc::as_const(vecn), [](int const n) noexcept {return n*n;}));
 			_ASSERTEQUAL(tc::size(vecn), 3);
 			_ASSERTEQUAL(std::addressof(*tc::begin(rng)), std::addressof(*tc::begin(vecn)));
 			static_assert(std::is_lvalue_reference<decltype((rng))>::value);
 			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
-				as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
+				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
 				rng
 			);
 		}
 
 		{
 			// r-value transform with r-value range
-			auto rng = tc::untransform(tc::transform(tc::vector<int>{1, 2, 3}, [](int n) noexcept {return n*n;}));
+			auto rng = tc::untransform(tc::transform(tc::vector<int>{1, 2, 3}, [](int const n) noexcept {return n*n;}));
 			STATICASSERTSAME(decltype(rng),tc::vector<int>);
 			TEST_RANGE_EQUAL(
-				as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
+				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
 				rng
 			);
 		}
 
 		{
 			// l-value transform of l-value-range
-			auto trnsfrng = tc::transform(vecn, [](int n) noexcept {return n*n;});
+			auto trnsfrng = tc::transform(vecn, [](int const n) noexcept {return n*n;});
 
 			auto&& rng = tc::untransform(trnsfrng);
 			_ASSERTEQUAL(tc::size(vecn), 3);
@@ -303,14 +298,14 @@ namespace {
 			// rewrite the following line to ::value once VC++ compiler bug is resolved https://developercommunity.visualstudio.com/content/problem/1088659/class-local-to-function-template-erroneously-cant.html
 			static_assert(!std::is_const_v<std::remove_reference_t<decltype(rng)>>);
 			TEST_RANGE_EQUAL(
-				as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
+				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
 				rng
 			);
 		}
 
 		{
 			// l-value transform of const l-value-range
-			auto const trnsfrng = tc::transform(tc::as_const(vecn), [](int n) noexcept {return n*n;});
+			auto const trnsfrng = tc::transform(tc::as_const(vecn), [](int const n) noexcept {return n*n;});
 
 			auto&& rng = tc::untransform(trnsfrng);
 			_ASSERTEQUAL(tc::size(vecn), 3);
@@ -318,14 +313,14 @@ namespace {
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
 			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
-				as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
+				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
 				rng
 			);
 		}
 
 		{
 			// l-value transform of const l-value-range
-			auto trnsfrng = tc::transform(tc::as_const(vecn), [](int n) noexcept {return n*n;});
+			auto trnsfrng = tc::transform(tc::as_const(vecn), [](int const n) noexcept {return n*n;});
 
 			auto&& rng = tc::untransform(trnsfrng);
 			_ASSERTEQUAL(tc::size(vecn), 3);
@@ -333,14 +328,14 @@ namespace {
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
 			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
-				as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
+				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
 				rng
 			);
 		}
 
 		{
 			// l-value transform of r-value range
-			auto trnsfrng = tc::transform(tc::vector<int>{1, 2, 3}, [](int n) noexcept {return n*n; });
+			auto trnsfrng = tc::transform(tc::vector<int>{1, 2, 3}, [](int const n) noexcept {return n*n; });
 			auto&& rng = tc::untransform(trnsfrng);
 			_ASSERTEQUAL(
 				std::addressof(*tc::begin(trnsfrng).element_base()),
@@ -350,13 +345,13 @@ namespace {
 			// rewrite the following line to ::value once VC++ compiler bug is resolved https://developercommunity.visualstudio.com/content/problem/1088659/class-local-to-function-template-erroneously-cant.html
 			static_assert(!std::is_const_v<std::remove_reference_t<decltype(rng)>>);
 			TEST_RANGE_EQUAL(
-				as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
+				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
 				rng
 			);
 		}
 		{
 			// const l-value transform of r-value range
-			auto const trnsfrng = tc::transform(tc::vector<int>{1, 2, 3}, [](int n) noexcept {return n*n; });
+			auto const trnsfrng = tc::transform(tc::vector<int>{1, 2, 3}, [](int const n) noexcept {return n*n; });
 			auto&& rng = tc::untransform(trnsfrng);
 			_ASSERTEQUAL(
 				std::addressof(*tc::begin(trnsfrng).element_base()),
@@ -365,7 +360,7 @@ namespace {
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
 			static_assert(std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
-				as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
+				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
 				rng
 			);
 		}
@@ -421,7 +416,7 @@ namespace {
 
 		}
 
-		auto Pred = [](int lhs, int rhs) noexcept {
+		auto const Pred = [](int const lhs, int const rhs) noexcept {
 			return std::abs(lhs-rhs) <=1;
 		};
 
@@ -464,19 +459,19 @@ namespace {
 	UNITTESTDEF(difference_range) {
 		TEST_RANGE_EQUAL(
 			tc::difference(
-				as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,2,4,7,8,8,11,11)),
-				as_constexpr(tc::make_array(tc::aggregate_tag, 2,3,4,8,8))
+				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,2,4,7,8,8,11,11)),
+				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 2,3,4,8,8))
 			),
-			as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,7,11,11))
+			tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,7,11,11))
 		);
 	}
 
 	UNITTESTDEF(difference_unordered_set) {
 		tc::unordered_set<int> setn1;
-		tc::cont_assign(setn1, as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,4,5,6,7,8,9,10,11)));
+		tc::cont_assign(setn1, tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,4,5,6,7,8,9,10,11)));
 
 		tc::unordered_set<int> setn2;
-		tc::cont_assign(setn2, as_constexpr(tc::make_array(tc::aggregate_tag, 10,9,8,7,6,5,4,3,2,1)));
+		tc::cont_assign(setn2, tc_as_constexpr(tc::make_array(tc::aggregate_tag, 10,9,8,7,6,5,4,3,2,1)));
 
 		TEST_RANGE_EQUAL(
 			tc::set_difference(setn1, setn2),
@@ -484,47 +479,47 @@ namespace {
 		);
 
 		tc::vector<int> vecn;
-		tc::for_each(tc::set_intersect(setn1, setn2), [&](int n) noexcept {
+		tc::for_each(tc::set_intersect(setn1, setn2), [&](int const n) noexcept {
 			vecn.emplace_back(n);
 		});
 
 		TEST_RANGE_EQUAL(
 			tc::sort(vecn),
-			as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,4,5,6,7,8,9,10))
+			tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,4,5,6,7,8,9,10))
 		);
 	}
 
 	UNITTESTDEF(tc_unique) {
 		TEST_RANGE_EQUAL(
-			tc::adjacent_unique(as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,2,4,7,8,8,11,11))),
-			as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,4,7,8,11))
+			tc::adjacent_unique(tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,2,4,7,8,8,11,11))),
+			tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,4,7,8,11))
 		);
 
 		TEST_RANGE_EQUAL(
-			tc::reverse(tc::adjacent_unique(as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,2,4,7,8,8,11,11)))),
-			as_constexpr(tc::make_array(tc::aggregate_tag, 11,8,7,4,2,1))
+			tc::reverse(tc::adjacent_unique(tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,2,4,7,8,8,11,11)))),
+			tc_as_constexpr(tc::make_array(tc::aggregate_tag, 11,8,7,4,2,1))
 		);
 
 		TEST_RANGE_EQUAL(
 			tc::transform(
 				tc::adjacent_unique(
-					tc::make_range_of_iterators(as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,2,3,3,3,4,7,8,8,11,11))),
+					tc::make_range_of_iterators(tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,2,3,3,3,4,7,8,8,11,11))),
 					tc::projected(tc::fn_equal_to(), tc::fn_indirection())
 				),
 				tc::fn_indirection()
 			),
-			as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,4,7,8,11))
+			tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,4,7,8,11))
 		);
 
 		TEST_RANGE_EQUAL(
 			tc::transform(
 				tc::reverse(tc::adjacent_unique(
-					tc::make_range_of_iterators(as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,2,3,3,3,4,7,8,8,11,11))),
+					tc::make_range_of_iterators(tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,2,3,3,3,4,7,8,8,11,11))),
 					tc::projected(tc::fn_equal_to(), tc::fn_indirection())
 				)),
 				tc::fn_indirection()
 			),
-			as_constexpr(tc::make_array(tc::aggregate_tag, 11,8,7,4,3,2,1))
+			tc_as_constexpr(tc::make_array(tc::aggregate_tag, 11,8,7,4,3,2,1))
 		);
 
 		tc::vector<int> vecn{1,1,2,2};
@@ -584,7 +579,7 @@ namespace {
 
 		TEST_RANGE_EQUAL(
 			vecmn,
-			as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,4))
+			tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,4))
 		);
 	}
 
@@ -595,7 +590,7 @@ namespace {
 
 		_ASSERTEQUAL(tc::for_each(tc::begin_next<tc::return_take>(rngn), [](int) noexcept {}), tc::continue_);
 		_ASSERTEQUAL(tc::for_each(tc::begin_next<tc::return_take>(rngn), [](int) noexcept { return tc::break_; }), tc::break_);
-		_ASSERT(tc::equal(as_constexpr(tc::make_array(tc::aggregate_tag, 0,1,2,3)), tc::begin_next<tc::return_take>(rngn, 4)));
+		_ASSERT(tc::equal(tc_as_constexpr(tc::make_array(tc::aggregate_tag, 0,1,2,3)), tc::begin_next<tc::return_take>(rngn, 4)));
 
 		auto rngch = tc::concat("123", [](auto&& sink) noexcept { return tc::for_each("456", tc_move_if_owned(sink)); });
 
@@ -615,7 +610,7 @@ namespace {
 
 		_ASSERTEQUAL(tc::for_each(tc::begin_next<tc::return_drop>(rngn), [](int) noexcept {}), tc::continue_);
 		_ASSERTEQUAL(tc::for_each(tc::begin_next<tc::return_drop>(rngn), [](int) noexcept { return tc::break_; }), tc::break_);
-		_ASSERT(tc::equal(as_constexpr(tc::make_array(tc::aggregate_tag, 4,5,6)), tc::begin_next<tc::return_drop>(rngn, 4)));
+		_ASSERT(tc::equal(tc_as_constexpr(tc::make_array(tc::aggregate_tag, 4,5,6)), tc::begin_next<tc::return_drop>(rngn, 4)));
 
 		auto rngch = tc::begin_next<tc::return_drop>(tc::concat("123", [](auto&& sink) noexcept { return tc::for_each("456", tc_move_if_owned(sink)); }), 2);
 
@@ -655,7 +650,7 @@ namespace {
 #endif
 
 	UNITTESTDEF(and_then) {
-		auto const fn=[](auto n) noexcept {return n+1;};
+		auto const fn=[](auto const n) noexcept {return n+1;};
 		std::optional<int> on(12);
 
 		auto n1=tc::and_then(on, fn);

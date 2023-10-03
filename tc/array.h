@@ -56,19 +56,10 @@ namespace tc {
 			typename no_adl::array_storage<T*, N>::type m_a;
 
 		public:
-			using value_type = tc::decay_t<T>;
-			using reference = T&;
-			using const_reference = T&; // reference semantics == no deep constness
-			using pointer = T *;
-			using iterator = boost::indirect_iterator<T* const*, value_type, /*CategoryOrTraversal*/boost::use_default, reference>;
-			using const_iterator = iterator; // reference semantics == no deep constness
-			using reverse_iterator = std::reverse_iterator<iterator>;
-			using const_reverse_iterator = std::reverse_iterator<const_iterator>;
-			using size_type = std::size_t;
-			using difference_type = std::ptrdiff_t;
+			using iterator = boost::indirect_iterator<T* const*, tc::decay_t<T>, /*CategoryOrTraversal*/boost::use_default, T&>;
 
-			static constexpr std::size_t size() noexcept {
-				return N;
+			static constexpr auto size() noexcept {
+				return tc::least_uint_constant<N>{};
 			}
 
 		private:
@@ -139,7 +130,7 @@ namespace tc {
 
 			// access (no rvalue-qualified overloads, must not move data out of a reference)
 			// reference semantics == no deep constness
-			[[nodiscard]] constexpr T& operator[](std::size_t i) const& noexcept {
+			[[nodiscard]] constexpr T& operator[](std::size_t const i) const& noexcept {
 				_ASSERTDEBUG(i<N);
 				return *m_a[i];
 			}
@@ -163,17 +154,12 @@ namespace tc {
 	} // namespace array_adl
 	using array_adl::array;
 
-	namespace no_adl {
-		template<typename T, std::size_t N>
-		struct constexpr_size_impl<tc::array<T&, N>> : tc::constant<N> {};
-	}
-
 	/////////////////////////////////////////////////////
 	// std::array
 
 	namespace no_adl {
 		template<typename T, std::size_t N>
-		struct constexpr_size_impl<std::array<T, N>> : tc::constant<N> {};
+		struct constexpr_size_impl<std::array<T, N>> : tc::least_uint_constant<N> {};
 	}
 
 	namespace explicit_convert_std_array_detail {
@@ -282,12 +268,12 @@ namespace tc {
 
 	template<typename TTarget, typename Rng>
 	[[nodiscard]] constexpr auto make_array(Rng&& rng) return_decltype_MAYTHROW(
-		tc::make_array<TTarget, tc::constexpr_size<Rng>::value>(std::forward<Rng>(rng))
+		tc::make_array<TTarget, tc::constexpr_size<Rng>()>(std::forward<Rng>(rng))
 	)
 
 	template<typename Rng>
 	[[nodiscard]] constexpr auto make_array(Rng&& rng) return_decltype_MAYTHROW(
-		tc::make_array<tc::constexpr_size<Rng>::value>(std::forward<Rng>(rng))
+		tc::make_array<tc::constexpr_size<Rng>()>(std::forward<Rng>(rng))
 	)
 
 	template <typename T = tc::deduce_tag, typename... Ts> requires (!std::is_reference<T>::value)

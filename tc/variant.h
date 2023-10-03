@@ -20,50 +20,24 @@
 /*
  Extensions to make std::variant easier to use
 
-
- std::get_if always takes a pointer to the variant.
- tc::get_if allows passing a reference or a pointer.
-```
-	std::variant<int, std::string> var = "Hello World";
-	_ASSERT(tc::get_if<0>(var)==nullptr);
-	_ASSERT(tc::get_if<0>(std::addressof(var))==nullptr);
-	_ASSERT(tc::equal(tc::get_if<1>(var), "Hello World"))
-	_ASSERT(tc::equal(tc::get_if<1>(std::addressof(var)), "Hello World"));
-```
+ std::get_if takes a pointer to the variant and returns a pointer.
+ tc::get_if takes a reference to the variant and returns tc::optional<TRef>.
 */
 
 namespace tc {
-	template<std::size_t I, typename Variant>
-	[[nodiscard]] constexpr auto get_if(Variant& v) noexcept -> tc::optional<std::variant_alternative_t<I, Variant>&> {
+	template<std::size_t I, typename Variant> requires (I < tc::type::size<typename tc::is_instance_or_derived<std::remove_reference_t<Variant>, std::variant>::arguments>::value)
+	[[nodiscard]] constexpr auto get_if(Variant&& v) noexcept -> tc::optional<tc::apply_cvref_t<std::variant_alternative_t<I, typename tc::is_instance_or_derived<std::remove_reference_t<Variant>, std::variant>::base_instance>, Variant&&>> {
 		if(auto pval=std::get_if<I>(std::addressof(v))) {
-			return *pval;
+			return tc::forward_like<Variant>(*pval);
 		} else {
 			return std::nullopt;
 		}
 	}
 
-	template<std::size_t I, typename Variant>
-	[[nodiscard]] constexpr auto get_if(Variant&& v) noexcept -> tc::optional<std::variant_alternative_t<I, Variant>&&> {
-		if(auto pval=std::get_if<I>(std::addressof(v))) {
-			return std::move(*pval);
-		} else {
-			return std::nullopt;
-		}
-	}
-
-	template<typename T, typename Variant>
-	[[nodiscard]] constexpr auto get_if(Variant& v) noexcept -> tc::optional<std::conditional_t<std::is_const<Variant>::value, T const, T>&> {
+	template<typename T, typename Variant> requires tc::type::find_unique<typename tc::is_instance_or_derived<std::remove_reference_t<Variant>, std::variant>::arguments, T>::found
+	[[nodiscard]] constexpr auto get_if(Variant&& v) noexcept -> tc::optional<tc::apply_cvref_t<T, Variant&&>> {
 		if(auto pval=std::get_if<T>(std::addressof(v))) {
-			return *pval;
-		} else {
-			return std::nullopt;
-		}
-	}
-
-	template<typename T, typename Variant>
-	[[nodiscard]] constexpr auto get_if(Variant&& v) noexcept -> tc::optional<std::conditional_t<std::is_const<Variant>::value, T const, T>&&> {
-		if(auto pval=std::get_if<T>(std::addressof(v))) {
-			return std::move(*pval);
+			return tc::forward_like<Variant>(*pval);
 		} else {
 			return std::nullopt;
 		}
@@ -83,12 +57,12 @@ namespace tc {
 ```
 */
 namespace tc_get_impl {
-	template<std::size_t I, tc::instance_or_derived<std::variant> Variant>
+	template<std::size_t I, typename Variant> requires (I < tc::type::size<typename tc::is_instance_or_derived<std::remove_reference_t<Variant>, std::variant>::arguments>::value)
 	[[nodiscard]] constexpr decltype(auto) get(Variant&& v) noexcept {
 		return tc::forward_like<Variant>(*VERIFYNORETURN(tc::get_if<I>(v)));
 	}
 
-	template<typename T, tc::instance_or_derived<std::variant> Variant>
+	template<typename T, typename Variant> requires tc::type::find_unique<typename tc::is_instance_or_derived<std::remove_reference_t<Variant>, std::variant>::arguments, T>::found
 	[[nodiscard]] constexpr decltype(auto) get(Variant&& v) noexcept {
 		return tc::forward_like<Variant>(*VERIFYNORETURN(tc::get_if<T>(v)));
 	}
@@ -113,7 +87,7 @@ namespace tc {
 			tc::type::transform_t<
 				tc::type::cartesian_product_t<
 					tc::type::transform_t<
-						typename tc::is_instance_or_derived<Variants, std::variant>::arguments,
+						typename tc::is_instance_or_derived<std::remove_reference_t<Variants>, std::variant>::arguments,
 						tc::type::rcurry<tc::same_cvref_t, Variants>::template type
 					>...
 				>,
@@ -123,7 +97,7 @@ namespace tc {
 
 
 		template<typename Result, typename Overload>
-		decltype(auto) projected_result(Overload&& overload) noexcept {
+		constexpr decltype(auto) projected_result(Overload&& overload) noexcept {
 			return [overload=std::forward<Overload>(overload)](auto&&... args) MAYTHROW -> Result {
 				return tc::invoke(overload, tc_move_if_owned(args)...);
 			};
@@ -179,8 +153,8 @@ namespace tc {
 		template<typename Overload>
 		struct [[nodiscard]] fn_visit_impl : private Overload {
 			using Overload::Overload;
-			template<typename... Variant>
-			detail::visit_result_t<Overload, Variant...> operator()(Variant&&... v) const& MAYTHROW {
+			template<typename... Variant> requires (... && tc::instance_or_derived<std::remove_reference_t<Variant>, std::variant>)
+			constexpr detail::visit_result_t<Overload, Variant...> operator()(Variant&&... v) const& MAYTHROW {
 				([&]() noexcept { _ASSERTNORETURN( !v.valueless_by_exception() ); tc::discard(v); }(), ...);
 				return
 #ifdef TC_MAC
@@ -190,8 +164,13 @@ namespace tc {
 #endif
 					(
 						detail::projected_result<detail::visit_result_t<Overload, Variant...>>(tc::base_cast<Overload>(*this)),
-						tc::base_cast<typename tc::is_instance_or_derived<Variant, std::variant>::base_instance>(std::forward<Variant>(v))...
+						std::forward<Variant>(v)...
 					);
+			}
+
+			template<typename... T> requires (... && (!tc::instance_or_derived<std::remove_reference_t<T>, std::variant>))
+			constexpr decltype(auto) operator()(T&&... t) const& MAYTHROW {
+				return tc::invoke(tc::base_cast<Overload>(*this), std::forward<T>(t)...);
 			}
 		};
 	}
@@ -211,6 +190,17 @@ namespace tc {
 	}
 	using no_adl::variant_type_index;
 
+	namespace explicit_convert_detail {
+		template<typename VarTarget, typename VarSourceNocvref, typename VarSource>
+		constexpr bool explicit_castable_between_variants_impl = false;
+
+		template<typename... TT, typename... TS, typename VarSource> requires (... && tc::explicit_castable_from<TT, tc::apply_cvref_t<TS, VarSource>>)
+		constexpr bool explicit_castable_between_variants_impl<std::variant<TT...>, std::variant<TS...>, VarSource> = true;
+
+		template<typename VarTarget, typename VarSource>
+		concept explicit_castable_between_variants=explicit_castable_between_variants_impl<VarTarget, typename tc::is_instance_or_derived<std::remove_reference_t<VarSource>, std::variant>::base_instance, VarSource>;
+	}
+
 	namespace explicit_convert_adl {
 		template<typename TVariant, std::size_t I, typename... Args, tc::explicit_castable_from<Args...> Alternative = std::variant_alternative_t<I, TVariant>>
 		constexpr TVariant explicit_convert_impl(adl_tag_t, tc::type::identity<TVariant>, std::in_place_index_t<I> tag, Args&&... args) noexcept(
@@ -227,25 +217,14 @@ namespace tc {
 			tc::explicit_cast<TVariant>(std::in_place_index_t<tc::variant_type_index<TVariant, T>::value>(), std::forward<Args>(args)...)
 		)
 
-		template<typename... TT, typename... TS> requires (sizeof...(TT) == sizeof...(TS))
-		std::variant<TT...> explicit_convert_impl(adl_tag_t, tc::type::identity<std::variant<TT...>>, std::variant<TS...> const& src) MAYTHROW {
+		template<typename... TT, typename Variant> requires	tc::explicit_convert_detail::explicit_castable_between_variants<std::variant<TT...>, Variant>
+		std::variant<TT...> explicit_convert_impl(adl_tag_t, tc::type::identity<std::variant<TT...>>, Variant&& var) MAYTHROW {
 			using TTarget = std::variant<TT...>;
 			return tc::invoke_with_constant<std::make_index_sequence<sizeof...(TT)>>(
-				[&](auto nconstIndex) MAYTHROW -> TTarget {
-					tc_return_cast(std::in_place_index_t<nconstIndex()>(), tc::lazy_explicit_cast<std::variant_alternative_t<nconstIndex(), TTarget>>(tc::get<nconstIndex()>(src)));
+				[&](auto const nconstIndex) MAYTHROW -> TTarget {
+					return TTarget(std::in_place_index_t<nconstIndex()>(), tc::lazy_explicit_cast<std::variant_alternative_t<nconstIndex(), TTarget>>(tc::get<nconstIndex()>(tc_move_if_owned(var))));
 				},
-				src.index()
-			); // MAYTHROW
-		}
-
-		template<typename... TT, typename... TS> requires (sizeof...(TT) == sizeof...(TS))
-		std::variant<TT...> explicit_convert_impl(adl_tag_t, tc::type::identity<std::variant<TT...>>, std::variant<TS...>&& src) MAYTHROW {
-			using TTarget = std::variant<TT...>;
-			return tc::invoke_with_constant<std::make_index_sequence<sizeof...(TT)>>(
-				[&](auto nconstIndex) MAYTHROW -> TTarget {
-					tc_return_cast(std::in_place_index_t<nconstIndex()>(), tc::lazy_explicit_cast<std::variant_alternative_t<nconstIndex(), TTarget>>(tc::get<nconstIndex()>(tc_move(src))));
-				},
-				src.index()
+				var.index()
 			); // MAYTHROW
 		}
 	}
@@ -333,5 +312,5 @@ static_assert( std::is_nothrow_move_constructible< std::variant<int, double, tc:
 	auto const f=[&](auto& _) MAYTHROW -> decltype(auto) { return (__VA_ARGS__); }; \
 	static_assert( !std::is_rvalue_reference<decltype(f(*o))>::value ); \
 	static_assert( !std::is_rvalue_reference<decltype((val))>::value ); \
-	return CONDITIONAL_PRVALUE_AS_VAL(o, f(*o), TC_FWD(val)); \
+	return tc_conditional_prvalue_as_val(o, f(*o), TC_FWD(val)); \
 }(tc::get_if<type>(var)))

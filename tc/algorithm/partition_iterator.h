@@ -30,7 +30,7 @@ namespace tc {
 
 		namespace adl {
 			// default forward iterator implementation
-			template<typename It>
+			template<typename It> requires true // to make it more constrained than tc::iterator::middle_point
 			It 
 			middle_point( It const& itBegin, It const& itEnd ) noexcept {
 				// SEnumerateGapConstraints::SEnumerateGapConstraints calls intersect on transforms of counting ranges of tree iterators

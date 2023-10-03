@@ -11,10 +11,12 @@
 #include "../base/functors.h"
 #include "../base/utility.h"
 #include "../algorithm/quantifier.h"
-#include "../algorithm/algorithm.h"
 #include "../algorithm/element.h"
 #include "../algorithm/size_linear.h"
+#include "../algorithm/empty.h"
+#include "filter_adaptor.h"
 #include "range_adaptor.h"
+#include "reverse_adaptor.h"
 #include "iota_range.h"
 
 namespace tc {
@@ -111,6 +113,11 @@ namespace tc {
 
 		template<typename Rng, typename Self>
 		using apply_cvref_to_base_range_t = decltype(std::declval<tc::apply_cvref_t<tc::range_adaptor_base_range<Rng>, Self>>().base_range());
+
+		namespace trait_from_concept_workaround { // workaround Xcode14.1 segmentation fault
+			template<typename Rng>
+			using has_constexpr_size = tc::constant<tc::has_constexpr_size<Rng>>;
+		}
 
 		template<
 			bool HasIterator,
@@ -229,9 +236,20 @@ namespace tc {
 			}
 
 		public:
-			// TODO: Enable size() when any range supports constant-time size().
-			constexpr auto size() const& noexcept requires tc::has_size<tc::type::front_t<tc::type::list<Rng...>>> {
-				return tc::size_raw(tc::get<0>(m_tupleadaptbaserng).base_range());
+			constexpr auto size() const& MAYTHROW requires (... || tc::has_size<Rng>) && (!(... || tc::has_constexpr_size<Rng>)) {
+				return tc::all_same_element<tc::return_value>(tc::generator_range_output<std::size_t>(tc::transform(
+					tc::filter(m_tupleadaptbaserng, [](auto const& rng) noexcept {
+						return tc::constant<tc::has_size<decltype(rng.base_range())>>{};
+					}),
+					[](auto const& rng) noexcept {
+						return tc::size_raw(rng.base_range());
+					}
+				)));
+			}
+
+			constexpr auto size() const& noexcept requires (... || tc::has_constexpr_size<Rng>) {
+				using sized_rng = tc::type::front_t<tc::type::filter_t<tc::type::list<Rng...>, trait_from_concept_workaround::has_constexpr_size>>;
+				return tc::constexpr_size<sized_rng>;
 			}
 		};
 
@@ -267,7 +285,7 @@ namespace tc {
 
 			STATIC_FINAL_MOD(constexpr, at_end_index)(tc_index const& idx) const& noexcept -> bool {
 				auto MemberRangeAtEnd = 
-					[&](auto nconstIndex) noexcept {
+					[&](auto const nconstIndex) noexcept {
 						return tc::at_end_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(), tc::get<nconstIndex()>(idx));
 					};
 
@@ -275,7 +293,7 @@ namespace tc {
 
 				_ASSERT(tc::all_of(
 					tc::make_integer_sequence<std::size_t, 1, sizeof...(Rng)>(),
-					[&](auto nconstIndex) noexcept { return MemberRangeAtEnd(nconstIndex) == bAtEnd; }
+					[&](auto const nconstIndex) noexcept { return MemberRangeAtEnd(nconstIndex) == bAtEnd; }
 				));
 
 				return bAtEnd;
@@ -319,25 +337,12 @@ namespace tc {
 				tc_return_cast(tc::distance_to_index(tc::get<0>(this->m_tupleadaptbaserng).base_range(), tc::get<0>(idxLhs), tc::get<0>(idxRhs)));
 			}
 		};
-
-		namespace trait_from_concept_workaround { // workaround Xcode14.1 segmentation fault
-			template<typename Rng>
-			using has_constexpr_size = tc::constant<tc::has_constexpr_size<Rng>>;
-		}
-
-		template<bool HasIterator, typename... Rng> requires tc::type::any_of<tc::type::list<Rng...>, trait_from_concept_workaround::has_constexpr_size>::value
-		struct constexpr_size_impl<zip_adaptor<HasIterator, Rng...>>
-			: tc::constexpr_size<tc::type::front_t<tc::type::filter_t<
-				tc::type::list<Rng...>,
-				trait_from_concept_workaround::has_constexpr_size
-			>>>
-		{};
-
-		template<bool HasIterator, typename... Rng>
-		struct is_index_valid_for_move_constructed_range<zip_adaptor<HasIterator, Rng...>>
-			: std::conjunction<tc::is_index_valid_for_move_constructed_range<Rng>...>
-		{};
 	}
+	using no_adl::zip_adaptor;
+
+	template<bool HasIterator, typename... Rng>
+	constexpr auto enable_stable_index_on_move<zip_adaptor<HasIterator, Rng...>>
+		= (tc::stable_index_on_move<Rng> && ...);
 
 	template<typename... Rng>
 	constexpr no_adl::zip_adaptor</*HasIterator*/(... && tc::range_with_iterators<Rng>), Rng...> zip(Rng&&... rng) noexcept {
@@ -430,7 +435,7 @@ namespace tc {
 	*/
 	template<typename RngRng>
 	auto zip_ranges(RngRng&& rngrng) noexcept { // for random access ranges
-		_ASSERT(tc::all_same(tc::transform(rngrng, tc_fn(tc::size))));
+		_ASSERT(tc::all_same_element<tc::return_bool>(tc::transform(rngrng, tc_fn(tc::size))));
 		auto const n = tc::empty(rngrng) ? 0 : tc::size(tc::front(rngrng)); // Do not inline, function evaluation order undefined
 		return tc::transform(
 			tc::iota(0, n),

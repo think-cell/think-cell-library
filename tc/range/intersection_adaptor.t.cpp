@@ -41,7 +41,7 @@ UNITTESTDEF(intersection_difference) {
 		})
 	);
 
-	tc::for_each(rngndiff3, [](auto n) noexcept {
+	tc::for_each(rngndiff3, [](auto const n) noexcept {
 	});
 	_ASSERT(tc::equal(rngndiff3, tc::make_array(tc::aggregate_tag,0,5)));
 

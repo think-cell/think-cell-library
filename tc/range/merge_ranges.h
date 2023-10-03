@@ -19,7 +19,7 @@ namespace tc {
 				tc::filter(
 					tc::transform(
 						std::forward<RngRng>(rngrng),
-						tc_fn(tc::make_view)
+						tc_fn(tc::all)
 					),
 					tc_fn(!tc::empty)
 				),

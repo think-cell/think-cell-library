@@ -44,8 +44,8 @@ static_assert(IsLeading(static_cast<char>("\u200B"[0])) && IsTrailing(static_cas
 
 // UTF-16
 
-static_assert(IsSingle(UTF16('\x7FFF')));
-static_assert(IsLeading(UTF16('\xD800')));
-static_assert(IsLeading(UTF16('\xDBFF')));
-static_assert(IsTrailing(UTF16('\xDC00')));
-static_assert(IsTrailing(UTF16('\xDFFF')));
+static_assert(IsSingle(tc_utf16('\x7FFF')));
+static_assert(IsLeading(tc_utf16('\xD800')));
+static_assert(IsLeading(tc_utf16('\xDBFF')));
+static_assert(IsTrailing(tc_utf16('\xDC00')));
+static_assert(IsTrailing(tc_utf16('\xDFFF')));

@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include "reverse_adaptor.h"
 #include "../array.h"
 #include "../algorithm/accumulate.h"
 
@@ -108,15 +109,12 @@ namespace tc {
 				>...
 			>> {} // unevaluated
 
-			// Use variadic tc::mul and boost::multiprecision::number?
-			constexpr std::size_t size() const& noexcept requires (... && requires { {tc::size_raw(std::declval<Rng const&>())} -> std::convertible_to<std::size_t>; }) {
-				return tc::accumulate(
-					m_tupleadaptbaserng,
-					tc::explicit_cast<std::size_t>(1),
-					[](std::size_t& nAccu, auto const& adaptbaserng) noexcept {
-						tc::assign_mul(nAccu, tc::explicit_cast<std::size_t>(tc::size_raw(adaptbaserng.base_range())));
-					}
-				);
+			constexpr auto size() const& MAYTHROW requires (... && tc::has_size<Rng>) {
+				return tc::apply([](auto const& ... rng) MAYTHROW {
+					return tc::compute_range_adaptor_size<[](auto const ... n) noexcept {
+						return tc::as_unsigned((... * n));
+					}>(rng.base_range()...);
+				}, m_tupleadaptbaserng);
 			}
 		};
 
@@ -304,7 +302,7 @@ namespace tc {
 				requires
 					(tc::has_middle_point<std::remove_reference_t<Rng0>> && ... && tc::has_middle_point<std::remove_reference_t<Rng>>)
 			{
-				bool const bAdvanced = false;
+				bool bAdvanced = false;
 				tc::for_each(
 					tc::zip(this->m_tupleadaptbaserng, idx, idxEnd),
 					[&](auto const& adaptbaserng, auto& baseidx, auto const& baseidxEnd) MAYTHROW {
@@ -321,17 +319,9 @@ namespace tc {
 		};
 	}
 
-	namespace no_adl {
-		template<bool HasIterator, tc::has_constexpr_size... Rng>
-		struct constexpr_size_impl<cartesian_product_adaptor_adl::cartesian_product_adaptor<HasIterator, Rng...>>
-			: tc::constant<(... * tc::constexpr_size<Rng>::value)>
-		{};
-
-		template<typename... Rng>
-		struct is_index_valid_for_move_constructed_range<cartesian_product_adaptor_adl::cartesian_product_adaptor</*HasIterator*/true, Rng...>>
-			: std::conjunction<tc::is_index_valid_for_move_constructed_range<Rng>...>
-		{};
-	}
+	template<typename... Rng>
+	constexpr auto enable_stable_index_on_move<cartesian_product_adaptor_adl::cartesian_product_adaptor</*HasIterator*/true, Rng...>>
+		= (tc::stable_index_on_move<Rng> && ...);
 
 	template<typename... Rng>
 	constexpr decltype(auto) cartesian_product(Rng&&... rng) noexcept {

@@ -46,7 +46,7 @@ namespace tc {
 
 			template< typename S >
 			constexpr auto operator()( S&& s ) const& MAYTHROW {
-				return CONDITIONAL_PRVALUE_AS_VAL(
+				return tc_conditional_prvalue_as_val(
 					m_t,
 					tc::continue_if_not_break( m_accuop, *m_t, std::forward<S>(s) ),
 					TC_FWD(tc::optional_emplace(m_t, std::forward<S>(s)), tc::constant<tc::continue_>())

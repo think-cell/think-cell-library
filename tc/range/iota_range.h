@@ -114,7 +114,7 @@ MODIFY_WARNINGS_END
 		};
 
 		template<typename T, std::enable_if_t<!std::is_unsigned<T>::value>* = nullptr>
-		constexpr auto operator -(counting_iterator<T> const& a, counting_iterator<T> const& b) return_decltype_NOEXCEPT( // NOEXCEPT() for e.g. counting_iterator<tc::vector<T>::iterator>
+		constexpr auto operator -(counting_iterator<T> const& a, counting_iterator<T> const& b) return_decltype_NOEXCEPT( // NOEXCEPT() for e.g. counting_iterator<tc::iterator_t<tc::vector<T>>>
 			tc::as_signed(*a - *b)
 		)
 
@@ -131,6 +131,9 @@ MODIFY_WARNINGS_END
 		struct is_stashing_element<tc::counting_iterator<T>> : tc::constant<true> {};
 	}
 
+	template <typename Rng> requires tc::instance<tc::iterator_t<Rng>, tc::counting_iterator>
+	constexpr auto enable_borrowed_range<Rng> = true;
+
 	template<typename TBegin, typename TEnd>
 	[[nodiscard]] constexpr auto iota(TBegin const& tBegin, TEnd const& tEnd) noexcept {
 		using T = tc::counting_iterator<tc::common_type_t<TBegin, TEnd> >;
@@ -145,8 +148,8 @@ MODIFY_WARNINGS_END
 		struct is_iota_range_impl final: tc::constant<false> {};
 
 		template<typename T>
-		struct is_iota_range_impl<tc::subrange<tc::iterator_base<tc::counting_iterator<T>>>> final: tc::constant<true> {
-			STATICASSERTSAME(decltype(tc::iota(std::declval<T>(), std::declval<T>())), tc::subrange<tc::iterator_base<tc::counting_iterator<T>>>);
+		struct is_iota_range_impl<tc::subrange<tc::universal_range<tc::counting_iterator<T>>>> final: tc::constant<true> {
+			STATICASSERTSAME(decltype(tc::iota(std::declval<T>(), std::declval<T>())), tc::subrange<tc::universal_range<tc::counting_iterator<T>>>);
 		};
 	}
 
@@ -156,10 +159,6 @@ MODIFY_WARNINGS_END
 	namespace no_adl {
 		template<typename Rng>
 		struct [[nodiscard]] range_of_elements {
-			// iterator and const_iterator for compatibility with boost::range
-			using const_iterator=tc::counting_iterator< decltype(tc::begin(*std::declval<tc::reference_or_value<Rng> const&>())) >;
-			using iterator=tc::counting_iterator< decltype(tc::begin(*std::declval<tc::reference_or_value<Rng>&>())) >;
-
 			template<typename Rhs>
 			constexpr range_of_elements(aggregate_tag_t, Rhs&& rhs) noexcept
 				: m_rng(aggregate_tag, std::forward<Rhs>(rhs))
@@ -186,19 +185,21 @@ MODIFY_WARNINGS_END
 		return_ctor_noexcept( no_adl::range_of_elements< Rng >, (aggregate_tag, std::forward<Rng>(rng)) )
 
 	namespace no_adl {
-		template<auto first, decltype(first) last
+		template<auto Begin, decltype(Begin) End
 #ifdef _MSC_VER // MSVC 19.31 sometimes incorrectly folds iota_range_constant<EnumUnrelated(0), EnumUnrelated(7)> and iota_range_constant<Enum(0), Enum(7)>. I don't have a concise repro for this behavior.
-			, typename MsvcWorkaround = decltype(first)
+			, typename MsvcWorkaround = decltype(Begin)
 #endif
 		>
 		struct [[nodiscard]] iota_range_constant {
-			using const_iterator = tc::counting_iterator<decltype(first)>;
-			using iterator = const_iterator;
-			static constexpr iterator begin() noexcept {
-				return iterator(first);
+			static constexpr auto begin() noexcept {
+				return tc::counting_iterator(Begin);
 			}
-			static constexpr iterator end() noexcept {
-				return iterator(last);
+			static constexpr auto end() noexcept {
+				return tc::counting_iterator(End);
+			}
+
+			static constexpr auto size() noexcept {
+				return tc::least_uint_constant<tc::as_unsigned(End - Begin)>{};
 			}
 		};
 
@@ -222,15 +223,12 @@ MODIFY_WARNINGS_END
 				return RangeReturn::template pack_element<all_values>(e);
 			}
 		}
-
-		template<typename Enum>
-		struct constexpr_size_impl<all_values<Enum>> : tc::constant<enum_count<Enum>::value> {};
-
-		template<typename Enum>
-		struct is_index_valid_for_move_constructed_range<all_values<Enum>> : tc::constant<true> {};
 	}
 	using no_adl::iota_range_constant;
 	using no_adl::all_values;
+
+	template <typename Enum>
+	constexpr auto enable_borrowed_range<tc::all_values<Enum>> = true;
 
 	template<typename Enum>
 	inline auto constexpr all_constants = tc::tuple_transform(

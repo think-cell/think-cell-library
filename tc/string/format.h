@@ -16,7 +16,7 @@
 #include "../range/subrange.h"
 #include "../range/concat_adaptor.h"
 #include "../range/repeat_n.h"
-#include "value_restrictive.h"
+#include "char.h"
 
 #ifdef __clang__
 #pragma clang diagnostic push
@@ -68,7 +68,8 @@ namespace tc {
 
 			template<typename Sink>
 			auto operator()(Sink&& sink) const& MAYTHROW {
-				return tc::for_each(tc::transform(tc::ptr_begin( boost::lexical_cast< std::array<char,50> >(m_n+0/*force integral promotion, otherwise unsigned/signed char gets printed as character*/) ), tc::fn_explicit_cast<tc::char_ascii>()), std::forward<Sink>(sink));
+				tc_auto_cref(str, boost::lexical_cast< std::array<char,50> >(m_n+0/*force integral promotion, otherwise unsigned/signed char gets printed as character*/));
+				return tc::for_each(tc::transform(tc::ptr_begin(str), tc::fn_explicit_cast<tc::char_ascii>()), std::forward<Sink>(sink));
 			}
 
 			constexpr bool empty() const& noexcept { return false; }
@@ -264,7 +265,7 @@ MODIFY_WARNINGS_END
 		};
 	}
 
-	template< typename T > requires tc::instance<std::remove_reference_t<T>, std::optional>
+	template< typename T > requires tc::instance<std::remove_reference_t<T>, std::optional> || tc::instance<std::remove_reference_t<T>, tc::optional>
 	auto bool_prefixed(T&& t) return_ctor_noexcept(
 		no_adl::bool_prefixed_impl<T>,
 		(aggregate_tag, std::forward<T>(t))

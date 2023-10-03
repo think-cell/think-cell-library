@@ -15,8 +15,8 @@
 #define TYPED_CONDITIONAL(b, type, lhs, rhs) \
 	(tc::explicit_cast<bool>(b) ? static_cast<type>(lhs) : static_cast<type>(rhs)) // static_cast needed for conversion from const& to const&&
 
-#define CONDITIONAL_RVALUE_AS_REF(b, lhs, rhs) \
+#define tc_conditional_rvalue_as_ref(b, lhs, rhs) \
 	TYPED_CONDITIONAL(TC_FWD(b), TC_FWD(tc::common_reference_xvalue_as_ref_t<decltype((lhs))&&, decltype((rhs))&&>), TC_FWD(lhs), TC_FWD(rhs))
 
-#define CONDITIONAL_PRVALUE_AS_VAL(b, lhs, rhs) \
+#define tc_conditional_prvalue_as_val(b, lhs, rhs) \
 	TYPED_CONDITIONAL(TC_FWD(b), TC_FWD(tc::common_reference_prvalue_as_val_t<decltype((lhs)), decltype((rhs))>), TC_FWD(lhs), TC_FWD(rhs))

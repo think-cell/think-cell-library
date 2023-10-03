@@ -33,15 +33,34 @@ namespace tc {
 				: m_t(std::forward<Rhs>(rhs))
 			{}
 
-			// T may be a proxy with reference behavior (e.g. pair<X&,X&>): operator= may not be equivalent to copy ctor.
+			// reference_or_value<T> is trivially copy assignable if T is trivially copy assignable.
+			constexpr reference_or_value& operator=(reference_or_value const& other) & requires std::is_trivially_copy_assignable<T>::value = default;
+			// T may be a proxy with reference behavior (e.g. pair<X&,X&>): operator= must be non trivial and may not be equivalent to copy ctor.
 			// operator=() with tc::renew for pointer semantics.
-			constexpr reference_or_value& operator=(reference_or_value const& other) & noexcept {
+#ifdef __clang__ // workaround clang bug on trivially copyable: https://github.com/llvm/llvm-project/issues/63352
+			template<ENABLE_SFINAE>
+			constexpr reference_or_value& operator=(reference_or_value<SFINAE_TYPE(T)> const& other) & noexcept requires
+#else
+			constexpr reference_or_value& operator=(reference_or_value const& other) & noexcept requires
+#endif
+				(!std::is_trivially_copy_assignable<T>::value) &&
+				std::is_copy_constructible<T>::value
+			{
 				_ASSERTE(this != std::addressof(other));
 				tc::renew(m_t, other.m_t);
 				return *this;
 			}
 
-			constexpr reference_or_value& operator=(reference_or_value&& other) & noexcept {
+			constexpr reference_or_value& operator=(reference_or_value&& other) & requires std::is_trivially_move_assignable<T>::value = default;
+#ifdef __clang__ // workaround clang bug on trivially copyable: https://github.com/llvm/llvm-project/issues/63352
+			template<ENABLE_SFINAE>
+			constexpr reference_or_value& operator=(reference_or_value<SFINAE_TYPE(T)>&& other) & noexcept requires
+#else
+			constexpr reference_or_value& operator=(reference_or_value&& other) & noexcept requires
+#endif
+				(!std::is_trivially_move_assignable<T>::value) &&
+				std::is_move_constructible<T>::value
+			{
 				_ASSERTE(this != std::addressof(other));
 				tc::renew(m_t, tc_move(other).m_t);
 				return *this;
@@ -146,8 +165,8 @@ namespace tc {
 	}
 	template<typename T>
 	using reference_or_value = std::conditional_t<
-		tc::empty_type<T>,
-		no_adl::empty_value<std::remove_cv_t<T>>,
+		tc::empty_type<std::remove_cvref_t<T>>,
+		no_adl::empty_value<std::remove_cvref_t<T>>,
 		no_adl::reference_or_value<std::remove_cv_t<T>>
 	>;
 	

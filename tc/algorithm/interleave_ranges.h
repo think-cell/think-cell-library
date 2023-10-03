@@ -29,7 +29,7 @@ namespace tc {
 		template<typename RngRng>
 		struct SIteratorView<RngRng, false> : std::conditional_t<std::is_lvalue_reference<RangeView<RngRng>>::value, tc::copyable, tc::noncopyable>
 		{
-			static_assert( tc::is_index_valid_for_move_constructed_range<RangeView<RngRng>>::value );
+			static_assert( tc::stable_index_on_move<RangeView<RngRng>> );
 
 			explicit SIteratorView(tc::iterator_t<RngRng const&> const& itrng) noexcept
 				: m_rng(tc::aggregate_tag, *itrng)
@@ -69,6 +69,9 @@ namespace tc {
 			std::size_t m_nLast;
 
 			static_assert(!tc::is_stashing_element<tc::iterator_t<RngRng const&>>::value || std::is_copy_constructible<tc::iterator_t<RngRng const&>>::value);
+
+			interleave_ranges_index(tc::empty_range) noexcept
+				: m_nLast(0) {}
 			interleave_ranges_index(RngRng const& rng) noexcept
 				: tc_member_init_cast(m_vecview, tc::filter(
 					tc::make_range_of_iterators(rng),
@@ -124,7 +127,7 @@ namespace tc {
 			}
 
 			STATIC_FINAL_MOD(constexpr, end_index)() const& noexcept -> tc_index {
-				return {tc::empty_range(), 0};
+				return tc::empty_range();
 			}
 
 			STATIC_FINAL_MOD(constexpr, at_end_index)(tc_index const& idx) const& noexcept -> bool {

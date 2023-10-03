@@ -15,6 +15,17 @@
 #include "Library/Internationalization/i18n_fwd.h"
 #endif
 
+static_assert(tc::has_c_str<std::string const&, char const>);
+static_assert(!tc::has_c_str<std::string const&, char>);
+static_assert(tc::has_c_str<std::string&, char const>);
+static_assert(tc::has_c_str<std::string&, char>);
+static_assert(tc::has_c_str<std::string&&, char const>);
+static_assert(tc::has_c_str<std::string&&, char>);
+static_assert(tc::has_c_str<char const*, char const>);
+static_assert(!tc::has_c_str<char const*, char>);
+static_assert(tc::has_c_str<char*, char const>);
+static_assert(tc::has_c_str<char*, char>);
+
 namespace {
 	template<typename Char1, typename Char2> requires std::is_same<Char1, Char2>::value
 	bool check_make_c_str_fwd(Char1 const* str1, Char2 const* str2) noexcept {
@@ -62,8 +73,8 @@ UNITTESTDEF(make_c_str_test) {
 	auto strLocal3 = tc::make_c_str(tc::string<char>("ef"));
 	_ASSERT(check_make_c_str<char>(strLocal3, "ef"));
 #ifdef TC_PRIVATE
-	_ASSERT(check_make_c_str<tc::uichar>(tc::make_c_str<tc::uichar>("ab"_tc, "cd"_tc, "ef"_tc), tc::make_str<tc::uichar>("ab", "cd", "ef")));
-	_ASSERT(check_make_c_str<char>(tc::make_c_str<char>("abcdef"_tc), tc::explicit_cast<tc::string<char>>(UISTR("abcdef"))));
+	_ASSERT(check_make_c_str<tc::uichar>(tc::make_c_str<tc::uichar>(tc_ascii("ab"), tc_ascii("cd"), tc_ascii("ef")), tc::make_str<tc::uichar>("ab", "cd", "ef")));
+	_ASSERT(check_make_c_str<char>(tc::make_c_str<char>(tc_ascii("abcdef")), tc::explicit_cast<tc::string<char>>(UISTR("abcdef"))));
 #endif
 }
 

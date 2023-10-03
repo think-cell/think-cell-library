@@ -69,6 +69,10 @@ namespace tc {
 			}
 		};
 	}
+	using no_adl::repeat_range;
+
+	template<typename T>
+	constexpr auto enable_stable_index_on_move<repeat_range<T>> = true;
 
 	template<typename TSize, typename T>
 	constexpr auto repeat_n( TSize&& ct, T && t ) return_ctor_noexcept(

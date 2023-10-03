@@ -47,7 +47,7 @@ namespace tc {
 		template< typename Enum >
 		struct enumset /*final*/
 			: tc::setlike<>
-			, tc::range_iterator_from_index< enumset<Enum>, typename tc::all_values<Enum>::const_iterator >
+			, tc::range_iterator_from_index< enumset<Enum>, tc::iterator_t<tc::all_values<Enum> const> >
 		{
 		private:
 			using this_type = enumset;
@@ -227,12 +227,15 @@ namespace tc {
 	namespace no_adl {
 		template<typename Enum>
 		struct [[nodiscard]] all_values<tc::enumset<Enum>> final {
+		public:
+			static constexpr auto size() noexcept {
+				constexpr auto size_all_values_enum = tc::constexpr_size<tc::all_values<Enum>>();
+				static_assert(size_all_values_enum < std::size_t(std::numeric_limits<std::size_t>::digits));
+				return tc::least_uint_constant<std::size_t(1) << size_all_values_enum>{};
+			}
+
 		private:
-			static_assert(tc::constexpr_size<tc::all_values<Enum>>::value < std::numeric_limits<std::size_t>::digits);
-			using storage_type = typename tc::integer<tc::constexpr_size<tc::all_values<Enum>>::value + 1>::unsigned_;
-			friend constexpr_size_impl<all_values<tc::enumset<Enum>>>;
-			static storage_type constexpr c_nSize = tc::explicit_cast<storage_type>(1) << tc::constexpr_size<tc::all_values<Enum>>::value;
-			static auto constexpr c_rngsete = tc::transform(tc::iota_range_constant<tc::explicit_cast<storage_type>(0), c_nSize>(), [](auto n) noexcept {
+			static auto constexpr c_rngsete = tc::transform(tc::iota_range_constant<static_cast<decltype(size().value)>(0), size().value>(), [](auto const n) noexcept {
 				return tc::enumset<Enum>(tc::enumset_from_underlying_tag, n);
 			});
 
@@ -244,16 +247,10 @@ namespace tc {
 				return tc::end(c_rngsete);
 			}
 
-			using const_iterator = decltype(all_values::begin());
-			using iterator = const_iterator;
-
 			static constexpr std::size_t index_of(tc::enumset<Enum> const& sete) noexcept {
 				return sete.m_bitset_();
 			}
 		};
-
-		template<typename Enum>
-		struct constexpr_size_impl<all_values<tc::enumset<Enum>>> : tc::constant<tc::all_values<tc::enumset<Enum>>::c_nSize> {};
 	}
 
 	namespace explicit_convert_adl {

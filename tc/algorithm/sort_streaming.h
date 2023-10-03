@@ -23,7 +23,7 @@ namespace tc {
 		// tc::back(cont) = std::forward<T>(t);
 		// std::ranges::push_heap(cont, less);
 		auto const n = tc::size_raw(cont);
-		auto IndexAndIterator = [&](decltype(n) i) noexcept {
+		auto const IndexAndIterator = [&](decltype(n) i) noexcept {
 			return tc::make_tuple(i, tc::at<tc::return_element>(cont, i));
 		};
 		auto nitHole = IndexAndIterator(0);

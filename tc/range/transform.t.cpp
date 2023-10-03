@@ -28,24 +28,12 @@ namespace {
 		auto anNativeTrans = tc::make_array(tc::transform(anNative, tc::identity()));
 		auto anTcTrans = tc::make_array(tc::transform(anTc, tc::identity()));
 
-		static_assert(
-			tc::constexpr_size<decltype(anTc)>::value==
-			tc::constexpr_size<decltype(anNative)>::value
-		);
-		static_assert(
-			tc::constexpr_size<decltype(anTc2)>::value==
-			tc::constexpr_size<decltype(anNative)>::value
-		);
-		static_assert(
-			tc::constexpr_size<decltype(anNativeTrans)>::value==
-			tc::constexpr_size<decltype(anNative)>::value
-		);
-		static_assert(
-			tc::constexpr_size<decltype(anTcTrans)>::value==
-			tc::constexpr_size<decltype(anNative)>::value
-		);
+		static_assert( tc::constexpr_size<decltype(anTc)>() == tc::constexpr_size<decltype(anNative)>() );
+		static_assert( tc::constexpr_size<decltype(anTc2)>() == tc::constexpr_size<decltype(anNative)>() );
+		static_assert( tc::constexpr_size<decltype(anNativeTrans)>() == tc::constexpr_size<decltype(anNative)>() );
+		static_assert( tc::constexpr_size<decltype(anTcTrans)>() == tc::constexpr_size<decltype(anNative)>() );
 
-		auto rngnoncopy = tc::transform(as_constexpr(tc::make_array(tc::aggregate_tag, 1,2)), [](int) noexcept {
+		auto rngnoncopy = tc::transform(tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2)), [](int) noexcept {
 			struct NonCopyNonMoveable final {
 				NonCopyNonMoveable(NonCopyNonMoveable const&) = delete;
 				NonCopyNonMoveable(NonCopyNonMoveable&&) = delete;

@@ -10,6 +10,7 @@
 
 #include "../base/assert_defs.h"
 #include "../base/construction_restrictiveness.h"
+#include "../base/inside_unwinding.h"
 
 #include "../container/container_traits.h"
 #include "../container/insert.h"
@@ -143,7 +144,7 @@ namespace tc {
 		} else {
 			// assume iterators are stable to get iterator to first inserted element
 			auto const it = tc::back<tc::return_element_or_null>(cont);
-			auto FirstAppendedElement = [&]() noexcept {
+			auto const FirstAppendedElement = [&]() noexcept {
 				return it ? tc_modified(it, ++_) : tc::begin(cont);
 			};
 			try {
@@ -161,6 +162,36 @@ namespace tc {
 	template< typename RangeReturn = tc::return_void, typename Cont, tc::appendable<Cont&>... Rng> requires (1 < sizeof...(Rng))
 	constexpr decltype(auto) append(Cont&& cont, Rng&&... rng) MAYTHROW {
 		return tc::append<RangeReturn>(std::forward<Cont>(cont), tc::concat(std::forward<Rng>(rng)...));
+	}
+
+	namespace no_adl {
+		template<typename Cont, typename Rng>
+		struct append_on_dtor_t final : tc::noncopyable, tc::inside_unwinding {
+			tc::optional<Cont&> m_ocont;
+			tc::reference_or_value<Rng> m_rng;
+
+			append_on_dtor_t(Cont& cont, Rng&& rng) noexcept
+			: m_ocont(cont), m_rng(tc::aggregate_tag, std::forward<Rng>(rng))
+			{}
+
+			append_on_dtor_t(append_on_dtor_t&& other) noexcept
+			: m_ocont(tc_move(other.m_ocont)), m_rng(tc_move(other.m_rng))
+			{
+				other.m_ocont = std::nullopt;
+			}
+			ASSIGN_BY_RENEW(append_on_dtor_t, append_on_dtor_t&&);
+
+			~append_on_dtor_t() MAYTHROW {
+				if(m_ocont && !inside_stack_unwinding()) {
+					tc::append(*m_ocont, *tc_move(m_rng)); // MAYTHROW
+				}
+			}
+		};
+	}
+
+	template<typename Cont, tc::appendable<Cont&> Rng>
+	constexpr decltype(auto) make_append_on_dtor(Cont& cont, Rng&& rng) MAYTHROW {
+		return no_adl::append_on_dtor_t<Cont, Rng>(cont, std::forward<Rng>(rng));
 	}
 
 	namespace explicit_convert_to_container_detail {

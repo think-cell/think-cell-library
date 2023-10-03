@@ -12,10 +12,10 @@
 #include "../base/tc_move.h" 
 #include "../base/conditional.h"
 #include "../base/invoke.h"
+#include "../base/trivial_functors.h"
 
 #include "range_adaptor.h"
 #include "meta.h"
-#include "range_fwd.h"
 
 namespace tc {
 	namespace no_adl {
@@ -30,13 +30,27 @@ namespace tc {
 			Pred const& m_pred;
 			Sink m_sink;
 
-			template<typename T>
-			constexpr auto operator()(T&& t) const& return_decltype_MAYTHROW(
-				tc::explicit_cast<bool>(tc::invoke(m_pred, tc::as_const(t)))
-					? tc::continue_if_not_break(m_sink, std::forward<T>(t))
-					: tc::constant<tc::continue_>()
-			)
+			template<typename T> requires tc::runtime_predicate<Pred, T> && tc::sinkable<Sink, T>
+			constexpr auto operator()(T&& t) const& noexcept(tc::nothrow_predicate<Pred, T> && tc::nothrow_sinkable<Sink, T>) {
+				return tc::explicit_cast<bool>(tc::invoke(m_pred, tc::as_const(t)))
+							? tc::continue_if_not_break(m_sink, std::forward<T>(t))
+							: tc::constant<tc::continue_>();
+			}
+
+			template<typename T> requires tc::constant_predicate_true<Pred, T>  && tc::sinkable<Sink, T>
+			constexpr auto operator()(T&& t) const& noexcept(tc::nothrow_predicate<Pred, T> && tc::nothrow_sinkable<Sink, T>) {
+				tc::discard(tc::invoke(m_pred, tc::as_const(t)));
+				return tc::continue_if_not_break(m_sink, std::forward<T>(t));
+			}
+			template<typename T> requires tc::constant_predicate_false<Pred, T>
+			constexpr auto operator()(T&& t) const& noexcept(tc::nothrow_predicate<Pred, T>) {
+				tc::discard(tc::invoke(m_pred, tc::as_const(t)));
+				return tc::constant<tc::continue_>();
+			}
 		};
+
+		template< typename Pred, typename Rng, bool HasIterator=tc::range_with_iterators< Rng > >
+		struct filter_adaptor;
 
 		template< typename Pred, typename Rng >
 		struct [[nodiscard]] filter_adaptor<Pred, Rng, false> : tc::generator_range_adaptor<Rng>, tc::range_output_from_base_range {
@@ -62,9 +76,8 @@ namespace tc {
 		struct [[nodiscard]] filter_adaptor<Pred, Rng, true>
 			: tc::index_range_adaptor<
 				filter_adaptor<Pred, Rng, true>,
-				Rng,
-				filter_adaptor<Pred, Rng, false>,
-				boost::iterators::bidirectional_traversal_tag // filter_adaptor is bidirectional at best
+				Rng, tc::index_range_adaptor_flags::inherit_end | tc::index_range_adaptor_flags::inherit_dereference,
+				filter_adaptor<Pred, Rng, false>
 			>
 		{
 		private:
@@ -80,36 +93,40 @@ namespace tc {
 		private:
 			void increment_until_kept(tc_index& idx) const& MAYTHROW {
 				// always call operator() const, which is assumed to be thread-safe
-				while(!this->template at_end_index<base_>(idx) && !tc::explicit_cast<bool>(tc::invoke(this->m_pred, tc::as_const(this->template dereference_index<base_>(idx))))) {
-					this->template increment_index<base_>(idx);
+				while(!this->at_end_index(idx) && !tc::explicit_cast<bool>(tc::invoke(this->m_pred, tc::as_const(this->dereference_index(idx))))) {
+					tc::increment_index(this->base_range(), idx);
 				}
 			}
 
 			STATIC_FINAL(begin_index)() const& MAYTHROW -> tc_index {
-				tc_index idx=this->template begin_index<base_>();
+				tc_index idx=this->base_begin_index();
 				increment_until_kept(idx);
 				return idx;
 			}
 
 			STATIC_FINAL(increment_index)(tc_index& idx) const& MAYTHROW -> void {
-				this->template increment_index<base_>(idx);
+				tc::increment_index(this->base_range(), idx);
 				increment_until_kept(idx);
 			}
 
-			STATIC_FINAL(decrement_index)(tc_index& idx) const& MAYTHROW -> void {
+			STATIC_FINAL(decrement_index)(tc_index& idx) const& MAYTHROW -> void
+				requires tc::has_decrement_index<Rng>
+			{
 				do {
-					this->template decrement_index<base_>(idx);
+					tc::decrement_index(this->base_range(), idx);
 					// always call operator() const, which is assumed to be thread-safe
-				} while(!tc::explicit_cast<bool>(tc::invoke(this->m_pred, tc::as_const(this->template dereference_index<base_>(idx)))));
+				} while(!tc::explicit_cast<bool>(tc::invoke(this->m_pred, tc::as_const(this->dereference_index(idx)))));
 			}
 
-			STATIC_FINAL(middle_point)( tc_index & idx, tc_index const& idxEnd ) const& MAYTHROW -> void {
+			STATIC_FINAL(middle_point)( tc_index & idx, tc_index const& idxEnd ) const& MAYTHROW -> void
+				requires tc::has_middle_point<Rng> && tc::has_decrement_index<Rng>
+			{
 				tc_index const idxBegin = idx;
-				this->template middle_point<base_>(idx,idxEnd);
+				tc::middle_point(this->base_range(), idx, idxEnd);
 			
 				// always call operator() const, which is assumed to be thread-safe
-				while(idxBegin != idx && !tc::explicit_cast<bool>(tc::invoke(this->m_pred, tc::as_const(this->template dereference_index<base_>(idx))))) {
-					this->template decrement_index<base_>(idx);
+				while(idxBegin != idx && !tc::explicit_cast<bool>(tc::invoke(this->m_pred, tc::as_const(this->dereference_index(idx))))) {
+					tc::decrement_index(this->base_range(), idx);
 				}
 			}
 		public:
@@ -119,19 +136,15 @@ namespace tc {
 			static constexpr decltype(auto) element_base_index(tc_index&& idx) noexcept {
 				return tc_move(idx);
 			}
-
-			constexpr decltype(auto) dereference_untransform(tc_index const& idx) const& noexcept {
-				return this->base_range().dereference_untransform(idx);
-			}
 		};
 	}
+	using no_adl::filter_adaptor;
+
+	template<typename Pred, typename Rng>
+	constexpr auto enable_stable_index_on_move<tc::filter_adaptor<Pred, Rng, true>> = tc::stable_index_on_move<Rng>;
 
 	template<typename Rng, typename Pred = tc::identity>
 	constexpr auto filter(Rng&& rng, Pred&& pred = Pred())
-		return_ctor_noexcept( TC_FWD(filter_adaptor<tc::decay_t<Pred>, Rng>), (std::forward<Rng>(rng),std::forward<Pred>(pred)) )
-
-	namespace no_adl {
-		template<typename Pred, typename Rng>
-		struct is_index_valid_for_move_constructed_range<tc::filter_adaptor<Pred, Rng, true>>: tc::is_index_valid_for_move_constructed_range<Rng> {};
-	}
+		return_ctor_noexcept( TC_FWD(tc::filter_adaptor<tc::decay_t<Pred>, Rng>), (std::forward<Rng>(rng),std::forward<Pred>(pred)) )
 }
+

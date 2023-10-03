@@ -155,7 +155,7 @@ namespace tc {
 
 		private:
 			template< typename TPos, typename TExtent >
-			static constexpr interval<T> from_extent_impl( TPos&& pos, TExtent&& extent, tc::lohi lohi ) noexcept {
+			static constexpr interval<T> from_extent_impl( TPos&& pos, TExtent&& extent, tc::lohi const lohi ) noexcept {
 				switch_no_default(lohi) {
 					case tc::lo: {
 						auto end = pos + std::forward<TExtent>(extent);
@@ -183,7 +183,7 @@ namespace tc {
 
 		public:
 			template< typename TPos, typename TExtent >
-			[[nodiscard]] static constexpr interval<T> from_extent( TPos&& pos, TExtent&& extent, tc::lohi lohi ) noexcept
+			[[nodiscard]] static constexpr interval<T> from_extent( TPos&& pos, TExtent&& extent, tc::lohi const lohi ) noexcept
 			{
 				return from_extent_impl(std::forward<TPos>(pos), std::forward<TExtent>(extent), lohi);
 			}
@@ -195,7 +195,7 @@ namespace tc {
 			}
 
 			template< typename TPos, typename TExtent >
-			[[nodiscard]] static constexpr interval<T> from_extent( TPos&& pos, TExtent&& extent, EAlign ealign ) noexcept
+			[[nodiscard]] static constexpr interval<T> from_extent( TPos&& pos, TExtent&& extent, EAlign const ealign ) noexcept
 			{
 				switch_no_default(ealign) {
 					case ealignLOW: {
@@ -389,7 +389,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 				);
 			}
 
-			[[nodiscard]] constexpr newT Val(EAlign ealign) const& noexcept {
+			[[nodiscard]] constexpr newT Val(EAlign const ealign) const& noexcept {
 				switch_no_default(ealign) {
 					case ealignLOW:
 						return (*this)[tc::lo];
@@ -460,7 +460,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 				return !(intvl[tc::hi]<(*this)[tc::lo]) && !((*this)[tc::hi]<intvl[tc::lo]);
 			}
 
-			template<tc::instance_or_derived<tc::interval> Rhs>
+			template<typename Rhs> requires tc::instance_or_derived<std::remove_reference_t<Rhs>, tc::interval>
 			constexpr interval<T>& operator&=(Rhs&& rhs) & noexcept {
 				static_assert(
 					std::is_same<newT, tc::range_value_t<Rhs>>::value,
@@ -496,7 +496,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 				tc::assign_max( (*this)[tc::hi], std::forward<U>(u) );
 			}
 
-			template<tc::instance_or_derived<tc::interval> Rhs>
+			template<typename Rhs> requires tc::instance_or_derived<std::remove_reference_t<Rhs>, tc::interval>
 			constexpr interval<T>& operator|=(Rhs&& rhs) & noexcept {
 				static_assert(
 					std::is_same<newT, tc::range_value_t<Rhs>>::value,
@@ -653,12 +653,10 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 		return interval<tc::decay_t<T>>(std::forward<T>(value), tc_modified(value, tc::nextafter_inplace(_)));
 	}
 
-	template<typename T>
-	[[nodiscard]] constexpr auto make_empty_interval(T&& value)
-		return_decltype_MAYTHROW(tc::make_interval(std::forward<T>(value), tc::decay_copy(value)))
-
 	namespace interval_adl {
-		template<tc::instance_or_derived<tc::interval> Lhs, tc::instance_or_derived<tc::interval> Rhs>
+		template<typename Lhs, typename Rhs> requires
+			tc::instance_or_derived<std::remove_reference_t<Lhs>, tc::interval> &&
+			tc::instance_or_derived<std::remove_reference_t<Rhs>, tc::interval>
 		[[nodiscard]] constexpr auto operator&(Lhs&& lhs, Rhs&& rhs) noexcept {
 			static_assert(
 				std::is_same<tc::range_value_t<Lhs>, tc::range_value_t<Rhs>>::value,
@@ -672,7 +670,9 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 			);
 		}
 
-		template<tc::instance_or_derived<tc::interval> Lhs, tc::instance_or_derived<tc::interval> Rhs>
+		template<typename Lhs, typename Rhs> requires
+			tc::instance_or_derived<std::remove_reference_t<Lhs>, tc::interval> &&
+			tc::instance_or_derived<std::remove_reference_t<Rhs>, tc::interval>
 		[[nodiscard]] constexpr auto operator|(Lhs&& lhs, Rhs&& rhs) noexcept {
 			static_assert(
 				std::is_same<tc::range_value_t<Lhs>, tc::range_value_t<Rhs>>::value,
@@ -966,7 +966,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 						itintervalAdd = m_cont.emplace_hint(itinterval, interval);
 					}
 
-					for (; itinterval != tc::end(m_cont) && !(interval[tc::hi] < (*itinterval)[tc::hi]); ) {
+					while (itinterval != tc::end(m_cont) && !(interval[tc::hi] < (*itinterval)[tc::hi])) {
 						itinterval = m_cont.erase(itinterval);
 					}
 
@@ -1133,7 +1133,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 				return closest_missing(t, tc::lo);
 			}
 
-			T const& closest_missing(T const& t, tc::lohi lohi) const& noexcept {
+			T const& closest_missing(T const& t, tc::lohi const lohi) const& noexcept {
 				if (tc_auto_cref(itinterval, upper_bound<tc::return_element_before_or_null>(t))) {
 					if( t < (*itinterval)[tc::hi] ) {
 						return (*itinterval)[lohi];
@@ -1306,6 +1306,10 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 
 			auto all_intervals() const& noexcept -> Cont const& {
 				return m_cont;
+			}
+
+			void filter_inplace(auto func) & noexcept {
+				tc::filter_inplace(m_cont, func);
 			}
 
 			template<typename OtherSetOrVectorImpl, typename Func>

@@ -57,7 +57,7 @@ namespace {
 			mock_reset();
 		}
 
-		void mock_reset(tc::vector<int> const& v = tc::vector<int>(), std::size_t break_at = 0, bool expect_break = true) & noexcept {
+		void mock_reset(tc::vector<int> const& v = tc::vector<int>(), std::size_t const break_at = 0, bool expect_break = true) & noexcept {
 			if(!m_copyed_or_moved_from && !(m_index == tc::min(m_expect.size(), (m_expect_break) ? m_break_at + 1 : m_expect.size()))) {
 				TEST_OUTPUT( << "unexpectedly terminated before index " << m_index
 							 << " went to the expected index " << tc::min(m_expect.size(), m_break_at + 1) << '\n');
@@ -70,7 +70,7 @@ namespace {
 			m_copyed_or_moved_from = false;
 		}
 
-		tc::break_or_continue operator()(int val) const& noexcept {
+		tc::break_or_continue operator()(int const val) const& noexcept {
 			if (m_copyed_or_moved_from) {
 				TEST_OUTPUT(<< "used copyed or moved consumer for real work!\n");
 			}
@@ -98,7 +98,7 @@ namespace {
 
 	all_called_mock g_mock;
 
-	void foo(int i) noexcept { g_mock(i); }
+	void foo(int const i) noexcept { g_mock(i); }
 
 //-----------------------------------------------------------------------------------------------------------------------------
 UNITTESTDEF( for_each ) {
@@ -126,8 +126,8 @@ UNITTESTDEF( for_each ) {
 	//g_mock.mock_reset(exp); tc::for_each(gv, &foo);
 
 	// call with lambda
-	g_mock.mock_reset(exp); tc::for_each(v, [](int i) noexcept { g_mock(i); });
-	g_mock.mock_reset(exp); tc::for_each(gv, [](int i) noexcept { g_mock(i); });
+	g_mock.mock_reset(exp); tc::for_each(v, [](int const i) noexcept { g_mock(i); });
+	g_mock.mock_reset(exp); tc::for_each(gv, [](int const i) noexcept { g_mock(i); });
 
 	// Todo: call with mem func, std::function and bind
 }
@@ -174,7 +174,7 @@ UNITTESTDEF( for_each ) {
 	struct consumer_break /*final*/ {
 		consumer_break(tc::vector<int> const& v, std::size_t break_at = 0, bool expect_break = true) noexcept : m_mock(v, break_at, expect_break) {}
 
-		tc::break_or_continue operator()(int i) const& noexcept { return m_mock(i); }
+		tc::break_or_continue operator()(int const i) const& noexcept { return m_mock(i); }
 		private:
 			all_called_mock m_mock;
 	};
@@ -183,7 +183,7 @@ UNITTESTDEF( for_each ) {
 		consumer_nobreak(tc::vector<int> const& v, std::size_t break_at = 0, bool expect_break = true) noexcept : m_mock(v, break_at, expect_break) {}
 		~consumer_nobreak() {}
 
-		void operator()(int i) const& noexcept { m_mock(i); }
+		void operator()(int const i) const& noexcept { m_mock(i); }
 
 		private:
 			all_called_mock m_mock;
@@ -230,7 +230,7 @@ UNITTESTDEF(for_each_adjacent_tuple_deref) {
 
 	TEST_RANGE_EQUAL(
 		vecn,
-		as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,2,1))
+		tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,2,1))
 	);
 
 	int nTransforms = 0;
@@ -238,7 +238,7 @@ UNITTESTDEF(for_each_adjacent_tuple_deref) {
 		tc::adjacent<3>(
 			tc::transform(
 				vecn,
-				[&](int n) noexcept {++nTransforms; return n;}
+				[&](int const n) noexcept {++nTransforms; return n;}
 			)
 		),
 		[](int n0, int n1, int n2) noexcept {
@@ -256,19 +256,19 @@ UNITTESTDEF(for_each_adjacent_tuple_deref) {
 			std::ref(overloads)
 		);
 
-		TEST_RANGE_EQUAL(overloads.m_n, as_constexpr(tc::make_array(tc::aggregate_tag, 3,0,0)));
+		TEST_RANGE_EQUAL(overloads.m_n, tc_as_constexpr(tc::make_array(tc::aggregate_tag, 3,0,0)));
 	}
 
 	{
 		lr_overloads overloads;
 		tc::for_each(
 			tc::adjacent<3>(
-				tc::transform(vecn, [](int n) noexcept {return n;})
+				tc::transform(vecn, [](int const n) noexcept {return n;})
 			),
 			std::ref(overloads)
 		);
 
-		TEST_RANGE_EQUAL(overloads.m_n, as_constexpr(tc::make_array(tc::aggregate_tag, 0,2,1)));
+		TEST_RANGE_EQUAL(overloads.m_n, tc_as_constexpr(tc::make_array(tc::aggregate_tag, 0,2,1)));
 	}
 }
 

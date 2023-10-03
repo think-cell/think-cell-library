@@ -11,6 +11,33 @@
 #include "optional.h"
 #include "array.h"
 
+UNITTESTDEF(make_optional_reference_or_value) {
+	int obj = 42;
+	int const cobj = 42;
+
+	std::same_as<tc::optional<int&>> auto opt_obj = tc::make_optional_reference_or_value(obj);
+	_ASSERTEQUAL(&*opt_obj, &obj);
+
+	std::same_as<tc::optional<int const&>> auto opt_cobj = tc::make_optional_reference_or_value(cobj);
+	_ASSERTEQUAL(&*opt_cobj, &cobj);
+
+	std::same_as<tc::optional<int>> auto opt_rvalue = tc::make_optional_reference_or_value(42);
+	_ASSERTEQUAL(*opt_rvalue, 42);
+
+	struct empty {};
+	empty empty_obj;
+	empty const empty_cobj;
+
+	std::same_as<tc::optional<empty>> auto opt_empty_obj = tc::make_optional_reference_or_value(empty_obj);
+	_ASSERT(opt_empty_obj);
+
+	std::same_as<tc::optional<empty>> auto opt_empty_cobj = tc::make_optional_reference_or_value(empty_cobj);
+	_ASSERT(opt_empty_cobj);
+
+	std::same_as<tc::optional<empty>> auto opt_empty_rvalue = tc::make_optional_reference_or_value(empty());
+	_ASSERT(opt_empty_rvalue);
+}
+
 UNITTESTDEF(optional_as_range) {
 	std::optional<int> on;
 	_ASSERT(tc::empty(on));

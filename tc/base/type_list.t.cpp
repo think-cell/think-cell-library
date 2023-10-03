@@ -8,6 +8,7 @@
 #include "assert_defs.h"
 #include "type_list.h"
 #include "../range/meta.h"
+#include "../string/char.h"
 
 namespace tc {
 	template<typename Rng>

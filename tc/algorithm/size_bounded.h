@@ -15,6 +15,31 @@
 #include "for_each.h"
 
 namespace tc {
+	template< typename It, typename T, typename Sentinel >
+	T advance_forward_bounded(It&& it, T n, Sentinel&& itBound) noexcept {
+		_ASSERT(0 <= n);
+		if constexpr( std::convertible_to<
+			typename boost::iterator_traversal<std::remove_reference_t<It>>::type,
+			boost::iterators::random_access_traversal_tag
+		> && requires { itBound - it; } ) {
+			if (tc::assign_better(tc::fn_less_equal(), n, tc::make_size_proxy(itBound - it))) {
+				it = std::forward<Sentinel>(itBound);
+			} else {
+				it += n;
+			}
+			return n;
+		} else {
+			// size_proxy does not provide operator++ and the operation cannot fail here,
+			// because nCount is always inside interval [0,n].
+			auto nCount = tc::explicit_cast<decltype(tc::unmake_size_proxy(n))>(0);
+			while (nCount != n && it != itBound) {
+				++nCount;
+				++it;
+			}
+			tc_return_cast(nCount);
+		}
+	}
+
 	template< typename Rng, typename T>
 	[[nodiscard]] constexpr auto size_bounded(Rng const& rng, T const nBound) noexcept {
 		if constexpr( tc::has_size<Rng> ) {
@@ -24,7 +49,7 @@ namespace tc {
 		} else {
 			T n = 0;
 			if (0 < nBound) {
-				auto Enumerate = [&](tc::unused) noexcept { return tc::continue_if(nBound!=++n); };
+				auto const Enumerate = [&](tc::unused) noexcept { return tc::continue_if(nBound!=++n); };
 				STATICASSERTSAME(tc::break_or_continue, decltype(tc::for_each(rng, Enumerate)), "size_bounded only works with interruptible generators");
 				tc::for_each(rng, Enumerate);
 			}

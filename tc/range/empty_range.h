@@ -14,6 +14,10 @@
 namespace tc {
 	namespace empty_range_adl {
 		struct TC_EMPTY_BASES empty_range {
+			static constexpr auto size() noexcept {
+				return tc::least_uint_constant<0>{};
+			}
+
 			constexpr auto operator()(tc::unused /*sink*/) const& noexcept {
 				return tc::constant<tc::continue_>();
 			}
@@ -25,9 +29,5 @@ namespace tc {
 
 		auto range_output_t_impl(empty_range const&) noexcept -> tc::type::list<>; // declaration only
 	}
-
-	namespace no_adl {
-		template<>
-		struct constexpr_size_impl<empty_range> : tc::constant<tc::explicit_cast<std::uint8_t>(0)> {};
-	}
+	using empty_range_adl::empty_range;
 }

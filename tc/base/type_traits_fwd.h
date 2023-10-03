@@ -16,6 +16,7 @@
 #include <boost/preprocessor/facilities/overload.hpp>
 #include <boost/preprocessor/punctuation/remove_parens.hpp>
 #include <boost/preprocessor/seq/cat.hpp>
+#include <boost/integer.hpp>
 
 #include <type_traits>
 #include <limits>
@@ -187,17 +188,14 @@ namespace tc {
 	template<typename T>
 	using remove_rvalue_reference_t=typename tc::remove_rvalue_reference<T>::type;
 
-	//////////////////////////////////////////////////////////////////////////
-	// constant
-
-	template<auto t>
-	using constant = std::integral_constant<decltype(t), t>;
-
 	//////////////////////////
 	// type classification concepts
 
 	template<typename T>
-	concept char_type = tc::type::find_unique<tc::type::list<char, wchar_t, char16_t, char32_t>, std::remove_cv_t<T>>::found;
+	concept char_type = tc::type::find_unique<tc::type::list<char, wchar_t, char8_t, char16_t, char32_t>, std::remove_cv_t<T>>::found;
+
+	template< typename T >
+	concept char_ptr = std::is_pointer<T>::value && tc::char_type<std::remove_pointer_t<T>>;
 
 	namespace char_like_detail {
 		template<typename T>
@@ -208,19 +206,32 @@ namespace tc {
 	concept char_like = char_like_detail::char_like_impl<T>;
 
 	template< typename T >
-	concept decayed=std::same_as< T, tc::decay_t<T> >;
+	concept decayed = std::same_as< T, tc::decay_t<T> >;
 
 	template<typename T>
-	concept actual_integer=std::integral<T> && (!std::same_as<std::remove_cv_t<T>, bool>) && (!tc::char_type<T>);
+	concept actual_integer = std::integral<T> && (!std::same_as<std::remove_cv_t<T>, bool>) && (!tc::char_type<T>);
+	template<typename T>
+	concept actual_unsigned_integer = tc::actual_integer<T> && std::unsigned_integral<T>;
+	template<typename T>
+	concept actual_signed_integer = tc::actual_integer<T> && std::signed_integral<T>;
 
 	template<typename T>
-	concept actual_arithmetic=tc::actual_integer<T> || std::floating_point<T>;
+	concept actual_arithmetic = tc::actual_integer<T> || std::floating_point<T>;
 
 	template<typename T>
 	concept empty_type = std::is_empty<T>::value && std::is_trivial<std::remove_cv_t<T>>::value;
 
 	template<typename T>
 	concept enum_type = std::is_enum<T>::value;
+
+	//////////////////////////////////////////////////////////////////////////
+	// constant
+
+	template<auto t>
+	using constant = std::integral_constant<decltype(t), t>;
+
+	template<tc::actual_integer auto N> requires (N >= 0)
+	using least_uint_constant = tc::constant<static_cast<typename boost::uint_value_t<N>::least>(N)>;
 
 	//////////////////////////
 	// derived_from
@@ -304,7 +315,7 @@ template<typename TInstance, template<TC_PP_PARAMS_TYPE_ENUM(seq)> typename Temp
 using BOOST_PP_CAT(is_instance_or_derived, suffix) = \
 	decltype( \
 		no_adl::BOOST_PP_CAT(is_instance_or_derived_detector, suffix)<Template>::detector( \
-			std::declval<std::remove_cvref_t<TInstance>*>() \
+			std::declval<std::conditional_t<std::is_reference<TInstance>::value, /* anything that cannot bind to Template<...>* */ int*, std::remove_cvref_t<TInstance>*>>() \
 		) \
 	); \
 template<typename TInstance, template<TC_PP_PARAMS_TYPE_ENUM(seq)> typename Template> \
@@ -670,7 +681,6 @@ namespace tc {
 	//		d) SFINAE friendly: Yes
 	template<typename... T>
 	using common_type_t = typename tc::common_type_decayed<tc::decay_t<T>...>::type;
-
 	namespace no_adl {
 		template<typename T>
 		struct common_type_decayed<T> {

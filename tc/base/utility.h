@@ -53,16 +53,6 @@ namespace tc {
 	using is_contiguous_integer_sequence = decltype(is_contiguous_integer_sequence_impl::is_contiguous_integer_sequence(std::declval<IntSequence>()));
 
 	//////////////////////////////////////////////////////////////////////////
-	// next
-
-	template<typename T>
-	constexpr auto next(T&& x) noexcept(noexcept(++std::declval<std::decay_t<T&&>&>()) && std::is_nothrow_copy_constructible<T>::value) {
-		auto t = std::forward<T>(x);
-		++t;
-		return t;
-	}
-
-	//////////////////////////////////////////////////////////////////////////
 	// select_nth
 
 	template<std::size_t n, typename Arg, typename... Args>
@@ -86,6 +76,32 @@ namespace tc {
 //////////////////////////////////////////////////////////////////////////
 // get
 
+namespace tc {
+	namespace no_adl {
+		template<typename IndexSequence, typename Tuple>
+		struct tuple_types_impl;
+
+		template<std::size_t... I, typename Tuple>
+		struct tuple_types_impl<std::index_sequence<I...>, Tuple> final {
+			using type = tc::type::list<std::tuple_element_t<I, Tuple>...>;
+		};
+	}
+
+	template<typename Tuple>
+	struct is_tuple_like /*not final*/: tc::constant<false> {};
+
+	template<typename Tuple> requires
+		tc::actual_integer<decltype(std::tuple_size<std::remove_reference_t<Tuple>>::value)> &&
+		requires { typename no_adl::tuple_types_impl<std::make_index_sequence<std::tuple_size<std::remove_reference_t<Tuple>>::value>, std::remove_cvref_t<Tuple>>::type; }
+	struct is_tuple_like<Tuple> /*not final*/ : tc::constant<true>
+	{
+		using types = typename no_adl::tuple_types_impl<std::make_index_sequence<std::tuple_size<std::remove_reference_t<Tuple>>::value>, std::remove_cvref_t<Tuple>>::type;
+	};
+
+	template<typename T>
+	concept tuple_like = tc::is_tuple_like<T>::value;
+}
+
 namespace tc_get_impl_adl { // Outside tc namespace to avoid finding tc::get leading to infinite recursion.
 #ifndef __clang__
 	// Suppress unqualified lookup, because of https://developercommunity.visualstudio.com/t/vc-unqualified-lookup-finds-function-in-unrelated/1570914
@@ -93,13 +109,12 @@ namespace tc_get_impl_adl { // Outside tc namespace to avoid finding tc::get lea
 	template<typename T> void get() = delete;
 	template<std::size_t I> void get() = delete;
 #endif
-
-	template<typename T, typename Tuple>
+	template<typename T, typename Tuple, std::enable_if_t<tc::type::find_unique<typename tc::is_tuple_like<Tuple>::types, T>::found>* = nullptr>
 	constexpr auto get_impl(Tuple&& tpl) return_decltype_xvalue_by_ref_noexcept(
 		/*adl*/get<T>(std::forward<Tuple>(tpl))
 	)
 
-	template<std::size_t I, typename Tuple>
+	template<std::size_t I, typename Tuple, std::enable_if_t<I < std::tuple_size<std::remove_reference_t<Tuple>>::value>* = nullptr>
 	constexpr auto get_impl(Tuple&& tpl) return_decltype_xvalue_by_ref_noexcept(
 		/*adl*/get<I>(std::forward<Tuple>(tpl))
 	)
@@ -115,6 +130,11 @@ namespace tc_get_impl {
 	[[nodiscard]] constexpr auto get(Tuple&& tpl) return_decltype_xvalue_by_ref_noexcept(
 		tc_get_impl_adl::get_impl<I>(std::forward<Tuple>(tpl))
 	)
+
+	template<typename T, typename Src> requires std::same_as<T, std::remove_cvref_t<Src>>
+	[[nodiscard]] constexpr decltype(auto) get(Src&& src) noexcept {
+		return std::forward<Src>(src);
+	}
 }
 
 namespace tc {
@@ -189,7 +209,7 @@ namespace tc
 }
 
 //////////////////////////////////////////////////////////////////////////
-// as_constexpr
+// tc_as_constexpr
 
 namespace tc::as_constexpr_no_adl {
 	namespace {
@@ -205,7 +225,7 @@ namespace tc::as_constexpr_no_adl {
 }
 
 #if defined(__clang__) // https://bugs.llvm.org/show_bug.cgi?id=32766
-#define as_constexpr(...) \
+#define tc_as_constexpr(...) \
 	([]() constexpr noexcept -> auto const& { \
 		struct SConstexprInit final { \
 			static constexpr auto value() noexcept { return []() constexpr noexcept { return __VA_ARGS__; }; } \
@@ -213,7 +233,7 @@ namespace tc::as_constexpr_no_adl {
 		return tc::as_constexpr_no_adl::SValueHolder<SConstexprInit>::value; \
 	}())
 #else
-#define as_constexpr(...) \
+#define tc_as_constexpr(...) \
 	([]() constexpr noexcept -> auto const& { \
 		struct SConstexprInit final { \
 			static constexpr auto value() noexcept { return __VA_ARGS__; } \
@@ -221,53 +241,6 @@ namespace tc::as_constexpr_no_adl {
 		return tc::as_constexpr_no_adl::SValueHolder<SConstexprInit>::value; \
 	}())
 #endif
-
-//////////////////////////////////////////////////////////////////////////
-// cmp_equal/cmp_less/cmp_greater...
-
-namespace tc { // TODO c++20: replace these functions with std versions
-	template< tc::actual_integer T, tc::actual_integer U >
-	constexpr bool cmp_equal( T t, U u ) noexcept
-	{
-	    if constexpr (std::is_signed_v<T> == std::is_signed_v<U>)
-	        return t == u;
-	    else if constexpr (std::is_signed_v<T>)
-	        return t < 0 ? false : static_cast<std::make_unsigned_t<T>>(t) == u;
-	    else
-	        return u < 0 ? false : t == static_cast<std::make_unsigned_t<U>>(u);
-	}
-	 
-	template< typename T, typename U>
-	constexpr auto cmp_not_equal( T t, U u ) return_decltype_noexcept(
-		!cmp_equal(t, u)
-	)
-	 
-	template< tc::actual_integer T, tc::actual_integer U>
-	constexpr bool cmp_less( T t, U u ) noexcept
-	{
-	    if constexpr (std::is_signed_v<T> == std::is_signed_v<U>)
-	        return t < u;
-	    else if constexpr (std::is_signed_v<T>)
-	        return t < 0 ? true : static_cast<std::make_unsigned_t<T>>(t) < u;
-	    else
-	        return u < 0 ? false : t < static_cast<std::make_unsigned_t<U>>(u);
-	}
-	 
-	template< typename T, typename U>
-	constexpr auto cmp_greater( T t, U u ) return_decltype_noexcept(
-	    cmp_less(u, t)
-	)
-	 
-	template< typename T, typename U >
-	constexpr auto cmp_less_equal( T t, U u ) return_decltype_noexcept(
-	    !cmp_greater(t, u)
-	)
-	 
-	template< typename T, typename U >
-	constexpr auto cmp_greater_equal( T t, U u ) return_decltype_noexcept(
-	    !cmp_less(t, u)
-	)
-}
 
 namespace tc {
 	// Pass cheaply-copied types by value and others by reference to const.

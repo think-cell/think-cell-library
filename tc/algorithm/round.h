@@ -74,7 +74,7 @@ namespace tc {
 #ifdef __clang__
 		__attribute__((optnone)) // Disable compiler optimization num/den ---> num*(1/den) resulting in tc::fdiv(49,49)==0.99999999999999989
 #endif
-	double fdiv(double num, double den) noexcept {
+	double fdiv(double const num, double const den) noexcept {
 		return num/den;
 	}
 #ifdef _MSC_VER
@@ -165,6 +165,9 @@ namespace tc {
 	struct SRoundBanker final {
 	} inline constexpr roundBANKER{};
 
+	struct SNoRounding final {
+	} inline constexpr norounding{};
+
 	namespace idiv_impl {
 		// The standard guarantees that integer division rounds to zero.
 		// [expr.mul]/4 (oder 5.6/4) 
@@ -174,7 +177,7 @@ namespace tc {
 			static_assert( tc::actual_integer_like< Denom > );
 			STATICASSERTEQUAL( std::numeric_limits<Num>::is_signed, std::numeric_limits<Denom>::is_signed );
 			_ASSERTE( 0<denom );
-			if constexpr( std::is_same<Round, SRoundBanker>::value ) {
+			if constexpr(std::same_as<Round, SRoundBanker>) {
 				auto result = num / denom;
 				auto remainder = num - result * denom;
 				if(remainder<0) -tc::inplace(remainder);
@@ -182,6 +185,9 @@ namespace tc {
 					result += num < 0 ? -1 : 1;
 				}
 				tc_return_cast(result);
+			} else if constexpr(std::same_as<Round, SNoRounding>) {
+				_ASSERTEQUAL(num%denom, 0);
+				tc_return_cast(num/denom);
 			} else {
 				tc_return_cast( ( num<0 ? num-Round::NegativeOffset(denom) : num+Round::PositiveOffset(denom) )/denom );
 			}

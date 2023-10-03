@@ -72,7 +72,7 @@ namespace tc {
 					throw;
 				}
 			}
-
+		protected:
 			[[nodiscard]] constexpr T* data() & noexcept {
 				return m_aot[0].uninitialized_addressof();
 			}
@@ -134,7 +134,7 @@ namespace tc {
 					throw;
 				}
 			}
-
+		protected:
 			[[nodiscard]] constexpr T* data() & noexcept {
 				return std::addressof(m_a.m_at[0]);
 			}

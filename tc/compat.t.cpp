@@ -102,7 +102,7 @@ UNITTESTDEF( boost_iterator_range_compat ) {
 
 	TEST_RANGE_EQUAL(baul_exp, baul_r);
 
-	auto baul_our_r = tc::slice(baul);
+	auto baul_our_r = tc::all(baul);
 	TEST_RANGE_EQUAL(baul_exp, baul_our_r);
 
 }
@@ -111,7 +111,7 @@ UNITTESTDEF( boost_range_traits_compat ) {
 	TEST_init_hack(tc::vector, unsigned long, original, {1,2,3,4,5,6,7,8});
 	TEST_init_hack(tc::vector, unsigned long, exp, {2,4,6,8});
 
-	auto fr = tc::filter(original, [](unsigned long i) noexcept { return i%2==0; });
+	auto fr = tc::filter(original, [](unsigned long const i) noexcept { return i%2==0; });
 
 	STATIC_ASSERT(std::is_same<decltype(std::begin(fr)), decltype(tc::begin(fr))>::value);
 

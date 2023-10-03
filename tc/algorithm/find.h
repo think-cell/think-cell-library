@@ -12,6 +12,7 @@
 #include "../range/meta.h"
 #include "../range/iterator_cache.h"
 #include "../base/scope.h"
+#include "../base/trivial_functors.h"
 #include "../storage_for.h"
 
 #include "equal.h"

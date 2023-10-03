@@ -46,16 +46,12 @@ namespace tc {
 				return tc::constant<tc::continue_>();
 			}
 
-			constexpr auto size() const& noexcept requires tc::has_size<Rng> {
-				std::size_t const nSize = tc::size_raw(this->base_range());
-				return nSize * (nSize - 1) / 2;
+			constexpr auto size() const& MAYTHROW requires tc::has_size<Rng> {
+				return tc::compute_range_adaptor_size<[](auto const n) noexcept {
+					return tc::as_unsigned(n * (n - 1) / 2);
+				}>(this->base_range());
 			}
 		};
-	}
-
-	namespace no_adl {
-		template<tc::has_constexpr_size Rng>
-		struct constexpr_size_impl<ordered_pairs_adaptor_adl::ordered_pairs_adaptor<Rng>> : tc::constant<tc::constexpr_size<Rng>::value * (tc::constexpr_size<Rng>::value - 1) / 2> {};
 	}
 
 	template<typename Rng>

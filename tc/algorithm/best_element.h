@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include "../range/range_fwd.h"
 #include "../range/subrange.h"
 #include "../storage_for.h"
 #include "../base/assign.h"
@@ -52,7 +51,9 @@ namespace tc {
 					}
 				}
 			}
-		} else if (auto ovalue = tc::accumulate_with_front(std::forward<Rng>(rng), tc::fn_assign_better(tc_move(better)))) {
+		} else if (auto ovalue = tc::accumulate_with_front(std::forward<Rng>(rng), [&](auto& valueBest, auto&& value) noexcept {
+			return tc::assign_better(better, valueBest, tc_move_if_owned(value));
+		})) {
 			return RangeReturn::template pack_element<Rng>(*tc_move(ovalue));
 		} else {
 			return RangeReturn::template pack_no_element<Rng>();

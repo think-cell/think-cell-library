@@ -32,7 +32,7 @@ namespace tc {
 		template<typename T>
 		struct storage_for_select_dtor_base<T, false> {
 			constexpr storage_for_select_dtor_base() noexcept {}
-			constexpr ~storage_for_select_dtor_base() noexcept {}
+			constexpr ~storage_for_select_dtor_base() {}
 
 			union {
 				uninitalized_storage_dummy m_dummy;
@@ -43,7 +43,7 @@ namespace tc {
 		template<typename T>
 		struct storage_for_select_dtor_base<T, /*is_trivially_destructible*/true> {
 			constexpr storage_for_select_dtor_base() noexcept {}
-			constexpr ~storage_for_select_dtor_base() noexcept = default;
+			constexpr ~storage_for_select_dtor_base() = default;
 
 			union {
 				uninitalized_storage_dummy m_dummy;
@@ -125,8 +125,7 @@ namespace tc {
 				tc::dtor_static(tc::as_mutable(this->m_buffer));
 			}
 		protected:
-			STATIC_VIRTUAL_CONSTEXPR(dereference)
-			STATIC_OVERRIDE_MOD(constexpr, dereference)() const& -> T const& {
+			STATIC_VIRTUAL_WITH_DEFAULT_IMPL_MOD(constexpr, dereference)() const& -> T const& {
 				STATICASSERTEQUAL( sizeof(storage_for_base), sizeof(T) ); // no extra members, important for arrays
 				return this->m_buffer;
 			}
@@ -139,8 +138,7 @@ namespace tc {
 			using this_type = storage_for_base<Derived, T&>;
 			T* m_buffer;
 
-			STATIC_VIRTUAL_CONSTEXPR(dereference)
-			STATIC_OVERRIDE_MOD(constexpr, dereference)() const& -> T& {
+			STATIC_VIRTUAL_WITH_DEFAULT_IMPL_MOD(constexpr, dereference)() const& -> T& {
 				return *m_buffer;
 			}
 		public:
@@ -169,8 +167,7 @@ namespace tc {
 			using this_type = storage_for_base<Derived, T&&>;
 			T* m_buffer;
 
-			STATIC_VIRTUAL_CONSTEXPR(dereference)
-			STATIC_OVERRIDE_MOD(constexpr, dereference)() const& -> T&& {
+			STATIC_VIRTUAL_WITH_DEFAULT_IMPL_MOD(constexpr, dereference)() const& -> T&& {
 				return static_cast<T&&>(*m_buffer);
 			}
 		public:

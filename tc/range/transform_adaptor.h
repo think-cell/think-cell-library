@@ -10,7 +10,6 @@
 
 #include "../base/assert_defs.h"
 #include "../base/tc_move.h"
-#include "range_fwd.h"
 
 #include "range_adaptor.h"
 #include "subrange.h"
@@ -35,6 +34,9 @@ namespace tc {
 	}
 
 	namespace transform_adaptor_adl {
+		template< typename Func, typename Rng, bool HasIterator=tc::range_with_iterators< Rng > >
+		struct transform_adaptor;
+
 		template< typename Func, typename Rng >
 		struct [[nodiscard]] transform_adaptor<Func,Rng,false> : tc::generator_range_adaptor<Rng> {
 		protected:
@@ -49,8 +51,8 @@ namespace tc {
 				, m_func(std::forward<FuncOther>(func))
 			{}
 
-			constexpr auto size() const& noexcept requires tc::has_size<Rng> {
-				return tc::size_raw(this->base_range());
+			constexpr auto size() const& MAYTHROW requires tc::has_size<Rng> {
+				return tc::compute_range_adaptor_size<tc::identity{}>(this->base_range());
 			}
 
 			template<typename Sink>
@@ -67,7 +69,7 @@ namespace tc {
 		struct [[nodiscard]] transform_adaptor<Func, Rng, true>
 			: tc::index_range_adaptor<
 				transform_adaptor<Func, Rng, true>,
-				Rng,
+				Rng, tc::index_range_adaptor_flags::inherit_begin_end | tc::index_range_adaptor_flags::inherit_traversal,
 				transform_adaptor<Func, Rng, false>
 			>
 		{
@@ -83,26 +85,22 @@ namespace tc {
 			template<ENABLE_SFINAE>
 			constexpr auto STATIC_VIRTUAL_METHOD_NAME(dereference_index)(tc_index const& idx) & MAYTHROW -> tc::transform_return_t<
 				SFINAE_TYPE(Func),
-				decltype(tc::invoke(std::declval<SFINAE_TYPE(Func) const&>(), std::declval<base_ &>().template dereference_index<base_>(std::declval<tc_index const&>()))),
-				decltype(std::declval<base_ &>().template dereference_index<base_>(std::declval<tc_index const&>()))
+				decltype(tc::invoke(std::declval<SFINAE_TYPE(Func) const&>(), tc::dereference_index(this->base_range(), std::declval<tc_index const&>()))),
+				decltype(tc::dereference_index(this->base_range(), std::declval<tc_index const&>()))
 			> {
 				// always call operator() const, which is assumed to be thread-safe
-				return tc::invoke(tc::as_const(this->m_func), this->template dereference_index<base_>(idx));
+				return tc::invoke(tc::as_const(this->m_func), tc::dereference_index(this->base_range(), idx));
 			}
 
 			template<ENABLE_SFINAE>
 			constexpr auto STATIC_VIRTUAL_METHOD_NAME(dereference_index)(tc_index const& idx) const& MAYTHROW -> tc::transform_return_t<
 				SFINAE_TYPE(Func),
-				decltype(tc::invoke(std::declval<SFINAE_TYPE(Func) const&>(), std::declval<base_ const&>().template dereference_index<base_>(std::declval<tc_index const&>()))),
-				decltype(std::declval<base_ const&>().template dereference_index<base_>(std::declval<tc_index const&>()))
+				decltype(tc::invoke(std::declval<SFINAE_TYPE(Func) const&>(), tc::dereference_index(this->base_range(), std::declval<tc_index const&>()))),
+				decltype(tc::dereference_index(this->base_range(), std::declval<tc_index const&>()))
 			> {
 				// always call operator() const, which is assumed to be thread-safe
-				return tc::invoke(tc::as_const(this->m_func), this->template dereference_index<base_>(idx));
+				return tc::invoke(tc::as_const(this->m_func), tc::dereference_index(this->base_range(), idx));
 			}
-
-			// We may inherit an index_to_address from our base; just like dereference_index(), we need to override it.
-			// But in the case of transform, we are no longer contiguous, so delete it.
-			auto STATIC_VIRTUAL_METHOD_NAME(index_to_address)(tc_index const&) const = delete;
 
 			static constexpr decltype(auto) border_base_index(tc_index const& idx) noexcept {
 				return idx;
@@ -124,11 +122,10 @@ namespace tc {
 			}
 		};
 	}
+	using transform_adaptor_adl::transform_adaptor;
 
-	namespace no_adl {
-		template<typename Func, typename Rng, bool bConst>
-		struct constexpr_size_impl<tc::transform_adaptor<Func,Rng,bConst>> : tc::constexpr_size<Rng> {};
-	}
+	template<typename Func, typename Rng>
+	constexpr auto enable_stable_index_on_move<tc::transform_adaptor<Func, Rng, true>> = tc::stable_index_on_move<Rng>;
 
 	template<typename Rng, typename Func>
 	[[nodiscard]] constexpr auto transform(Rng&& rng, Func&& func)
@@ -148,11 +145,6 @@ namespace tc {
 		>, transform_adaptor>
 	[[nodiscard]] auto untransform(Rng&& rng) noexcept {
 		return tc::slice(untransform(std::forward<Rng>(rng).base_range()), rng.begin_index(), rng.end_index());
-	}
-
-	namespace no_adl {
-		template<typename Func, typename Rng>
-		struct is_index_valid_for_move_constructed_range<tc::transform_adaptor<Func, Rng, true>>: tc::is_index_valid_for_move_constructed_range<Rng> {};
 	}
 }
 

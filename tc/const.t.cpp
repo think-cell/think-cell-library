@@ -23,7 +23,7 @@ UNITTESTDEF( const_range ) {
 
 	tc::vector<int> v = original;
 
-	auto mutable_range = tc::slice(v); TEST_RANGE_LENGTH(mutable_range, 8);
+	auto mutable_range = tc::all(v); TEST_RANGE_LENGTH(mutable_range, 8);
 
 	TEST_RANGE_EQUAL(original, mutable_range);
 	TEST_RANGE_NOT_EQUAL(modified, mutable_range);
@@ -32,8 +32,7 @@ UNITTESTDEF( const_range ) {
 	TEST_RANGE_NOT_EQUAL(original, mutable_range);
 
 	v = original;
-	auto const_range = tc::const_slice(v); TEST_RANGE_LENGTH(const_range, 8);
-	STATICASSERTSAME(decltype(tc::const_slice(v)), decltype(tc::slice(tc::as_const(v))), "wrong const type");
+	auto const_range = tc::all(tc::as_const(v)); TEST_RANGE_LENGTH(const_range, 8);
 
 	TEST_RANGE_EQUAL(original, const_range);
 	TEST_RANGE_NOT_EQUAL(modified, const_range);

@@ -23,7 +23,7 @@ namespace tc {
 				_ASSERT(!c_ptib);
 				c_ptib=this;
 			}
-			void reset_instance() const & noexcept {
+			void reset_instance() const& noexcept {
 				_ASSERT(is_instance());
 				c_ptib=nullptr;
 			};

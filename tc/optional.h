@@ -114,14 +114,69 @@ namespace tc {
 			template<typename... Args>
 			void construct(Args&& ... args) & noexcept(noexcept(std::declval<storage_for<T>&>().ctor(std::forward<Args>(args)...))) {
 				_ASSERT(m_bValue); // allow querying the flag to prevent double-construction
-				try {
-					_ASSERT(!m_bInsideDtor);
+				_ASSERT(!m_bInsideDtor);
+				if constexpr (noexcept(m_oValue.ctor(std::forward<Args>(args)...))) {
 					m_oValue.ctor(std::forward<Args>(args)...);
-				} catch( ... ) {
-					m_bValue = false;
-					throw;
+				} else {
+					try {	
+						m_oValue.ctor(std::forward<Args>(args)...); // MAYTHROW
+					} catch( ... ) {
+						m_bValue = false;
+						throw; // MSVC and gcc: throw in catch block of a noexcept function triggers warning even if try block never throws
+					}
 				}
 			}
+		};
+
+		template<tc::empty_type TEmpty>
+		struct optional<TEmpty> {
+			constexpr optional() noexcept = default;
+			constexpr optional(std::nullopt_t) noexcept {}
+
+			template<typename... Args>
+			constexpr optional(std::in_place_t, Args&& ... args) noexcept(std::is_nothrow_constructible_v<TEmpty, Args&&...>) : m_bValue(true) {
+				tc::discard(TEmpty(tc_move_if_owned(args)...));
+			}
+
+			constexpr void reset() & noexcept {
+				m_bValue = false;
+			}
+			template<typename... Args>
+			constexpr TEmpty emplace(Args&& ... args) & noexcept(std::is_nothrow_constructible_v<TEmpty, Args&&...>) {
+				TEmpty result(tc_move_if_owned(args)...);
+				m_bValue = true;
+				return result;
+			}
+	
+			constexpr optional& operator=(std::nullopt_t) & noexcept {
+				reset();
+				return *this;
+			}
+	
+			constexpr bool has_value() const& noexcept {
+				return m_bValue;
+			}
+			constexpr explicit operator bool() const& noexcept {
+				return has_value();
+			}
+	
+		private:
+			struct pointer final {
+				TEmpty m_t;
+				constexpr TEmpty* operator->() && noexcept { return std::addressof(m_t); }
+			};
+		public:
+			constexpr auto operator->() const& noexcept {
+				_ASSERT(*this);
+				return pointer();
+			}
+			constexpr TEmpty operator*() const& noexcept {
+				_ASSERT(*this);
+				return TEmpty();
+			}
+
+		private:
+			bool m_bValue = false;
 		};
 
 		template<typename TRef> requires std::is_reference<TRef>::value
@@ -133,25 +188,15 @@ namespace tc {
 			constexpr optional(std::nullopt_t) noexcept {}
 
 			template<typename U> requires tc::safely_constructible_from<TRef, U&&>
-			explicit(!tc::safely_convertible_to<U&&, TRef>) constexpr optional(U&& u) noexcept(noexcept(static_cast<TRef>(std::forward<U>(u))))
+			constexpr optional(U&& u) noexcept(noexcept(static_cast<TRef>(std::forward<U>(u))))
 				: m_pt(std::addressof(tc::as_lvalue(static_cast<TRef>(std::forward<U>(u))))) // tc::safely_constructible_from makes sure no reference to temporary is created
 			{}
 
 			template<typename TOptional> requires
-				tc::safely_constructible_from<TRef, tc::apply_cvref_t<tc::type::only_t<typename tc::is_instance<std::remove_reference_t<TOptional>, tc::no_adl::optional>::arguments>, TOptional&&>>
-			explicit(!tc::safely_convertible_to<tc::apply_cvref_t<tc::type::only_t<typename tc::is_instance<std::remove_reference_t<TOptional>, tc::no_adl::optional>::arguments>, TOptional&&>, TRef>)
+				tc::safely_constructible_from<TRef, decltype(*std::declval<TOptional>()) >
 			constexpr optional(TOptional&& rhs) noexcept
 				: m_pt([&]() noexcept {
-					return rhs ? rhs.m_pt : nullptr;
-				}())
-			{}
-
-			template<typename TOptional> requires
-				tc::safely_constructible_from<TRef, tc::apply_cvref_t<tc::type::only_t<typename tc::is_instance<std::remove_reference_t<TOptional>, std::optional>::arguments>, TOptional&&>>
-			explicit(!tc::safely_convertible_to<tc::apply_cvref_t<tc::type::only_t<typename tc::is_instance<std::remove_reference_t<TOptional>, std::optional>::arguments>, TOptional&&>, TRef>)
-			constexpr optional(TOptional&& rhs) noexcept
-				: m_pt([&]() noexcept {
-					return rhs ? std::addressof(*rhs) : nullptr;
+					return rhs ? std::addressof(tc::as_lvalue(*tc_move_if_owned(rhs))) : nullptr;
 				}())
 			{}
 
@@ -197,16 +242,32 @@ namespace tc {
 		};
 	}
 	using no_adl::optional;
+
+	template <typename T>
+	using optional_reference_or_value = std::conditional_t<
+		tc::empty_type<std::remove_cvref_t<T>> || std::is_rvalue_reference<T&&>::value,
+		tc::optional<std::remove_cvref_t<T>>,
+		tc::optional<T>
+	>;
+
+	template <typename T> requires (!tc::empty_type<T>)
+	[[nodiscard]] constexpr optional_reference_or_value<T&> make_optional_reference_or_value(T& ref) noexcept {
+		return ref;
+	}
+	template <typename T> requires tc::empty_type<std::remove_cvref_t<T>> || std::is_rvalue_reference<T&&>::value
+	[[nodiscard]] constexpr optional_reference_or_value<T> make_optional_reference_or_value(T&& ref) noexcept {
+		return {std::in_place, std::forward<T>(ref)};
+	}
 }
 
 namespace tc {
 	template<typename Optional, typename T>
 	[[nodiscard]] constexpr decltype(auto) value_or( Optional&& optional, T&& t ) MAYTHROW {
-		if constexpr( tc::instance_or_derived<T, tc::make_lazy> ) {
+		if constexpr( tc::instance_or_derived<std::remove_reference_t<T>, tc::make_lazy> ) {
 			static_assert( !tc::has_actual_common_reference<decltype(*std::declval<Optional>()), T&&> ); // Should value_or(std::optional<make_lazy<T>>(), make_lazy<T>()) return make_lazy<T>&& or T?
-			return CONDITIONAL_PRVALUE_AS_VAL(optional, *std::forward<Optional>(optional), std::forward<T>(t)());
+			return tc_conditional_prvalue_as_val(optional, *std::forward<Optional>(optional), std::forward<T>(t)());
 		} else {
-			return CONDITIONAL_RVALUE_AS_REF(optional, *std::forward<Optional>(optional), std::forward<T>(t));
+			return tc_conditional_rvalue_as_ref(optional, *std::forward<Optional>(optional), std::forward<T>(t));
 		}
 	}
 
@@ -311,17 +372,6 @@ namespace tc {
 
 	// For `tc::and_then(opt, tc::chained(fn_make_optional, f))`.
 	DEFINE_FN2(std::make_optional, fn_make_optional);
-}
-
-namespace boost {
-	template<typename T>
-	struct range_mutable_iterator<std::optional<T>> {
-		using type = T*;
-	};
-	template<typename T>
-	struct range_const_iterator<std::optional<T>> {
-		using type = T const*;
-	};
 }
 
 namespace tc::begin_end_adl {

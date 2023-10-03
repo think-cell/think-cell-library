@@ -81,18 +81,3 @@ namespace tc {
 #else
 	#define MSVC_TEMPLATE_WORKAROUND template
 #endif
-
-#if WCHAR_MAX == 0xFFFF // == 2 bytes unsigned: We want tc::char16 to be unsigned. wchar_t is unsigned on MSVC, but that's implementation-specific.
-namespace tc {
-	using char16 = wchar_t;
-}
-	#define UTF16_(x) L ## x
-#else
-namespace tc {
-	using char16 = char16_t;
-}
-	#define UTF16_(x) u ## x
-#endif
-#define UTF16(x) UTF16_(x)
-
-static_assert(0 == std::numeric_limits<tc::char16>::lowest() && 0xFFFF == std::numeric_limits<tc::char16>::max());

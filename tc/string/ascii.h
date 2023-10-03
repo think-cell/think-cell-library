@@ -8,7 +8,7 @@
 
 #pragma once
 
-#include "value_restrictive.h"
+#include "char.h"
 #include "../base/assert_defs.h"
 #include "../base/explicit_cast.h"
 #include "../range/meta.h"
@@ -48,13 +48,23 @@ namespace tc {
 
 	template< typename T >
 	[[nodiscard]] constexpr bool isasciiblank( T ch ) noexcept {
+		// in C locale, it is:
+		// ' '	(0x20) space (SPC)
+		// '\t'	(0x09) horizontal tab (TAB)
 		return tc::char_ascii('\t')==ch || tc::char_ascii(' ')==ch;
 	}
 
 	template< typename T >
 	[[nodiscard]] constexpr bool isasciispace( T ch ) noexcept {
+		// in C locale, it is:
+		// ' '	(0x20) space (SPC)
+		// '\t'	(0x09) horizontal tab (TAB)
+		// '\n'	(0x0a) newline (LF)
+		// '\v'	(0x0b) vertical tab (VT)
+		// '\f'	(0x0c) feed (FF)
+		// '\r'	(0x0d) carriage return (CR)
 		return tc::isasciiblank(ch) ||
-			(tc::char_ascii('\xa')<=ch && ch<=tc::char_ascii('\xd')); // \n, \v, \f, \r
+			(tc::char_ascii('\xa')<=ch && ch<=tc::char_ascii('\xd'));
 	}
 
 	template< typename T >
@@ -127,7 +137,7 @@ namespace tc {
 	}
 
 	namespace ascii_byte_literals {
-		constexpr auto operator "" _asc(char ch) noexcept {
+		constexpr auto operator "" _asc(char const ch) noexcept {
 			// Don't use hex or octal escapes; use the char code directly. For example, use 0x80 instead of '\x80'_asc
 			// Other ASCII control characters may be added here as exceptions.
 			_ASSERTE((ch >= 0x20 && ch <= 0x7E) || ch == '\r' || ch == '\n' || ch == '\t');

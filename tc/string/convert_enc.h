@@ -15,11 +15,51 @@
 #include "../algorithm/compare.h"
 #include "../range/range_adaptor.h"
 
-#include "value_restrictive.h"
+#include "char.h"
 
 namespace tc {
+	// Code unit predicates
+	//
+	// These names are based on the terminology used in the Unicode Standard: https://www.unicode.org/versions/Unicode13.0.0/UnicodeStandard-13.0.pdf
+	// "(...) reserved for the first, or leading, element of a UTF-8 code unit sequences, (...) reserved for the subsequent, or trailing, elements of such sequences;"
+	// "(...) for the lead, trail, or single code units in any of those encoding forms overlap."
+	[[nodiscard]] constexpr bool is_leading_codeunit(char const ch) noexcept {
+		return 0xc0 == (ch & 0xc0); // matches 11xxxxxx
+	}
+	[[nodiscard]] constexpr bool is_leading_codeunit(tc::char16 const ch) noexcept {
+		return 0xd800u == (ch & 0xfc00u); // high surrogate
+	}
+	template <tc::char_type Char, Char chFirst, Char chLast>
+	[[nodiscard]] constexpr auto is_leading_codeunit(tc::restricted_enum<Char, chFirst, chLast> const ch) noexcept {
+		if constexpr(chLast < 0x80) {
+			return tc::constant<false>{};
+		} else {
+			return is_leading_codeunit(tc::implicit_cast<Char>(ch));
+		}
+	}
+
+	[[nodiscard]] constexpr bool is_trailing_codeunit(char const ch) noexcept {
+		return 0x80 == (ch & 0xc0); // matches 10xxxxxx
+	}
+	[[nodiscard]] constexpr bool is_trailing_codeunit(tc::char16 const ch) noexcept {
+		return 0xdc00u == (ch & 0xfc00u); // low surrogate
+	}
+	template <tc::char_type Char, Char chFirst, Char chLast>
+	[[nodiscard]] constexpr auto is_trailing_codeunit(tc::restricted_enum<Char, chFirst, chLast> const ch) noexcept {
+		if constexpr(chLast < 0x80) {
+			return tc::constant<false>{};
+		} else {
+			return is_trailing_codeunit(tc::implicit_cast<Char>(ch));
+		}
+	}
+
+	template<typename T>
+	[[nodiscard]] constexpr bool is_single_codeunit(T const ch) noexcept {
+		return char_in_range<T>(tc::to_underlying(ch));
+	}
+
 	namespace codeunit_sequence_size_detail {
-		[[nodiscard]] constexpr inline std::optional<int> codeunit_sequence_size_raw(char ch) noexcept {
+		[[nodiscard]] constexpr inline std::optional<int> codeunit_sequence_size_raw(char const ch) noexcept {
 			if( auto const n=0xffu & ~tc::to_underlying(ch); 0!=n ) { // code unit 0xff is invalid
 				switch(tc::index_of_most_significant_bit(n)) {
 					case 7: return 1;
@@ -33,13 +73,13 @@ namespace tc {
 		}
 
 		// tc::make_interval not used to avoid dependency cycle
-		[[nodiscard]] constexpr std::optional<int> codeunit_sequence_size_raw(tc::char16 ch) noexcept {
+		[[nodiscard]] constexpr std::optional<int> codeunit_sequence_size_raw(tc::char16 const ch) noexcept {
 			if( auto const n=tc::to_underlying(ch); n<0xd800u || 0xdfffu<n) return 1;
 			else if( n<0xdc00u ) return 2; // high-surrogate
 			else return std::nullopt; // low-surrogate, continuation
 		}
 
-		[[nodiscard]] constexpr std::optional<int> codeunit_sequence_size_raw(tc::char_ascii ch) noexcept {
+		[[nodiscard]] constexpr std::optional<int> codeunit_sequence_size_raw(tc::char_ascii const ch) noexcept {
 			return 1;
 		}
 
@@ -190,7 +230,7 @@ namespace tc {
 	}
 
 	template<typename Char>
-	constexpr Char codepoint_codeunit_at(unsigned int nCodePoint, int nCodeUnitIndex) noexcept {
+	constexpr Char codepoint_codeunit_at(unsigned int nCodePoint, int const nCodeUnitIndex) noexcept {
 		_ASSERTDEBUG(nCodePoint<0x110000u);
 		auto const nLastIndex=tc::codepoint_codeunit_count<Char>(nCodePoint) - 1;
 		if constexpr( std::same_as<char, Char> ) {
@@ -469,18 +509,18 @@ namespace tc {
 				return tc::for_each(*src, no_adl::convert_enc_sink<decltype(sink), Dst>(tc_move_if_owned(sink)));
 			});
 		}
+
+		template <tc::char_like Dst, auto ... Cs>
+		[[nodiscard]] constexpr auto convert_literal(tc::literal_range<tc::char_ascii, Cs...>) noexcept {
+			// We cast the Cs to char, to keep a simple type as NTTP and because presumably every char_like type is constructible from char.
+			return tc::literal_range<Dst, tc::implicit_cast<char>(Cs)...>{};
+		}
 	}
 
-	template <typename T>
-	void foo() {
-			static_assert(tc::char_like<T>);
-	}
-
-	template<tc::char_like Dst, typename Src> requires (!tc::instance_or_derived<std::remove_reference_t<Src>, convert_enc_impl::SStringConversionRange>)
+	template<tc::char_like Dst, typename Src>
 	[[nodiscard]] decltype(auto) convert_enc(Src&& src) noexcept {
 		if constexpr(tc::has_range_value<Src>::value) {
-			foo<tc::range_value_t<Src>>();
-			//static_assert(tc::char_like<tc::range_value_t<Src>>);
+			static_assert(tc::char_like<tc::range_value_t<Src>>);
 			if constexpr(tc::safely_convertible_to<tc::range_value_t<Src>, Dst>) {
 				return std::forward<Src>(src);
 			} else if constexpr(tc::char_type<Dst> && tc::char_type<tc::range_value_t<Src>> && tc::range_with_iterators<Src>) {
@@ -495,9 +535,14 @@ namespace tc {
 		}
 	}
 
-	template<tc::char_type Dst, typename Src> requires tc::instance_or_derived<std::remove_reference_t<Src>, convert_enc_impl::SStringConversionRange>
+	template<tc::char_like Dst, typename Src> requires tc::instance_or_derived<std::remove_reference_t<Src>, convert_enc_impl::SStringConversionRange>
 	[[nodiscard]] auto convert_enc(Src&& src) noexcept {
 		return tc::convert_enc<Dst>(tc_move_if_owned(src).base_range());
+	}
+
+	template<tc::char_like Dst, typename Src> requires tc::is_literal_range<Src> && std::same_as<tc::range_value_t<Src>, tc::char_ascii>
+	[[nodiscard]] auto convert_enc(Src&& src) noexcept {
+		return convert_enc_detail::convert_literal<Dst>(src);
 	}
 
 	namespace no_adl {
@@ -521,11 +566,6 @@ namespace tc {
 				tc::for_each(tc::convert_enc<Dst>(std::forward<Rng>(rng)), m_sink)
 			)
 		};
-	}
-
-	template<typename T>
-	[[nodiscard]] constexpr bool is_single_codeunit(T const ch) noexcept {
-		return char_in_range<T>(tc::to_underlying(ch));
 	}
 }
 
