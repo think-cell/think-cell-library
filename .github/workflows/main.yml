@@ -1,49 +1,32 @@
 name: CI
 
-# Controls when the action will run. Triggers the workflow on push or pull request
-# events.
-on:
-  push:
-  pull_request:
+on: [push, pull_request]
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   build:
-    # Build on multiple systems: https://docs.github.com/en/actions/configuring-and-managing-workflows/configuring-a-workflow#configuring-a-build-matrix
     strategy:
       fail-fast: false
       matrix:
-        compiler: [g++-12, clang++-13]
-        config: [release, debug]
+        image: ["gcc:13", "clang:16"]
+        config: [Debug, Release]
 
-    # The type of runner that the job will run on
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/think-cell/${{matrix.image}}
 
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-    - uses: actions/checkout@v2
-    
-    - name: Setup Boost 1.75.0
+    - uses: actions/checkout@v4
+    - name: Setup Boost
       shell: bash
       run: |
-        curl -L https://boostorg.jfrog.io/artifactory/main/release/1.75.0/source/boost_1_75_0.zip --output boost_1_75_0.zip
-        unzip -q boost_1_75_0.zip
+        curl -L https://boostorg.jfrog.io/artifactory/main/release/1.83.0/source/boost_1_83_0.zip --output boost_1_83_0.zip
+        unzip -q boost_1_83_0.zip
+        mv boost_1_83_0/ boost/
 
     - name: CMake configure
-      if: matrix.config == 'debug'
-      run: cmake -S . -B build -DBoost_INCLUDE_DIR=$GITHUB_WORKSPACE/boost_1_75_0/ -DBoost_LIBRARY_DIR=$GITHUB_WORKSPACE/boost_1_75_0/
-      env:
-        CXX: ${{ matrix.compiler }}
-
-    - name: CMake configure
-      if: matrix.config == 'release'
-      run: cmake -S . -B build -D CMAKE_BUILD_TYPE=Release -DBoost_INCLUDE_DIR=$GITHUB_WORKSPACE/boost_1_75_0/ -DBoost_LIBRARY_DIR=$GITHUB_WORKSPACE/boost_1_75_0/
-      env:
-        CXX: ${{ matrix.compiler }}
+      run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.config }} -DBoost_INCLUDE_DIR=$GITHUB_WORKSPACE/boost/ -DBoost_LIBRARY_DIR=$GITHUB_WORKSPACE/boost/
 
     - name: Compile
       run: cmake --build build
-
     - name: Run
       run: cmake --build build --target test
