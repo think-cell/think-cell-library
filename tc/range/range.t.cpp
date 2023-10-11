@@ -43,15 +43,15 @@ UNITTESTDEF( basic ) {
 			"type must be a reference type"
 		);
 
-		WrapVoidFunc(Func func, tc::break_or_continue& breakorcontinue) noexcept :
-			m_func(std::move(func)), m_breakorcontinue(breakorcontinue)
+		WrapVoidFunc(Func func, tc::break_or_continue& boc) noexcept :
+			m_func(std::move(func)), m_boc(boc)
 		{}
 
 		template<typename Arg>
 		void operator()(Arg&& arg) & noexcept {
-			if (tc::continue_ == m_breakorcontinue) {
+			if (tc::continue_ == m_boc) {
 				if constexpr( std::is_same<decltype(std::declval<std::remove_reference_t<Func> >()(std::declval<Arg>())), tc::break_or_continue>::value ) {
-					m_breakorcontinue = m_func(std::forward<Arg>(arg));
+					m_boc = m_func(std::forward<Arg>(arg));
 				} else {
 					m_func(std::forward<Arg>(arg));
 				}
@@ -60,7 +60,7 @@ UNITTESTDEF( basic ) {
 
 		private:
 			Func m_func;
-			tc::break_or_continue& m_breakorcontinue;
+			tc::break_or_continue& m_boc;
 	};
 
 	template<typename Rng>
@@ -73,9 +73,9 @@ UNITTESTDEF( basic ) {
 			if constexpr( std::is_same<decltype(std::declval<base_>()(std::declval<Func>())), tc::break_or_continue>::value ) {
 				return base_::operator()(std::forward<Func>(func));
 			} else {
-				tc::break_or_continue breakorcontinue = tc::continue_;
-				base_::operator()(WrapVoidFunc<Func&&>(std::forward<Func>(func), breakorcontinue));
-				return breakorcontinue;
+				tc::break_or_continue boc = tc::continue_;
+				base_::operator()(WrapVoidFunc<Func&&>(std::forward<Func>(func), boc));
+				return boc;
 			}
 		}
 
@@ -84,9 +84,9 @@ UNITTESTDEF( basic ) {
 			if constexpr( std::is_same<decltype(std::declval<base_>()(std::declval<Func>())), tc::break_or_continue>::value ) {
 				return base_::operator()(std::forward<Func>(func));
 			} else {
-				tc::break_or_continue breakorcontinue = tc::continue_;
-				base_::operator()(WrapVoidFunc<Func&&>(std::forward<Func>(func), breakorcontinue));
-				return breakorcontinue;
+				tc::break_or_continue boc = tc::continue_;
+				base_::operator()(WrapVoidFunc<Func&&>(std::forward<Func>(func), boc));
+				return boc;
 			}
 		}
 	};
@@ -542,7 +542,7 @@ namespace {
 		tc::for_each(tc::cartesian_product(tc::as_const(an), tc::as_const(an)), [](auto&& x){
 			STATICASSERTSAME(decltype(x), (tc::tuple<int const&, const int&>&&));
 		});
-		auto const rvaluerng = [](auto sink) { sink(1); };
+		static auto constexpr rvaluerng = [](auto sink) { sink(1); };
 		tc::for_each(tc::cartesian_product(rvaluerng, rvaluerng), [](auto&& x){
 			STATICASSERTSAME(decltype(x), (tc::tuple<int const&&, int&&>&&));
 		});

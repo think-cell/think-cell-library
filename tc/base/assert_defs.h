@@ -14,11 +14,17 @@
 	#include "fundamental.h"
 	#include <type_traits>
 	#include <cstdlib>
-	#include <cassert>
 
-	#define _CHECKS
+	#ifndef _CHECKS
+		#define _CHECKS
+	#endif
+
 	#ifndef IF_TC_CHECKS
-		#define IF_TC_CHECKS(...) __VA_ARGS__
+		#ifdef _CHECKS
+			#define IF_TC_CHECKS(...) __VA_ARGS__
+		#else
+			#define IF_TC_CHECKS(...)
+		#endif
 	#endif
 	#ifndef IF_TC_DEBUG
 		#ifdef _DEBUG
@@ -27,9 +33,14 @@
 			#define IF_TC_DEBUG(...)
 		#endif
 	#endif
+
 	#ifndef _ASSERT
-		#include <cassert>
-		#define _ASSERT(...) assert(TC_FWD(__VA_ARGS__))
+		#ifdef NDEBUG
+			#define _ASSERT(...) IF_TC_CHECKS((TC_FWD(__VA_ARGS__) ? (void)0 : std::abort()))
+		#else
+			#include <cassert>
+			#define _ASSERT(...) IF_TC_CHECKS(assert(TC_FWD(__VA_ARGS__)))
+		#endif
 	#endif
 	#ifndef TRYASSERT
 		#define TRYASSERT _ASSERT
@@ -59,14 +70,14 @@
 		#define _ASSERTENOTIFY _ASSERTE
 	#endif
 	#ifndef _ASSERTEQUAL
-		#define _ASSERTEQUAL(a, b) assert((a)==(b))
+		#define _ASSERTEQUAL(a, b) _ASSERT((a)==(b))
 	#endif
 	#ifndef _ASSERTDEBUGEQUAL
 		#define _ASSERTDEBUGEQUAL(a, b) IF_TC_DEBUG(_ASSERTEQUAL(a, b))
 	#endif
 	#ifndef _ASSERTANYOF
 		#include <boost/preprocessor/seq/enum.hpp>
-		#define _ASSERTANYOF(expr, values) [](auto const& e, auto const&... val) noexcept { assert( ((e == val) || ...) ); }(expr, BOOST_PP_SEQ_ENUM(values))
+		#define _ASSERTANYOF(expr, values) [](auto const& e, auto const&... val) noexcept { _ASSERT( ((e == val) || ...) ); }(expr, BOOST_PP_SEQ_ENUM(values))
 	#endif
 	#ifndef _ASSERTDEBUGANYOF
 		#define _ASSERTDEBUGANYOF(expr, values) IF_TC_DEBUG(_ASSERTANYOF(expr, values))
@@ -75,7 +86,7 @@
 		#define _ASSERTINITIALIZED( expr ) tc::discard(expr)
 	#endif
 	#ifndef _ASSERTPRINT
-		#define _ASSERTPRINT( cond, ... ) assert( cond )
+		#define _ASSERTPRINT( cond, ... ) _ASSERT( cond )
 	#endif
 	#ifndef VERIFYEQUAL
 		#include <utility>

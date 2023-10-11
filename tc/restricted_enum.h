@@ -57,6 +57,12 @@ namespace tc {
 
 			template<typename U>
 				requires tc::explicit_castable_from<T, U const&>
+			static bool constructable_from(U const& u) noexcept {
+				return restricted_enum(c_tFirst) <= u && u <= restricted_enum(c_tLast); // We reuse the SFINAE from the comparison operators of restricted_enum.
+			}
+
+			template<typename U>
+				requires tc::explicit_castable_from<T, U const&>
 			explicit constexpr restricted_enum(U const& u) noexcept : tc_member_init_cast(m_t, u) {
 				_ASSERTE(tc::to_underlying(c_tFirst) <= tc::to_underlying(m_t) && tc::to_underlying(m_t) <= tc::to_underlying(c_tLast));
 			}

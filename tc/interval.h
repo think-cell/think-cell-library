@@ -1381,8 +1381,10 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 			// DEPRECATED
 			using iterator = tc::iterator_t<Cont>;
 
-			const_iterator lower_bound( TInterval const& intvl ) const& noexcept {
-				return m_cont.lower_bound( intvl );
+			template <typename RangeReturn = tc::return_border, typename K>
+			decltype(auto) lower_bound(K const& k) const& noexcept {
+				static_assert( RangeReturn::allowed_if_always_has_border );
+				return RangeReturn::pack_border(m_cont.lower_bound(k), *this);
 			}
 
 			template <typename RangeReturn = tc::return_border, typename K>

@@ -62,7 +62,7 @@ namespace tc {
 		public:
 			template<tc::decayed_derived_from<intersection_difference_adaptor> Self, typename Sink>
 			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
-				auto const NotInRng0 = [](tc::unused) noexcept {
+				auto constexpr NotInRng0 = [](tc::unused) noexcept {
 					_ASSERT(!bSubset);
 				};
 				if constexpr (bIntersection) {

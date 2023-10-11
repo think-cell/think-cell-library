@@ -77,25 +77,25 @@ namespace tc {
 			);
 		};
 
-		template<tc::break_or_continue breakorcontinue, typename Sink>
+		template<tc::break_or_continue boc, typename Sink>
 		struct verify_sink_result_impl final : Sink {
 			static_assert(tc::decayed<Sink>);
-			using guaranteed_break_or_continue = tc::constant<breakorcontinue>;
+			using guaranteed_break_or_continue = tc::constant<boc>;
 
 			template<typename... Args, typename R = decltype(std::declval<Sink const&>()(std::declval<Args>()...))>
-			constexpr tc::constant<breakorcontinue> operator()(Args&&... args) const& noexcept(noexcept(
+			constexpr tc::constant<boc> operator()(Args&&... args) const& noexcept(noexcept(
 				tc::base_cast<Sink>(*this)(std::declval<Args&&>()...)
 			)) {
-				check_sink_result<R, breakorcontinue>();
+				check_sink_result<R, boc>();
 				tc::base_cast<Sink>(*this)(std::forward<Args>(args)...); // MAYTHROW
 				return {};
 			}
 
 			template<typename Rng> requires tc::has_mem_fn_chunk<Sink const&, Rng>
-			constexpr tc::constant<breakorcontinue> chunk(Rng&& rng) const& noexcept(noexcept(
+			constexpr tc::constant<boc> chunk(Rng&& rng) const& noexcept(noexcept(
 				tc::base_cast<Sink>(*this).chunk(std::forward<Rng>(rng))
 			)) {
-				check_sink_result<decltype(tc::base_cast<Sink>(*this).chunk(std::forward<Rng>(rng))), breakorcontinue>();
+				check_sink_result<decltype(tc::base_cast<Sink>(*this).chunk(std::forward<Rng>(rng))), boc>();
 				tc::base_cast<Sink>(*this).chunk(std::forward<Rng>(rng)); // MAYTHROW
 				return {};
 			}
@@ -225,12 +225,12 @@ namespace tc {
 				(sink(T()), ...); // plain call, tc::invoke on std::integral_constant or tc::type has no value.
 				return tc::constant<tc::continue_>();
 			} else {
-				auto const breakorcontinue = tc::continue_if(((tc::continue_ == tc_internal_continue_if_not_break(sink(T()))) && ...));
+				auto const boc = tc::continue_if(((tc::continue_ == tc_internal_continue_if_not_break(sink(T()))) && ...));
 
 				if constexpr (std::is_same<tc::constant<tc::break_>, R>::value) {
 					return tc::constant<tc::break_>();
 				} else {
-					return breakorcontinue;
+					return boc;
 				}
 			}
 		}

@@ -100,7 +100,7 @@ namespace tc {
 				}
 			} else {
 				std::optional<tc::element_return_type_t<RangeReturn, Rng>> ot;
-				auto const breakorcontinue = tc::for_each(tc_move_if_owned(rng), [&](auto&& t) MAYTHROW {
+				auto const boc = tc::for_each(tc_move_if_owned(rng), [&](auto&& t) MAYTHROW {
 					if(!ot) {
 						ot.emplace(RangeReturn::template pack_element<Rng>(tc_move_if_owned(t))); // MAYTHROW
 						return tc::continue_;
@@ -108,7 +108,7 @@ namespace tc {
 						return tc::break_;
 					}
 				});
-				if(ot && (tc::continue_ == breakorcontinue || tc::explicit_cast<bool>(func()))) {
+				if(ot && (tc::continue_ == boc || tc::explicit_cast<bool>(func()))) {
 					return *tc_move(ot);
 				} else {
 					return RangeReturn::template pack_no_element<Rng>();

@@ -85,7 +85,7 @@ namespace tc {
 
 				// The parent of the root of the tree is a special header node (representing end()) whose
 				// parent is again the root node.
-				auto PathToRoot=[]( node_type* pnode ) noexcept ->TNodeVector {
+				static auto constexpr PathToRoot=[]( node_type* pnode ) noexcept ->TNodeVector {
 					TNodeVector vecpnode;
 					node_type* pnodeParent=node_type::from_impl(pnode->parent());
 

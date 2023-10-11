@@ -132,7 +132,7 @@ UNITTESTDEF(is_strictly_sorted){
 
 UNITTESTDEF(remove_inplace_parser) {
 	tc::string<char> input = "0123<font>4567<font10><font11><font12>89<font14><font";
-	tc::remove_inplace(input, tc::asciilit("<font") > *(tc::one<char> - tc::asciilit(">")) > tc::asciilit(">"));
+	tc::remove_inplace(input, tc::lit(tc_ascii("<font")) > *(tc::one<char> - tc::lit(tc_ascii(">"))) > tc::lit(tc_ascii(">")));
 	_ASSERTEQUAL(input, "0123456789<font");
 }
 

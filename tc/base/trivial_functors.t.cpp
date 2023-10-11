@@ -24,7 +24,7 @@ namespace {
 		// Fits in a pointer
 		{
 			constexpr auto fn = tc::constexpr_function<int{}>();
-			auto const fnOracle = []() constexpr noexcept {
+			static auto constexpr fnOracle = []() constexpr noexcept {
 				constexpr auto _ = int();
 				return _;
 			}; 
@@ -36,7 +36,7 @@ namespace {
 				int m_n;
 			};
 			constexpr auto fn = MAKE_CONSTEXPR_FUNCTION(SFoo{});
-			auto const fnOracle = []() constexpr noexcept {
+			static auto constexpr fnOracle = []() constexpr noexcept {
 				constexpr auto _ = SFoo{};
 				return _;
 			}; 
@@ -45,7 +45,7 @@ namespace {
 		}
 		{
 			constexpr auto fn = MAKE_CONSTEXPR_FUNCTION(tc::constant<10>());
-			auto const fnOracle = []() constexpr noexcept {
+			static auto constexpr fnOracle = []() constexpr noexcept {
 				constexpr auto _ = tc::constant<10>();
 				return _;
 			}; 
@@ -54,7 +54,7 @@ namespace {
 		}
 		{
 			constexpr auto fn = MAKE_CONSTEXPR_FUNCTION(tc::constant<tc::break_>());
-			auto const fnOracle = []() constexpr noexcept {
+			static auto constexpr fnOracle = []() constexpr noexcept {
 				constexpr auto _ = tc::constant<tc::break_>();
 				return _;
 			}; 
@@ -65,7 +65,7 @@ namespace {
 		// Doesn't fit in a pointer
 		{
 			constexpr auto fn = MAKE_CONSTEXPR_FUNCTION(c_typebiggerthanpointer);
-			auto const fnOracle = []() constexpr noexcept ->decltype(auto) {
+			static auto constexpr fnOracle = []() constexpr noexcept ->decltype(auto) {
 				return (c_typebiggerthanpointer);
 			}; 
 			STATICASSERTSAME(decltype(fnOracle()), TypeBiggerThanPointer const&);

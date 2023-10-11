@@ -58,7 +58,9 @@ namespace tc {
 
 }
 
+#ifndef TC_PRIVATE // We don't want std::hash.
 template <typename Alloc> requires std::is_signed<char>::value
 struct std::hash<std::basic_string<char, tc::char_traits<char>, Alloc>> {
 	auto operator()(std::basic_string<char, tc::char_traits<char>, Alloc> const& str) const& return_decltype_MAYTHROW(std::hash<std::string_view>{}(std::string_view(str.data(), str.size())))
 };
+#endif

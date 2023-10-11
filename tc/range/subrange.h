@@ -677,10 +677,10 @@ namespace tc {
 				static_assert(tc::decayed<TakePred>);
 
 				template<typename Sink2>
-				take_first_sink(Sink2&& sink, TakePred& takepred, tc::break_or_continue& breakorcontinue) noexcept
+				take_first_sink(Sink2&& sink, TakePred& takepred, tc::break_or_continue& boc) noexcept
 					: m_sink(std::forward<Sink2>(sink))
 					, m_takepred(takepred)
-					, m_breakorcontinue(breakorcontinue)
+					, m_boc(boc)
 				{}
 
 				template< typename T >
@@ -691,15 +691,15 @@ namespace tc {
 					auto const Take=[&]() MAYTHROW { return tc::continue_if_not_break(m_sink, std::forward<T>(t)); };
 					switch_no_default(m_takepred.take(t)) {
 						case etakepredTAKEANDCONTINUE: {
-							auto breakorcontinue=Take(); // MAYTHROW
-							m_breakorcontinue=breakorcontinue;
-							return breakorcontinue; // allow return type to be tc::constant<tc::break_> if possible
+							auto boc=Take(); // MAYTHROW
+							m_boc=boc;
+							return boc; // allow return type to be tc::constant<tc::break_> if possible
 						}
 						case etakepredTAKEANDBREAK:
-							m_breakorcontinue=Take(); // MAYTHROW
+							m_boc=Take(); // MAYTHROW
 							return tc::constant<tc::break_>();
 						case etakepredDONTTAKE:
-							m_breakorcontinue=tc::continue_;
+							m_boc=tc::continue_;
 							return tc::constant<tc::break_>();
 					}
 				}
@@ -710,10 +710,10 @@ namespace tc {
 					tc::constant<tc::break_>
 				> {
 					tc_auto_cref(pairitetakepred, m_takepred.take_range(rng)); // MAYTHROW
-					auto breakorcontinue=tc::continue_if_not_break(tc::mem_fn_chunk(), m_sink, tc::take(std::forward<Rng>(rng), pairitetakepred.first)); // MAYTHROW
-					m_breakorcontinue=breakorcontinue;
+					auto boc=tc::continue_if_not_break(tc::mem_fn_chunk(), m_sink, tc::take(std::forward<Rng>(rng), pairitetakepred.first)); // MAYTHROW
+					m_boc=boc;
 					switch_no_default(pairitetakepred.second) {
-						case etakepredTAKEANDCONTINUE: return breakorcontinue;
+						case etakepredTAKEANDCONTINUE: return boc;
 						case etakepredTAKEANDBREAK: return tc::constant<tc::break_>();
 					}
 				}
@@ -721,7 +721,7 @@ namespace tc {
 			private:
 				Sink m_sink;
 				TakePred& m_takepred;
-				tc::break_or_continue& m_breakorcontinue;
+				tc::break_or_continue& m_boc;
 			};
 
 			struct take_first_pred {
@@ -756,10 +756,10 @@ namespace tc {
 			return [rng=tc::make_reference_or_value(std::forward<Rng>(rng)), n](auto&& sink) MAYTHROW {
 				if(0<n) {
 					TakePred takepred(n);
-					tc::break_or_continue breakorcontinue;
-					if(tc::break_==tc::for_each(*rng, no_adl::take_first_sink<tc::decay_t<decltype(sink)>, TakePred>(tc_move_if_owned(sink), takepred, breakorcontinue))) { // MAYTHROW
-						return VERIFYINITIALIZED(breakorcontinue);
-					} else { // breakorcontinue won't be initialized if rng is empty
+					tc::break_or_continue boc;
+					if(tc::break_==tc::for_each(*rng, no_adl::take_first_sink<tc::decay_t<decltype(sink)>, TakePred>(tc_move_if_owned(sink), takepred, boc))) { // MAYTHROW
+						return VERIFYINITIALIZED(boc);
+					} else { // boc won't be initialized if rng is empty
 						_ASSERT(bTruncate);
 					}
 				}
@@ -836,9 +836,9 @@ namespace tc {
 	[[nodiscard]] auto begin_next(Rng&& rng, std::size_t const n=1) noexcept {
 		return [rng=tc::make_reference_or_value(std::forward<Rng>(rng)), n](auto&& sink) MAYTHROW {
 			auto nCount=n;
-			auto breakorcontinue=tc::for_each(*rng, no_adl::drop_first_sink<tc::decay_t<decltype(sink)>>(tc_move_if_owned(sink), nCount)); // MAYTHROW
+			auto boc=tc::for_each(*rng, no_adl::drop_first_sink<tc::decay_t<decltype(sink)>>(tc_move_if_owned(sink), nCount)); // MAYTHROW
 			_ASSERTEQUAL(nCount, 0);
-			return breakorcontinue;
+			return boc;
 		};
 	}
 

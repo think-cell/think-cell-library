@@ -18,7 +18,7 @@ UNITTESTDEF( quantifiers ) {
 	tc::vector<int> all_even{2,4,6,8};
 	tc::vector<int> all_odd{3,5,7,9};
 
-	auto const even = [](int const i) noexcept { return i%2==0; };
+	static auto constexpr even = [](int const i) noexcept { return i%2==0; };
 
 	int const existing_value = 5;
 	int const non_existing_value = 9;

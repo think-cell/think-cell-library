@@ -195,8 +195,8 @@ namespace tc {
 				STATICASSERTEQUAL( sizeof...(nPrefix) + 1 + sizeof...(nSuffix), sizeof...(Rng) );
 				auto tuplepairrngidxPrefix = zip_detail::MakeRngIndexPairTuple(tc::get<nPrefix>(std::forward<Self>(self).m_tupleadaptbaserng)...); // MAYTHROW
 				auto tuplepairrngidxSuffix = zip_detail::MakeRngIndexPairTuple(tc::get<sizeof...(nPrefix) + 1 + nSuffix>(std::forward<Self>(self).m_tupleadaptbaserng)...); // MAYTHROW
-				auto const breakorcontinue = tc::for_each(tc::get<sizeof...(nPrefix)>(std::forward<Self>(self).m_tupleadaptbaserng).base_range(), [&](auto&& u) MAYTHROW {
-					auto const breakorcontinue = tc::continue_if_not_break(
+				auto const boc = tc::for_each(tc::get<sizeof...(nPrefix)>(std::forward<Self>(self).m_tupleadaptbaserng).base_range(), [&](auto&& u) MAYTHROW {
+					auto const boc = tc::continue_if_not_break(
 						sink,
 						tc::forward_as_tuple(
 							zip_detail::DereferenceRngIndexPair(tc::get<nPrefix>(tuplepairrngidxPrefix))...,  // MAYTHROW
@@ -204,14 +204,14 @@ namespace tc {
 							zip_detail::DereferenceRngIndexPair(tc::get<nSuffix>(tuplepairrngidxSuffix))...  // MAYTHROW
 						)
 					); // MAYTHROW
-					if( tc::continue_ == breakorcontinue ) {
+					if( tc::continue_ == boc ) {
 						(zip_detail::IncrementRngIndexPair(tc::get<nPrefix>(tuplepairrngidxPrefix)), ...); // MAYTHROW
 						(zip_detail::IncrementRngIndexPair(tc::get<nSuffix>(tuplepairrngidxSuffix)), ...); // MAYTHROW
 					}
-					return breakorcontinue;
+					return boc;
 				});  // MAYTHROW
-				_ASSERTE( tc::break_ == breakorcontinue || (zip_detail::RngIndexPairAtEnd(tc::get<nPrefix>(tuplepairrngidxPrefix)) && ...) && (zip_detail::RngIndexPairAtEnd(tc::get<nSuffix>(tuplepairrngidxSuffix)) && ...) );
-				return breakorcontinue;
+				_ASSERTE( tc::break_ == boc || (zip_detail::RngIndexPairAtEnd(tc::get<nPrefix>(tuplepairrngidxPrefix)) && ...) && (zip_detail::RngIndexPairAtEnd(tc::get<nSuffix>(tuplepairrngidxSuffix)) && ...) );
+				return boc;
 			}
 			template<typename Self, typename Sink, std::size_t... nPrefix/*=0,...,generator_index()-1*/, std::size_t... nSuffix/*=0,...,sizeof...(Rng)-generator_index()-2*/>
 			static constexpr auto internal_for_each_reverse_impl(Self&& self, Sink&& sink, std::index_sequence<nPrefix...>, std::index_sequence<nSuffix...>) MAYTHROW {
@@ -219,7 +219,7 @@ namespace tc {
 				STATICASSERTEQUAL( sizeof...(nPrefix) + 1 + sizeof...(nSuffix), sizeof...(Rng) );
 				auto tuplepairrngidxPrefix = zip_detail::MakeRngEndIndexPairTuple(tc::get<nPrefix>(std::forward<Self>(self).m_tupleadaptbaserng)...); // MAYTHROW
 				auto tuplepairrngidxSuffix = zip_detail::MakeRngEndIndexPairTuple(tc::get<sizeof...(nPrefix) + 1 + nSuffix>(std::forward<Self>(self).m_tupleadaptbaserng)...); // MAYTHROW
-				auto const breakorcontinue = tc::for_each(tc::reverse(tc::get<sizeof...(nPrefix)>(std::forward<Self>(self).m_tupleadaptbaserng).base_range()), [&](auto&& u) MAYTHROW {
+				auto const boc = tc::for_each(tc::reverse(tc::get<sizeof...(nPrefix)>(std::forward<Self>(self).m_tupleadaptbaserng).base_range()), [&](auto&& u) MAYTHROW {
 					(zip_detail::DecrementRngIndexPair(tc::get<nPrefix>(tuplepairrngidxPrefix)), ...); // MAYTHROW
 					(zip_detail::DecrementRngIndexPair(tc::get<nSuffix>(tuplepairrngidxSuffix)), ...); // MAYTHROW
 					return tc::continue_if_not_break(
@@ -231,8 +231,8 @@ namespace tc {
 						)
 					); // MAYTHROW
 				}); // MAYTHROW
-				_ASSERTE( tc::break_ == breakorcontinue || ((tc::begin_index(tc::get<nPrefix>(tuplepairrngidxPrefix).first)==tc::get<nPrefix>(tuplepairrngidxPrefix).second) && ...) && ((tc::begin_index(tc::get<nSuffix>(tuplepairrngidxSuffix).first)==tc::get<nSuffix>(tuplepairrngidxSuffix).second) && ...) );
-				return breakorcontinue;
+				_ASSERTE( tc::break_ == boc || ((tc::begin_index(tc::get<nPrefix>(tuplepairrngidxPrefix).first)==tc::get<nPrefix>(tuplepairrngidxPrefix).second) && ...) && ((tc::begin_index(tc::get<nSuffix>(tuplepairrngidxSuffix).first)==tc::get<nSuffix>(tuplepairrngidxSuffix).second) && ...) );
+				return boc;
 			}
 
 		public:

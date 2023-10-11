@@ -88,10 +88,20 @@ namespace tc {
 
 			template<typename ReturnBorder, bool bSupportsNoElement = true>
 			struct pack_as_border_before : pack_as_border_base<ReturnBorder, bSupportsNoElement> {
+				static constexpr bool allowed_if_always_has_border = true;
 				template<typename It, typename Rng>
 				static constexpr auto pack_element(It&& it, Rng&& rng, tc::unused /*ref*/={}) return_decltype_xvalue_by_ref_noexcept(
 					ReturnBorder::pack_border(std::forward<It>(it), std::forward<Rng>(rng))
 				)
+				template<typename It, typename Rng>
+				static constexpr decltype(auto) pack_border(It&& it, Rng&& rng) noexcept(noexcept(--it)) {
+					if( tc::begin(rng) != it ) {
+						--it;
+						return ReturnBorder::pack_border(std::forward<It>(it), std::forward<Rng>(rng));
+					} else {
+						return ReturnBorder::pack_no_border(std::forward<Rng>(rng));
+					}
+				}
 				template<typename Rng, typename Begin, typename End>
 				static constexpr auto pack_view(Rng&& rng, Begin&& begin, End&& end) return_decltype_xvalue_by_ref_noexcept(
 					ReturnBorder::pack_border(std::forward<Begin>(begin), std::forward<Rng>(rng))
@@ -100,11 +110,21 @@ namespace tc {
 
 			template<typename ReturnBorder, bool bSupportsNoElement = true>
 			struct pack_as_border_after : pack_as_border_base<ReturnBorder, bSupportsNoElement> {
+				static constexpr bool allowed_if_always_has_border = true;
 				template<typename It, typename Rng>
 				static constexpr auto pack_element(It&& it, Rng&& rng, tc::unused /*ref*/={}) return_decltype_xvalue_by_ref_MAYTHROW(
 					++it, // MAYTHROW
 					ReturnBorder::pack_border(std::forward<It>(it), std::forward<Rng>(rng))
 				)
+				template<typename It, typename Rng>
+				static constexpr decltype(auto) pack_border(It&& it, Rng&& rng) noexcept(noexcept(--it)) {
+					if( tc::end(rng) != it ) {
+						++it;
+						return ReturnBorder::pack_border(std::forward<It>(it), std::forward<Rng>(rng));
+					} else {
+						return ReturnBorder::pack_no_border(std::forward<Rng>(rng));
+					}
+				}
 				template<typename Rng, typename Begin, typename End>
 				static constexpr auto pack_view(Rng&& rng, Begin&&, End&& end) return_decltype_xvalue_by_ref_noexcept(
 					ReturnBorder::pack_border(std::forward<End>(end), std::forward<Rng>(rng))
@@ -608,10 +628,12 @@ namespace tc {
 	// return element border
 	using return_border_after = return_detail::no_adl::pack_as_border_after<tc::return_border_or_end, false>;
 	using return_border_after_or_begin = return_detail::no_adl::pack_as_border_after<tc::return_border_or_begin>;
-	using return_border_after_or_end = return_detail::no_adl::pack_as_border_after<tc::return_border_or_end>;
 	using return_border_before = return_detail::no_adl::pack_as_border_before<tc::return_border_or_begin, false>;
-	using return_border_before_or_begin = return_detail::no_adl::pack_as_border_before<tc::return_border_or_begin>;
 	using return_border_before_or_end = return_detail::no_adl::pack_as_border_before<tc::return_border_or_end>;
+
+	// return element border or border element
+	using return_border_before_or_begin = return_detail::no_adl::pack_as_border_before<tc::return_border_or_begin>;
+	using return_border_after_or_end = return_detail::no_adl::pack_as_border_after<tc::return_border_or_end>;
 
 	using return_take_before = return_detail::no_adl::pack_as_border_before<tc::return_take_or_empty, false>; // safe choice is empty because result may be empty
 	using return_take_before_or_empty = return_detail::no_adl::pack_as_border_before<tc::return_take_or_empty>;

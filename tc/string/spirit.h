@@ -117,12 +117,11 @@ namespace tc {
 
 			template <typename Rng>
 			[[nodiscard]] constexpr auto operator()(Rng const& rng) const MAYTHROW {
-				typename Expr::attribute_type result;
-				if (tc::parse(rng, *this > x3::eoi, result)) {
-					return std::optional(result);
-				} else {
-					return std::optional<typename Expr::attribute_type>();
+				std::optional<typename Expr::attribute_type> oresult(std::in_place);
+				if (!tc::parse(rng, *this > x3::eoi, *oresult)) {
+					oresult=std::nullopt;
 				}
+				return oresult;
 			}
 		};
 	}
@@ -130,14 +129,160 @@ namespace tc {
 	constexpr auto x3parser(Expr&& expr) return_ctor_MAYTHROW(no_adl::x3parser<std::remove_cvref_t<Expr>>, (tc_move_if_owned(expr)))
 
 	namespace no_adl {
-		template<typename Char>
-		struct char_encoding;
+		struct any_one_impl final : x3::char_parser<any_one_impl> {
+			static bool const has_attribute = false;
+			using attribute_type = x3::unused_type;
 
-		template<tc::char_type Char>
-		struct char_encoding<Char> final {
-			using char_type = Char;
+			constexpr bool test(tc::unused /*char*/, tc::unused /*context*/) const& noexcept {
+				return true;
+			}
+		};
+	}
+	inline constexpr auto any_one = no_adl::any_one_impl();
 
-			static constexpr bool ischar(int) noexcept {
+	namespace no_adl {
+		template<typename T>
+		struct one_impl final : x3::char_parser<one_impl<T>> {
+			static bool const has_attribute = true;
+			using attribute_type = T;
+
+			template<typename U>
+			bool test(U const u, tc::unused /*context*/) const& noexcept {
+				return parse_match(u);
+			}
+
+			template<typename U>
+			bool parse_match(U const u) const& noexcept {
+				if constexpr (requires { T::constructable_from(std::declval<T>()); }) {
+					return T::constructable_from(u);
+				} else {
+					static_assert(tc::safely_constructible_from<T, U const&>);
+					return true;
+				}
+			}
+		};
+	}
+	template<typename T>
+	constexpr auto one = no_adl::one_impl<T>();
+
+	namespace no_adl {
+		template<typename Rng>
+		struct char_set final: x3::char_parser<char_set<Rng>> {
+			static bool const has_attribute = true;
+			using attribute_type = tc::range_value_t<Rng>;
+
+			constexpr char_set(Rng&& rng) noexcept
+				: m_rng(tc::aggregate_tag, tc_move_if_owned(rng)) {}
+
+			template <typename CharType, typename Context>
+			bool test(CharType const& ch, Context& context) const& noexcept {
+				return tc::any_of(*m_rng, [&](auto const& chAllowed) noexcept {
+					return tc::equal_to_or_parse_match(ch, chAllowed);
+				});
+			}
+		private:
+			tc::reference_or_value<Rng> m_rng;
+		};
+	}
+	template<typename Rng>
+	constexpr no_adl::char_set<Rng> static_char_class(Rng&& rng) noexcept {
+		return tc_move_if_owned(rng);
+	}
+
+	namespace no_adl {
+		template<typename String>
+		struct lit_impl final: x3::parser<lit_impl<String>> {
+			static bool const has_attribute = false;
+			using attribute_type = x3::unused_type;
+
+			explicit constexpr lit_impl(String&& str) noexcept: m_str(tc::aggregate_tag, tc_move_if_owned(str)) {}
+
+			template<typename Iterator, typename Context, typename Attribute>
+			bool parse(Iterator& first, Iterator const& last, Context const& context, x3::unused_type, Attribute& attr) const& {
+				x3::skip_over(first, last, context);
+				if(auto const first_=tc::starts_with<tc::return_border_or_null>(tc::make_iterator_range(first, last), *m_str)) {
+					first=first_;
+					return true;
+				}
+				return false;
+			}
+		private:
+			tc::reference_or_value<String> m_str;
+		};
+	}
+	template<typename String>
+	constexpr auto lit(String&& str) noexcept {
+		return no_adl::lit_impl<String>(tc_move_if_owned(str));
+	}
+
+	namespace no_adl {
+		// tc::attr_is<T>[parser] directive creates an x3::rule_definition (an x3::parser with a customized attribute type).
+		// When specifying an attribute, in some cases the attribute can be filled by the parser without any additional code:
+		//   auto const parser = tc::attr_is<tc::string<char>>[+x3::alpha];
+		// In other cases, you may have to write a semantic action and access the attribute via x3::_val(ctx) to fill it:
+		//   auto const parser = tc::attr_is<tc::string<char>>[+x3::alpha[([](auto const& ctx) noexcept {
+		//     tc::append(
+		//       x3::_val(ctx)/*attribute of innermost x3::rule_definition, which is what is specified in tc::attr_is<>*/,
+		//       tc::single(x3::_attr(ctx))/*automatic attribute of the parser attached; in this case x3::alpha is producing char*/
+		//     );
+		//   })]];
+		template<typename T>
+		struct attr_is_type {
+			template<typename Expr>
+			constexpr auto operator[](Expr&& expr) const& noexcept {
+				// returns a x3::rule_definition with attr_is_id, Attribute type of T and rhs parser of x3::as_parser(expr)
+				return x3::rule<struct attr_is_id, T>{"attr_is"} = x3::as_parser(std::forward<Expr>(expr));
+			}
+		};
+	}
+	template<typename T>
+	inline constexpr no_adl::attr_is_type<T> attr_is = {};
+
+	namespace no_adl {
+		struct asciiblank final: x3::char_parser<asciiblank> {
+			static bool const has_attribute = false;
+			using attribute_type = x3::unused_type;
+
+			template <typename CharType>
+			static bool test(CharType const& ch, tc::unused /*context*/) noexcept {
+				return tc::isasciiblank(ch);
+			}
+		};
+
+		struct asciispace final: x3::char_parser<asciispace> {
+			static bool const has_attribute = false;
+			using attribute_type = x3::unused_type;
+
+			template <typename CharType>
+			static bool test(CharType const& ch, tc::unused /*context*/) noexcept {
+				return tc::isasciispace(ch);
+			}
+		};
+	}
+	inline constexpr auto asciiblank = no_adl::asciiblank{};
+	inline constexpr auto asciispace = no_adl::asciispace{};
+
+	template <bool bSigned>
+	struct xml_percentage_policies final : std::conditional_t<bSigned, x3::real_policies<double>, x3::ureal_policies<double>> {
+		static constexpr bool allow_leading_dot = false;
+		static constexpr bool allow_trailing_dot = false;
+		// do not parse exponents
+		template<typename Iterator> static bool parse_exp(Iterator& first, Iterator const& last) noexcept { return false; }
+		// do not parse NANs
+		template<typename Iterator, typename Attribute> static bool parse_nan(Iterator& first, Iterator const& last, Attribute& attr) noexcept { return false; }
+		// do not parse INFs
+		template<typename Iterator, typename Attribute> static bool parse_inf(Iterator& first, Iterator const& last, Attribute& attr) noexcept { return false; }
+	};
+
+	inline constexpr auto asciixdigit = tc::one<tc::char_asciidigit> | tc::one<tc::restricted_enum<char, 'A', 'F'>> | tc::one<tc::restricted_enum<char, 'a', 'f'>>;
+
+	namespace no_adl {
+		template<tc::char_type T>
+		struct char_encoding final {
+			using char_type = T;
+
+			template<typename Char> requires std::same_as<Char, T>
+			static constexpr bool ischar(Char ch) noexcept {
 				return true;
 			}
 			static ::boost::uint32_t toucs4(int const ch) noexcept { // for debug only
@@ -159,210 +304,6 @@ namespace tc {
 		};
 	}
 	using no_adl::char_encoding;
-
-	DEFINE_TAG_TYPE(unused_type)
-
-	template<typename Char>
-	inline constexpr auto one = tc::unused_type;
-
-	template<>
-	inline constexpr auto one<char> = x3::any_char<tc::char_encoding<char>>();
-
-	template<>
-	inline constexpr auto one<wchar_t> = x3::any_char<tc::char_encoding<wchar_t>>();
-
-#ifdef __clang__
-	template<>
-	inline constexpr auto one<char16_t> = x3::any_char<tc::char_encoding<char16_t>>();
-#endif
-
-	template<typename Char>
-	constexpr
-	x3::literal_char<
-		tc::char_encoding<Char>
-	> single_char(Char ch) noexcept {
-		return {ch};
-	}
-
-	namespace no_adl {
-		template<typename Rng>
-		struct char_set final: x3::char_parser<char_set<Rng>> {
-			using attribute_type = tc::range_value_t<Rng>;
-			static bool const has_attribute = true;
-
-			constexpr char_set(Rng rng) noexcept
-				: m_rng(tc_move_if_owned(rng)) {}
-
-			template <typename CharType, typename Context>
-			bool test(CharType const& ch, Context& context) const& noexcept {
-				static_assert( std::is_same<CharType, attribute_type>::value );
-				return tc::any_of(m_rng, [&](auto const& chAllowed) noexcept {
-					return 0==x3::get_case_compare<tc::char_encoding<CharType>>(context)(ch, chAllowed);
-				});
-			}
-		private:
-			tc::decay_t<Rng> m_rng;
-		};
-	}
-
-	template<typename Rng>
-	constexpr no_adl::char_set<tc::decay_t<Rng>> static_char_class(Rng rng) noexcept {
-		return tc_move_if_owned(rng);
-	}
-
-	template<tc::char_type Char>
-	constexpr x3::literal_char<
-		tc::char_encoding<Char>,
-		x3::unused_type
-	> lit(Char ch) noexcept {
-		return {ch};
-	}
-
-	template<typename Char>
-	using literal_string_type = x3::literal_string<
-		tc::span<Char const>,
-		tc::char_encoding<Char>,
-		x3::unused_type
-	>;
-
-	template<typename Str> requires tc::safely_convertible_to<Str&&, tc::span<tc::range_value_t<Str> const>>
-	constexpr auto lit(Str&& str) noexcept {
-		static_assert(!tc::instance<Str, std::basic_string>, "tc::lit won't own string data. Use tc::as_lvalue or x3::lit.");
-		return literal_string_type<tc::range_value_t<Str>>(std::forward<Str>(str));
-	}
-}
-
-namespace boost::spirit::x3 {
-	template< typename Char >
-	struct get_info<tc::literal_string_type<Char>> {
-		using result_type = std::basic_string<char>/*external interface*/;
-		result_type operator()(tc::literal_string_type<Char> const& p) const& noexcept {
-			return tc_modified(result_type(), tc::append(_, p.str));
-		}
-	};
-}
-
-namespace tc {
-	namespace no_adl {
-		// tc::attr_is<T>[parser] directive creates an x3::rule_definition (an x3::parser with a customized attribute type).
-		// When specifying an attribute, in some cases the attribute can be filled by the parser without any additional code:
-		//   auto const parser = tc::attr_is<tc::string<char>>[+x3::alpha];
-		// In other cases, you may have to write a semantic action and access the attribute via x3::_val(ctx) to fill it:
-		//   auto const parser = tc::attr_is<tc::string<char>>[+x3::alpha[([](auto const& ctx) noexcept {
-		//     tc::append(
-		//       x3::_val(ctx)/*attribute of innermost x3::rule_definition, which is what is specified in tc::attr_is<>*/,
-		//       tc::single(x3::_attr(ctx))/*automatic attribute of the parser attached; in this case x3::alpha is producing char*/
-		//     );
-		//   })]];
-		template<typename T>
-		struct attr_is_type {
-			template<typename Expr>
-			constexpr auto operator[](Expr&& expr) const& noexcept {
-				// returns a x3::rule_definition with attr_is_id, Attribute type of T and rhs parser of x3::as_parser(expr)
-				return x3::rule<struct attr_is_id, T>{"attr_is"} = x3::as_parser(std::forward<Expr>(expr));
-			}
-		};
-	}
-
-	template<typename T>
-	inline constexpr no_adl::attr_is_type<T> attr_is = {};
-
-	namespace no_adl {
-		template<typename T>
-		struct restricted_enum_parser final : x3::char_parser<restricted_enum_parser<T>> {
-			using attribute_type = T;
-			static bool const has_attribute = true;
-
-			template<typename U>
-			bool test(U const u, tc::unused /*context*/) const& noexcept {
-				return parse_match(u);
-			}
-
-			template<typename U>
-			bool parse_match(U const u) const& noexcept {
-				return T(T::c_tFirst) <= u && u <= T(T::c_tLast); // We reuse the SFINAE from the comparison operators of restricted_enum.
-			}
-		};
-	}
-	template<typename T, T tFirst, T tLast>
-	inline constexpr auto one<restricted_enum<T, tFirst, tLast>> = no_adl::restricted_enum_parser<restricted_enum<T, tFirst, tLast>>();
-
-	inline constexpr auto asciidigit = tc::one<tc::char_asciidigit>;
-	inline constexpr auto asciilower = tc::one<tc::char_asciilower>;
-	inline constexpr auto asciiupper = tc::one<tc::char_asciiupper>;
-
-	namespace no_adl {
-		struct asciilit_impl final: x3::parser<asciilit_impl> {
-			static bool const has_attribute = false;
-			using attribute_type = x3::unused_type;
-			explicit constexpr asciilit_impl(tc::span<char const> str) noexcept: m_str(tc_move(str)) {
-				_ASSERTE(tc::all_of(m_str, [](char const ch) constexpr noexcept { return '\0'<=ch && ch<='\x7f'; }));
-			}
-
-			template<typename Iterator, typename Context, typename Attribute>
-			bool parse(Iterator& first, Iterator const& last, Context const& context, x3::unused_type, Attribute& attr) const& {
-				x3::skip_over(first, last, context);
-				if(auto const first_=tc::starts_with<tc::return_border_or_null>(tc::make_iterator_range(first, last), m_str, [](auto const chInput, char const chLit) noexcept {
-					return chInput == tc::explicit_cast<decltype(chInput)>(chLit);
-				})) {
-					first=first_;
-					return true;
-				}
-				return false;
-			}
-		private:
-			tc::span<char const> m_str;
-		};
-	}
-
-	template<std::size_t N>
-	constexpr auto asciilit(char const (&str)[N]) noexcept {
-		return tc::no_adl::asciilit_impl(str);
-	}
-
-	namespace no_adl {
-		struct blank final: x3::char_parser<blank> {
-			using attribute_type = x3::unused_type;
-			static bool const has_attribute = false;
-
-			template <typename CharType>
-			static bool test(CharType const& ch, tc::unused /*context*/) noexcept {
-				// TODO: support unicode?
-				return tc::isasciiblank(ch);
-			}
-		};
-
-		struct space final: x3::char_parser<space> {
-			using attribute_type = x3::unused_type;
-			static bool const has_attribute = false;
-
-			template <typename CharType>
-			static bool test(CharType const& ch, tc::unused /*context*/) noexcept {
-				// TODO: support unicode?
-				return tc::isasciispace(ch);
-			}
-		};
-	}
-
-	inline constexpr auto blank = no_adl::blank{};
-	inline constexpr auto space = no_adl::space{};
-
-	template <bool bSigned>
-	struct xml_percentage_policies final : std::conditional_t<bSigned, x3::real_policies<double>, x3::ureal_policies<double>> {
-		static constexpr bool allow_leading_dot = false;
-		static constexpr bool allow_trailing_dot = false;
-		// do not parse exponents
-		template<typename Iterator> static bool parse_exp(Iterator& first, Iterator const& last) noexcept { return false; }
-		// do not parse NANs
-		template<typename Iterator, typename Attribute> static bool parse_nan(Iterator& first, Iterator const& last, Attribute& attr) noexcept { return false; }
-		// do not parse INFs
-		template<typename Iterator, typename Attribute> static bool parse_inf(Iterator& first, Iterator const& last, Attribute& attr) noexcept { return false; }
-	};
-
-}
-
-namespace tc {
-	inline constexpr auto asciixdigit = asciidigit | tc::one<tc::restricted_enum<char, 'A', 'F'>> | tc::one<tc::restricted_enum<char, 'a', 'f'>>;
 
 	template<typename Char, typename T>
 	using symbols = x3::symbols_parser<tc::char_encoding<Char>, T>;
@@ -405,7 +346,7 @@ namespace boost::spirit::x3 {
 	{
 		using base_type = typename with_val_directive::unary_parser;
 		static bool const is_pass_through_unary = true;
-        static bool const handles_container = Subject::handles_container;
+		static bool const handles_container = Subject::handles_container;
 		using subject_type = Subject;
 
 		constexpr with_val_directive(Subject const& subject): base_type(subject) {}
@@ -467,7 +408,7 @@ namespace boost::spirit::x3::traits
 			>::type>::type,
 			Context
 		> {};
-	      
+
 	template <typename context_tag, typename Context>
 	struct has_attribute<x3::lazy_parser<context_tag>, Context>
 		: has_attribute<

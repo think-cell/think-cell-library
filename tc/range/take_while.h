@@ -38,19 +38,19 @@ namespace tc {
 
 			template<tc::decayed_derived_from<take_while_adaptor> Self, typename Sink> 
 			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
-				tc::common_type_t<decltype(tc::for_each(std::forward<Self>(self).base_range(), sink)),tc::constant<tc::continue_>> breakorcontinue = tc::constant<tc::continue_>();
+				tc::common_type_t<decltype(tc::for_each(std::forward<Self>(self).base_range(), sink)),tc::constant<tc::continue_>> boc = tc::constant<tc::continue_>();
 				tc::for_each(
 					std::forward<Self>(self).base_range(),
 					[&](auto&& t) MAYTHROW -> tc::break_or_continue {
 						if (tc::invoke(self.m_pred, tc::as_const(t))) {
-							breakorcontinue = tc::continue_if_not_break(sink, tc_move_if_owned(t));
-							return breakorcontinue;
+							boc = tc::continue_if_not_break(sink, tc_move_if_owned(t));
+							return boc;
 						} else {
 							return tc::break_;
 						}
 					}
 				);
-				return breakorcontinue;
+				return boc;
 			}
 		};
 

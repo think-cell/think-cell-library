@@ -38,7 +38,7 @@ UNITTESTDEF( equal_vec_int_pred ) {
 	TEST_init_hack(tc::vector, int, v123, {1,2,3});
 	TEST_init_hack(tc::vector, int, v234, {2,3,4});
 
-	auto const ofByOne = [](int const lhs, int const rhs) noexcept { return (lhs + 1) == rhs; }; // unsymmetrical to uncover wrong order of argument application to the predicate
+	static auto constexpr ofByOne = [](int const lhs, int const rhs) noexcept { return (lhs + 1) == rhs; }; // unsymmetrical to uncover wrong order of argument application to the predicate
 
 	_ASSERT(tc::equal(v123, v234, ofByOne));
 	_ASSERT(!tc::equal(v234, v123, ofByOne));
@@ -89,7 +89,7 @@ UNITTESTDEF( equal_generator_pred ) {
 	auto g123 = tc::make_generator_range(v123);
 	auto g234 = tc::make_generator_range(v234);
 
-	auto const ofByOne = [](int const lhs, int const rhs) noexcept { return (lhs + 1) == rhs; };  // unsymmetrical to uncover wrong order of argument application to the predicate
+	static auto constexpr ofByOne = [](int const lhs, int const rhs) noexcept { return (lhs + 1) == rhs; };  // unsymmetrical to uncover wrong order of argument application to the predicate
 
 	//_ASSERT(tc::equal(g123, g234, ofByOne)); // Fails to compile with proper msg, as it should be.
 

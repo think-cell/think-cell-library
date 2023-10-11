@@ -416,7 +416,7 @@ namespace {
 
 		}
 
-		auto const Pred = [](int const lhs, int const rhs) noexcept {
+		static auto constexpr Pred = [](int const lhs, int const rhs) noexcept {
 			return std::abs(lhs-rhs) <=1;
 		};
 
@@ -584,7 +584,7 @@ namespace {
 	}
 
 	UNITTESTDEF( take_first_sink ) {
-		auto const rngn = [](auto sink) noexcept {
+		static auto constexpr rngn = [](auto sink) noexcept {
 			for(int i=0;;++i) { tc_yield(sink, i); }
 		};
 
@@ -603,7 +603,7 @@ namespace {
 	}
 
 	UNITTESTDEF( drop_first_sink ) {
-		auto const rngn = [](auto sink) noexcept {
+		static auto constexpr rngn = [](auto sink) noexcept {
 			for(int i=0; i < 7;++i) { tc_yield(sink, i); }
 			return tc::continue_;
 		};
@@ -650,7 +650,7 @@ namespace {
 #endif
 
 	UNITTESTDEF(and_then) {
-		auto const fn=[](auto const n) noexcept {return n+1;};
+		static auto constexpr fn=[](auto const n) noexcept {return n+1;};
 		std::optional<int> on(12);
 
 		auto n1=tc::and_then(on, fn);

@@ -272,11 +272,6 @@ namespace tc {
 				return it;
 			}
 
-			template< tc::has_mem_fn_distance_to_index IndexRange_, bool bConst1, bool bConst2>
-			friend constexpr auto operator -(
-				index_iterator<IndexRange_, bConst1> const& itLhs,
-				index_iterator<IndexRange_, bConst2> const& itRhs) noexcept;
-
 			constexpr auto border_base() const& noexcept requires
 				tc::has_mem_fn_base_range<IndexRange> && tc::has_mem_fn_border_base_index<IndexRange>
 			{
@@ -312,8 +307,14 @@ namespace tc {
 				return tc::explicit_cast<bool>(m_oidxrng);
 			}
 
-			friend constexpr bool operator==(index_iterator const& it, end_sentinel) noexcept {
-				return tc::as_const(*it.m_oidxrng).at_end_index(it.m_idx);
+			constexpr bool operator==(end_sentinel) const& noexcept {
+				return tc::as_const(*m_oidxrng).at_end_index(m_idx);
+			}
+			template <bool OtherConst> requires tc::is_equality_comparable<tc_index>::value
+			constexpr bool operator==(index_iterator<IndexRange, OtherConst> const& rhs) const& noexcept {
+				if constexpr (!tc::empty_type<IndexRange>) _ASSERTE(std::addressof(*m_oidxrng) == std::addressof(*rhs.m_oidxrng));
+				_ASSERTDEBUG( m_oidxrng || m_idx == rhs.m_idx );
+				return m_idx == rhs.m_idx;
 			}
 
 			// For iterator_facade.
@@ -321,25 +322,12 @@ namespace tc {
 			constexpr void advance(N&& n) noexcept(noexcept(m_oidxrng->advance_index(m_idx, n))) {
 				tc::as_const(*m_oidxrng).advance_index(m_idx, std::forward<N>(n));
 			}
-
-			template< typename IndexRange_, bool bConst1, bool bConst2> requires tc::is_equality_comparable<tc::index_t<IndexRange_>>::value
-			friend constexpr bool operator==(index_iterator<IndexRange_, bConst1> const& itLhs, index_iterator<IndexRange_, bConst2> const& itRhs) noexcept;
 		};
 
-		template< typename IndexRange_, bool bConst1, bool bConst2> requires tc::is_equality_comparable<tc::index_t<IndexRange_>>::value
-		constexpr bool operator==(index_iterator<IndexRange_, bConst1> const& itLhs, index_iterator<IndexRange_, bConst2> const& itRhs) noexcept {
-			if constexpr (!tc::empty_type<IndexRange_>) _ASSERTE(std::addressof(*itLhs.m_oidxrng) == std::addressof(*itRhs.m_oidxrng));
-			_ASSERTDEBUG( itLhs.m_oidxrng || itLhs.m_idx == itRhs.m_idx );
-			return itLhs.m_idx == itRhs.m_idx;
-		}
-
 		template< tc::has_mem_fn_distance_to_index IndexRange_, bool bConst1, bool bConst2>
-		constexpr auto operator -(
-			index_iterator<IndexRange_, bConst1> const& itLhs,
-			index_iterator<IndexRange_, bConst2> const& itRhs) noexcept {
-			_ASSERTE(itLhs.m_oidxrng);
-			if constexpr (!tc::empty_type<IndexRange_>) _ASSERTE(std::addressof(*itLhs.m_oidxrng) == std::addressof(*itRhs.m_oidxrng));
-			return tc::as_const(*itLhs.m_oidxrng).distance_to_index(itRhs.m_idx, itLhs.m_idx);
+		constexpr auto operator -( index_iterator<IndexRange_, bConst1> const& itLhs, index_iterator<IndexRange_, bConst2> const& itRhs) noexcept {
+			if constexpr (!tc::empty_type<IndexRange_>) _ASSERTE(std::addressof(itLhs.get_range()) == std::addressof(itRhs.get_range()));
+			return tc::as_const(itLhs.get_range()).distance_to_index(itRhs.get_index(), itLhs.get_index());
 		}
 	}
 	using index_iterator_impl::index_iterator;

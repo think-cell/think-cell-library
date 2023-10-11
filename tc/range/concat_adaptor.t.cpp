@@ -76,7 +76,7 @@ UNITTESTDEF(concat_index_test) {
 
 
 	tc::vector<int> vecn;
-	_ASSERTEQUAL(tc::break_, tc::for_each(
+	VERIFYEQUAL(tc::break_, tc::for_each(
 		tc::filter(
 			tc::reverse(
 				tc::concat(

@@ -83,6 +83,23 @@ namespace tc {
 	template<typename Key, typename T, typename Hash=tc::fn_hash<std::size_t, Key>, typename KeyEqual=tc::fn_equal_to, typename Alloc=std::allocator<std::pair<Key const, T>>>
 	using unordered_map=std::unordered_map<Key, T, Hash, KeyEqual, Alloc>;
 #else
+	template<
+		typename Rng,
+		typename Hash=std::hash<Rng>,
+		typename KeyEqual=tc::fn_equal,
+		typename Alloc=std::allocator<Rng>
+	>
+	using unordered_set_range = std::unordered_set<Rng, Hash, KeyEqual, Alloc>;
+
+	template<
+		typename Rng,
+		typename T,
+		typename Hash=std::hash<Rng>,
+		typename KeyEqual=tc::fn_equal,
+		typename Alloc=std::allocator<std::pair<Rng const, T>>
+	>
+	using unordered_map_range = std::unordered_map<Rng, T, Hash, KeyEqual, Alloc>;
+
 	using std::unordered_set;
 	using std::unordered_map;
 #endif

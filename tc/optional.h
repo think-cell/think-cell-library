@@ -79,27 +79,27 @@ namespace tc {
 			}
 	
 			T const* operator->() const& noexcept {
-				_ASSERT(*this);
+				_ASSERT(*this || m_bInsideDtor);
 				return m_oValue.operator->();
 			}
 			T* operator->() & noexcept {
-				_ASSERT(*this);
+				_ASSERT(*this || m_bInsideDtor);
 				return m_oValue.operator->();
 			}
 			T const& operator*() const& noexcept {
-				_ASSERT(*this);
+				_ASSERT(*this || m_bInsideDtor);
 				return *m_oValue;
 			}
 			T const&& operator*() const&& noexcept {
-				_ASSERT(*this);
+				_ASSERT(*this || m_bInsideDtor);
 				return *tc_move(m_oValue);
 			}
 			T& operator*() & noexcept {
-				_ASSERT(*this);
+				_ASSERT(*this || m_bInsideDtor);
 				return *m_oValue;
 			}
 			T&& operator*() && noexcept {
-				_ASSERT(*this);
+				_ASSERT(*this || m_bInsideDtor);
 				return *tc_move(m_oValue);
 			}
 	

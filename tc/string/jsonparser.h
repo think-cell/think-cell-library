@@ -448,7 +448,7 @@ namespace tc::json {
 				if constexpr( std::floating_point<T> ) {
 					auto it = this->position();
 					if (!tc::parse_iterator(it, this->end_position(), x3::real_parser<T>(), *ot)) {
-						ot.reset();
+						ot=std::nullopt;
 					}
 					this->set_position(it);
 					this->skip_whitespace_maybe_end();
@@ -456,7 +456,7 @@ namespace tc::json {
 					static_assert( tc::actual_integer<T> );
 					auto it = this->position();
 					if (!tc::parse_iterator(it, this->end_position(), x3::int_parser<T>(), *ot)) {
-						ot.reset();
+						ot=std::nullopt;
 					}
 					this->set_position(it);
 					this->skip_whitespace_maybe_end();

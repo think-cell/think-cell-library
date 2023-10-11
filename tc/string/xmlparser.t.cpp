@@ -567,7 +567,7 @@ UNITTESTDEF(xml_transform_drop_element) {
 namespace
 {
 	// MSVC doesn't like it at function scope for some reason.
-	auto const MatchOrInsertTest = [](tc::span<char const> strXml) noexcept {
+	auto constexpr MatchOrInsertTest = [](tc::span<char const> strXml) noexcept {
 		tc::string<char> strOutput;
 		{
 			auto transform=tc::xml::make_transform(strXml, SAssertingErrorHandler(), strOutput);

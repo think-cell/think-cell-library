@@ -13,7 +13,6 @@
 #include "../container/container.h"
 #include "../container/cont_assign.h"
 #include "../range/join_framed_adaptor.h"
-#include "../range/join_framed_adaptor.h"
 
 namespace tc::xml {
 	namespace no_adl {
@@ -297,7 +296,7 @@ namespace tc::xml {
 		template<typename Char>
 		struct namespace_info : tc::noncopyable {
 		protected:
-			using SetNamespace = tc::unordered_set<tc::string<Char>>;
+			using SetNamespace = tc::unordered_set_range<tc::string<Char>>;
 			SetNamespace m_setstrns;
 			
 		public:
@@ -654,9 +653,6 @@ namespace tc::xml {
 #ifdef _MSC_VER
 			static constexpr Namespace c_nsStackSeparator = std::addressof(tc_as_constexpr(tc::string<char_type>{}));
 #else
-# if defined(__clang__)
-			static_assert(__clang_major__ == 14, "Is this workaround needed in Xcode 15?");
-# endif
 			static tc::string<char_type> const c_strDummy;
 			static Namespace const c_nsStackSeparator;
 #endif

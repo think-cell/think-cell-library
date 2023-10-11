@@ -32,17 +32,17 @@ namespace tc {
 
 	#define tc_return_if_break(...) \
 	{ \
-		auto breakorcontinue__ = (__VA_ARGS__); \
+		auto boc__ = (__VA_ARGS__); \
 		/* Inline constexpr bools as soon as "constexpr if" works properly in MSVC */ \
 		MODIFY_WARNINGS_BEGIN(((disable)(4189))) /* diable warning C4189 to workaround VS2022 17.0 compiler bug: https://developercommunity.visualstudio.com/t/unexpected-warning-c4189-with-vs170-preview-21/1489426 */ \
-		constexpr bool bAlwaysBreaks = std::is_same<decltype(breakorcontinue__), tc::constant<tc::break_>>::value; \
-		constexpr bool bNeverBreaks = std::is_same<decltype(breakorcontinue__), tc::constant<tc::continue_>>::value; \
+		constexpr bool bAlwaysBreaks = std::is_same<decltype(boc__), tc::constant<tc::break_>>::value; \
+		constexpr bool bNeverBreaks = std::is_same<decltype(boc__), tc::constant<tc::continue_>>::value; \
 		MODIFY_WARNINGS_END \
 		if constexpr (bAlwaysBreaks) { \
 			return tc::constant<tc::break_>(); \
 		} \
 		else if constexpr (!bNeverBreaks) { \
-			if( tc::break_ == breakorcontinue__ ) { \
+			if( tc::break_ == boc__ ) { \
 				return tc::break_; \
 			} \
 		} \
@@ -51,19 +51,19 @@ namespace tc {
 	namespace continue_if_not_break_adl {
 		template<typename BreakOrContinueDefault = tc::constant<tc::continue_>>
 		struct impl_t final {
-			BreakOrContinueDefault m_breakorcontinue;
+			BreakOrContinueDefault m_boc;
 		};
 		inline constexpr impl_t<> impl = {tc::constant<tc::continue_>()};
 		template<typename BreakOrContinue>
 		using is_break_or_continue = tc::type::find_unique<tc::type::list<tc::break_or_continue, tc::constant<tc::break_>, tc::constant<tc::continue_>>, BreakOrContinue>;
 
 		template<typename BreakOrContinue> requires is_break_or_continue<BreakOrContinue>::found
-		constexpr impl_t<BreakOrContinue> operator,(BreakOrContinue breakorcontinue, impl_t<> const&) noexcept {
-			return {breakorcontinue};
+		constexpr impl_t<BreakOrContinue> operator,(BreakOrContinue boc, impl_t<> const&) noexcept {
+			return {boc};
 		}
 		// The built-in "operator," would be fine, but this is needed to protect against other libraries that overload "operator," (e.g. boost::proto).
 		template<typename NotBreakOrContinue> requires (!is_break_or_continue<std::remove_cvref_t<NotBreakOrContinue>>::found)
-		constexpr impl_t<> const& operator,(NotBreakOrContinue&& /*notbreakorcontinue*/, impl_t<> const& _) noexcept {
+		constexpr impl_t<> const& operator,(NotBreakOrContinue&& /*notboc*/, impl_t<> const& _) noexcept {
 			return _;
 		}
 		// Built-in:
@@ -71,7 +71,7 @@ namespace tc {
 		//impl_t<> const& operator,(void, impl_t<> const& _) noexcept {
 		//	return _;
 		//}
-#define tc_internal_continue_if_not_break(...) tc::decay_copy(((__VA_ARGS__), tc::continue_if_not_break_adl::impl).m_breakorcontinue)
+#define tc_internal_continue_if_not_break(...) tc::decay_copy(((__VA_ARGS__), tc::continue_if_not_break_adl::impl).m_boc)
 	}
 
 	template<typename Void> requires std::is_void<Void>::value

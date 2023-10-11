@@ -21,7 +21,7 @@ UNITTESTDEF(find_closest_if) {
 		bool mutable m_bCompared = false;
 	};
 
-	auto find=[](auto const& rngn, int const iStart, int const nTarget, int const nComparisonsMax) noexcept {
+	static auto constexpr find=[](auto const& rngn, int const iStart, int const nTarget, int const nComparisonsMax) noexcept {
 		int nComparisons = 0;
 		return tc::find_closest_if_with_index<tc::return_element_index_or_npos>(rngn, iStart, /*bSkipSelf*/false, [&](IntCompareOnce const& n) noexcept {
 			_ASSERT(++nComparisons<=nComparisonsMax);
