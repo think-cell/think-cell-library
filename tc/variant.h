@@ -98,7 +98,7 @@ namespace tc {
 
 		template<typename Result, typename Overload>
 		constexpr decltype(auto) projected_result(Overload&& overload) noexcept {
-			return [overload=std::forward<Overload>(overload)](auto&&... args) MAYTHROW -> Result {
+			return [overload=tc_move_if_owned(overload)](auto&&... args) MAYTHROW -> Result {
 				return tc::invoke(overload, tc_move_if_owned(args)...);
 			};
 		}
@@ -164,19 +164,19 @@ namespace tc {
 #endif
 					(
 						detail::projected_result<detail::visit_result_t<Overload, Variant...>>(tc::base_cast<Overload>(*this)),
-						std::forward<Variant>(v)...
+						tc_move_if_owned(v)...
 					);
 			}
 
 			template<typename... T> requires (... && (!tc::instance_or_derived<std::remove_reference_t<T>, std::variant>))
 			constexpr decltype(auto) operator()(T&&... t) const& MAYTHROW {
-				return tc::invoke(tc::base_cast<Overload>(*this), std::forward<T>(t)...);
+				return tc::invoke(tc::base_cast<Overload>(*this), tc_move_if_owned(t)...);
 			}
 		};
 	}
 	template<typename... F>
 	constexpr auto fn_visit(F&&... f) noexcept {
-		return no_adl::fn_visit_impl<tc::overload<F...>>(std::forward<F>(f)...);
+		return no_adl::fn_visit_impl<tc::overload<F...>>(tc_move_if_owned(f)...);
 	}
 
 	namespace no_adl {
@@ -204,17 +204,17 @@ namespace tc {
 	namespace explicit_convert_adl {
 		template<typename TVariant, std::size_t I, typename... Args, tc::explicit_castable_from<Args...> Alternative = std::variant_alternative_t<I, TVariant>>
 		constexpr TVariant explicit_convert_impl(adl_tag_t, tc::type::identity<TVariant>, std::in_place_index_t<I> tag, Args&&... args) noexcept(
-			noexcept(tc::explicit_cast<Alternative>(std::forward<Args>(args)...))
+			noexcept(tc::explicit_cast<Alternative>(tc_move_if_owned(args)...))
 		) {
 			return tc::with_lazy_explicit_cast<Alternative>(
 				[](auto&&... args) return_ctor_MAYTHROW(TVariant, (std::in_place_index<I>, tc_move_if_owned(args)...)),
-				std::forward<Args>(args)...
+				tc_move_if_owned(args)...
 			);
 		}
 
 		template<typename TVariant, typename T, typename... Args>
 		constexpr auto explicit_convert_impl(adl_tag_t, tc::type::identity<TVariant>, std::in_place_type_t<T>, Args&&... args) return_decltype_MAYTHROW(
-			tc::explicit_cast<TVariant>(std::in_place_index_t<tc::variant_type_index<TVariant, T>::value>(), std::forward<Args>(args)...)
+			tc::explicit_cast<TVariant>(std::in_place_index_t<tc::variant_type_index<TVariant, T>::value>(), tc_move_if_owned(args)...)
 		)
 
 		template<typename... TT, typename Variant> requires	tc::explicit_convert_detail::explicit_castable_between_variants<std::variant<TT...>, Variant>
@@ -232,15 +232,15 @@ namespace tc {
 	template<std::size_t I, typename TVariant, typename... Args>
 	std::variant_alternative_t<I, TVariant>& emplace(TVariant& var, Args&&... args) MAYTHROW {
 		if constexpr (tc::safely_constructible_from<std::variant_alternative_t<I, TVariant>, Args&&...>) {
-			return var.template emplace<I>(std::forward<Args>(args)...);
+			return var.template emplace<I>(tc_move_if_owned(args)...);
 		} else {
-			return var.template emplace<I>(tc::lazy_explicit_cast<std::variant_alternative_t<I, TVariant>>(std::forward<Args>(args)...));
+			return var.template emplace<I>(tc::lazy_explicit_cast<std::variant_alternative_t<I, TVariant>>(tc_move_if_owned(args)...));
 		}
 	}
 
 	template<typename T, typename TVariant, typename... Args>
 	auto emplace (TVariant& var, Args&&... args) return_decltype_MAYTHROW (
-		tc::emplace<tc::variant_type_index<TVariant, T>::value>(var, std::forward<Args>(args)...)
+		tc::emplace<tc::variant_type_index<TVariant, T>::value>(var, tc_move_if_owned(args)...)
 	)
 }
 

@@ -44,16 +44,16 @@ UNITTESTDEF( basic ) {
 		);
 
 		WrapVoidFunc(Func func, tc::break_or_continue& boc) noexcept :
-			m_func(std::move(func)), m_boc(boc)
+			m_func(tc_move(func)), m_boc(boc)
 		{}
 
 		template<typename Arg>
 		void operator()(Arg&& arg) & noexcept {
 			if (tc::continue_ == m_boc) {
 				if constexpr( std::is_same<decltype(std::declval<std::remove_reference_t<Func> >()(std::declval<Arg>())), tc::break_or_continue>::value ) {
-					m_boc = m_func(std::forward<Arg>(arg));
+					m_boc = m_func(tc_move_if_owned(arg));
 				} else {
-					m_func(std::forward<Arg>(arg));
+					m_func(tc_move_if_owned(arg));
 				}
 			}
 		}
@@ -71,10 +71,10 @@ UNITTESTDEF( basic ) {
 		template< typename Func>
 		tc::break_or_continue operator()(Func&& func) & noexcept {
 			if constexpr( std::is_same<decltype(std::declval<base_>()(std::declval<Func>())), tc::break_or_continue>::value ) {
-				return base_::operator()(std::forward<Func>(func));
+				return base_::operator()(tc_move_if_owned(func));
 			} else {
 				tc::break_or_continue boc = tc::continue_;
-				base_::operator()(WrapVoidFunc<Func&&>(std::forward<Func>(func), boc));
+				base_::operator()(WrapVoidFunc<Func&&>(tc_move_if_owned(func), boc));
 				return boc;
 			}
 		}
@@ -82,10 +82,10 @@ UNITTESTDEF( basic ) {
 		template< typename Func>
 		tc::break_or_continue operator()(Func&& func) const& noexcept {
 			if constexpr( std::is_same<decltype(std::declval<base_>()(std::declval<Func>())), tc::break_or_continue>::value ) {
-				return base_::operator()(std::forward<Func>(func));
+				return base_::operator()(tc_move_if_owned(func));
 			} else {
 				tc::break_or_continue boc = tc::continue_;
-				base_::operator()(WrapVoidFunc<Func&&>(std::forward<Func>(func), boc));
+				base_::operator()(WrapVoidFunc<Func&&>(tc_move_if_owned(func), boc));
 				return boc;
 			}
 		}
@@ -93,7 +93,7 @@ UNITTESTDEF( basic ) {
 
 	template<typename Rng>
 	auto void_range(Rng&& rng) return_decltype_xvalue_by_ref_MAYTHROW(
-		tc::derived_cast<void_range_struct<Rng&&>>(std::forward<Rng>(rng))
+		tc::derived_cast<void_range_struct<Rng&&>>(tc_move_if_owned(rng))
 	)
 
 

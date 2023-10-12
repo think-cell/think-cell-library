@@ -79,16 +79,16 @@ MODIFY_WARNINGS_END
 		template<typename TTargetFirst, typename TTargetSecond,	typename Tuple, /*not requires because of CWG issue 2369*/std::enable_if_t<2==std::tuple_size<std::remove_cvref_t<Tuple>>::value>* =nullptr>
 		constexpr auto explicit_convert_impl(adl_tag_t, tc::type::identity<std::pair<TTargetFirst, TTargetSecond>>, Tuple&& tuple) return_decltype_MAYTHROW(
 			std::pair<TTargetFirst, TTargetSecond>(
-				tc::explicit_cast<TTargetFirst>(tc::get<0>(std::forward<Tuple>(tuple))),
-				tc::explicit_cast<TTargetSecond>(tc::get<1>(std::forward<Tuple>(tuple)))
+				tc::explicit_cast<TTargetFirst>(tc::get<0>(tc_move_if_owned(tuple))),
+				tc::explicit_cast<TTargetSecond>(tc::get<1>(tc_move_if_owned(tuple)))
 			)
 		)
 
 		template<typename TTargetFirst, typename TTargetSecond,	typename TSourceFirst, typename TSourceSecond>
 		constexpr auto explicit_convert_impl(adl_tag_t, tc::type::identity<std::pair<TTargetFirst, TTargetSecond>>, TSourceFirst&& first, TSourceSecond&& second) return_decltype_MAYTHROW(
 			std::pair<TTargetFirst, TTargetSecond>(
-				tc::explicit_cast<TTargetFirst>(std::forward<TSourceFirst>(first)),
-				tc::explicit_cast<TTargetSecond>(std::forward<TSourceSecond>(second))
+				tc::explicit_cast<TTargetFirst>(tc_move_if_owned(first)),
+				tc::explicit_cast<TTargetSecond>(tc_move_if_owned(second))
 			)
 		)
 
@@ -97,20 +97,20 @@ MODIFY_WARNINGS_END
 		template<typename... TTarget, typename... TSource, /*not requires because of CWG issue 2369*/std::enable_if_t<sizeof...(TTarget)==sizeof...(TSource)>* =nullptr>
 		constexpr auto explicit_convert_impl(adl_tag_t, tc::type::identity<tc::tuple<TTarget...>>, TSource&&... src) return_decltype_MAYTHROW(
 			tc::tuple<TTarget...>{
-				tc::explicit_cast<TTarget>(std::forward<TSource>(src))...
+				tc::explicit_cast<TTarget>(tc_move_if_owned(src))...
 			}
 		)
 
 		template<typename... TTarget, typename Tuple, /*not requires because of CWG issue 2369*/std::enable_if_t<sizeof...(TTarget)==std::tuple_size<std::remove_cvref_t<Tuple>>::value>* =nullptr>
 		constexpr auto explicit_convert_impl(adl_tag_t, tc::type::identity<tc::tuple<TTarget...>>, Tuple&& tuple) return_decltype_MAYTHROW(
-			tc::apply(tc::fn_explicit_cast<tc::tuple<TTarget...>>(), std::forward<Tuple>(tuple))
+			tc::apply(tc::fn_explicit_cast<tc::tuple<TTarget...>>(), tc_move_if_owned(tuple))
 		)
 
 		// tc::constant
 
 		template<typename T, T t, typename TSource> requires tc::explicit_castable_from<T, TSource&&>
 		constexpr tc::constant<t> explicit_convert_impl(adl_tag_t, tc::type::identity<std::integral_constant<T, t>>, TSource&& source) noexcept {
-			_ASSERTE(t == tc::explicit_cast<T>(std::forward<TSource>(source)));
+			_ASSERTE(t == tc::explicit_cast<T>(tc_move_if_owned(source)));
 			return {};
 		}
 	}
@@ -133,7 +133,7 @@ MODIFY_WARNINGS_END
 
 		template<typename... Args>
 		constexpr no_adl::return_cast_impl<Args...> return_cast(Args&&... args) noexcept {
-			return { {}, tc::forward_as_tuple(std::forward<Args>(args)...) };
+			return { {}, tc::forward_as_tuple(tc_move_if_owned(args)...) };
 		}
 	}
 
@@ -146,7 +146,7 @@ MODIFY_WARNINGS_END
 	template<typename Target, typename Source>
 	[[nodiscard]] Target explicit_cast_with_rounding(Source&& src) noexcept {
 		if constexpr( std::floating_point< tc::decay_t<Source> > && tc::actual_integer< Target > ) {
-			double srcRounded=std::floor( static_cast<double>(std::forward<Source>(src))+.5 );
+			double srcRounded=std::floor( static_cast<double>(tc_move_if_owned(src))+.5 );
 			tc_return_cast(srcRounded);
 		} else {
 			tc_return_cast(src);
@@ -171,24 +171,24 @@ MODIFY_WARNINGS_END
 
 	template<typename T, typename... Args> requires tc::explicit_castable_from<T, Args&&...>
 	constexpr tc::no_adl::lazy_explicit_cast<T, Args...> lazy_explicit_cast(Args&&... args) noexcept {
-		return { {}, tc::forward_as_tuple(std::forward<Args>(args)...) };
+		return { {}, tc::forward_as_tuple(tc_move_if_owned(args)...) };
 	}
 
 	namespace detail {
 		template<typename T, typename Func, typename... Args> requires tc::safely_constructible_from<T, Args&&...>
 		constexpr decltype(auto) with_lazy_explicit_cast_impl(Func func, Args&&... args) return_MAYTHROW(
-			func(std::forward<Args>(args)...)
+			func(tc_move_if_owned(args)...)
 		)
 
 		template<typename T, typename Func, typename... Args> requires (!tc::safely_constructible_from<T, Args&&...>)
 		constexpr decltype(auto) with_lazy_explicit_cast_impl(Func func, Args&&... args) return_MAYTHROW(
-			func(tc::lazy_explicit_cast<T>(std::forward<Args>(args)...))
+			func(tc::lazy_explicit_cast<T>(tc_move_if_owned(args)...))
 		)
 	}
 
 	template<typename T, typename Func, typename... Args>
 	constexpr decltype(auto) with_lazy_explicit_cast(Func&& func, Args&&... args) return_MAYTHROW(
-		tc::detail::with_lazy_explicit_cast_impl<T>(std::forward<Func>(func), std::forward<Args>(args)...)
+		tc::detail::with_lazy_explicit_cast_impl<T>(tc_move_if_owned(func), tc_move_if_owned(args)...)
 	)
 
 	namespace explicit_convert_adl {
@@ -196,7 +196,7 @@ MODIFY_WARNINGS_END
 		constexpr std::optional<T> explicit_convert_impl(adl_tag_t, tc::type::identity<std::optional<T>>, std::in_place_t, TSource&&... src) MAYTHROW {
 			return tc::with_lazy_explicit_cast<T> (
 				[](auto&&... args) return_ctor_MAYTHROW(std::optional<T>, (std::in_place, tc_move_if_owned(args)...)),
-				std::forward<TSource>(src)...
+				tc_move_if_owned(src)...
 			);
 		}
 	}
@@ -213,7 +213,7 @@ MODIFY_WARNINGS_END
 				}
 				o.emplace(tc_move_if_owned(args2)...);
 			},
-			std::forward<Args>(args)...
+			tc_move_if_owned(args)...
 		);
 	}
 }

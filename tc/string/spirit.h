@@ -231,7 +231,7 @@ namespace tc {
 			template<typename Expr>
 			constexpr auto operator[](Expr&& expr) const& noexcept {
 				// returns a x3::rule_definition with attr_is_id, Attribute type of T and rhs parser of x3::as_parser(expr)
-				return x3::rule<struct attr_is_id, T>{"attr_is"} = x3::as_parser(std::forward<Expr>(expr));
+				return x3::rule<struct attr_is_id, T>{"attr_is"} = x3::as_parser(tc_move_if_owned(expr));
 			}
 		};
 	}

@@ -28,8 +28,8 @@ namespace tc {
 			template<tc::decayed_derived_from<adjacent_adaptor> Self, typename Sink>
 			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
 				return internal_for_each(
-					std::forward<Self>(self),
-					std::forward<Sink>(sink),
+					tc_move_if_owned(self),
+					tc_move_if_owned(sink),
 					std::make_index_sequence<N - (tc::range_with_iterators<Rng> ? 1 : 2)>()
 				);
 			}
@@ -77,7 +77,7 @@ namespace tc {
 					std::size_t n = 0;
 					tc_scope_exit { tc::for_each(tc::begin_next<tc::return_take>(aoval, tc::min(n, N - 1)), tc_mem_fn(.dtor)); };
 
-					return tc::for_each(std::forward<Self>(self).base_range(), [&](auto&& u) MAYTHROW {
+					return tc::for_each(tc_move_if_owned(self).base_range(), [&](auto&& u) MAYTHROW {
 						auto const CallSink = [&]() MAYTHROW {
 							return tc::continue_if_not_break( // MAYTHROW
 								sink,
@@ -251,6 +251,6 @@ namespace tc {
 
 	template<std::size_t N, typename Rng>
 	constexpr adjacent_adaptor_adl::adjacent_adaptor<Rng, N> adjacent(Rng&& rng) noexcept {
-		return {tc::aggregate_tag, std::forward<Rng>(rng)};
+		return {tc::aggregate_tag, tc_move_if_owned(rng)};
 	}
 }

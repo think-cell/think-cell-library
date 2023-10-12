@@ -95,7 +95,7 @@ namespace tc {
 		// Aggregate types are tc::safely_constructible_from same type (copy/move). This is handled in the default explicit_cast below.
 		template<typename TTarget, typename... Args> requires std::is_class<TTarget>::value && std::is_aggregate<TTarget>::value
 		constexpr auto explicit_convert_impl(tc::type::identity<TTarget>, Args&&... args)
-			return_decltype_MAYTHROW( TTarget{std::forward<Args>(args)...} )
+			return_decltype_MAYTHROW( TTarget{tc_move_if_owned(args)...} )
 
 		template<typename T, std::size_t N, typename... Args>
 		std::array<T, N> explicit_convert_impl(tc::type::identity<std::array<T, N>>, Args&&... args) = delete; // explicitly delete direct list construction of std::array
@@ -105,11 +105,11 @@ namespace tc {
 
 	template<typename TTarget, typename... Args, std::enable_if_t<!tc::safely_constructible_from<std::remove_cv_t<TTarget>, Args&&...>>* = nullptr>
 	[[nodiscard]] constexpr auto explicit_cast(Args&&... args)
-		return_decltype_MAYTHROW(tc::explicit_convert(tc::type::identity<std::remove_cv_t<TTarget>>(), std::forward<Args>(args)...))
+		return_decltype_MAYTHROW(tc::explicit_convert(tc::type::identity<std::remove_cv_t<TTarget>>(), tc_move_if_owned(args)...))
 
 	template<typename TTarget, typename... Args> requires tc::safely_constructible_from<std::remove_cv_t<TTarget>, Args&&...>
 	[[nodiscard]] constexpr auto explicit_cast(Args&&... args)
-		return_ctor_MAYTHROW(std::remove_cv_t<TTarget>, (std::forward<Args>(args)...))
+		return_ctor_MAYTHROW(std::remove_cv_t<TTarget>, (tc_move_if_owned(args)...))
 
 	template<typename TTarget, typename... Args>
 	concept explicit_castable_from = requires { tc::explicit_cast<TTarget>(std::declval<Args>()...); };
@@ -134,14 +134,14 @@ namespace tc {
 	[[nodiscard]] constexpr decltype(auto) reluctant_explicit_cast(TSource&& src) noexcept {
 		STATICASSERTSAME(std::remove_cvref_t<TTarget>, TTarget);
 		if constexpr( tc::decayed_derived_from<TSource, TTarget> ) {
-			return std::forward<TSource>(src);
+			return tc_move_if_owned(src);
 		} else {
-			return tc::explicit_cast<TTarget>(std::forward<TSource>(src));
+			return tc::explicit_cast<TTarget>(tc_move_if_owned(src));
 		}
 	}
 
 	template<typename Lhs, typename Rhs>
 	constexpr void assign_explicit_cast(Lhs& lhs, Rhs&& rhs) noexcept {
-		lhs=tc::explicit_cast<Lhs>(std::forward<Rhs>(rhs));
+		lhs=tc::explicit_cast<Lhs>(tc_move_if_owned(rhs));
 	}
 }

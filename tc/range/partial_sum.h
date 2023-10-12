@@ -27,9 +27,9 @@ namespace tc {
 
 			template <typename RngRef, typename TRef, typename AccuOpRef>
 			constexpr partial_sum_adaptor(RngRef&& rng, TRef&& init, AccuOpRef&& accuop) noexcept
-				: tc::range_adaptor_base_range<Rng>(aggregate_tag, std::forward<RngRef>(rng))
-				, m_init(aggregate_tag, std::forward<TRef>(init))
-				, m_accuop(std::forward<AccuOpRef>(accuop))
+				: tc::range_adaptor_base_range<Rng>(aggregate_tag, tc_move_if_owned(rng))
+				, m_init(aggregate_tag, tc_move_if_owned(init))
+				, m_accuop(tc_move_if_owned(accuop))
 			{}
 
 			template <typename Sink>
@@ -60,11 +60,11 @@ namespace tc {
 
 	template <typename Rng, typename T, typename AccuOp = tc::fn_assign_plus>
 	constexpr auto partial_sum_excluding_init(Rng&& rng, T&& init, AccuOp&& accuop = AccuOp()) noexcept {
-		return partial_sum_adaptor<Rng, T, AccuOp, /*c_bIncludeInit*/false>(std::forward<Rng>(rng), std::forward<T>(init), std::forward<AccuOp>(accuop));
+		return partial_sum_adaptor<Rng, T, AccuOp, /*c_bIncludeInit*/false>(tc_move_if_owned(rng), tc_move_if_owned(init), tc_move_if_owned(accuop));
 	}
 
 	template <typename Rng, typename T, typename AccuOp = tc::fn_assign_plus>
 	constexpr auto partial_sum_including_init(Rng&& rng, T&& init, AccuOp&& accuop = AccuOp()) noexcept {
-		return partial_sum_adaptor<Rng, T, AccuOp, /*c_bIncludeInit*/true>(std::forward<Rng>(rng), std::forward<T>(init), std::forward<AccuOp>(accuop));
+		return partial_sum_adaptor<Rng, T, AccuOp, /*c_bIncludeInit*/true>(tc_move_if_owned(rng), tc_move_if_owned(init), tc_move_if_owned(accuop));
 	}
 }

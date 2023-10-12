@@ -258,7 +258,7 @@ namespace tc {
 	}
 
 	template< typename T >
-	[[nodiscard]] constexpr auto lower_half(T&& t) return_decltype_noexcept( tc::internal_lower_half</*bGeneralized*/ false>(std::forward<T>(t)) )
+	[[nodiscard]] constexpr auto lower_half(T&& t) return_decltype_noexcept( tc::internal_lower_half</*bGeneralized*/ false>(tc_move_if_owned(t)) )
 
 	template< bool bGeneralized, typename T >
 	[[nodiscard]] constexpr auto internal_midpoint(T const& begin, T const& end) noexcept {
@@ -336,28 +336,28 @@ namespace tc {
 			(tc::actual_integer<tc::decay_t<Src>> && (tc::actual_integer<Dst> || tc::floating_point_like<Dst>))
 			|| (tc::floating_point_like<tc::decay_t<Src>> && tc::floating_point_like<Dst>)
 	[[nodiscard]] decltype(auto) rounding_cast(Src&& x, TRound) noexcept {
-		return tc::reluctant_explicit_cast<Dst>(std::forward<Src>(x));
+		return tc::reluctant_explicit_cast<Dst>(tc_move_if_owned(x));
 	}
 
 	template<tc::actual_integer Dst, typename Src, typename TRound>
 		 requires tc::floating_point_like<tc::decay_t<Src>>
 	[[nodiscard]] decltype(auto) rounding_cast(Src&& x, TRound round) noexcept {
-		return tc::reluctant_explicit_cast<Dst>(round(std::forward<Src>(x)));
+		return tc::reluctant_explicit_cast<Dst>(round(tc_move_if_owned(x)));
 	}
 
 	template<typename Dst, typename Src>
 	[[nodiscard]] decltype(auto) rounding_cast(Src&& x) noexcept {
-		return rounding_cast<Dst>(std::forward<Src>(x), roundNEAREST);
+		return rounding_cast<Dst>(tc_move_if_owned(x), roundNEAREST);
 	}
 
 	template<typename Lhs, typename Rhs, typename TRound>
 	void assign_rounding_cast(Lhs& lhs, Rhs&& rhs, TRound round) noexcept {
-		lhs=tc::rounding_cast<Lhs>(std::forward<Rhs>(rhs), round);
+		lhs=tc::rounding_cast<Lhs>(tc_move_if_owned(rhs), round);
 	}
 
 	template<typename Lhs, typename Rhs>
 	void assign_rounding_cast(Lhs& lhs, Rhs&& rhs) noexcept {
-		lhs=tc::rounding_cast<Lhs>(std::forward<Rhs>(rhs));
+		lhs=tc::rounding_cast<Lhs>(tc_move_if_owned(rhs));
 	}
 
 	namespace no_adl {
@@ -366,12 +366,12 @@ namespace tc {
 			[[nodiscard]] constexpr Quot operator()(Num&& num, Denom&& denom) const& noexcept {
 				if constexpr( tc::actual_integer_like<tc::decay_t<Num>> && tc::actual_integer_like<tc::decay_t<Denom>> ) {
 					static_assert( dependent_false<Num, Denom>::value, "Do not rely on language int/int-behavior, use tc::scale_div " );
-					return tc::idiv(tc::explicit_cast<Quot>(std::forward<Num>(num)), std::forward<Denom>(denom), tc::roundNEAREST);
+					return tc::idiv(tc::explicit_cast<Quot>(tc_move_if_owned(num)), tc_move_if_owned(denom), tc::roundNEAREST);
 				} else {
 					static_assert( std::floating_point<tc::decay_t<Num>> || std::floating_point<tc::decay_t<Denom>> || std::is_class<tc::decay_t<Num>>::value || std::is_class<tc::decay_t<Denom>>::value );
 					static_assert( !tc::instance<tc::decay_t<Num>, tc::size_proxy> );
 					static_assert( !tc::instance<tc::decay_t<Denom>, tc::size_proxy> );
-					return std::forward<Num>(num) / std::forward<Denom>(denom);
+					return tc_move_if_owned(num) / tc_move_if_owned(denom);
 				}
 			}
 		};
@@ -381,11 +381,11 @@ namespace tc {
 			[[nodiscard]] constexpr Num& operator()(Num& num, Denom&& denom) const& noexcept {
 				if constexpr( tc::actual_integer_like<tc::decay_t<Num>> ) {
 					static_assert( dependent_false<Num, Denom>::value, "Do not rely on language int/int-behavior, use tc::scale_div " );
-					num = tc::idiv(num, std::forward<Denom>(denom), tc::roundNEAREST);
+					num = tc::idiv(num, tc_move_if_owned(denom), tc::roundNEAREST);
 				} else {
 					static_assert( std::floating_point<tc::decay_t<Num>> || std::is_class<tc::decay_t<Num>>::value );
 					static_assert( !tc::instance<tc::decay_t<Num>, tc::size_proxy> );
-					num /= std::forward<Denom>(denom);
+					num /= tc_move_if_owned(denom);
 				}
 				return num;
 			}

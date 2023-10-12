@@ -85,7 +85,7 @@ namespace tc {
 	// note that contrary to return_decltype_xvalue_by_val, this helper function also decays prvalues
 	template<typename T>
 	constexpr xvalue_decay_t<T&&> lvalue_or_decay(T&& t) noexcept {
-		return std::forward<T>(t);
+		return tc_move_if_owned(t);
 	}
 }
 

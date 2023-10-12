@@ -451,12 +451,12 @@ namespace tc {
 
 			template<typename Self>
 			static constexpr decltype(auto) base_range_(Self&& self) noexcept {
-				return std::forward<Self>(self).base_::base_range().base_range();
+				return tc_move_if_owned(self).base_::base_range().base_range();
 			}
 
 		public:
 			constexpr explicit SStringConversionRange(aggregate_tag_t, Rng&& rng) noexcept
-				: base_(aggregate_tag, SStringConversionRange<char32_t, Rng>(aggregate_tag, std::forward<Rng>(rng)))
+				: base_(aggregate_tag, SStringConversionRange<char32_t, Rng>(aggregate_tag, tc_move_if_owned(rng)))
 			{}
 			using typename base_::tc_index;
 
@@ -476,12 +476,12 @@ namespace tc {
 
 			template<typename Self>
 			static constexpr decltype(auto) base_range_(Self&& self) noexcept {
-				return std::forward<Self>(self).base_::base_range().base_range();
+				return tc_move_if_owned(self).base_::base_range().base_range();
 			}
 
 		public:
 			constexpr explicit SStringConversionRange(aggregate_tag_t, Rng&& rng) noexcept
-				: base_(aggregate_tag, SStringConversionRange<char32_t, Rng>(aggregate_tag, std::forward<Rng>(rng)))
+				: base_(aggregate_tag, SStringConversionRange<char32_t, Rng>(aggregate_tag, tc_move_if_owned(rng)))
 			{}
 			using typename base_::tc_index;
 
@@ -505,7 +505,7 @@ namespace tc {
 	namespace convert_enc_detail {
 		template<tc::char_like Dst, typename Src>
 		[[nodiscard]] decltype(auto) with_sink_impl(Src&& src) noexcept {
-			return tc::generator_range_output<Dst>([src=tc::make_reference_or_value(std::forward<Src>(src))](auto&& sink) MAYTHROW {
+			return tc::generator_range_output<Dst>([src=tc::make_reference_or_value(tc_move_if_owned(src))](auto&& sink) MAYTHROW {
 				return tc::for_each(*src, no_adl::convert_enc_sink<decltype(sink), Dst>(tc_move_if_owned(sink)));
 			});
 		}
@@ -522,16 +522,16 @@ namespace tc {
 		if constexpr(tc::has_range_value<Src>::value) {
 			static_assert(tc::char_like<tc::range_value_t<Src>>);
 			if constexpr(tc::safely_convertible_to<tc::range_value_t<Src>, Dst>) {
-				return std::forward<Src>(src);
+				return tc_move_if_owned(src);
 			} else if constexpr(tc::char_type<Dst> && tc::char_type<tc::range_value_t<Src>> && tc::range_with_iterators<Src>) {
-				return convert_enc_impl::SStringConversionRange<Dst, Src>{aggregate_tag, std::forward<Src>(src)};
+				return convert_enc_impl::SStringConversionRange<Dst, Src>{aggregate_tag, tc_move_if_owned(src)};
 			} else if constexpr(std::same_as<Dst, tc::char_ascii>) {
-				return tc::transform(std::forward<Src>(src), tc::fn_explicit_cast<tc::char_ascii>());
+				return tc::transform(tc_move_if_owned(src), tc::fn_explicit_cast<tc::char_ascii>());
 			} else {
-				return convert_enc_detail::with_sink_impl<Dst>(std::forward<Src>(src));
+				return convert_enc_detail::with_sink_impl<Dst>(tc_move_if_owned(src));
 			}
 		} else {
-			return convert_enc_detail::with_sink_impl<Dst>(std::forward<Src>(src));
+			return convert_enc_detail::with_sink_impl<Dst>(tc_move_if_owned(src));
 		}
 	}
 
@@ -553,7 +553,7 @@ namespace tc {
 
 		public:
 			explicit convert_enc_sink(Sink&& sink) noexcept
-				: m_sink(std::forward<Sink>(sink)) 
+				: m_sink(tc_move_if_owned(sink)) 
 			{}
 
 			template<tc::char_like CharT, std::enable_if_t<tc::safely_convertible_to<CharT, Dst>>* = nullptr>
@@ -563,7 +563,7 @@ namespace tc {
 
 			template<typename Rng, std::enable_if_t<tc::range_with_iterators<Rng> && tc::char_like<tc::range_value_t<Rng>>>* = nullptr> // terse syntax triggers VS17.1 ICE
 			auto chunk(Rng&& rng) const& return_decltype_MAYTHROW(
-				tc::for_each(tc::convert_enc<Dst>(std::forward<Rng>(rng)), m_sink)
+				tc::for_each(tc::convert_enc<Dst>(tc_move_if_owned(rng)), m_sink)
 			)
 		};
 	}

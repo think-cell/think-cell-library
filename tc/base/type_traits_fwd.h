@@ -11,6 +11,7 @@
 #include "fundamental.h"
 #include "type_list.h"
 #include "generic_macros.h"
+#include "move.h"
 
 #include <boost/preprocessor/facilities/empty.hpp>
 #include <boost/preprocessor/facilities/overload.hpp>
@@ -166,7 +167,7 @@ namespace tc {
 	//	auto a=decay_copy(b); uses tc::decay_t
 	template<typename T>
 	constexpr tc::decay_t<T&&> decay_copy(T&& t) noexcept {
-		return std::forward<T>(t);
+		return tc_move_if_owned(t);
 	}
 	
 	/////////////////////////////

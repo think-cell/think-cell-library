@@ -14,7 +14,7 @@ namespace tc {
 	// create a generator range that gives the same values as the rng it takes (for testing)
 	template<typename Rng> 
 	constexpr auto make_generator_range(Rng&& rng) noexcept {
-		return tc::generator_range_output<tc::type::transform_t<tc::range_output_t<decltype(*tc::as_const(tc::as_lvalue(tc::make_reference_or_value(std::forward<Rng>(rng)))))>, std::add_rvalue_reference_t>>([rng=tc::make_reference_or_value(std::forward<Rng>(rng))](auto&& sink) noexcept {
+		return tc::generator_range_output<tc::type::transform_t<tc::range_output_t<decltype(*tc::as_const(tc::as_lvalue(tc::make_reference_or_value(tc_move_if_owned(rng)))))>, std::add_rvalue_reference_t>>([rng=tc::make_reference_or_value(tc_move_if_owned(rng))](auto&& sink) noexcept {
 			return tc::for_each(*rng, tc_move_if_owned(sink));
 		});
 	}
@@ -31,7 +31,7 @@ namespace tc {
 			auto chunk(RngChunk rng) const& return_decltype_MAYTHROW(m_sink(static_cast<RngChunk&&>(rng)))
 
 			template<typename T>
-			auto operator()(T&& t) const& return_decltype_MAYTHROW(chunk(tc::single(std::forward<T>(t))))
+			auto operator()(T&& t) const& return_decltype_MAYTHROW(chunk(tc::single(tc_move_if_owned(t))))
 		};
 
 		template<typename RngChunk, typename Rng>
@@ -48,7 +48,7 @@ namespace tc {
 
 	template<typename RngChunk, typename Rng>
 	no_adl::chunk_range_adaptor<RngChunk, Rng> chunk_range(Rng&& rng) noexcept {
-		return {tc::make_reference_or_value(std::forward<Rng>(rng))};
+		return {tc::make_reference_or_value(tc_move_if_owned(rng))};
 	}
 
 }

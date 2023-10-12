@@ -188,7 +188,7 @@ namespace tc {
 		Rng&& rng, \
 		tc::element_stash<Rng>&& stash={} \
 	) return_MAYTHROW( \
-		stash.extract(tc::name<tc::return_element>(std::forward<Rng>(rng))) \
+		stash.extract(tc::name<tc::return_element>(tc_move_if_owned(rng))) \
 	) \
 	\
 	/* Use tc::fn_front() instead of tc_fn(tc::front) because the latter returns a dangling xvalue reference when used with counting ranges. */ \
@@ -198,7 +198,7 @@ namespace tc {
 		struct fn_ ## name { \
 			template<typename Rng> \
 			decltype(auto) operator()(Rng&& rng) const& return_MAYTHROW( \
-				tc::name<RangeReturn>(std::forward<Rng>(rng)) \
+				tc::name<RangeReturn>(tc_move_if_owned(rng)) \
 			) \
 			friend tc::constant<true> returns_reference_to_argument(fn_ ## name); /*mark as returning reference to argument. */ \
 		}; \
@@ -206,7 +206,7 @@ namespace tc {
 		struct fn_ ## name<void> { \
 			template<typename Rng> \
 			decltype(auto) operator()(Rng&& rng, tc::element_stash<Rng>&& stash={}) const& return_MAYTHROW( \
-				tc::name(std::forward<Rng>(rng), tc_move(stash)) \
+				tc::name(tc_move_if_owned(rng), tc_move(stash)) \
 			) \
 			friend tc::constant<true> returns_reference_to_argument(fn_ ## name); /*mark as returning reference to argument. */ \
 		}; \
@@ -227,7 +227,7 @@ namespace tc {
 		typename boost::range_size< std::remove_reference_t<Rng> >::type i, \
 		tc::element_stash<Rng>&& stash={} \
 	) return_MAYTHROW( \
-		stash.extract(tc::fn<tc::return_element>(std::forward<Rng>(rng), tc_move(i))) \
+		stash.extract(tc::fn<tc::return_element>(tc_move_if_owned(rng), tc_move(i))) \
 	)
 
 	RETURN_REFERENCE_FROM_INDEXED_ELEMENT(at)
@@ -243,7 +243,7 @@ namespace tc {
 	template<typename Rng, typename Func>
 	bool if_nonempty_with_only(Rng&& rng, Func func) MAYTHROW {
 		bool bCalled=false;
-		tc::for_each(std::forward<Rng>(rng), [&](auto&&... args) MAYTHROW {
+		tc::for_each(tc_move_if_owned(rng), [&](auto&&... args) MAYTHROW {
 			VERIFY(tc::change(bCalled, true)); // only a single element is allowed
 
 			RETURNS_VOID( func(tc_move_if_owned(args)...) ); // MAYTHROW
@@ -255,7 +255,7 @@ namespace tc {
 
 	template<typename Rng, typename Func>
 	bool if_nonempty_with_front(Rng&& rng, Func func) MAYTHROW {
-		return tc::break_==tc::for_each(std::forward<Rng>(rng), [&](auto&&... args) MAYTHROW{
+		return tc::break_==tc::for_each(tc_move_if_owned(rng), [&](auto&&... args) MAYTHROW{
 			RETURNS_VOID(func(tc_move_if_owned(args)...)); // MAYTHROW
 			return tc::constant<tc::break_>();
 		});
@@ -266,7 +266,7 @@ namespace tc {
 		static_assert(!RangeReturn::requires_iterator, "implement iterator version if needed");
 		tc::storage_for<tc::element_return_type_t<RangeReturn, Rng>> ot;
 		T n=0;
-		tc::for_each(std::forward<Rng>(rng), [&](auto&& t) MAYTHROW {
+		tc::for_each(tc_move_if_owned(rng), [&](auto&& t) MAYTHROW {
 			if (0==n) {
 				ot.ctor(RangeReturn::template pack_element<Rng>(tc_move_if_owned(t)));
 			}

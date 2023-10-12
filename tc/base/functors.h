@@ -13,7 +13,7 @@
 ////////////////////////////////
 // functor equivalents for operators, free functions and member functions
 
-#include "tc_move.h"
+#include "move.h"
 #include "return_decltype.h"
 #include "tag_type.h"
 
@@ -28,14 +28,14 @@
 	struct [[nodiscard]] name { \
 		template< typename... Args > \
 		constexpr auto operator()( Args&& ... args) /*no &*/ const \
-			return_decltype_xvalue_by_ref_MAYTHROW( func(std::forward<Args>(args)...) ) \
+			return_decltype_xvalue_by_ref_MAYTHROW( func(tc_move_if_owned(args)...) ) \
 		using is_transparent=void; \
 	};
 
 #define DEFINE_MEM_FN_BODY_( ... ) \
 	template< typename O, typename... __A > \
 	constexpr auto operator()( O&& o, __A&& ... __a ) const \
-		return_decltype_xvalue_by_ref_MAYTHROW( std::forward<O>(o) __VA_ARGS__ ( std::forward<__A>(__a)... ) )
+		return_decltype_xvalue_by_ref_MAYTHROW( tc_move_if_owned(o) __VA_ARGS__ ( tc_move_if_owned(__a)... ) )
 
 // std::mem_fn (C++11 standard 20.8.2) knows the type it can apply its member function pointer to and
 // dereferences via operator* until it reaches that something of that type. We cannot do that because
@@ -48,10 +48,10 @@
 #define DEFINE_MEM_FN_AUTO_BODY_( ... ) \
 	template< typename O, typename... __A, std::enable_if_t<tc::has_operator_arrow<O>::value>* = nullptr > \
 	constexpr auto operator()( O&& o, __A&& ... __a ) const \
-		return_decltype_xvalue_by_ref_MAYTHROW( std::forward<O>(o)-> __VA_ARGS__ ( std::forward<__A>(__a)... ) ) \
+		return_decltype_xvalue_by_ref_MAYTHROW( tc_move_if_owned(o)-> __VA_ARGS__ ( tc_move_if_owned(__a)... ) ) \
 	template< typename O, typename... __A, std::enable_if_t<!tc::has_operator_arrow<O>::value>* = nullptr > \
 	constexpr auto operator()( O&& o, __A&& ... __a ) const \
-		return_decltype_xvalue_by_ref_MAYTHROW( std::forward<O>(o). __VA_ARGS__ ( std::forward<__A>(__a)... ) )
+		return_decltype_xvalue_by_ref_MAYTHROW( tc_move_if_owned(o). __VA_ARGS__ ( tc_move_if_owned(__a)... ) )
 
 // When a functor must be declared in class-scope, e.g., to access a protected member function,
 // you should use DEFINE_MEM_FN instead of tc_define_fn. 
@@ -111,7 +111,7 @@ DEFINE_FN2( operator delete, fn_operator_delete )
 		template <typename To> \
 		struct [[nodiscard]] fn_ ## name { \
 			template<typename From> constexpr_ auto operator()(From&& from) const \
-				return_decltype_xvalue_by_ref_MAYTHROW( name <To>(std::forward<From>(from))) \
+				return_decltype_xvalue_by_ref_MAYTHROW( name <To>(tc_move_if_owned(from))) \
 		}; \
 	} \
 	using no_adl::fn_ ## name;
@@ -170,7 +170,7 @@ namespace tc {
 		struct [[nodiscard]] fn_subscript final {
 			template<typename Lhs, typename Rhs>
 			auto operator()( Lhs&& lhs, Rhs&& rhs ) const&
-				return_decltype_xvalue_by_ref_MAYTHROW( std::forward<Lhs>(lhs)[std::forward<Rhs>(rhs)] )
+				return_decltype_xvalue_by_ref_MAYTHROW( tc_move_if_owned(lhs)[tc_move_if_owned(rhs)] )
 		};
 	}
 	using no_adl::fn_subscript;
@@ -181,7 +181,7 @@ namespace tc {
 		struct [[nodiscard]] fn_ ## name { \
 			template<typename T> \
 			constexpr auto operator()( T&& t ) const \
-				return_decltype_xvalue_by_ref_MAYTHROW(op std::forward<T>(t)) \
+				return_decltype_xvalue_by_ref_MAYTHROW(op tc_move_if_owned(t)) \
 		}; \
 	} \
 	using fn_ ## name ## _adl::fn_ ## name;
@@ -207,14 +207,14 @@ namespace tc {
 		template<typename... F>
 		struct [[nodiscard]] TC_EMPTY_BASES overload : tc::decay_t<F>... {
 			using tc::decay_t<F>::operator()...;
-			constexpr overload(F&&... f) noexcept : tc::decay_t<F>(std::forward<F>(f))... {}
+			constexpr overload(F&&... f) noexcept : tc::decay_t<F>(tc_move_if_owned(f))... {}
 		};
 	}
 	using no_adl::overload;
 
 	template <typename... F>
 	[[nodiscard]] constexpr auto make_overload(F&&... f) noexcept {
-		return overload<F...>(std::forward<F>(f)...);
+		return overload<F...>(tc_move_if_owned(f)...);
 	}
 
 #pragma push_macro("INFIX_FN_")
@@ -223,7 +223,7 @@ namespace tc {
 		struct [[nodiscard]] fn_ ## name { \
 			template<typename Lhs, typename Rhs> \
 			constexpr auto operator()( Lhs&& lhs, Rhs&& rhs ) const \
-				return_decltype_xvalue_by_ref_MAYTHROW(std::forward<Lhs>(lhs) op std::forward<Rhs>(rhs)) \
+				return_decltype_xvalue_by_ref_MAYTHROW(tc_move_if_owned(lhs) op tc_move_if_owned(rhs)) \
 		}; \
 	} \
 	using no_adl::fn_ ## name;
@@ -250,8 +250,8 @@ namespace tc {
 	namespace no_adl { \
 		struct [[nodiscard]] fn_assign_logical_ ## name { \
 			template<typename Lhs, typename Rhs> \
-			auto operator()( Lhs&& lhs, Rhs&& rhs ) const noexcept(noexcept(lhs = lhs op std::forward<Rhs>(rhs))) code_return_decltype_xvalue_by_ref( \
-				lhs = lhs op std::forward<Rhs>(rhs);, std::forward<Lhs>(lhs) \
+			auto operator()( Lhs&& lhs, Rhs&& rhs ) const noexcept(noexcept(lhs = lhs op tc_move_if_owned(rhs))) code_return_decltype_xvalue_by_ref( \
+				lhs = lhs op tc_move_if_owned(rhs);, tc_move_if_owned(lhs) \
 			)\
 		}; \
 	} \

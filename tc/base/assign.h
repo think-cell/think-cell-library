@@ -160,7 +160,7 @@ constexpr auto assign_better( Better better, Var&& var, Val&& val ) noexcept {
 	return tc::make_overload(
 		[&](tc::constant<true> b) noexcept {
 			static_assert( tc::safely_assignable_from<Var&&, Val&&> );
-			std::forward<Var>(var) = std::forward<Val>(val);
+			tc_move_if_owned(var) = tc_move_if_owned(val);
 			return b;
 		},
 		[&](tc::constant<false> b) noexcept {
@@ -169,7 +169,7 @@ constexpr auto assign_better( Better better, Var&& var, Val&& val ) noexcept {
 		[&](bool const b) noexcept {
 			if (b) {
 				static_assert( tc::safely_assignable_from<Var&&, Val&&> );
-				std::forward<Var>(var) = std::forward<Val>(val);
+				tc_move_if_owned(var) = tc_move_if_owned(val);
 				return true;
 			} else {
 				return false;
@@ -180,7 +180,7 @@ constexpr auto assign_better( Better better, Var&& var, Val&& val ) noexcept {
 
 template< typename Var, typename Val >
 constexpr bool change( Var&& var, Val&& val ) noexcept {
-	return tc::assign_better( [](auto const& val_, auto const& var_) noexcept { return !tc::equal_to(var_, val_); }, std::forward<Var>(var), std::forward<Val>(val) ); // var==val, not val==var
+	return tc::assign_better( [](auto const& val_, auto const& var_) noexcept { return !tc::equal_to(var_, val_); }, tc_move_if_owned(var), tc_move_if_owned(val) ); // var==val, not val==var
 }
 
 #ifndef __EMSCRIPTEN__
@@ -210,18 +210,18 @@ bool change( std::atomic<Var>&& var, Val&& val ) noexcept; // make passing rvalu
 template< typename Better, typename Var, typename... Val> requires (1<sizeof...(Val))
 constexpr bool assign_better( Better better, Var&& var, Val&&... val) noexcept {
 	bool b=false;
-	static_cast<void>(std::initializer_list<bool>{(b=(tc::assign_better(better, var, std::forward<Val>(val)) || b))...});
+	static_cast<void>(std::initializer_list<bool>{(b=(tc::assign_better(better, var, tc_move_if_owned(val)) || b))...});
 	return b;
 }
 
 template< typename Var, typename Val0, typename... Val >
 constexpr bool assign_max( Var&& var, Val0&& val0, Val&&... val ) noexcept {
-	return tc::assign_better( tc::fn_greater(), std::forward<Var>(var), std::forward<Val0>(val0), std::forward<Val>(val)... ); // use operator< for comparison just like tc::min/max
+	return tc::assign_better( tc::fn_greater(), tc_move_if_owned(var), tc_move_if_owned(val0), tc_move_if_owned(val)... ); // use operator< for comparison just like tc::min/max
 }
 
 template< typename Var, typename Val0, typename... Val>
 constexpr bool assign_min( Var&& var, Val0&& val0, Val&&... val ) noexcept {
-	return tc::assign_better( tc::fn_less(), std::forward<Var>(var), std::forward<Val0>(val0), std::forward<Val>(val)... );
+	return tc::assign_better( tc::fn_less(), tc_move_if_owned(var), tc_move_if_owned(val0), tc_move_if_owned(val)... );
 }
 
 template<typename Var, typename Val>
@@ -229,9 +229,9 @@ void change_with_or(Var&& var, Val&& val, bool& bChanged) noexcept {
 	// accessing an uninitialized variable is undefined behavior, so don't compare for equality if var is uninitialized!
 	if( VERIFYINITIALIZED(bChanged) ) {
 		_ASSERTINITIALIZED( val );
-		std::forward<Var>(var) = std::forward<Val>(val);
+		tc_move_if_owned(var) = tc_move_if_owned(val);
 	} else {
-		bChanged = tc::change( std::forward<Var>(var), std::forward<Val>(val) );
+		bChanged = tc::change( tc_move_if_owned(var), tc_move_if_owned(val) );
 	}
 }
 
@@ -272,7 +272,7 @@ bool change( Var&& var, Value&& value ) noexcept {
 	_ASSERTINITIALIZED( var );
 	_ASSERT( !std::isnan( var ) || binary_equal(var, nan) );
 	_ASSERTINITIALIZED( value );
-	auto float_value = tc::implicit_cast<float_type>(std::forward<Value>(value));
+	auto float_value = tc::implicit_cast<float_type>(tc_move_if_owned(value));
 	_ASSERT( !std::isnan( float_value ) || binary_equal(float_value, nan) );
 	return binary_change( var, float_value );
 }

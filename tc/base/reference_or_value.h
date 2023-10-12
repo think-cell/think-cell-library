@@ -30,7 +30,7 @@ namespace tc {
 			
 			template< typename Rhs> requires tc::safely_constructible_from<T, Rhs&&>
 			constexpr reference_or_value( aggregate_tag_t, Rhs&& rhs ) noexcept
-				: m_t(std::forward<Rhs>(rhs))
+				: m_t(tc_move_if_owned(rhs))
 			{}
 
 			// reference_or_value<T> is trivially copy assignable if T is trivially copy assignable.
@@ -86,10 +86,10 @@ namespace tc {
 				return m_t;
 			}
 			constexpr T&& operator*() && noexcept {
-				return std::move(m_t);
+				return tc_move(m_t);
 			}
 			constexpr T const&& operator*() const&& noexcept {
-				return std::move(tc::as_const(m_t));
+				return tc_move_always_even_const(tc::as_const(m_t));
 			}
 
 		private:
@@ -173,7 +173,7 @@ namespace tc {
 	template< typename T >
 	[[nodiscard]] constexpr auto make_reference_or_value(T&& t) return_ctor_noexcept(
 		reference_or_value<T>,
-		(tc::aggregate_tag, std::forward<T>(t))
+		(tc::aggregate_tag, tc_move_if_owned(t))
 	)
 
 	namespace no_adl {
@@ -184,7 +184,7 @@ namespace tc {
 
 		public:
 			constexpr stores_result_of( Func&& func, Args&&... args ) MAYTHROW
-				: m_t(aggregate_tag, std::forward<Func>(func)(std::forward<Args>(args)...))
+				: m_t(aggregate_tag, tc_move_if_owned(func)(tc_move_if_owned(args)...))
 			{}
 
 			constexpr auto get() const& noexcept ->decltype(auto) {
@@ -198,28 +198,28 @@ namespace tc {
 			}
 			template<typename FuncTo, typename... ArgsTo>
 			constexpr auto pass_to(FuncTo&& functo, ArgsTo&& ...args) const& noexcept ->decltype(auto) {
-				return std::forward<FuncTo>(functo)(*m_t, std::forward<ArgsTo>(args)...);
+				return tc_move_if_owned(functo)(*m_t, tc_move_if_owned(args)...);
 			}
 			template<typename FuncTo, typename... ArgsTo>
 			constexpr auto pass_to(FuncTo&& functo, ArgsTo&& ...args) & noexcept ->decltype(auto) {
-				return std::forward<FuncTo>(functo)(*m_t, std::forward<ArgsTo>(args)...);
+				return tc_move_if_owned(functo)(*m_t, tc_move_if_owned(args)...);
 			}
 			template<typename FuncTo, typename... ArgsTo>
 			constexpr auto pass_to(FuncTo&& functo, ArgsTo&& ...args) && noexcept ->decltype(auto) {
-				return std::forward<FuncTo>(functo)(*tc_move(m_t), std::forward<ArgsTo>(args)...);
+				return tc_move_if_owned(functo)(*tc_move(m_t), tc_move_if_owned(args)...);
 			}
 		};
 
 		template< typename Func, typename... Args > requires std::is_void< decltype(std::declval<Func>()(std::declval<Args>()...)) >::value
 		struct stores_result_of<Func, Args... > final {
 			constexpr stores_result_of( Func&& func, Args... args ) MAYTHROW {
-				std::forward<Func>(func)(static_cast<Args>(args)...);
+				tc_move_if_owned(func)(static_cast<Args>(args)...);
 			}
 
 			static constexpr void get() noexcept {}
 			template<typename FuncTo, typename... ArgsTo>
 			static constexpr auto pass_to(FuncTo&& functo, ArgsTo&& ...args) noexcept ->decltype(auto) {
-				return std::forward<FuncTo>(functo)(std::forward<ArgsTo>(args)...);
+				return tc_move_if_owned(functo)(tc_move_if_owned(args)...);
 			}
 		};
 	}

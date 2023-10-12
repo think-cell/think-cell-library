@@ -18,9 +18,9 @@ namespace tc {
 	[[nodiscard]] decltype(auto) starts_with_expr(Rng&& rng, Expr const& expr) noexcept {
 		auto itEndParse = tc::begin(rng);
 		if (tc::parse_iterator(itEndParse, tc::end(rng), expr)) {
-			return RangeReturn::pack_border(tc_move(itEndParse), std::forward<Rng>(rng));
+			return RangeReturn::pack_border(tc_move(itEndParse), tc_move_if_owned(rng));
 		}
-		return RangeReturn::pack_no_border(std::forward<Rng>(rng));
+		return RangeReturn::pack_no_border(tc_move_if_owned(rng));
 	}
 
 	// 1 or more elements from rngWhat are required to match each element from rngWhere
@@ -34,10 +34,10 @@ namespace tc {
 			auto itWhat = itWhatBegin;
 			for (;;) {
 				if (itWhatEnd == itWhat) {
-					return RangeReturn::pack_view(std::forward<RngWhere>(rngWhere), tc_move(itWhere), tc_move(itWhere2));
+					return RangeReturn::pack_view(tc_move_if_owned(rngWhere), tc_move(itWhere), tc_move(itWhere2));
 				}
 				if (itWhereEnd == itWhere2) {
-					return RangeReturn::pack_no_element(std::forward<RngWhere>(rngWhere));
+					return RangeReturn::pack_no_element(tc_move_if_owned(rngWhere));
 				}
 				if (!predConsume(tc::as_const(*itWhere2), itWhat, itWhatEnd)) break;
 				++itWhere2;
@@ -47,14 +47,14 @@ namespace tc {
 
 	template<typename RangeReturn, typename RngWhere, typename RngWhat, typename Pred> requires (!tc::derived_from<RngWhat, x3::parser_base>)
 	[[nodiscard]] decltype(auto) search_first(RngWhere&& rngWhere, RngWhat const& rngWhat, Pred pred) noexcept {
-		return search_first_impl<RangeReturn>(std::forward<RngWhere>(rngWhere), rngWhat, [&](auto const& valWhere, auto& itWhat, auto const& /*itWhatEnd*/) noexcept {
+		return search_first_impl<RangeReturn>(tc_move_if_owned(rngWhere), rngWhat, [&](auto const& valWhere, auto& itWhat, auto const& /*itWhatEnd*/) noexcept {
 			return pred(valWhere, tc::as_const(*itWhat)) && (++itWhat, true);
 		});
 	}
 
 	template<typename RangeReturn, typename RngWhere, typename RngWhat>
 	[[nodiscard]] decltype(auto) search_first(RngWhere&& rngWhere, RngWhat const& rngWhat) noexcept {
-		return tc::search_first<RangeReturn>(std::forward<RngWhere>(rngWhere), rngWhat, tc::fn_equal_to_or_parse_match());
+		return tc::search_first<RangeReturn>(tc_move_if_owned(rngWhere), rngWhat, tc::fn_equal_to_or_parse_match());
 	}
 
 	template<typename RangeReturn, typename Rng, tc::derived_from<x3::parser_base> Expr>
@@ -63,19 +63,19 @@ namespace tc {
 		for (auto it = tc::begin(rng); it != itEnd; ++it) {
 			auto itEndParse = it;
 			if (tc::parse_iterator(itEndParse, itEnd, expr)) {
-				return RangeReturn::pack_view(std::forward<Rng>(rng), tc_move(it), tc_move(itEndParse));
+				return RangeReturn::pack_view(tc_move_if_owned(rng), tc_move(it), tc_move(itEndParse));
 			}
 		}
-		return RangeReturn::pack_no_element(std::forward<Rng>(rng));
+		return RangeReturn::pack_no_element(tc_move_if_owned(rng));
 	}
 
 	template<typename RangeReturn, typename RngWhere, typename What>
 	decltype(auto) search_unique(RngWhere&& rngWhere, What const& what) noexcept {
 		if(auto const orng=tc::search_first<tc::return_view_or_none>(rngWhere, what)) {
 			auto itEnd=VERIFYPRED(tc::end(*orng), !tc::search_first<tc::return_bool>(tc::drop(rngWhere, _), what)); // do not inline, rngWhere is forwarded
-			return RangeReturn::pack_view(std::forward<RngWhere>(rngWhere), tc::begin(*orng), tc_move(itEnd));
+			return RangeReturn::pack_view(tc_move_if_owned(rngWhere), tc::begin(*orng), tc_move(itEnd));
 		} else {
-			return RangeReturn::pack_no_element(std::forward<RngWhere>(rngWhere));
+			return RangeReturn::pack_no_element(tc_move_if_owned(rngWhere));
 		}
 	}
 

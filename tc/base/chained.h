@@ -42,10 +42,10 @@ namespace tc {
 			template <typename... Args>
 			constexpr auto operator()(Args&&... args) const& MAYTHROW -> tc::transform_return_t<
 				FuncSecond,
-				decltype(tc::invoke(m_funcSecond, tc::invoke(m_funcFirst, std::forward<Args>(args)...))),
-				decltype(tc::invoke(m_funcFirst, std::forward<Args>(args)...))
+				decltype(tc::invoke(m_funcSecond, tc::invoke(m_funcFirst, tc_move_if_owned(args)...))),
+				decltype(tc::invoke(m_funcFirst, tc_move_if_owned(args)...))
 			> {
-				return tc::invoke(m_funcSecond, tc::invoke(m_funcFirst, std::forward<Args>(args)...));
+				return tc::invoke(m_funcSecond, tc::invoke(m_funcFirst, tc_move_if_owned(args)...));
 			}
 
 			constexpr auto inverted() const& MAYTHROW {
@@ -61,6 +61,6 @@ namespace tc {
 
 	template <typename FuncSecond, typename FuncFirst>
 	constexpr auto chained(FuncSecond&& funcSecond, FuncFirst&& funcFirst) noexcept {
-		return no_adl::chained_impl<FuncSecond, FuncFirst>{std::forward<FuncSecond>(funcSecond), std::forward<FuncFirst>(funcFirst)};
+		return no_adl::chained_impl<FuncSecond, FuncFirst>{tc_move_if_owned(funcSecond), tc_move_if_owned(funcFirst)};
 	}
 }

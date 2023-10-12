@@ -24,18 +24,18 @@ namespace tc {
 	template< typename It >
 	It&& verify_inserted(std::pair<It,bool>&& pairitb) noexcept {
 		_ASSERT(pairitb.second);
-		return tc_move(pairitb.first);
+		return tc_move(pairitb).first;
 	}
 
 	// std::multiset/multimap always inserts and thus returns only iterator
 	template< typename It >
 	It&& verify_inserted(It&& it) noexcept {
-		return std::forward<It>(it);
+		return tc_move_if_owned(it);
 	}
 
 	template< typename Cont, typename It>
 	It&& verify_at_upper_bound(Cont const& cont, It&& it) noexcept {
-		return std::forward<It>(it);
+		return tc_move_if_owned(it);
 	}
 
 	template< typename Cont, typename It> requires tc::instance<Cont, std::multiset> || tc::instance<Cont, std::multimap> || tc::instance<Cont, boost::intrusive::multiset>
@@ -45,7 +45,7 @@ namespace tc {
 		auto itNext = tc_modified(it, ++_);
 		_ASSERTDEBUG(tc::end(cont) == itNext || cont.value_comp()(*it, *itNext));
 #endif
-		return std::forward<It>(it);
+		return tc_move_if_owned(it);
 	}
 
 	template< typename Cont, typename TValue > // use extra template parameter instead of Cont::value_type to have both move and copy semantics
@@ -60,7 +60,7 @@ namespace tc {
 	#endif
 		auto it = tc::with_lazy_explicit_cast<tc::range_value_t<Cont&>>(
 			[&](auto&&... args2) MAYTHROW -> decltype(auto) { return NOBADALLOC(cont.emplace_hint(itHint, tc_move_if_owned(args2)...)); },
-			std::forward<Args>(args)...
+			tc_move_if_owned(args)...
 		); // MAYTHROW
 		_ASSERTEQUAL( cont.size(), c+1 );
 		_ASSERTEQUAL(tc_modified(it, ++_), itHint);
@@ -72,24 +72,24 @@ namespace tc {
 		constexpr auto cont_emplace_back_impl(Cont& cont, T&& ... value) noexcept {
 			if constexpr (has_mem_fn_lower_bound<Cont>) {
 				return [&]() return_decltype_MAYTHROW(
-					RangeReturn::pack_element(tc::cont_must_emplace_before(cont, tc::end(cont), std::forward<T>(value)...), cont)
+					RangeReturn::pack_element(tc::cont_must_emplace_before(cont, tc::end(cont), tc_move_if_owned(value)...), cont)
 				);
 			} else if constexpr (0 == sizeof...(T) || tc::safely_constructible_from<tc::range_value_t<Cont&>, T&& ... >) {
 				return [&]() noexcept(std::is_nothrow_constructible<tc::range_value_t<Cont&>, T...>::value) -> decltype(auto) {
 					if constexpr (has_emplace_back<Cont, T...>::value) {
-						NOBADALLOC( cont.emplace_back(std::forward<T>(value)...) );
+						NOBADALLOC( cont.emplace_back(tc_move_if_owned(value)...) );
 					} else {
 						if constexpr (1 == sizeof...(T)) {
-							NOBADALLOC( cont.push_back(std::forward<T>(value)...) );
+							NOBADALLOC( cont.push_back(tc_move_if_owned(value)...) );
 						} else {
-							NOBADALLOC( cont.push_back(tc::range_value_t<Cont&>(std::forward<T>(value)...)) );
+							NOBADALLOC( cont.push_back(tc::range_value_t<Cont&>(tc_move_if_owned(value)...)) );
 						}
 					}
 					return tc::back<RangeReturn>(cont);
 				};
 			} else if constexpr (tc::explicit_castable_from<tc::range_value_t<Cont&>, T&&...>) {
 				return [&]() return_decltype_MAYTHROW(
-					cont_emplace_back_impl<RangeReturn>(cont, tc::lazy_explicit_cast<tc::range_value_t<Cont&>>(std::forward<T>(value)...))()
+					cont_emplace_back_impl<RangeReturn>(cont, tc::lazy_explicit_cast<tc::range_value_t<Cont&>>(tc_move_if_owned(value)...))()
 				);
 			}
 		}
@@ -97,12 +97,12 @@ namespace tc {
 
 	template<typename RangeReturn, typename Cont, typename... T>
 	constexpr auto cont_emplace_back(Cont& cont, T&& ... value) return_decltype_MAYTHROW(
-		cont_emplace_back_detail::cont_emplace_back_impl<RangeReturn>(cont, std::forward<T>(value)...)()
+		cont_emplace_back_detail::cont_emplace_back_impl<RangeReturn>(cont, tc_move_if_owned(value)...)()
 	)
 
 	template<int = 0, typename Cont, typename... T> // Make first template argument non-type to avoid instantiation error
 	constexpr auto cont_emplace_back(Cont& cont, T&& ... value) return_decltype_MAYTHROW(
-		*cont_emplace_back_detail::cont_emplace_back_impl<tc::return_element>(cont, std::forward<T>(value)...)()
+		*cont_emplace_back_detail::cont_emplace_back_impl<tc::return_element>(cont, tc_move_if_owned(value)...)()
 	)
 
 	template <typename Cont>
@@ -116,7 +116,7 @@ namespace tc {
 			cont,
 			tc::with_lazy_explicit_cast<tc::range_value_t<Cont&>>(
 				[&](auto&&... args2) MAYTHROW -> decltype(auto) { return NOBADALLOC(cont.emplace(tc_move_if_owned(args2)...)); },
-				std::forward<Args>(args)...
+				tc_move_if_owned(args)...
 			) // MAYTHROW
 		));
 	}
@@ -124,7 +124,7 @@ namespace tc {
 	template< typename Cont, typename Rng >
 	void cont_must_insert_range(Cont& cont, Rng&& rng) MAYTHROW {
 		tc::for_each(
-			std::forward<Rng>(rng),
+			tc_move_if_owned(rng),
 			[&](auto&& _) MAYTHROW { tc::cont_must_emplace(cont, tc_move_if_owned(_)); }
 		);
 	}
@@ -133,7 +133,7 @@ namespace tc {
 	auto cont_try_emplace(Cont& cont, Args&& ... args) MAYTHROW {
 		auto const pairitb = tc::with_lazy_explicit_cast<tc::range_value_t<Cont&>>(
 			[&](auto&&... args2) MAYTHROW -> decltype(auto) { return NOBADALLOC(cont.emplace(tc_move_if_owned(args2)...)); },
-			std::forward<Args>(args)...
+			tc_move_if_owned(args)...
 		); // MAYTHROW
 		STATICASSERTSAME(decltype(pairitb.second), bool);
 		return pairitb;
@@ -148,7 +148,7 @@ namespace tc {
 			transforms are involved, a generator range needs to dereference only once.
 		*/
 		tc::for_each(
-			std::forward<Rng>(rng),
+			tc_move_if_owned(rng),
 			[&](auto&& _) MAYTHROW { tc::cont_try_emplace(cont, tc_move_if_owned(_)); }
 		);
 	}
@@ -158,7 +158,7 @@ namespace tc {
 	auto map_try_emplace(tc::map<Key, Val, Compare, Alloc>& map, K&& key, Args&& ...args) MAYTHROW -> std::pair<tc::iterator_t<tc::map<Key, Val, Compare, Alloc>>, bool> {
 		if (auto it = map.lower_bound(key); tc::end(map) == it || map.key_comp()(key, it->first)) {
 			// MSVC 19.29 does not correctly parse the following statement, if tc_move is used instead of tc_move_always.
-			return std::make_pair( tc::cont_must_emplace_before(map, tc_move_always(it), std::piecewise_construct, std::forward_as_tuple(std::forward<K>(key)), std::forward_as_tuple(std::forward<Args>(args)...)), true );
+			return std::make_pair( tc::cont_must_emplace_before(map, tc_move_always(it), std::piecewise_construct, std::forward_as_tuple(tc_move_if_owned(key)), std::forward_as_tuple(tc_move_if_owned(args)...)), true );
 		} else {
 			return std::make_pair(tc_move(it), false);
 		}
@@ -168,16 +168,16 @@ namespace tc {
 	void map_emplace_or_assign(tc::map<Key, Val, Compare, Alloc>& map, K&& key, Args&& ...args) MAYTHROW {
 		if (auto it = map.lower_bound(key); tc::end(map) == it || map.key_comp()(key, it->first)) {
 			// MSVC 19.29 does not correctly parse the following statement, if tc_move is used instead of tc_move_always.
-			tc::cont_must_emplace_before(map, tc_move_always(it), std::piecewise_construct, std::forward_as_tuple(std::forward<K>(key)), std::forward_as_tuple(std::forward<Args>(args)...));
+			tc::cont_must_emplace_before(map, tc_move_always(it), std::piecewise_construct, std::forward_as_tuple(tc_move_if_owned(key)), std::forward_as_tuple(tc_move_if_owned(args)...));
 		} else {
-			tc::renew( it->second, std::forward<Args>(args)... );
+			tc::renew( it->second, tc_move_if_owned(args)... );
 		}
 	}
 
 	template<typename Key, typename T, typename Hash, typename KeyEqual, typename Allocator, typename ...Args, typename K>
 	void map_emplace_or_assign(tc::unordered_map<Key, T, Hash, KeyEqual, Allocator>& map, K&& key, Args&& ...args) MAYTHROW {
 		if (auto const pairitb = map.try_emplace(tc::reluctant_explicit_cast<std::remove_reference_t<decltype(map)>::key_type>(tc_move_if_owned(key)), tc_move_if_owned(args)...); !pairitb.second ) {
-			tc::renew( pairitb.first->second, std::forward<Args>(args)... );
+			tc::renew( pairitb.first->second, tc_move_if_owned(args)... );
 		}
 	}
 }

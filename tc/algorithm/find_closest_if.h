@@ -59,14 +59,14 @@ namespace tc {
 			});
 		})) {
 			tc_scope_exit { oitc.dtor(); };
-			return RangeReturn::pack_element(oitc->m_it_(), std::forward<Rng>(rng), **tc_move(oitc));
+			return RangeReturn::pack_element(oitc->m_it_(), tc_move_if_owned(rng), **tc_move(oitc));
 		} else {
-			return RangeReturn::pack_no_element(std::forward<Rng>(rng));
+			return RangeReturn::pack_no_element(tc_move_if_owned(rng));
 		}
 	}
 
 	template < typename RangeReturn, typename Rng, typename Index, typename Pred = tc::identity>
 	[[nodiscard]] decltype(auto) find_closest_if_with_index(Rng&& rng, Index&& n, bool const bSkipSelf, Pred&& pred = Pred()) noexcept {
-		return find_closest_if<RangeReturn>(std::forward<Rng>(rng), tc::begin_next<tc::return_border>(rng, std::forward<Index>(n)), bSkipSelf, std::forward<Pred>(pred));
+		return find_closest_if<RangeReturn>(tc_move_if_owned(rng), tc::begin_next<tc::return_border>(rng, tc_move_if_owned(n)), bSkipSelf, tc_move_if_owned(pred));
 	}
 }

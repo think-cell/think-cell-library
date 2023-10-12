@@ -57,6 +57,6 @@ namespace tc {
 	template<typename Rng>
 	auto ordered_pairs(Rng&& rng) return_ctor_noexcept(
 		ordered_pairs_adaptor_adl::ordered_pairs_adaptor<Rng>,
-		(tc::aggregate_tag, std::forward<Rng>(rng))
+		(tc::aggregate_tag, tc_move_if_owned(rng))
 	)
 }

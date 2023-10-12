@@ -43,10 +43,10 @@ namespace tc {
 			template<typename Rhs0, typename Rhs1, typename Comp2>
 			explicit union_adaptor(Rhs0&& rhs0, Rhs1&& rhs1, Comp2&& comp) noexcept
 				: m_tupleadaptbaserng{{
-					{{aggregate_tag, std::forward<Rhs0>(rhs0)}},
-					{{aggregate_tag, std::forward<Rhs1>(rhs1)}}
+					{{aggregate_tag, tc_move_if_owned(rhs0)}},
+					{{aggregate_tag, tc_move_if_owned(rhs1)}}
 				}},
-				m_comp(std::forward<Comp2>(comp))
+				m_comp(tc_move_if_owned(comp))
 			{}
 
 		private:
@@ -57,7 +57,7 @@ namespace tc {
 				template<typename T0, typename T1>
 				auto operator()(T0&& arg0, T1&&) const {
 					_ASSERT(!bDisjoint);
-					return tc::continue_if_not_break(m_sink, std::forward<T0>(arg0));
+					return tc::continue_if_not_break(m_sink, tc_move_if_owned(arg0));
 				}
 			};
 
@@ -65,9 +65,9 @@ namespace tc {
 			template<tc::decayed_derived_from<union_adaptor> Self, typename Sink>
 			friend auto for_each_impl(Self&& self, Sink const sink) MAYTHROW {
 				return tc::interleave_2(
-					tc::get<0>(std::forward<Self>(self).m_tupleadaptbaserng).base_range(),
-					tc::get<1>(std::forward<Self>(self).m_tupleadaptbaserng).base_range(),
-					std::forward<Self>(self).m_comp,
+					tc::get<0>(tc_move_if_owned(self).m_tupleadaptbaserng).base_range(),
+					tc::get<1>(tc_move_if_owned(self).m_tupleadaptbaserng).base_range(),
+					tc_move_if_owned(self).m_comp,
 					std::ref(sink),
 					std::ref(sink),
 					FForwardFirstArgOnly<Sink>{sink}
@@ -83,8 +83,8 @@ namespace tc {
 			template<tc::decayed_derived_from<union_adaptor> Self, typename Sink>
 			friend auto for_each_reverse_impl(Self&& self, Sink const sink) MAYTHROW {
 				return tc::interleave_2(
-					tc::reverse(tc::get<0>(std::forward<Self>(self).m_tupleadaptbaserng).base_range()),
-					tc::reverse(tc::get<1>(std::forward<Self>(self).m_tupleadaptbaserng).base_range()),
+					tc::reverse(tc::get<0>(tc_move_if_owned(self).m_tupleadaptbaserng).base_range()),
+					tc::reverse(tc::get<1>(tc_move_if_owned(self).m_tupleadaptbaserng).base_range()),
 					/*comp*/[&](auto const& lhs, auto const& rhs) noexcept { return tc::negate(self.m_comp(lhs, rhs)); },
 					std::ref(sink),
 					std::ref(sink),
@@ -295,12 +295,12 @@ namespace tc {
 	template<typename Rng0, typename Rng1, typename Comp = tc::fn_compare>
 	[[nodiscard]] auto union_range(Rng0&& rng0, Rng1&& rng1, Comp&& comp = Comp()) return_ctor_noexcept(
 		TC_FWD(union_adaptor< tc::decay_t<Comp>, Rng0, Rng1, /*bDisjoint*/false>),
-		(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1), std::forward<Comp>(comp))
+		(tc_move_if_owned(rng0), tc_move_if_owned(rng1), tc_move_if_owned(comp))
 	)
 
 	template<typename Rng0, typename Rng1, typename Comp = tc::fn_compare>
 	[[nodiscard]] auto disjoint_union_range(Rng0&& rng0, Rng1&& rng1, Comp&& comp = Comp()) return_ctor_noexcept(
 		TC_FWD(union_adaptor< tc::decay_t<Comp>, Rng0, Rng1, /*bDisjoint*/true>),
-		(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1), std::forward<Comp>(comp))
+		(tc_move_if_owned(rng0), tc_move_if_owned(rng1), tc_move_if_owned(comp))
 	)
 }

@@ -12,6 +12,7 @@
 	#include "Library/ErrorReporting/assert_fwd.h"
 #else
 	#include "fundamental.h"
+	#include "move.h"
 	#include <type_traits>
 	#include <cstdlib>
 
@@ -94,7 +95,7 @@
 			template <typename Expr, typename Const>
 			constexpr Expr&& VerifyEqual(Expr&& expr, Const const& c) {
 				_ASSERTEQUAL(expr, c);
-				return std::forward<Expr>(expr);
+				return tc_move_if_owned(expr);
 			}
 		}
 		#define VERIFYEQUAL( expr, constant ) ErrorHandling::VerifyEqual(expr, constant)
@@ -108,7 +109,7 @@
 			template <typename Expr>
 			constexpr Expr&& Verify(Expr&& expr) {
 				_ASSERT(expr);
-				return std::forward<Expr>(expr);
+				return tc_move_if_owned(expr);
 			}
 		}
 		#define VERIFY ErrorHandling::Verify
@@ -119,7 +120,7 @@
 			template <typename Expr, typename Pred>
 			constexpr Expr&& VerifyPred(Expr&& expr, Pred pred) {
 				_ASSERT(pred(expr));
-				return std::forward<Expr>(expr);
+				return tc_move_if_owned(expr);
 			}
 		}
 		#define VERIFYPRED( expr, ... ) ErrorHandling::VerifyPred(expr, [&](auto const& _) { return (__VA_ARGS__); })

@@ -43,7 +43,7 @@ namespace tc {
 					[&](auto const nconstIndex) MAYTHROW {
 						STATICASSERTEQUAL(sizeof...(Rng), sizeof...(FuncRng));
 						return decltype(m_ubaserng)(
-							std::in_place_index<nconstIndex()>, tc::aggregate_tag, tc::select_nth<nconstIndex()>(std::forward<FuncRng>(funcrng)...)()
+							std::in_place_index<nconstIndex()>, tc::aggregate_tag, tc::select_nth<nconstIndex()>(tc_move_if_owned(funcrng)...)()
 						);
 					},
 					n
@@ -95,14 +95,14 @@ namespace tc {
 			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
 				return tc::fn_visit([&](auto&& rng) MAYTHROW {
 					return tc::for_each(*tc_move_if_owned(rng), sink);
-				})(std::forward<Self>(self).m_ubaserng);
+				})(tc_move_if_owned_msvc_workaround(Self&&, self).m_ubaserng);
 			}
 
 			template<typename Self, typename Sink> requires tc::decayed_derived_from<Self, select_range_adaptor>
 			friend constexpr auto for_each_reverse_impl(Self&& self, Sink&& sink) MAYTHROW {
 				return tc::fn_visit([&](auto&& rng) MAYTHROW {
 					return tc::for_each(tc::reverse(*tc_move_if_owned(rng)), sink);
-				})(std::forward<Self>(self).m_ubaserng);
+				})(tc_move_if_owned_msvc_workaround(Self&&, self).m_ubaserng);
 			}
 		};
 
@@ -230,7 +230,7 @@ namespace tc {
 
 		tc::invoke_with_constant<std::index_sequence_for<FuncRng...>>(
 			[&](auto const nconstIndex) MAYTHROW {
-				result.ctor(tc::select_nth<nconstIndex()>(std::forward<FuncRng>(funcrng)...)());
+				result.ctor(tc::select_nth<nconstIndex()>(tc_move_if_owned(funcrng)...)());
 			},
 			n
 		);
@@ -247,7 +247,7 @@ namespace tc {
 
 		return tc::invoke_with_constant<std::index_sequence_for<FuncRng...>>(
 			[&](auto const nconstIndex) MAYTHROW -> tc::common_reference_xvalue_as_ref_t<decltype(std::declval<FuncRng>()())...> {
-				return tc::select_nth<nconstIndex()>(std::forward<FuncRng>(funcrng)...)();
+				return tc::select_nth<nconstIndex()>(tc_move_if_owned(funcrng)...)();
 			},
 			n
 		);
@@ -256,12 +256,12 @@ namespace tc {
 	template<typename... FuncRng>
 	constexpr auto select_range(int n, FuncRng&&... funcrng) return_ctor_MAYTHROW(
 		select_range_adaptor<tc::remove_rvalue_reference_t<decltype(std::declval<FuncRng>()())>...>,
-		(aggregate_tag, n, std::forward<FuncRng>(funcrng)...)
+		(aggregate_tag, n, tc_move_if_owned(funcrng)...)
 	)
 
 	template<typename FuncRngTrue, typename FuncRngFalse>
 	constexpr auto conditional_range(tc::bool_context b, FuncRngTrue&& funcrngTrue, FuncRngFalse&& funcrngFalse) return_decltype_xvalue_by_ref_MAYTHROW(
-		tc::select_range(b ? 0 : 1, std::forward<FuncRngTrue>(funcrngTrue), std::forward<FuncRngFalse>(funcrngFalse))
+		tc::select_range(b ? 0 : 1, tc_move_if_owned(funcrngTrue), tc_move_if_owned(funcrngFalse))
 	)
 	template<typename FuncRngTrue, typename FuncRngFalse>
 	constexpr auto conditional_range(tc::constant<true>, FuncRngTrue funcrngTrue, FuncRngFalse&& /*funcrngFalse*/) return_decltype_xvalue_by_ref_MAYTHROW(
@@ -275,7 +275,7 @@ namespace tc {
 
 	template<typename Bool, typename FuncRngTrue>
 	constexpr auto conditional_range(Bool&& b, FuncRngTrue&& funcrngTrue) return_decltype_xvalue_by_ref_MAYTHROW(
-		tc::conditional_range(std::forward<Bool>(b), std::forward<FuncRngTrue>(funcrngTrue), tc::fn_explicit_cast<tc::empty_range>())
+		tc::conditional_range(tc_move_if_owned(b), tc_move_if_owned(funcrngTrue), tc::fn_explicit_cast<tc::empty_range>())
 	)
 }
 
@@ -293,9 +293,9 @@ namespace tc {
 namespace tc {
 	template<typename Bool, typename Rng, typename Fn>
 	constexpr decltype(auto) transform_range_if(Bool&& b, Rng&& rng, Fn fn) noexcept {
-		return tc::conditional_range(std::forward<Bool>(b),
-			/*funcrngTrue*/[&]() noexcept -> decltype(auto) { return fn(std::forward<Rng>(rng)); },
-			/*funcrngFalse*/[&]() noexcept -> decltype(auto) { return std::forward<Rng>(rng); }
+		return tc::conditional_range(tc_move_if_owned(b),
+			/*funcrngTrue*/[&]() noexcept -> decltype(auto) { return fn(tc_move_if_owned(rng)); },
+			/*funcrngFalse*/[&]() noexcept -> decltype(auto) { return tc_move_if_owned(rng); }
 		);
 	}
 
@@ -315,7 +315,7 @@ namespace tc {
 	template<typename Enum, typename... FuncRng>
 	constexpr auto switch_range(Enum const& e, FuncRng&&... funcrng) noexcept {
 		return switch_range_detail::switch_range_impl(
-			e, tc::make_overload(std::forward<FuncRng>(funcrng)...),
+			e, tc::make_overload(tc_move_if_owned(funcrng)...),
 			std::make_index_sequence<tc::constexpr_size<tc::all_values<Enum>>()>()
 		);
 	}

@@ -87,12 +87,12 @@ namespace tc {
 
 	template<typename Rng>
 	decltype(auto) transform_asciiupper(Rng&& rng) noexcept { // return_decltype_noexcept in C++20
-		return tc::transform( std::forward<Rng>(rng), tc_fn(tc::toasciiupper) );
+		return tc::transform( tc_move_if_owned(rng), tc_fn(tc::toasciiupper) );
 	}
 
 	template<typename Rng>
 	decltype(auto) transform_asciilower(Rng&& rng) noexcept { // return_decltype_noexcept in C++20
-		return tc::transform( std::forward<Rng>(rng), tc_fn(tc::toasciilower) );
+		return tc::transform( tc_move_if_owned(rng), tc_fn(tc::toasciilower) );
 	}
 
 	namespace rfc3986 {

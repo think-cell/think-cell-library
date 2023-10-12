@@ -16,7 +16,7 @@ namespace tc {
 		constexpr decltype(auto) empty_slice(Rng&& rng) noexcept {
 			auto it = tc::begin(rng);
 			auto it2 = it;
-			return tc::slice(std::forward<Rng>(rng), tc_move(it), tc_move(it2));
+			return tc::slice(tc_move_if_owned(rng), tc_move(it), tc_move(it2));
 		}
 
 		namespace no_adl {
@@ -25,7 +25,7 @@ namespace tc {
 			struct return_take_base {
 				template<typename It, typename Rng>
 				static constexpr auto pack_border(It&& it, Rng&& rng) return_decltype_xvalue_by_ref_noexcept(
-					tc::take(std::forward<Rng>(rng), std::forward<It>(it))
+					tc::take(tc_move_if_owned(rng), tc_move_if_owned(it))
 				)
 			};
 
@@ -43,7 +43,7 @@ namespace tc {
 				template<typename... Args>
 				static decltype(auto) pack_no_border(Args&&... args) noexcept {
 					_ASSERTFALSE;
-					return ReturnSubrange::pack_no_border(std::forward<Args>(args)...);
+					return ReturnSubrange::pack_no_border(tc_move_if_owned(args)...);
 				}
 			};
 
@@ -53,7 +53,7 @@ namespace tc {
 
 				template<typename It, typename Rng>
 				static constexpr auto pack_border(It&& it, Rng&& rng) noexcept {
-					return std::optional(ReturnSubrange::pack_border(std::forward<It>(it), std::forward<Rng>(rng)));
+					return std::optional(ReturnSubrange::pack_border(tc_move_if_owned(it), tc_move_if_owned(rng)));
 				}
 
 				template<typename Rng, typename... OptEndIt>
@@ -68,7 +68,7 @@ namespace tc {
 
 				template<typename Rng, typename... OptEndIt>
 				static constexpr decltype(ReturnSubrange::pack_border(tc::begin(std::declval<Rng&>()), std::declval<Rng>())) pack_no_border(Rng&& rng, OptEndIt&&...) noexcept {
-					return std::forward<Rng>(rng);
+					return tc_move_if_owned(rng);
 				}
 			};
 
@@ -82,7 +82,7 @@ namespace tc {
 				template<typename Rng>
 				static constexpr auto pack_no_element(Rng&& rng) noexcept code_return_decltype_xvalue_by_ref(
 					if constexpr( !bSupportsNoElement ) _ASSERTFALSE;,
-					ReturnBorder::pack_no_border(std::forward<Rng>(rng))
+					ReturnBorder::pack_no_border(tc_move_if_owned(rng))
 				)
 			};
 
@@ -91,20 +91,20 @@ namespace tc {
 				static constexpr bool allowed_if_always_has_border = true;
 				template<typename It, typename Rng>
 				static constexpr auto pack_element(It&& it, Rng&& rng, tc::unused /*ref*/={}) return_decltype_xvalue_by_ref_noexcept(
-					ReturnBorder::pack_border(std::forward<It>(it), std::forward<Rng>(rng))
+					ReturnBorder::pack_border(tc_move_if_owned(it), tc_move_if_owned(rng))
 				)
 				template<typename It, typename Rng>
 				static constexpr decltype(auto) pack_border(It&& it, Rng&& rng) noexcept(noexcept(--it)) {
 					if( tc::begin(rng) != it ) {
 						--it;
-						return ReturnBorder::pack_border(std::forward<It>(it), std::forward<Rng>(rng));
+						return ReturnBorder::pack_border(tc_move_if_owned(it), tc_move_if_owned(rng));
 					} else {
-						return ReturnBorder::pack_no_border(std::forward<Rng>(rng));
+						return ReturnBorder::pack_no_border(tc_move_if_owned(rng));
 					}
 				}
 				template<typename Rng, typename Begin, typename End>
 				static constexpr auto pack_view(Rng&& rng, Begin&& begin, End&& end) return_decltype_xvalue_by_ref_noexcept(
-					ReturnBorder::pack_border(std::forward<Begin>(begin), std::forward<Rng>(rng))
+					ReturnBorder::pack_border(tc_move_if_owned(begin), tc_move_if_owned(rng))
 				)
 			};
 
@@ -114,20 +114,20 @@ namespace tc {
 				template<typename It, typename Rng>
 				static constexpr auto pack_element(It&& it, Rng&& rng, tc::unused /*ref*/={}) return_decltype_xvalue_by_ref_MAYTHROW(
 					++it, // MAYTHROW
-					ReturnBorder::pack_border(std::forward<It>(it), std::forward<Rng>(rng))
+					ReturnBorder::pack_border(tc_move_if_owned(it), tc_move_if_owned(rng))
 				)
 				template<typename It, typename Rng>
 				static constexpr decltype(auto) pack_border(It&& it, Rng&& rng) noexcept(noexcept(--it)) {
 					if( tc::end(rng) != it ) {
 						++it;
-						return ReturnBorder::pack_border(std::forward<It>(it), std::forward<Rng>(rng));
+						return ReturnBorder::pack_border(tc_move_if_owned(it), tc_move_if_owned(rng));
 					} else {
-						return ReturnBorder::pack_no_border(std::forward<Rng>(rng));
+						return ReturnBorder::pack_no_border(tc_move_if_owned(rng));
 					}
 				}
 				template<typename Rng, typename Begin, typename End>
 				static constexpr auto pack_view(Rng&& rng, Begin&&, End&& end) return_decltype_xvalue_by_ref_noexcept(
-					ReturnBorder::pack_border(std::forward<End>(end), std::forward<Rng>(rng))
+					ReturnBorder::pack_border(tc_move_if_owned(end), tc_move_if_owned(rng))
 				)
 			};
 
@@ -140,7 +140,7 @@ namespace tc {
 
 				template<typename Rng, typename... OptEndIt>
 				static constexpr auto pack_no_border(Rng&& rng, OptEndIt&&...) return_decltype_noexcept(
-					ReturnElement::pack_no_element(std::forward<Rng>(rng))
+					ReturnElement::pack_no_element(tc_move_if_owned(rng))
 				)
 			};
 
@@ -150,9 +150,9 @@ namespace tc {
 				static constexpr decltype(auto) pack_border(It&& it, Rng&& rng) noexcept(noexcept(--it)) {
 					if( tc::begin(rng) != it ) {
 						--it;
-						return ReturnElement::pack_element(std::forward<It>(it), std::forward<Rng>(rng));
+						return ReturnElement::pack_element(tc_move_if_owned(it), tc_move_if_owned(rng));
 					} else {
-						return ReturnElement::pack_no_element(std::forward<Rng>(rng));
+						return ReturnElement::pack_no_element(tc_move_if_owned(rng));
 					}
 				}
 			};
@@ -162,9 +162,9 @@ namespace tc {
 				template<typename It, typename Rng>
 				static constexpr decltype(auto) pack_border(It&& it, Rng&& rng) noexcept {
 					if( tc::end(rng) != it ) {
-						return ReturnElement::pack_element(std::forward<It>(it), std::forward<Rng>(rng));
+						return ReturnElement::pack_element(tc_move_if_owned(it), tc_move_if_owned(rng));
 					} else {
-						return ReturnElement::pack_no_element(std::forward<Rng>(rng));
+						return ReturnElement::pack_no_element(tc_move_if_owned(rng));
 					}
 				}
 			};
@@ -242,7 +242,7 @@ namespace tc {
 
 			template<typename It>
 			static constexpr tc::decay_t<It> pack_border(It&& it, tc::unused /*rng*/) noexcept {
-				return std::forward<It>(it);
+				return tc_move_if_owned(it);
 			}
 
 			template<typename Rng, typename... OptEndIt>
@@ -280,7 +280,7 @@ namespace tc {
 
 			template<typename It, typename Rng>
 			static constexpr auto pack_border(It&& it, Rng&&) noexcept {
-				return tc::border_t<tc::decay_t<It>>(std::forward<It>(it));
+				return tc::border_t<tc::decay_t<It>>(tc_move_if_owned(it));
 			}
 
 			template<typename Rng, typename... OptEndIt>
@@ -311,7 +311,7 @@ namespace tc {
 
 			template<typename Rng, typename... OptEndIt>
 			static constexpr auto pack_no_border(Rng&& rng, OptEndIt&&...) return_decltype_xvalue_by_ref_MAYTHROW(
-				tc::take(std::forward<Rng>(rng), tc::begin(rng))
+				tc::take(tc_move_if_owned(rng), tc::begin(rng))
 			)
 		};
 
@@ -339,7 +339,7 @@ namespace tc {
 
 			template<typename It>
 			static constexpr tc::decay_t<It> pack_element(It&& it, tc::unused /*rng*/, tc::unused /*ref*/={}) noexcept {
-				return std::forward<It>(it);
+				return tc_move_if_owned(it);
 			}
 
 			template<typename Rng>
@@ -354,7 +354,7 @@ namespace tc {
 
 			template<typename It>
 			static constexpr auto pack_element(It&& it, tc::unused /*rng*/, tc::unused /*ref*/={}) noexcept {
-				return tc::make_element(std::forward<It>(it));
+				return tc::make_element(tc_move_if_owned(it));
 			}
 
 			template<typename Rng>
@@ -373,7 +373,7 @@ namespace tc {
 		struct return_element_or_back final : return_element {
 			template<typename Rng>
 			static constexpr auto pack_no_element(Rng&& rng) noexcept {
-				return tc::end_prev<tc::return_border>(std::forward<Rng>(rng));
+				return tc::end_prev<tc::return_border>(tc_move_if_owned(rng));
 			}
 		};
 
@@ -383,15 +383,15 @@ namespace tc {
 			// Don't take it by value, or ref may be invalidated
 			template<typename Rng, typename Ref>
 			static constexpr tc::range_value_t<Rng> pack_element(tc::unused /*it*/, Rng&&, Ref&& ref) noexcept {
-				return std::forward<Ref>(ref);
+				return tc_move_if_owned(ref);
 			}
 			template<typename It, typename Rng>
 			static constexpr tc::range_value_t<Rng> pack_element(It&& it, Rng&&) noexcept {
-				return *std::forward<It>(it);
+				return *tc_move_if_owned(it);
 			}
 			template<typename Rng, typename Ref>
 			static constexpr tc::range_value_t<Rng> pack_element(Ref&& ref) noexcept {
-				return std::forward<Ref>(ref);
+				return tc_move_if_owned(ref);
 			}
 			template<typename Rng>
 			static auto pack_no_element(Rng&&) noexcept {
@@ -422,15 +422,15 @@ namespace tc {
 			// Don't take it by value, or ref may be invalidated
 			template<typename Rng, typename Ref>
 			static constexpr std::optional<tc::range_value_t<Rng>> pack_element(tc::unused /*it*/, Rng&&, Ref&& ref) noexcept {
-				return std::forward<Ref>(ref);
+				return tc_move_if_owned(ref);
 			}
 			template<typename It, typename Rng>
 			static constexpr std::optional<tc::range_value_t<Rng>> pack_element(It&& it, Rng&&) noexcept {
-				return *std::forward<It>(it);
+				return *tc_move_if_owned(it);
 			}
 			template<typename Rng, typename Ref>
 			static constexpr std::optional<tc::range_value_t<Rng>> pack_element(Ref&& ref) noexcept {
-				return std::forward<Ref>(ref);
+				return tc_move_if_owned(ref);
 			}
 			template<typename Rng>
 			static constexpr std::optional<tc::range_value_t<Rng>> pack_no_element(Rng&&) noexcept {
@@ -495,20 +495,20 @@ namespace tc {
 
 			template<typename It, typename Rng>
 			static constexpr decltype(auto) pack_element(It&& it, Rng&& rng, tc::unused /*ref*/={}) noexcept(noexcept(++tc::as_lvalue(tc::decay_copy(it)))) {
-				return tc::slice(std::forward<Rng>(rng), it, tc_modified(it, ++_));
+				return tc::slice(tc_move_if_owned(rng), it, tc_modified(it, ++_));
 			}
 			template<typename Rng>
 			static decltype(auto) pack_no_element(Rng&& rng) noexcept {
 				// safe choice is empty because result may be empty
 				_ASSERTFALSE;
-				return tc::return_detail::empty_slice(std::forward<Rng>(rng));
+				return tc::return_detail::empty_slice(tc_move_if_owned(rng));
 			}
 		};
 
 		struct return_singleton_range_or_empty final : return_singleton_range {
 			template<typename Rng>
 			static constexpr auto pack_no_element(Rng&& rng) return_decltype_noexcept(
-				tc::return_detail::empty_slice(std::forward<Rng>(rng))
+				tc::return_detail::empty_slice(tc_move_if_owned(rng))
 			)
 		};
 
@@ -518,20 +518,20 @@ namespace tc {
 		struct return_view {
 			template<typename Rng, typename Begin, typename End>
 			static constexpr auto pack_view(Rng&& rng, Begin&& begin, End&& end) return_decltype_noexcept(
-				tc::slice(std::forward<Rng>(rng), std::forward<Begin>(begin), std::forward<End>(end))
+				tc::slice(tc_move_if_owned(rng), tc_move_if_owned(begin), tc_move_if_owned(end))
 			)
 
 			template<typename Rng>
 			static decltype(auto) pack_no_element(Rng&& rng) noexcept {
 				_ASSERTFALSE;
-				return tc::slice(std::forward<Rng>(rng), tc::begin(rng), tc::end(rng));
+				return tc::slice(tc_move_if_owned(rng), tc::begin(rng), tc::end(rng));
 			}
 		};
 
 		struct return_view_or_none final {
 			template<typename Rng, typename Begin, typename End>
 			static constexpr auto pack_view(Rng&& rng, Begin&& begin, End&& end) noexcept {
-				return std::optional(return_view::pack_view(std::forward<Rng>(rng), std::forward<Begin>(begin), std::forward<End>(end)));
+				return std::optional(return_view::pack_view(tc_move_if_owned(rng), tc_move_if_owned(begin), tc_move_if_owned(end)));
 			}
 
 			template<typename Rng>
@@ -543,7 +543,7 @@ namespace tc {
 		struct return_view_or_empty final : return_view {
 			template<typename Rng>
 			static constexpr auto pack_no_element(Rng&& rng) return_decltype_noexcept(
-				tc::return_detail::empty_slice(std::forward<Rng>(rng))
+				tc::return_detail::empty_slice(tc_move_if_owned(rng))
 			)
 		};
 

@@ -95,16 +95,16 @@ namespace tc {
 			}
 			template<typename... Args> requires (0 < sizeof...(Args))
 			void ctor_default(Args&&... args) & noexcept(noexcept(tc::explicit_cast<T>(std::declval<Args>()...))) {
-				::new (static_cast<void*>(&this->m_buffer)) T(tc::explicit_cast<T>(std::forward<Args>(args)...)); // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
+				::new (static_cast<void*>(&this->m_buffer)) T(tc::explicit_cast<T>(tc_move_if_owned(args)...)); // :: ensures that non-class scope operator new is used, cast to void* ensures that built-in placement new is used  (18.6.1.3)
 			}
 
 			template<typename... Args> // ctor_value with non-empty argument list is useful in generic code
 			constexpr void ctor_value(Args&& ... args) & noexcept(std::is_nothrow_constructible<T, Args&&...>::value) {
- 				tc::ctor(this->m_buffer, std::forward<Args>(args)...);
+ 				tc::ctor(this->m_buffer, tc_move_if_owned(args)...);
 			}
 			template<typename First, typename... Args>
 			constexpr void ctor(First&& first, Args&& ... args) & noexcept(std::is_nothrow_constructible<T, First&&, Args&&...>::value) {
-				tc::ctor(this->m_buffer, std::forward<First>(first), std::forward<Args>(args)...);
+				tc::ctor(this->m_buffer, tc_move_if_owned(first), tc_move_if_owned(args)...);
 			}
 			[[nodiscard]] constexpr T const* operator->() const& noexcept {
 				return std::addressof(dereference());
@@ -212,22 +212,22 @@ namespace tc {
 				}
 			}
 			template<typename... Args> // ctor_value with non-empty argument list is useful in generic code
-			void ctor_value(Args&& ... args) & noexcept(noexcept(std::declval<Base&>().ctor_value(std::forward<Args>(args)...))) {
+			void ctor_value(Args&& ... args) & noexcept(noexcept(std::declval<Base&>().ctor_value(tc_move_if_owned(args)...))) {
 				check_dead_pattern();
 				tc::remove_dead_pattern(this->m_buffer);
 				try {
-					Base::ctor_value(std::forward<Args>(args)...);
+					Base::ctor_value(tc_move_if_owned(args)...);
 				} catch (...) {
 					tc::fill_with_dead_pattern(this->m_buffer);
 					throw;
 				}
 			}
 			template<typename First, typename... Args>
-			void ctor(First&& first, Args&& ... args) & noexcept(noexcept(Base::ctor(std::forward<First>(first), std::forward<Args>(args)...))) {
+			void ctor(First&& first, Args&& ... args) & noexcept(noexcept(Base::ctor(tc_move_if_owned(first), tc_move_if_owned(args)...))) {
 				check_dead_pattern();
 				tc::remove_dead_pattern(this->m_buffer);
 				try {
-					Base::ctor(std::forward<First>(first), std::forward<Args>(args)...);
+					Base::ctor(tc_move_if_owned(first), tc_move_if_owned(args)...);
 				} catch (...) {
 					tc::fill_with_dead_pattern(this->m_buffer);
 					throw;
@@ -318,7 +318,7 @@ namespace tc {
 			explicit scoped_constructor( storage_for<T>& ot, Args&&... args ) MAYTHROW
 			:	m_ot(ot)
 			{
-				m_ot.ctor(std::forward<Args>(args)...); // MAYTHROW
+				m_ot.ctor(tc_move_if_owned(args)...); // MAYTHROW
 			}
 			~scoped_constructor() {
 				m_ot.dtor();

@@ -58,7 +58,7 @@ namespace tc {
 
 			template< typename S >
 			size_proxy& operator=(S&& s) & noexcept {
-				tc::assign_explicit_cast(m_t,std::forward<S>(s));
+				tc::assign_explicit_cast(m_t,tc_move_if_owned(s));
 				AssertInvariant();
 				return *this;
 			}

@@ -26,7 +26,7 @@ namespace tc {
 		constexpr auto MakeRngIndexPairTuple(AdaptBaseRng&&... adaptbaserng) MAYTHROW {
 			return tc::make_tuple(
 				std::pair<decltype(std::declval<AdaptBaseRng>().base_range()), decltype(adaptbaserng.base_begin_index())>(
-					std::forward<AdaptBaseRng>(adaptbaserng).base_range(),
+					tc_move_if_owned(adaptbaserng).base_range(),
 					adaptbaserng.base_begin_index() // MAYTHROW
 				)...
 			);
@@ -35,7 +35,7 @@ namespace tc {
 		constexpr auto MakeRngEndIndexPairTuple(AdaptBaseRng&&... adaptbaserng) MAYTHROW {
 			return tc::make_tuple(
 				std::pair<decltype(std::declval<AdaptBaseRng>().base_range()), decltype(adaptbaserng.base_end_index())>(
-					std::forward<AdaptBaseRng>(adaptbaserng).base_range(),
+					tc_move_if_owned(adaptbaserng).base_range(),
 					adaptbaserng.base_end_index() // MAYTHROW
 				)...
 			);
@@ -156,14 +156,14 @@ namespace tc {
 		public:
 			template<typename... RngRef>
 			constexpr zip_adaptor(aggregate_tag_t, RngRef&&... rng) noexcept
-				: m_tupleadaptbaserng{{ {{aggregate_tag, std::forward<RngRef>(rng)}}... }}
+				: m_tupleadaptbaserng{{ {{aggregate_tag, tc_move_if_owned(rng)}}... }}
 			{}
 
 			template<tc::decayed_derived_from<zip_adaptor> Self, typename Sink>
 			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
 				return internal_for_each_impl(
-					std::forward<Self>(self),
-					std::forward<Sink>(sink),
+					tc_move_if_owned(self),
+					tc_move_if_owned(sink),
 					std::make_index_sequence<generator_index()>(),
 					std::make_index_sequence<sizeof...(Rng) - generator_index() - 1>()
 				); // MAYTHROW
@@ -171,8 +171,8 @@ namespace tc {
 			template<tc::decayed_derived_from<zip_adaptor> Self, typename Sink>
 			friend constexpr auto for_each_reverse_impl(Self&& self, Sink&& sink) MAYTHROW {
 				return internal_for_each_reverse_impl(
-					std::forward<Self>(self),
-					std::forward<Sink>(sink),
+					tc_move_if_owned(self),
+					tc_move_if_owned(sink),
 					std::make_index_sequence<generator_index()>(),
 					std::make_index_sequence<sizeof...(Rng) - generator_index() - 1>()
 				); // MAYTHROW
@@ -193,9 +193,9 @@ namespace tc {
 			static constexpr auto internal_for_each_impl(Self&& self, Sink&& sink, std::index_sequence<nPrefix...>, std::index_sequence<nSuffix...>) MAYTHROW {
 				STATICASSERTEQUAL( sizeof...(nPrefix), generator_index() );
 				STATICASSERTEQUAL( sizeof...(nPrefix) + 1 + sizeof...(nSuffix), sizeof...(Rng) );
-				auto tuplepairrngidxPrefix = zip_detail::MakeRngIndexPairTuple(tc::get<nPrefix>(std::forward<Self>(self).m_tupleadaptbaserng)...); // MAYTHROW
-				auto tuplepairrngidxSuffix = zip_detail::MakeRngIndexPairTuple(tc::get<sizeof...(nPrefix) + 1 + nSuffix>(std::forward<Self>(self).m_tupleadaptbaserng)...); // MAYTHROW
-				auto const boc = tc::for_each(tc::get<sizeof...(nPrefix)>(std::forward<Self>(self).m_tupleadaptbaserng).base_range(), [&](auto&& u) MAYTHROW {
+				auto tuplepairrngidxPrefix = zip_detail::MakeRngIndexPairTuple(tc::get<nPrefix>(tc_move_if_owned(self).m_tupleadaptbaserng)...); // MAYTHROW
+				auto tuplepairrngidxSuffix = zip_detail::MakeRngIndexPairTuple(tc::get<sizeof...(nPrefix) + 1 + nSuffix>(tc_move_if_owned(self).m_tupleadaptbaserng)...); // MAYTHROW
+				auto const boc = tc::for_each(tc::get<sizeof...(nPrefix)>(tc_move_if_owned(self).m_tupleadaptbaserng).base_range(), [&](auto&& u) MAYTHROW {
 					auto const boc = tc::continue_if_not_break(
 						sink,
 						tc::forward_as_tuple(
@@ -217,9 +217,9 @@ namespace tc {
 			static constexpr auto internal_for_each_reverse_impl(Self&& self, Sink&& sink, std::index_sequence<nPrefix...>, std::index_sequence<nSuffix...>) MAYTHROW {
 				STATICASSERTEQUAL( sizeof...(nPrefix), generator_index() );
 				STATICASSERTEQUAL( sizeof...(nPrefix) + 1 + sizeof...(nSuffix), sizeof...(Rng) );
-				auto tuplepairrngidxPrefix = zip_detail::MakeRngEndIndexPairTuple(tc::get<nPrefix>(std::forward<Self>(self).m_tupleadaptbaserng)...); // MAYTHROW
-				auto tuplepairrngidxSuffix = zip_detail::MakeRngEndIndexPairTuple(tc::get<sizeof...(nPrefix) + 1 + nSuffix>(std::forward<Self>(self).m_tupleadaptbaserng)...); // MAYTHROW
-				auto const boc = tc::for_each(tc::reverse(tc::get<sizeof...(nPrefix)>(std::forward<Self>(self).m_tupleadaptbaserng).base_range()), [&](auto&& u) MAYTHROW {
+				auto tuplepairrngidxPrefix = zip_detail::MakeRngEndIndexPairTuple(tc::get<nPrefix>(tc_move_if_owned(self).m_tupleadaptbaserng)...); // MAYTHROW
+				auto tuplepairrngidxSuffix = zip_detail::MakeRngEndIndexPairTuple(tc::get<sizeof...(nPrefix) + 1 + nSuffix>(tc_move_if_owned(self).m_tupleadaptbaserng)...); // MAYTHROW
+				auto const boc = tc::for_each(tc::reverse(tc::get<sizeof...(nPrefix)>(tc_move_if_owned(self).m_tupleadaptbaserng).base_range()), [&](auto&& u) MAYTHROW {
 					(zip_detail::DecrementRngIndexPair(tc::get<nPrefix>(tuplepairrngidxPrefix)), ...); // MAYTHROW
 					(zip_detail::DecrementRngIndexPair(tc::get<nSuffix>(tuplepairrngidxSuffix)), ...); // MAYTHROW
 					return tc::continue_if_not_break(
@@ -346,14 +346,14 @@ namespace tc {
 
 	template<typename... Rng>
 	constexpr no_adl::zip_adaptor</*HasIterator*/(... && tc::range_with_iterators<Rng>), Rng...> zip(Rng&&... rng) noexcept {
-		return {tc::aggregate_tag, std::forward<Rng>(rng)...};
+		return {tc::aggregate_tag, tc_move_if_owned(rng)...};
 	}
 
 	template<typename Rng0, typename Rng1>
 	constexpr auto zip_any(Rng0&& rng0, Rng1&& rng1) noexcept {
 		return [
-			rng0_ = reference_or_value<Rng0>(tc::aggregate_tag, std::forward<Rng0>(rng0)),
-			rng1_ = reference_or_value<Rng1>(tc::aggregate_tag, std::forward<Rng1>(rng1))
+			rng0_ = reference_or_value<Rng0>(tc::aggregate_tag, tc_move_if_owned(rng0)),
+			rng1_ = reference_or_value<Rng1>(tc::aggregate_tag, tc_move_if_owned(rng1))
 		](auto sink) MAYTHROW {
 			auto it0 = tc::begin(*rng0_);
 			auto it1 = tc::begin(*rng1_);
@@ -386,7 +386,7 @@ namespace tc {
 
 	template<typename Rng> requires tc::instance_b<std::remove_reference_t<Rng>, no_adl::zip_adaptor>
 	[[nodiscard]] constexpr decltype(auto) unzip(Rng&& rng) noexcept {
-		return std::remove_reference_t<Rng>::base_ranges(std::forward<Rng>(rng));
+		return std::remove_reference_t<Rng>::base_ranges(tc_move_if_owned(rng));
 	}
 
 	template<typename Rng> requires
@@ -398,9 +398,9 @@ namespace tc {
 	[[nodiscard]] constexpr auto unzip(Rng&& rng) noexcept {
 		return tc::tuple_transform(
 			tc::zip(
-				tc::unzip(std::forward<Rng>(rng).base_range()),
-				std::forward<Rng>(rng).begin_index(),
-				std::forward<Rng>(rng).end_index()
+				tc::unzip(tc_move_if_owned(rng).base_range()),
+				tc_move_if_owned(rng).begin_index(),
+				tc_move_if_owned(rng).end_index()
 			),
 			tc_fn(tc::slice)
 		);
@@ -439,7 +439,7 @@ namespace tc {
 		auto const n = tc::empty(rngrng) ? 0 : tc::size(tc::front(rngrng)); // Do not inline, function evaluation order undefined
 		return tc::transform(
 			tc::iota(0, n),
-			[rngrng = tc::make_reference_or_value(std::forward<RngRng>(rngrng))](auto const n) noexcept {
+			[rngrng = tc::make_reference_or_value(tc_move_if_owned(rngrng))](auto const n) noexcept {
 				// return_decltype_MAYTHROW(tc::at(rng, n)) may cause ICE on Apple clang 10
 				return tc::transform(*rngrng, [n](auto const& rng) MAYTHROW -> decltype(auto) { return tc::at(rng, n); });
 			}
@@ -458,7 +458,7 @@ namespace tc {
 			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
 				int i = 0;
 				// return_decltype_MAYTHROW with tc_move_if_owned causes compiler segfault on Mac
-				return tc::for_each(std::forward<Self>(self).base_range(), [&](auto&& t) noexcept(noexcept(tc::invoke(sink, std::declval<tc::tuple<int, decltype(t)>>()))) -> decltype(auto) {
+				return tc::for_each(tc_move_if_owned(self).base_range(), [&](auto&& t) noexcept(noexcept(tc::invoke(sink, std::declval<tc::tuple<int, decltype(t)>>()))) -> decltype(auto) {
 					return tc::invoke(sink, tc::tuple<int, decltype(t)>{i++, tc_move_if_owned(t)}); // MAYTHROW
 				});
 			}
@@ -474,7 +474,7 @@ namespace tc {
 	[[nodiscard]] constexpr auto enumerate(Rng&& rng) noexcept {
 		if constexpr( tc::has_size<Rng> ) {
 			auto nSize = tc::size(rng); // do not inline, evaluation order important
-			return tc::zip(tc::iota(0, nSize), std::forward<Rng>(rng));
+			return tc::zip(tc::iota(0, nSize), tc_move_if_owned(rng));
 		} else {
 			return enumerate_adl::enumerate_generator_adaptor<Rng>(tc_move_if_owned(rng));
 		}

@@ -24,12 +24,12 @@ namespace tc {
 
 template< typename Rng, typename Pred = tc::identity >
 [[nodiscard]] constexpr bool any_of(Rng&& rng, Pred&& pred = Pred()) MAYTHROW {
-	return tc::find_first_if<tc::return_bool>(std::forward<Rng>(rng), std::forward<Pred>(pred));
+	return tc::find_first_if<tc::return_bool>(tc_move_if_owned(rng), tc_move_if_owned(pred));
 }
 
 template< typename Rng, typename Pred = tc::identity >
 [[nodiscard]] constexpr bool all_of(Rng&& rng, Pred&& pred = Pred()) MAYTHROW {
-	return !tc::any_of(std::forward<Rng>(rng), std::not_fn(std::forward<Pred>(pred)));
+	return !tc::any_of(tc_move_if_owned(rng), std::not_fn(tc_move_if_owned(pred)));
 }
 
 // pair is in same order as if minmax_element( ..., operator<( bool, bool ) ) would have been used.
@@ -46,7 +46,7 @@ template< typename Rng >
 
 template< typename Rng, typename Pred >
 [[nodiscard]] std::pair<bool,bool> all_any_of(Rng const& rng, Pred&& pred) MAYTHROW {
-	return all_any_of( tc::transform(rng,std::forward<Pred>(pred)) );
+	return all_any_of( tc::transform(rng,tc_move_if_owned(pred)) );
 }
 
 [[nodiscard]] inline bool eager_or(std::initializer_list<tc::bool_context> ab) MAYTHROW {
@@ -70,7 +70,7 @@ template< typename Rng, typename Pred >
 
 template< typename Rng, typename Pred >
 [[nodiscard]] bool eager_all_of(Rng&& rng, Pred&& pred) MAYTHROW {
-	return !tc::eager_any_of(std::forward<Rng>(rng), std::not_fn(std::forward<Pred>(pred)));
+	return !tc::eager_any_of(tc_move_if_owned(rng), std::not_fn(tc_move_if_owned(pred)));
 }
 
 // all_same_element
@@ -108,11 +108,11 @@ namespace no_adl {
 						m_result=all_same_result::not_same_t();
 						return tc::break_;
 					}
-				)(std::forward<U>(u).m_result_());
+				)(tc_move_if_owned(u).m_result_());
 			} else {
 				return tc::fn_visit(
 					[&](all_same_result::empty_t) MAYTHROW {
-						m_result=std::forward<U>(u); // MAYTHROW
+						m_result=tc_move_if_owned(u); // MAYTHROW
 						return tc::continue_;
 					},
 					[&](T const& t) noexcept {
@@ -143,8 +143,8 @@ namespace no_adl {
 	template<typename Rng, typename Equal>
 	struct all_same_element_impl<return_all_same_result, Rng, Equal> final {
 		static constexpr auto fn(Rng&& rng, Equal&& equal) MAYTHROW {
-			accumulator_all_same<tc::range_value_t<Rng>, tc::decay_t<Equal>> accu(std::forward<Equal>(equal));
-			tc::for_each(std::forward<Rng>(rng), std::ref(accu));
+			accumulator_all_same<tc::range_value_t<Rng>, tc::decay_t<Equal>> accu(tc_move_if_owned(equal));
+			tc::for_each(tc_move_if_owned(rng), std::ref(accu));
 			return accu.m_result_();
 		}
 	};
@@ -163,7 +163,7 @@ namespace no_adl {
 				[](tc::all_same_result::not_same_t) noexcept -> decltype(auto) {
 					return RangeReturn::template pack_no_element<Rng>();
 				}
-			)(all_same_element_impl<return_all_same_result, Rng, Equal>::fn(std::forward<Rng>(rng), std::forward<Equal>(equal)) /*MAYTHROW*/);
+			)(all_same_element_impl<return_all_same_result, Rng, Equal>::fn(tc_move_if_owned(rng), tc_move_if_owned(equal)) /*MAYTHROW*/);
 		}
 	};
 }
@@ -172,7 +172,7 @@ using no_adl::return_all_same_result;
 
 template<typename RangeReturn, typename Rng, typename Equal = tc::fn_equal_to >
 [[nodiscard]] constexpr decltype(auto) all_same_element(Rng&& rng, Equal&& equal = Equal()) MAYTHROW {
-	return no_adl::all_same_element_impl<RangeReturn, Rng, Equal>::fn(std::forward<Rng>(rng), std::forward<Equal>(equal));
+	return no_adl::all_same_element_impl<RangeReturn, Rng, Equal>::fn(tc_move_if_owned(rng), tc_move_if_owned(equal));
 }
 
 template< typename Rng, typename Equal = tc::fn_equal_to >
@@ -181,6 +181,6 @@ template< typename Rng, typename Equal = tc::fn_equal_to >
 		[](auto&&) noexcept { return true; },
 		[](tc::all_same_result::empty_t) noexcept { return true; },
 		[](tc::all_same_result::not_same_t) noexcept { return false; }
-	)(tc::all_same_element<tc::return_all_same_result>(std::forward<Rng>(rng), std::forward<Equal>(equal)));
+	)(tc::all_same_element<tc::return_all_same_result>(tc_move_if_owned(rng), tc_move_if_owned(equal)));
 }
 }

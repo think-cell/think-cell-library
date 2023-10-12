@@ -116,7 +116,7 @@ namespace tc {
 
 	template< typename It >
 	constexpr auto make_element(It&& it) noexcept {
-		return element_t<tc::decay_t<It>>(std::forward<It>(it));
+		return element_t<tc::decay_t<It>>(tc_move_if_owned(it));
 	}
 
 	// Regarding constness:
@@ -320,7 +320,7 @@ namespace tc {
 			// For iterator_facade.
 			template<typename N> requires tc::has_mem_fn_advance_index<IndexRange>
 			constexpr void advance(N&& n) noexcept(noexcept(m_oidxrng->advance_index(m_idx, n))) {
-				tc::as_const(*m_oidxrng).advance_index(m_idx, std::forward<N>(n));
+				tc::as_const(*m_oidxrng).advance_index(m_idx, tc_move_if_owned(n));
 			}
 		};
 
@@ -354,10 +354,10 @@ namespace tc {
 	template<typename Rng, typename It>
 	constexpr decltype(auto) iterator2index(It&& it) noexcept {
 		if constexpr(tc::has_index<std::remove_reference_t<Rng>>) {
-			return std::remove_reference_t<Rng>::iterator2index(std::forward<It>(it));
+			return std::remove_reference_t<Rng>::iterator2index(tc_move_if_owned(it));
 		} else {
 			static_assert(iterator2index_detail::iterator_of<It, Rng>);
-			return std::forward<It>(it);
+			return tc_move_if_owned(it);
 		}
 	}
 }

@@ -87,7 +87,7 @@ namespace tc {
 		TTarget explicit_convert_impl(adl_tag_t, tc::type::identity<TTarget>, Rng&& rng) noexcept {
 			TTarget cont;
 			// force each element to be inserted
-			tc::cont_must_insert_range(cont, std::forward<Rng>(rng));
+			tc::cont_must_insert_range(cont, tc_move_if_owned(rng));
 			return cont;
 		}
 	}
@@ -165,7 +165,7 @@ namespace tc {
 	constexpr void sort_inplace(Rng&& rng, Less&& less = Less()) noexcept {
 		if constexpr( has_mem_fn_sort< Rng >) {
 			static_assert( std::is_lvalue_reference<Rng>::value );
-			rng.sort( std::forward<Less>(less) );
+			rng.sort( tc_move_if_owned(less) );
 		} else {
 #ifdef __clang__ // xcode12 does not support constexpr std::sort
 			if(std::is_constant_evaluated()) {
@@ -173,7 +173,7 @@ namespace tc {
 				_ASSERTE( tc::is_sorted(rng, less) );
 			} else {
 #endif
-				std::sort( tc::begin(rng), tc::end(rng), std::forward<Less>(less) );
+				std::sort( tc::begin(rng), tc::end(rng), tc_move_if_owned(less) );
 #ifdef __clang__
 			}
 #endif
@@ -182,7 +182,7 @@ namespace tc {
 
 	template<typename Rng, typename Less = tc::fn_less>
 	void stable_sort_inplace(Rng&& rng, Less&& less = Less()) noexcept {
-		std::stable_sort(tc::begin(rng), tc::end(rng), std::forward<Less>(less));
+		std::stable_sort(tc::begin(rng), tc::end(rng), tc_move_if_owned(less));
 	}
 
 	namespace no_adl {
@@ -208,7 +208,7 @@ namespace tc {
 
 			template<typename LessOrComp>
 			explicit sorted_index_adaptor(Rng&& rng, LessOrComp lessorcomp) noexcept
-				: tc::range_adaptor_base_range<Rng>(tc::aggregate_tag, std::forward<Rng>(rng))
+				: tc::range_adaptor_base_range<Rng>(tc::aggregate_tag, tc_move_if_owned(rng))
 			{
 				if constexpr (tc::has_size<Rng>) {
 					tc::cont_reserve(m_vecidx, tc::size(this->base_range()));
@@ -295,25 +295,25 @@ namespace tc {
 	template<typename Rng, typename Less = tc::fn_less>
 	[[nodiscard]] auto sorted_iterator_range(Rng& rng, Less&& less = Less()) noexcept {
 		auto vecitSorted=tc::make_vector( tc::make_range_of_iterators(rng) );
-		tc::sort_inplace(vecitSorted, tc::projected( std::forward<Less>(less), tc::fn_indirection() ) );
+		tc::sort_inplace(vecitSorted, tc::projected( tc_move_if_owned(less), tc::fn_indirection() ) );
 		return vecitSorted;
 	}
 
 	template<typename Rng, typename Less = tc::fn_less>
 	[[nodiscard]] auto sort(Rng&& rng, Less&& less = Less()) noexcept {
-		return tc::sorted_index_adaptor<Rng, false/*bStable*/>(std::forward<Rng>(rng), std::forward<Less>(less));
+		return tc::sorted_index_adaptor<Rng, false/*bStable*/>(tc_move_if_owned(rng), tc_move_if_owned(less));
 	}
 
 	template<typename Rng, typename Less = tc::fn_less>
 	[[nodiscard]] constexpr auto constexpr_sort(Rng&& rng, Less&& less = Less()) noexcept {
-		auto a = tc::make_array(std::forward<Rng>(rng));
-		tc::sort_inplace(a, std::forward<Less>(less));
+		auto a = tc::make_array(tc_move_if_owned(rng));
+		tc::sort_inplace(a, tc_move_if_owned(less));
 		return a;
 	}
 
 	template<typename Rng, typename Comp = tc::fn_compare>
 	[[nodiscard]] auto stable_sort(Rng&& rng, Comp&& comp = Comp()) noexcept {
-		return tc::sorted_index_adaptor<Rng, true/*bStable*/>(std::forward<Rng>(rng), std::forward<Comp>(comp));
+		return tc::sorted_index_adaptor<Rng, true/*bStable*/>(tc_move_if_owned(rng), tc_move_if_owned(comp));
 	}
 	
 	namespace no_adl {
@@ -343,7 +343,7 @@ namespace tc {
 
 	template<typename Rng>
 	[[nodiscard]] auto untransform(Rng&& rng) noexcept {
-		return no_adl::untransform_adaptor<Rng>(tc::aggregate_tag, std::forward<Rng>(rng));
+		return no_adl::untransform_adaptor<Rng>(tc::aggregate_tag, tc_move_if_owned(rng));
 	}
 
 	///////////////////////////////////////
@@ -352,13 +352,13 @@ namespace tc {
 	template<typename Rng, typename Less = tc::fn_less>
 	[[nodiscard]] auto ordered_unique_range(Rng&& rng, Less&& less = Less()) noexcept {
 		_ASSERTDEBUG( tc::is_sorted( rng, less ) );
-		return tc::adjacent_unique_range( std::forward<Rng>(rng), std::not_fn( std::forward<Less>(less) ) );
+		return tc::adjacent_unique_range( tc_move_if_owned(rng), std::not_fn( tc_move_if_owned(less) ) );
 	}
 
 	template<typename Rng, typename FuncRngStart, typename FuncRngElement, typename Less = tc::fn_less>
 	auto generator_ordered_unique_range(Rng&& rng, FuncRngStart funcStart, FuncRngElement funcElem, Less&& less = Less()) noexcept {
 		std::optional<tc::range_value_t<Rng>> oelem;
-		tc::for_each(std::forward<Rng>(rng), [&](auto&& element) noexcept {
+		tc::for_each(tc_move_if_owned(rng), [&](auto&& element) noexcept {
 			if (!oelem || less(*oelem, element)) {
 				tc_yield(funcStart);
 				tc::optional_emplace(oelem, element);
@@ -369,19 +369,19 @@ namespace tc {
 
 	template<typename Rng, typename Comp = tc::fn_compare>
 	[[nodiscard]] auto stable_sort_unique_range(Rng&& rng, Comp const& comp = Comp()) noexcept {
-		return tc::ordered_unique_range( tc::stable_sort( std::forward<Rng>(rng), comp ), tc::lessfrom3way(comp) );
+		return tc::ordered_unique_range( tc::stable_sort( tc_move_if_owned(rng), comp ), tc::lessfrom3way(comp) );
 	}
 
 	template<typename Rng, typename Less = tc::fn_less>
 	[[nodiscard]] auto sort_unique_range(Rng&& rng, Less const& less = Less()) noexcept {
-		return tc::ordered_unique_range( tc::sort( std::forward<Rng>(rng), less ), less );
+		return tc::ordered_unique_range( tc::sort( tc_move_if_owned(rng), less ), less );
 	}
 
 	template<typename Rng, typename Less = tc::fn_less>
 	[[nodiscard]] auto sort_inplace_unique_range(Rng&& rng, Less&& less = Less()) noexcept {
 		static_assert( !std::is_reference<Rng>::value );
 		tc::sort_inplace( rng, std::ref(less) );
-		return tc::ordered_unique_range( std::forward<Rng>(rng), std::forward<Less>(less) );
+		return tc::ordered_unique_range( tc_move_if_owned(rng), tc_move_if_owned(less) );
 	}
 
 	template< typename Rng, typename Less, typename Accu >
@@ -411,7 +411,7 @@ namespace tc {
 		tc::range_filter< tc::decay_t<Cont> > rngfilter(cont);
 		tc::for_each(
 			tc::transform(
-				tc::front_unique_range(cont, std::forward<Equals>(pred)),
+				tc::front_unique_range(cont, tc_move_if_owned(pred)),
 				tc_fn(tc::begin) // fn_boost_begin does not work, need subrange as lvalue to get non-const iterator
 			),
 			[&](auto it) noexcept {
@@ -430,7 +430,7 @@ namespace tc {
 		// When this function is evaluated at compile time, the range returned by tc::make_range_of_iterators cannot use an rvalue as a base range.
 		// This is because it stores the base range in a mutable field inside tc::reference_or_value.
 		tc::for_each(
-			tc::may_remove_current(tc::make_range_of_iterators(tc::as_lvalue(tc::adjacent_unique(cont, std::forward<Equals>(pred/*MAYTHROW*/))))),
+			tc::may_remove_current(tc::make_range_of_iterators(tc::as_lvalue(tc::adjacent_unique(cont, tc_move_if_owned(pred/*MAYTHROW*/))))),
 			[&](auto it) noexcept {
 				rngfilter.keep(it.element_base());
 			}
@@ -457,7 +457,7 @@ namespace tc {
 
 	template<typename Rng, typename Less>
 	auto ordered_unique_begin_and_count(Rng&& rng, Less&& less) noexcept {
-		return tc::transform(tc::ordered_unique_range( std::forward<Rng>(rng), std::forward<Less>(less)), [&](auto const& rngSub) noexcept {
+		return tc::transform(tc::ordered_unique_range( tc_move_if_owned(rng), tc_move_if_owned(less)), [&](auto const& rngSub) noexcept {
 			return std::make_pair(
 				tc::begin(rngSub),
 				tc::implicit_cast<typename boost::range_size< std::remove_reference_t<Rng> >::type >(tc::size_linear(rngSub))
@@ -475,22 +475,22 @@ namespace tc {
 			),
 			tc_member(.second)
 		)) {
-			return RangeReturn::pack_element(tc_move_always(*oit->first), std::forward<Rng>(rng));
+			return RangeReturn::pack_element(tc_move_always(*oit->first), tc_move_if_owned(rng));
 		} else {
-			return RangeReturn::pack_no_element(std::forward<Rng>(rng));
+			return RangeReturn::pack_no_element(tc_move_if_owned(rng));
 		}
 	}
 
 	template< typename RangeReturn, typename Rng, typename Pred >
 	[[nodiscard]] auto trim_left_if(Rng&& rng, Pred&& pred) MAYTHROW code_return_decltype_xvalue_by_ref(
 		static_assert( RangeReturn::allowed_if_always_has_border );,
-		RangeReturn::pack_border( tc::find_first_if<tc::return_border_before_or_end>( rng, std::not_fn(std::forward<Pred>(pred)) ), std::forward<Rng>(rng))
+		RangeReturn::pack_border( tc::find_first_if<tc::return_border_before_or_end>( rng, std::not_fn(tc_move_if_owned(pred)) ), tc_move_if_owned(rng))
 	)
 
 	template< typename RangeReturn, typename Rng, typename Pred >
 	[[nodiscard]] auto trim_right_if(Rng&& rng, Pred&& pred) MAYTHROW code_return_decltype_xvalue_by_ref(
 		static_assert( RangeReturn::allowed_if_always_has_border );,
-		RangeReturn::pack_border( tc::find_last_if<tc::return_border_after_or_begin>( rng, std::not_fn(std::forward<Pred>(pred)) ), std::forward<Rng>(rng))
+		RangeReturn::pack_border( tc::find_last_if<tc::return_border_after_or_begin>( rng, std::not_fn(tc_move_if_owned(pred)) ), tc_move_if_owned(rng))
 	)
 
 	template< typename Rng, typename Pred >
@@ -507,17 +507,17 @@ namespace tc {
 
 	template< typename RangeReturn, typename Rng, typename RngTrim >
 	[[nodiscard]] decltype(auto) trim_left(Rng&& rng, RngTrim const& rngTrim) MAYTHROW {
-		return tc::trim_left_if<RangeReturn>( std::forward<Rng>(rng), [&](auto const& _) noexcept { return tc::find_first<tc::return_bool>(rngTrim, _); } );
+		return tc::trim_left_if<RangeReturn>( tc_move_if_owned(rng), [&](auto const& _) noexcept { return tc::find_first<tc::return_bool>(rngTrim, _); } );
 	}
 
 	template< typename RangeReturn, typename Rng, typename RngTrim >
 	[[nodiscard]] decltype(auto) trim_right(Rng&& rng, RngTrim const& rngTrim) MAYTHROW {
-		return tc::trim_right_if<RangeReturn>( std::forward<Rng>(rng), [&](auto const& _) noexcept { return tc::find_first<tc::return_bool>(rngTrim, _); } );
+		return tc::trim_right_if<RangeReturn>( tc_move_if_owned(rng), [&](auto const& _) noexcept { return tc::find_first<tc::return_bool>(rngTrim, _); } );
 	}
 
 	template< typename Rng, typename RngTrim >
 	[[nodiscard]] decltype(auto) trim(Rng&& rng, RngTrim const& rngTrim) MAYTHROW {
-		return tc::trim_if( std::forward<Rng>(rng), [&](auto const& _) noexcept { return tc::find_first<tc::return_bool>(rngTrim, _); } );
+		return tc::trim_if( tc_move_if_owned(rng), [&](auto const& _) noexcept { return tc::find_first<tc::return_bool>(rngTrim, _); } );
 	}
 
 	template< typename Rng, typename T >
@@ -543,7 +543,7 @@ namespace tc {
 
 	template< typename RangeReturn, typename Cont, typename Arg >
 	[[nodiscard]] decltype(auto) cont_find(Cont& cont, Arg&& arg) noexcept {
-		return cont_find_detail::cont_find_impl<RangeReturn>(cont, cont.find(std::forward<Arg>(arg)));
+		return cont_find_detail::cont_find_impl<RangeReturn>(cont, cont.find(tc_move_if_owned(arg)));
 	}
 
 #ifdef _DEBUG
@@ -651,7 +651,7 @@ namespace tc {
 				tc::cont_reserve(cont, 8);
 			}
 
-			append_buffer_allowing_nulls(cont, std::forward<Func>(func));
+			append_buffer_allowing_nulls(cont, tc_move_if_owned(func));
 			if constexpr (std::is_same<Cont, decltype(cont)>::value) {
 				return cont;
 			} else {
@@ -675,21 +675,21 @@ namespace tc {
 
 	template<typename Cont, typename Func>
 	[[nodiscard]] Cont get_truncating_buffer(Func&& func) noexcept {
-		auto cont=tc::get_buffer_detail::get_truncating_buffer_allowing_nulls<Cont>(std::forward<Func>(func));
+		auto cont=tc::get_buffer_detail::get_truncating_buffer_allowing_nulls<Cont>(tc_move_if_owned(func));
 		tc::assert_no_null_terminator(cont);
 		return cont;
 	}
 
 	template<typename Cont, typename Func>
 	[[nodiscard]] Cont get_truncating_null_terminated_buffer(Func&& func) noexcept {
-		auto cont=tc::get_buffer_detail::get_truncating_buffer_allowing_nulls<Cont>(std::forward<Func>(func));
+		auto cont=tc::get_buffer_detail::get_truncating_buffer_allowing_nulls<Cont>(tc_move_if_owned(func));
 		tc::remove_null_terminator(cont);
 		return cont;
 	}
 
 	template<typename Cont, typename Func>
 	[[nodiscard]] Cont get_buffer(Func&& func) MAYTHROW {
-		auto cont=tc::get_buffer_detail::get_buffer_allowing_nulls<Cont>(std::forward<Func>(func)); // MAYTHROW
+		auto cont=tc::get_buffer_detail::get_buffer_allowing_nulls<Cont>(tc_move_if_owned(func)); // MAYTHROW
 		tc::assert_no_null_terminator(cont);
 		return cont;
 	}
@@ -697,13 +697,13 @@ namespace tc {
 	template<typename Cont, typename Func>
 	void append_buffer(Cont& cont, Func&& func) MAYTHROW {
 		IF_TC_CHECKS(auto const nOffset = tc::size(cont));
-		tc::get_buffer_detail::append_buffer_allowing_nulls<Cont>(cont, std::forward<Func>(func)); // MAYTHROW
+		tc::get_buffer_detail::append_buffer_allowing_nulls<Cont>(cont, tc_move_if_owned(func)); // MAYTHROW
 		IF_TC_CHECKS(tc::assert_no_null_terminator(tc::begin_next<tc::return_drop>(cont, nOffset)));
 	}
 
 	template<typename Cont, typename Func>
 	[[nodiscard]] Cont get_null_terminated_buffer(Func&& func) MAYTHROW {
-		auto cont=tc::get_buffer_detail::get_buffer_allowing_nulls<Cont>(std::forward<Func>(func)); // MAYTHROW
+		auto cont=tc::get_buffer_detail::get_buffer_allowing_nulls<Cont>(tc_move_if_owned(func)); // MAYTHROW
 		static_assert( tc::char_type< tc::range_value_t<decltype((cont))> > );
 		tc::remove_null_terminator(cont);
 		return cont;
@@ -711,7 +711,7 @@ namespace tc {
 
 	template<typename Cont, typename Func>
 	[[nodiscard]] Cont get_buffer_may_be_null_terminated(Func&& func) MAYTHROW {
-		auto cont = tc::get_buffer_detail::get_buffer_allowing_nulls<Cont>(std::forward<Func>(func)); // MAYTHROW
+		auto cont = tc::get_buffer_detail::get_buffer_allowing_nulls<Cont>(tc_move_if_owned(func)); // MAYTHROW
 		static_assert( tc::char_type< tc::range_value_t<decltype((cont))> > );
 		tc::take_inplace(cont, tc::ends_with<tc::return_border_or_end>(cont, tc::single(tc::explicit_cast< tc::range_value_t<decltype((cont))> >('\0'))));
 		tc::assert_no_null_terminator(cont);
@@ -726,7 +726,7 @@ namespace tc {
 		if(auto it = tc::cont_find<tc::return_element_or_null>(hashed_index, key)) {
 			return std::make_pair(tc_move(it), false);
 		} else {
-			return hashed_index.emplace(std::forward<ValueTypeCtorArgs>(valuetypectorargs)...); // MAYTHROW
+			return hashed_index.emplace(tc_move_if_owned(valuetypectorargs)...); // MAYTHROW
 		}
 	}
 
@@ -737,7 +737,7 @@ namespace tc {
 		auto it = ordered_index.lower_bound(key);
 		if (tc::end(ordered_index)==it || ordered_index.key_comp()(key, ordered_index.key_extractor()(*it))) {
 			return std::make_pair(
-				tc::cont_must_emplace_before(ordered_index, tc_move(it), std::forward<ValueTypeCtorArgs>(valuetypectorargs)...), // MAYTHROW
+				tc::cont_must_emplace_before(ordered_index, tc_move(it), tc_move_if_owned(valuetypectorargs)...), // MAYTHROW
 				true
 			);
 		} else {
@@ -751,18 +751,18 @@ namespace tc {
 		if (auto it = tc::cont_find<tc::return_element_or_null>(hashed_index, tc::as_const(key))) {
 			return std::make_pair(tc_move(it), false);
 		} else {
-			return hashed_index.emplace(std::forward<K>(key)); // MAYTHROW
+			return hashed_index.emplace(tc_move_if_owned(key)); // MAYTHROW
 		}
 	}
 
 	template<typename Cont, typename Key>
 	void cont_must_erase(Cont& cont, Key&& key) noexcept {
-		VERIFYEQUAL( cont.erase(std::forward<Key>(key)), 1u );
+		VERIFYEQUAL( cont.erase(tc_move_if_owned(key)), 1u );
 	}
 
 	template<typename Cont, typename Key>
 	bool cont_try_erase(Cont& cont, Key&& key) noexcept {
-		switch_no_default(cont.erase(std::forward<Key>(key))) {
+		switch_no_default(cont.erase(tc_move_if_owned(key))) {
 			case 0: return false;
 			case 1: return true;
 		};
@@ -811,36 +811,36 @@ namespace tc {
 	template<typename Rng, typename Less>
 	[[nodiscard]] auto ordered_unique(Rng&& rng, Less less) noexcept code_return_decltype (
 		_ASSERTDEBUG( tc::is_sorted( rng, less ) );,
-		tc::adjacent_unique( std::forward<Rng>(rng), std::not_fn( tc_move(less) ) )
+		tc::adjacent_unique( tc_move_if_owned(rng), std::not_fn( tc_move(less) ) )
 	)
 
 	template<typename Rng>
 	[[nodiscard]] auto ordered_unique(Rng&& rng) return_decltype_noexcept(
-		tc::ordered_unique( std::forward<Rng>(rng), tc::fn_less() )
+		tc::ordered_unique( tc_move_if_owned(rng), tc::fn_less() )
 	)
 
 	template<typename Rng, typename Less = tc::fn_less>
 	[[nodiscard]] auto sort_inplace_unique(Rng&& rng, Less less = Less()) noexcept code_return_decltype(
 		static_assert( !std::is_reference<Rng>::value );
 		tc::sort_inplace( rng, less );,
-		tc::ordered_unique( std::forward<Rng>(rng), tc_move(less) )
+		tc::ordered_unique( tc_move_if_owned(rng), tc_move(less) )
 	)
 
 	template<typename Rng, typename Less>
 	[[nodiscard]] auto sort_unique(Rng&& rng, Less less) return_decltype_noexcept(
-		tc::ordered_unique(tc::sort(std::forward<Rng>(rng), less), less)
+		tc::ordered_unique(tc::sort(tc_move_if_owned(rng), less), less)
 	)
 
 	template<typename Rng>
 	[[nodiscard]] auto sort_unique(Rng&& rng) return_decltype_noexcept(
-		sort_unique(std::forward<Rng>(rng), tc::fn_less())
+		sort_unique(tc_move_if_owned(rng), tc::fn_less())
 	)
 
 	template<typename Rng, typename Less=tc::fn_less>
 	[[nodiscard]] constexpr auto constexpr_sort_unique(Rng&& rng, Less&& less=Less()) noexcept {
 		return tc_modified(
-			tc::make_static_vector<tc::constexpr_size<Rng>()>(std::forward<Rng>(rng)),
-			tc::sort_unique_inplace(_, std::forward<Less>(less))
+			tc::make_static_vector<tc::constexpr_size<Rng>()>(tc_move_if_owned(rng)),
+			tc::sort_unique_inplace(_, tc_move_if_owned(less))
 		);
 	}
 
@@ -879,7 +879,7 @@ namespace tc {
 				}
 			}();
 			if( it==tc::end( rng ) ) {
-				return RangeReturn::pack_no_element(std::forward<Rng>(rng));
+				return RangeReturn::pack_no_element(tc_move_if_owned(rng));
 			} else {
 				auto const Greater = [&](auto const& elem) noexcept {
 					if constexpr(c_b3way) {
@@ -890,7 +890,7 @@ namespace tc {
 				};
 				auto && ref=*it;
 				if (Greater(tc::as_const(ref))) {
-					return RangeReturn::pack_no_element(std::forward<Rng>(rng));
+					return RangeReturn::pack_no_element(tc_move_if_owned(rng));
 				} else {
 #ifdef _CHECKS
 					if constexpr(c_bAssertUniqueness) {
@@ -898,7 +898,7 @@ namespace tc {
 						_ASSERT( tc::end(rng)==itNext || Greater(tc::as_const(*itNext)));
 					}
 #endif
-					return RangeReturn::pack_element(it,std::forward<Rng>(rng),tc_move_if_owned(ref));
+					return RangeReturn::pack_element(it,tc_move_if_owned(rng),tc_move_if_owned(ref));
 				}
 			}
 		}
@@ -911,7 +911,7 @@ namespace tc {
 	
 	template< typename RangeReturn, typename Rng, typename T >
 	[[nodiscard]] decltype(auto) binary_find_unique(Rng&& rng, T const& t) noexcept {
-		return tc::binary_find_unique<RangeReturn>( std::forward<Rng>(rng), t, tc::fn_less() );
+		return tc::binary_find_unique<RangeReturn>( tc_move_if_owned(rng), t, tc::fn_less() );
 	}
 
 	template< typename RangeReturn, typename Rng, typename T, typename Pred >
@@ -921,7 +921,7 @@ namespace tc {
 
 	template< typename RangeReturn, typename Rng, typename T >
 	[[nodiscard]] decltype(auto) binary_find_first(Rng&& rng, T const& t) noexcept {
-		return tc::binary_find_first<RangeReturn>( std::forward<Rng>(rng), t, tc::fn_less() );
+		return tc::binary_find_first<RangeReturn>( tc_move_if_owned(rng), t, tc::fn_less() );
 	}
 
 	// would be cleaner to search on the distance metric (starting with lower_bound(rng,0)),
@@ -1002,14 +1002,14 @@ namespace tc {
 			> {
 				for (;;) {
 					if( m_itb == m_endb ) {
-						return tc::continue_if_not_break(m_sinka, std::forward<A>(a));
+						return tc::continue_if_not_break(m_sinka, tc_move_if_owned(a));
 					} else if(auto const order=tc::invoke(m_comp, tc::as_const(a), tc::as_const(*m_itb) ); std::is_lt(order)) {
-						return tc::continue_if_not_break(m_sinka, std::forward<A>(a));
+						return tc::continue_if_not_break(m_sinka, tc_move_if_owned(a));
 					} else if (std::is_gt(order)) {
 						tc_yield(m_sinkb, *m_itb);
 						++m_itb;
 					} else {
-						tc_yield(m_sinkab, std::forward<A>(a), *m_itb);
+						tc_yield(m_sinkab, tc_move_if_owned(a), *m_itb);
 						++m_itb;
 						return tc::constant<tc::continue_>();
 					}
@@ -1044,14 +1044,14 @@ namespace tc {
 		requires (!tc::range_with_iterators<RngB>)
 	auto interleave_2(RngA&& rnga, RngB&& rngb, Comp&& comp, SinkA&& sinka, SinkB&& sinkb, SinkAB&& sinkab) MAYTHROW {
 		return tc::interleave_2(
-			std::forward<RngB>(rngb),
-			std::forward<RngA>(rnga),
-			[comp=tc::decay_copy(std::forward<Comp>(comp))](auto const& elemb, auto const& elema) noexcept {
+			tc_move_if_owned(rngb),
+			tc_move_if_owned(rnga),
+			[comp=tc::decay_copy(tc_move_if_owned(comp))](auto const& elemb, auto const& elema) noexcept {
 				return tc::negate(comp(elema, elemb));
 			},
-			std::forward<SinkB>(sinkb),
-			std::forward<SinkA>(sinka),
-			[sinkab=tc::decay_copy(std::forward<SinkAB>(sinkab))](auto&& elemb, auto&& elema) noexcept {
+			tc_move_if_owned(sinkb),
+			tc_move_if_owned(sinka),
+			[sinkab=tc::decay_copy(tc_move_if_owned(sinkab))](auto&& elemb, auto&& elema) noexcept {
 				return sinkab(tc_move_if_owned(elema), tc_move_if_owned(elemb));
 			}
 		);
@@ -1110,7 +1110,7 @@ namespace tc {
 			}
 
 			SInterleaveImpl(Compare&& compare) noexcept
-				: m_compare(std::forward<Compare>(compare))
+				: m_compare(tc_move_if_owned(compare))
 			{}
 
 			template<
@@ -1139,8 +1139,8 @@ namespace tc {
 		typename... Rng
 	>
 	tc::break_or_continue interleave_n(Compare&& compare, Func&& func, Rng&&... rng) noexcept {
-		return no_adl::SInterleaveImpl<Compare>(std::forward<Compare>(compare))(
-			std::forward<Func>(func),
+		return no_adl::SInterleaveImpl<Compare>(tc_move_if_owned(compare))(
+			tc_move_if_owned(func),
 			std::index_sequence_for<Rng...>(),
 			std::make_pair(
 				tc::begin(rng),
@@ -1165,7 +1165,7 @@ namespace tc {
 	[[nodiscard]] auto make_variant_range_filter(Rng&& rng) noexcept {
 		return tc::transform( 
 			tc::filter( 
-				std::forward<Rng>(rng), 
+				tc_move_if_owned(rng), 
 				tc_fn(std::holds_alternative<T>)
 			),
 			tc_fn(tc::get<T>)
@@ -1174,7 +1174,7 @@ namespace tc {
 
 	template< typename RangeReturn, typename Rng, typename T> requires (!RangeReturn::requires_iterator)
 	[[nodiscard]] constexpr decltype(auto) linear_at(Rng&& rng, T n) noexcept {
-		return tc::find_first_if<RangeReturn>(std::forward<Rng>(rng), [&](tc::unused) noexcept {
+		return tc::find_first_if<RangeReturn>(tc_move_if_owned(rng), [&](tc::unused) noexcept {
 			if(0==n) {
 				return true;
 			} else {
@@ -1187,7 +1187,7 @@ namespace tc {
 	// Create an infinite range by repeatedly applying funcIterate to t
 	template <typename T, typename FuncIterate>
 	auto iterate(T&& t, FuncIterate&& funcIterate) noexcept {
-		return tc::generator_range_output<tc::decay_t<T> const&>([funcIterate=tc::make_reference_or_value(std::forward<FuncIterate>(funcIterate)),t_=tc::make_reference_or_value(std::forward<T>(t))](auto func) noexcept {
+		return tc::generator_range_output<tc::decay_t<T> const&>([funcIterate=tc::make_reference_or_value(tc_move_if_owned(funcIterate)),t_=tc::make_reference_or_value(tc_move_if_owned(t))](auto func) noexcept {
 			auto t = *t_;
 			tc_yield(func,tc::as_const(t));
 			for (;;) {
@@ -1200,14 +1200,14 @@ namespace tc {
 	template<typename RngSep, typename... Rngs>
 	decltype(auto) concat_nonempty_with_separator(RngSep&& rngSep, Rngs&&... rngs) noexcept {
 		return tc::join_with_separator(
-			std::forward<RngSep>(rngSep),
-			tc::filter(tc::make_range(std::forward<Rngs>(rngs)...), std::not_fn(tc_fn(tc::empty)))
+			tc_move_if_owned(rngSep),
+			tc::filter(tc::make_range(tc_move_if_owned(rngs)...), std::not_fn(tc_fn(tc::empty)))
 		);
 	}
 
 	template<typename RngSep, typename Rng0, typename... Rngs>
 	decltype(auto) concat_with_separator(RngSep&& rngSep, Rng0&& rng0, Rngs&&... rngs) noexcept {
-		return tc::concat(std::forward<Rng0>(rng0), tc::concat(/*copy if needed*/tc::implicit_cast<RngSep>(rngSep), std::forward<Rngs>(rngs))...);
+		return tc::concat(tc_move_if_owned(rng0), tc::concat(/*copy if needed*/tc::implicit_cast<RngSep>(rngSep), tc_move_if_owned(rngs))...);
 	}
 
 	template<typename Rng, typename Val>

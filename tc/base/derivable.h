@@ -28,12 +28,12 @@ namespace tc {
 
 			template<typename A1> requires (tc::econstructionIMPLICIT==tc::construction_restrictiveness<T, A1&&>::value)
 			derivable_wrapper(A1&& a1) noexcept
-				: m_t(std::forward<A1>(a1))
+				: m_t(tc_move_if_owned(a1))
 			{}
 
 			template<typename A1> requires (tc::econstructionEXPLICIT==tc::construction_restrictiveness<T, A1&&>::value)
 			explicit derivable_wrapper(A1&& a1) noexcept
-				: tc_member_init_cast( m_t, std::forward<A1>(a1) )
+				: tc_member_init_cast( m_t, tc_move_if_owned(a1) )
 			{}
 
 			operator T const&() const& noexcept {

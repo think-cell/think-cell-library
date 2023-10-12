@@ -111,7 +111,7 @@ namespace tc {
 			template<typename Rng>
 			constexpr enumset(tc::union_tag_t, Rng&& rng) MAYTHROW : m_bitset(0)
 			{
-				tc::for_each(std::forward<Rng>(rng), [&](enumset const& sete) noexcept { // MAYTHROW
+				tc::for_each(tc_move_if_owned(rng), [&](enumset const& sete) noexcept { // MAYTHROW
 					*this |= sete;
 				});
 			}

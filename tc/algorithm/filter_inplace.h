@@ -177,7 +177,7 @@ namespace tc {
 		template <typename... Ts>
 		constexpr void emplace_back(Ts&&... ts) & noexcept {
 			_ASSERTE( tc::end(m_cont)!=m_itOutput );
-			tc::renew(*m_itOutput, std::forward<Ts>(ts)...);
+			tc::renew(*m_itOutput, tc_move_if_owned(ts)...);
 			++m_itOutput;
 		}
 	};
@@ -206,7 +206,7 @@ namespace tc {
 
 	template<typename Cont, typename Pred = tc::identity>
 	void filter_inplace(Cont& cont, Pred&& pred = Pred()) MAYTHROW {
-		tc::filter_inplace( cont, tc::begin(cont), std::forward<Pred>(pred) );
+		tc::filter_inplace( cont, tc::begin(cont), tc_move_if_owned(pred) );
 	}
 
 

@@ -99,10 +99,10 @@ namespace tc {
 			template<typename It>
 			constexpr static decltype(auto) iterator2index(It&& it) noexcept {
 				if constexpr(std::same_as<Index, std::remove_cvref_t<It>>) {
-					return std::forward<It>(it);
+					return tc_move_if_owned(it);
 				} else {
 					static_assert(std::same_as<Index, std::remove_cvref_t<decltype(it.m_idx)>>);
-					return (std::forward<It>(it).m_idx);
+					return (tc_move_if_owned(it).m_idx);
 				}
 			}
 		};
@@ -119,13 +119,13 @@ namespace tc {
 			constexpr range_adaptor_base_range()=default;
 			template<typename Rhs>
 			constexpr range_adaptor_base_range(tc::aggregate_tag_t, Rhs&& rhs) noexcept
-				: tc::reference_or_value<Rng>(tc::aggregate_tag, std::forward<Rhs>(rhs))
+				: tc::reference_or_value<Rng>(tc::aggregate_tag, tc_move_if_owned(rhs))
 			{}
 
 			constexpr decltype(auto) base_range() & noexcept { return **this; }
 			constexpr decltype(auto) base_range() const& noexcept { return **this; }
-			constexpr decltype(auto) base_range() && noexcept { return *std::move(*this); }
-			constexpr decltype(auto) base_range() const&& noexcept { return *std::move(*this); }
+			constexpr decltype(auto) base_range() && noexcept { return *tc_move_always(*this); }
+			constexpr decltype(auto) base_range() const&& noexcept { return *tc_move_always_even_const(*this); }
 			constexpr decltype(auto) base_range_best_access() const& noexcept { return this->best_access(); }
 
 			template<ENABLE_SFINAE>
@@ -158,8 +158,8 @@ namespace tc {
 		template<typename Self, typename Sink, typename std::remove_reference_t<Self>::is_generator_range_adaptor* = nullptr>
 		constexpr auto for_each_impl(Self&& self, Sink&& sink) return_decltype_MAYTHROW(
 			tc::for_each(
-				std::forward<Self>(self).base_range(),
-				std::forward<Self>(self).adapted_sink(std::forward<Sink>(sink), /*bReverse*/tc::constant<false>())
+				tc_move_if_owned(self).base_range(),
+				tc_move_if_owned(self).adapted_sink(tc_move_if_owned(sink), /*bReverse*/tc::constant<false>())
 			)
 		)
 	}
@@ -172,7 +172,7 @@ namespace tc {
 
 			template<typename Derived_ = Derived>
 			constexpr auto operator()(T t) const& return_decltype_MAYTHROW(
-				tc::invoke(tc::derived_cast<Derived_>(this)->m_sink, std::forward<T>(t))
+				tc::invoke(tc::derived_cast<Derived_>(this)->m_sink, tc_move_if_owned(t))
 			)
 		};
 
@@ -183,7 +183,7 @@ namespace tc {
 			Sink m_sink;
 
 			template<typename Sink_>
-			constexpr generator_range_output_sink(tc::aggregate_tag_t, Sink_&& sink) noexcept : m_sink(std::forward<Sink_>(sink)) {}
+			constexpr generator_range_output_sink(tc::aggregate_tag_t, Sink_&& sink) noexcept : m_sink(tc_move_if_owned(sink)) {}
 
 			using generator_range_output_sink_base<generator_range_output_sink<Sink, T...>, T>::operator()...;
 
@@ -205,7 +205,7 @@ namespace tc {
 
 			template<typename Rng> requires tc::has_mem_fn_chunk<Sink const&, Rng> && tc::type::all_of<tc::range_output_t<Rng>, is_valid_chunk_output>::value
 			constexpr auto chunk(Rng&& rng) const& noexcept(noexcept(m_sink.chunk(std::declval<Rng>()))) {
-				return m_sink.chunk(std::forward<Rng>(rng));
+				return m_sink.chunk(tc_move_if_owned(rng));
 			}
 		};
 	}
@@ -224,14 +224,14 @@ namespace tc {
 
 			template<typename Sink>
 			constexpr auto adapted_sink(Sink&& sink, bool /*bReverse*/) const& noexcept {
-				return generator_range_output_detail::no_adl::generator_range_output_sink<tc::decay_t<Sink>, T...>(tc::aggregate_tag, std::forward<Sink>(sink));
+				return generator_range_output_detail::no_adl::generator_range_output_sink<tc::decay_t<Sink>, T...>(tc::aggregate_tag, tc_move_if_owned(sink));
 			}
 		};
 	}
 
 	template<typename... TypeListOrTs, typename Rng>
 	constexpr auto generator_range_output(Rng&& rng) noexcept {
-		return generator_range_output_adaptor_adl::generator_range_output_adaptor<Rng, TypeListOrTs...>(tc::aggregate_tag, std::forward<Rng>(rng));
+		return generator_range_output_adaptor_adl::generator_range_output_adaptor<Rng, TypeListOrTs...>(tc::aggregate_tag, tc_move_if_owned(rng));
 	}
 
 	namespace range_output_from_base_range_adl {
@@ -316,7 +316,7 @@ namespace tc {
 
 				template<typename It>
 				constexpr static decltype(auto) iterator2index(It&& it) noexcept {
-					return tc::iterator2index<Rng>(std::forward<It>(it));
+					return tc::iterator2index<Rng>(tc_move_if_owned(it));
 				}
 			};
 		}
@@ -452,7 +452,7 @@ namespace tc {
 			template<typename Self>
 			static constexpr auto base_ranges(Self&& self) noexcept { // TODO C++23 deducing *this
 				return tc::tuple_transform(
-					std::forward<Self>(self).m_tupleadaptbaserng,
+					tc_move_if_owned(self).m_tupleadaptbaserng,
 					tc_mem_fn_xvalue_by_ref(.base_range)
 				);
 			}

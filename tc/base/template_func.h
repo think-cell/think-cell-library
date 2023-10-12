@@ -32,19 +32,19 @@
 	} \
 	template<typename... Args> requires \
 		name ## _detail::has_adl_ ## name ## _impl<Args...> \
-	constexpr decltype(auto) name(Args&& ... args) noexcept(noexcept(name ## _impl(std::forward<Args>(args)...))) { \
-		return name ## _impl(std::forward<Args>(args)...); \
+	constexpr decltype(auto) name(Args&& ... args) noexcept(noexcept(name ## _impl(tc_move_if_owned(args)...))) { \
+		return name ## _impl(tc_move_if_owned(args)...); \
 	} \
 	template<typename... Args> requires \
 		(!name ## _detail::has_adl_ ## name ## _impl<Args...>) && \
 		name ## _detail::has_adl_tag_ ## name ## _impl<Args...> \
-	constexpr decltype(auto) name(Args&& ... args) noexcept(noexcept(name ## _impl(name ## _adl::adl_tag, std::forward<Args>(args)...))) { \
-		return name ## _impl(name ## _adl::adl_tag, std::forward<Args>(args)...); \
+	constexpr decltype(auto) name(Args&& ... args) noexcept(noexcept(name ## _impl(name ## _adl::adl_tag, tc_move_if_owned(args)...))) { \
+		return name ## _impl(name ## _adl::adl_tag, tc_move_if_owned(args)...); \
 	} \
 	template<typename... Args> requires \
 		(!name ## _detail::has_adl_ ## name ## _impl<Args...>) && \
 		(!name ## _detail::has_adl_tag_ ## name ## _impl<Args...>) && \
 		name ## _detail::has_default_ ## name ## _impl<Args...> \
-	constexpr decltype(auto) name(Args&& ... args) noexcept(noexcept(name ## _default:: name ## _impl(std::forward<Args>(args)...))) { \
-		return name ## _default:: name ## _impl(std::forward<Args>(args)...); \
+	constexpr decltype(auto) name(Args&& ... args) noexcept(noexcept(name ## _default:: name ## _impl(tc_move_if_owned(args)...))) { \
+		return name ## _default:: name ## _impl(tc_move_if_owned(args)...); \
 	}

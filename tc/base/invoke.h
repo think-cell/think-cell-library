@@ -28,7 +28,7 @@ namespace tc {
 			template<std::size_t I>
 			static constexpr decltype(auto) select(Arg&& arg) noexcept {
 				static_assert(0 == I);
-				return std::forward<Arg>(arg);
+				return tc_move_if_owned(arg);
 			}
 		};
 
@@ -44,7 +44,7 @@ namespace tc {
 		struct expanded<Tuple> final : expanded_tuple<Tuple, std::make_index_sequence<std::tuple_size<std::remove_reference_t<Tuple>>::value>> {
 			template<std::size_t I>
 			static constexpr decltype(auto) select(Tuple&& tpl) noexcept {
-				return tc::get<I>(std::forward<Tuple>(tpl));
+				return tc::get<I>(tc_move_if_owned(tpl));
 			}
 		};
 
@@ -101,7 +101,7 @@ namespace tc {
 			using source_indices = expanded_argument_source_indices<tc::type::size<typename expanded<Args>::arguments>::value...>;
 			template<std::size_t nExpandedIndex, typename Arg>
 			static constexpr decltype(auto) select_elem(Arg&& arg) noexcept {
-				return expanded<Arg>::template select<source_indices::value.m_asrcidx[nExpandedIndex].m_nElement>(std::forward<Arg>(arg));
+				return expanded<Arg>::template select<source_indices::value.m_asrcidx[nExpandedIndex].m_nElement>(tc_move_if_owned(arg));
 			}
 
 		public:
@@ -109,7 +109,7 @@ namespace tc {
 
 			template<std::size_t nExpandedIndex>
 			static constexpr decltype(auto) select(Args&&... args) noexcept {
-				return select_elem<nExpandedIndex>(tc::select_nth<source_indices::value.m_asrcidx[nExpandedIndex].m_nArg>(std::forward<Args>(args)...));
+				return select_elem<nExpandedIndex>(tc::select_nth<source_indices::value.m_asrcidx[nExpandedIndex].m_nArg>(tc_move_if_owned(args)...));
 			}
 		};
 
@@ -126,7 +126,7 @@ namespace tc {
 	template <typename Func, typename... Args, std::enable_if_t<invoke_no_adl::is_directly_invocable<void, Func, Args...>::value>* = nullptr>
 	constexpr auto invoke(Func&& func, Args&&... args) return_decltype_xvalue_by_ref_MAYTHROW(
 		// We do not care for pointer to member function and pointer to data member, so we skip std::invoke.
-		std::forward<Func>(func)(std::forward<Args>(args)...) // MAYTHROW
+		tc_move_if_owned(func)(tc_move_if_owned(args)...) // MAYTHROW
 	)
 
 	namespace expanding_invoke_adl {
@@ -145,8 +145,8 @@ namespace tc {
 		expanding_invoke_impl( // use ADL to delay lookup of expanding_invoke_impl to point of instantiation
 			expanding_invoke_adl::expand_tag_t(),
 			typename invoke_no_adl::expanded_arguments<Args...>::index_sequence(),
-			std::forward<Func>(func),
-			std::forward<Args>(args)...
+			tc_move_if_owned(func),
+			tc_move_if_owned(args)...
 		) // recursive MAYTHROW
 	)
 
@@ -154,8 +154,8 @@ namespace tc {
 		template <std::size_t... nExpandedIndex, typename Func, typename... Args>
 		static constexpr auto expanding_invoke_impl( expand_tag_t, std::index_sequence<nExpandedIndex...>, Func&& func, Args&&... args) return_decltype_xvalue_by_ref_MAYTHROW(
 			tc::invoke(
-				std::forward<Func>(func),
-				invoke_no_adl::expanded_arguments<Args...>::template select<nExpandedIndex>(std::forward<Args>(args)...)...
+				tc_move_if_owned(func),
+				invoke_no_adl::expanded_arguments<Args...>::template select<nExpandedIndex>(tc_move_if_owned(args)...)...
 			) // recursive MAYTHROW
 		)
 	}
@@ -163,7 +163,7 @@ namespace tc {
 	//////////////////////////////////////////////////////////////////////////
 	// concepts
 	template <typename Func, typename... Args>
-	concept invocable = requires(Func&& f, Args&&... args) { tc::invoke(std::forward<Func>(f), std::forward<Args>(args)...); };
+	concept invocable = requires(Func&& f, Args&&... args) { tc::invoke(tc_move_if_owned(f), tc_move_if_owned(args)...); };
 	template <typename Func, typename... Args>
 	concept nothrow_invocable = tc::invocable<Func, Args...> && noexcept(tc::invoke(std::declval<Func>(), std::declval<Args>()...));
 

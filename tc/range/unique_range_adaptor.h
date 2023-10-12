@@ -151,7 +151,7 @@ namespace tc {
 					}();
 				} else {
 					std::optional<tc::range_value_t<decltype(std::declval<Self>().base_range())>> ovalLast;
-					return tc::for_each(std::forward<Self>(self).base_range(), [&](auto&& elem) MAYTHROW {
+					return tc::for_each(tc_move_if_owned(self).base_range(), [&](auto&& elem) MAYTHROW {
 						bool const bSkip = tc::and_then(ovalLast, [&](auto const& valLast) MAYTHROW {
 							return self.m_equals(valLast, tc::as_const(elem)); // MAYTHROW
 						});
@@ -307,7 +307,7 @@ namespace tc {
 				tc::decayed_derived_from<PartitionRange, partition_range_adaptor>
 			>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
 			friend constexpr auto join_impl(PartitionRange&& partrng) return_decltype_xvalue_by_ref_noexcept(
-				std::forward<PartitionRange>(partrng).base_range()
+				tc_move_if_owned(partrng).base_range()
 			)
 
 			template<typename SubPartitionRange, std::enable_if_t<
@@ -320,9 +320,9 @@ namespace tc {
 			>* = nullptr>
 			friend constexpr auto join_impl(SubPartitionRange&& subpartrng) return_decltype_noexcept(
 				tc::slice(
-					std::forward<SubPartitionRange>(subpartrng).base_range().base_range(),
-					std::forward<SubPartitionRange>(subpartrng).begin_index().m_idxBegin,
-					std::forward<SubPartitionRange>(subpartrng).end_index().m_idxBegin
+					tc_move_if_owned(subpartrng).base_range().base_range(),
+					tc_move_if_owned(subpartrng).begin_index().m_idxBegin,
+					tc_move_if_owned(subpartrng).end_index().m_idxBegin
 				)
 			)
 		};
@@ -341,8 +341,8 @@ namespace tc {
 		public:
 			template<typename RhsRng, typename RhsEquals>
 			constexpr unique_range_front_adaptor(RhsRng&& rng, RhsEquals&& equals) noexcept
-				: this_type::partition_range_adaptor(tc::aggregate_tag, std::forward<RhsRng>(rng))
-				, m_equals(std::forward<RhsEquals>(equals))
+				: this_type::partition_range_adaptor(tc::aggregate_tag, tc_move_if_owned(rng))
+				, m_equals(tc_move_if_owned(equals))
 			{}
 
 		private:
@@ -367,8 +367,8 @@ namespace tc {
 		public:
 			template<typename RhsRng, typename RhsEquals>
 			explicit unique_range_adjacent_adaptor(RhsRng&& rng, RhsEquals&& equals) noexcept
-				: this_type::partition_range_adaptor(tc::aggregate_tag, std::forward<RhsRng>(rng))
-				, m_equals(std::forward<RhsEquals>(equals))
+				: this_type::partition_range_adaptor(tc::aggregate_tag, tc_move_if_owned(rng))
+				, m_equals(tc_move_if_owned(equals))
 			{}
 
 		private:
@@ -402,12 +402,12 @@ namespace tc {
 	>
 	constexpr auto front_unique_range(Rng&& rng, Equals&& equals) return_ctor_noexcept(
 		TC_FWD(unique_range_front_adaptor< Rng, tc::decay_t<Equals> >),
-		(std::forward<Rng>(rng), std::forward<Equals>(equals))
+		(tc_move_if_owned(rng), tc_move_if_owned(equals))
 	)
 
 	template< typename Rng >
 	constexpr auto front_unique_range(Rng&& rng) return_decltype_noexcept(
-		front_unique_range(std::forward<Rng>(rng),tc::fn_equal_to())
+		front_unique_range(tc_move_if_owned(rng),tc::fn_equal_to())
 	)
 
 	template<
@@ -416,12 +416,12 @@ namespace tc {
 	>
 	auto adjacent_unique_range(Rng&& rng, Equals&& equals) return_ctor_noexcept(
 		TC_FWD(unique_range_adjacent_adaptor< Rng, tc::decay_t<Equals> >),
-		(std::forward<Rng>(rng), std::forward<Equals>(equals))
+		(tc_move_if_owned(rng), tc_move_if_owned(equals))
 	)
 
 	template< typename Rng >
 	auto adjacent_unique_range(Rng&& rng) return_decltype_noexcept(
-		adjacent_unique_range(std::forward<Rng>(rng), tc::fn_equal_to())
+		adjacent_unique_range(tc_move_if_owned(rng), tc::fn_equal_to())
 	)
 
 	/*
@@ -434,11 +434,11 @@ namespace tc {
 	>
 	constexpr auto adjacent_unique(Rng&& rng, Equals&& equals) return_ctor_noexcept(
 		TC_FWD(unique_adaptor< Rng, tc::decay_t<Equals> >),
-		(std::forward<Rng>(rng), std::forward<Equals>(equals))
+		(tc_move_if_owned(rng), tc_move_if_owned(equals))
 	)
 
 	template< typename Rng >
 	constexpr auto adjacent_unique(Rng&& rng) return_decltype_noexcept(
-		adjacent_unique(std::forward<Rng>(rng),tc::fn_equal_to())
+		adjacent_unique(tc_move_if_owned(rng),tc::fn_equal_to())
 	)
 }

@@ -112,7 +112,7 @@ namespace tc {
 				auto it=tc::begin(rhs);
 				auto const itEnd=tc::end(rhs);
 				for(auto itOut=begin(); itEnd!=it; ++it, ++itOut) {
-					*itOut=std::forward<T2>(VERIFYINITIALIZED(*it)); // T2 may be lvalue-reference
+					*itOut=tc_move_if_owned(VERIFYINITIALIZED(*it)); // T2 may be lvalue-reference
 				}
 				return *this;
 			}
@@ -173,7 +173,7 @@ namespace tc {
 			STATICASSERTEQUAL(N, sizeof...(IndexPack)+1);
 			return { {
 				(tc::discard(IndexPack), tc::explicit_cast<T>(tc::const_forward<Args>(args)...))...,
-				tc::explicit_cast<T>(std::forward<Args>(args)...)
+				tc::explicit_cast<T>(tc_move_if_owned(args)...)
 			} };
 		}
 
@@ -202,13 +202,13 @@ namespace tc {
 
 		template<typename T, std::size_t N, typename... Args> requires (0!=N) && tc::explicit_castable_from<T, Args&&...>
 		constexpr std::array<T, N> explicit_convert_impl(adl_tag_t, tc::type::identity<std::array<T, N>> id, tc::fill_tag_t, Args&& ... args) MAYTHROW {
-			return tc::explicit_convert_std_array_detail::with_fill_tag_impl(id, std::make_index_sequence<N-1>(), std::forward<Args>(args)...);
+			return tc::explicit_convert_std_array_detail::with_fill_tag_impl(id, std::make_index_sequence<N-1>(), tc_move_if_owned(args)...);
 		}
 
 		template<typename T, std::size_t N, typename... Args> requires (tc::explicit_castable_from<T, Args&&> && ...)
 		constexpr std::array<T, N> explicit_convert_impl(adl_tag_t, tc::type::identity<std::array<T, N>>, tc::aggregate_tag_t, Args&& ... args) MAYTHROW {
 			STATICASSERTEQUAL(sizeof...(Args), N, "array initializer list does not match number of elements");
-			return {{tc::explicit_cast<T>(std::forward<Args>(args))...}};
+			return {{tc::explicit_cast<T>(tc_move_if_owned(args))...}};
 		}
 
 		template<typename T, std::size_t N>
@@ -258,28 +258,28 @@ namespace tc {
 
 	template<typename TTarget, std::size_t N, typename Rng>
 	[[nodiscard]] constexpr auto make_array(Rng&& rng) return_decltype_MAYTHROW(
-		tc::explicit_cast<std::array<TTarget, N>>(std::forward<Rng>(rng))
+		tc::explicit_cast<std::array<TTarget, N>>(tc_move_if_owned(rng))
 	)
 
 	template<std::size_t N, typename Rng>
 	[[nodiscard]] constexpr auto make_array(Rng&& rng) return_decltype_MAYTHROW(
-		tc::make_array<tc::range_value_t<Rng>, N>(std::forward<Rng>(rng))
+		tc::make_array<tc::range_value_t<Rng>, N>(tc_move_if_owned(rng))
 	)
 
 	template<typename TTarget, typename Rng>
 	[[nodiscard]] constexpr auto make_array(Rng&& rng) return_decltype_MAYTHROW(
-		tc::make_array<TTarget, tc::constexpr_size<Rng>()>(std::forward<Rng>(rng))
+		tc::make_array<TTarget, tc::constexpr_size<Rng>()>(tc_move_if_owned(rng))
 	)
 
 	template<typename Rng>
 	[[nodiscard]] constexpr auto make_array(Rng&& rng) return_decltype_MAYTHROW(
-		tc::make_array<tc::constexpr_size<Rng>()>(std::forward<Rng>(rng))
+		tc::make_array<tc::constexpr_size<Rng>()>(tc_move_if_owned(rng))
 	)
 
 	template <typename T = tc::deduce_tag, typename... Ts> requires (!std::is_reference<T>::value)
 	[[nodiscard]] constexpr auto make_array(tc::aggregate_tag_t, Ts&&... ts) noexcept {
 		static_assert(!std::is_reference<typename no_adl::delayed_deduce<T, Ts...>::type>::value);
-		return tc::explicit_cast<std::array<typename no_adl::delayed_deduce<T, Ts...>::type, sizeof...(Ts)>>(tc::aggregate_tag, std::forward<Ts>(ts)...);
+		return tc::explicit_cast<std::array<typename no_adl::delayed_deduce<T, Ts...>::type, sizeof...(Ts)>>(tc::aggregate_tag, tc_move_if_owned(ts)...);
 	}
 
 	// If T is a reference, force argument type T for all given arguments. That way, conversions
@@ -307,7 +307,7 @@ namespace tc {
 		} else {
 			// not tc::decay_t, we want to keep reference-like proxy objects as proxy objects
 			// just like we preserve lvalue references.
-			return tc::make_array<std::remove_cv_t<T> >(tc::aggregate_tag,std::forward<T>(t));
+			return tc::make_array<std::remove_cv_t<T> >(tc::aggregate_tag,tc_move_if_owned(t));
 		}
 	}
 }

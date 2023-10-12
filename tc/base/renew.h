@@ -48,21 +48,21 @@ namespace tc {
 
 	template <typename T, typename... Args> requires (0 == sizeof...(Args)) || tc::safely_constructible_from<T, Args&&...>
 	constexpr void ctor(T& t, Args&&... args) noexcept(std::is_nothrow_constructible<T, Args&&...>::value) {
-		std::construct_at(std::addressof(t), std::forward<Args>(args)...);
+		std::construct_at(std::addressof(t), tc_move_if_owned(args)...);
 	}
 
 	template <typename T, typename... Args>
 	constexpr void ctor(T& t, Args&&... args) noexcept(noexcept(tc::explicit_cast<T>(std::declval<Args>()...))) {
 		if constexpr( std::is_move_constructible<T>::value ) {
 			if( std::is_constant_evaluated() ) {
-				tc::ctor(t, tc::explicit_cast<T>(std::forward<Args>(args)...));
+				tc::ctor(t, tc::explicit_cast<T>(tc_move_if_owned(args)...));
 				return;
 			}
 		}
 		// :: ensures that non-class scope operator new is used.
 		// cast to void* ensures that built-in placement new is used  (18.6.1.3).
 		// not using std::construct_at to guarantee copy elision.
-		::new (static_cast<void*>(std::addressof(t))) T(tc::explicit_cast<T>(std::forward<Args>(args)...)); 
+		::new (static_cast<void*>(std::addressof(t))) T(tc::explicit_cast<T>(tc_move_if_owned(args)...)); 
 	}
 
 	namespace renew_detail {
@@ -73,7 +73,7 @@ namespace tc {
 		) {
 			tc::assert_most_derived(t);
 			tc::dtor_static(t);
-			tc::ctor(t, std::forward<Args>(args)...);
+			tc::ctor(t, tc_move_if_owned(args)...);
 		}
 	}
 
@@ -91,9 +91,9 @@ namespace tc {
 	)
 
 	template< typename T, typename... Args >
-	constexpr void renew(T& t, Args&&... args) noexcept(noexcept(renew_detail::renew(t, std::forward<Args>(args)...)))	{
+	constexpr void renew(T& t, Args&&... args) noexcept(noexcept(renew_detail::renew(t, tc_move_if_owned(args)...)))	{
 		static_assert(!std::is_trivially_default_constructible<T>::value || 0 < sizeof...(Args), "You must decide between renew_default and renew_value!");
-		renew_detail::renew(t, std::forward<Args>(args)...);
+		renew_detail::renew(t, tc_move_if_owned(args)...);
 	}
 }
 
@@ -112,8 +112,8 @@ namespace tc {
 		  We adopt the same policy. \
 		- Values cannot alias. */ \
 		/* check for overlap of memory ranges, most general check for self-assignment I could come up with, even if it does not catch all cases, e.g., heap-allocated memory */ \
-		tc::assert_no_overlap(*this, std::forward<S>(s)); \
-		tc::renew( *this, std::forward<S>(s) ); \
+		tc::assert_no_overlap(*this, tc_move_if_owned(s)); \
+		tc::renew( *this, tc_move_if_owned(s) ); \
 		return *this; \
 	}
 

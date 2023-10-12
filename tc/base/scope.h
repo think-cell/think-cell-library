@@ -67,7 +67,7 @@ namespace tc {
 			// can be used to access/change saved value
 			template<typename T2>
 			constexpr scoped_restorer& operator=( T2&& t ) & noexcept {
-				m_valSaved=std::forward<T2>(t);
+				m_valSaved=tc_move_if_owned(t);
 				return *this;
 			}
 			constexpr operator tc::decay_t<T> const& () const& noexcept {
@@ -87,11 +87,11 @@ namespace tc {
 			constexpr explicit scoped_assigner( T&& var, T2&& val ) noexcept
 			:	scoped_restorer<T>( tc_move_if_owned(var), scoped_assign_tag )
 			{
-				this->m_var=std::forward<T2>(val);
+				this->m_var=tc_move_if_owned(val);
 			}
 			template<typename T2>
 			constexpr explicit scoped_assigner( scoped_change_tag_t, T&& var, T2&& val ) noexcept
-			:	scoped_assigner( std::forward<T>(var), std::forward<T2>(val) )
+			:	scoped_assigner( tc_move_if_owned(var), tc_move_if_owned(val) )
 			{
 				_ASSERT(!(this->m_var == this->m_valSaved));
 			}
@@ -108,7 +108,7 @@ namespace tc {
 			constexpr explicit scoped_assigner_better( T& var, Val&& val, Better better ) noexcept
 			:	scoped_restorer<T>( var )
 			{
-				tc::assign_better(tc_move(better), var, std::forward<Val>(val));
+				tc::assign_better(tc_move(better), var, tc_move_if_owned(val));
 			}
 		};
 	}

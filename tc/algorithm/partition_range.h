@@ -21,8 +21,8 @@ namespace tc {
 		[[nodiscard]] constexpr decltype(auto) partition_point(Rng&& rng, UnaryPredicate&& pred) noexcept {
 			static_assert( RangeReturn::allowed_if_always_has_border );
 			return RangeReturn::pack_border(
-				iterator::partition_point(tc::begin(rng), tc::end(rng), std::forward<UnaryPredicate>(pred)),
-				std::forward<Rng>(rng)
+				iterator::partition_point(tc::begin(rng), tc::end(rng), tc_move_if_owned(pred)),
+				tc_move_if_owned(rng)
 			);
 		}
 
@@ -31,7 +31,7 @@ namespace tc {
 			static_assert( RangeReturn::allowed_if_always_has_border );
 			return RangeReturn::pack_border(
 				iterator::lower_bound(tc::begin(rng), tc::end(rng), val),
-				std::forward<Rng>(rng)
+				tc_move_if_owned(rng)
 			);
 		}
 
@@ -39,8 +39,8 @@ namespace tc {
 		[[nodiscard]] decltype(auto) lower_bound(Rng&& rng, Value const& val, SortPredicate&& pred) noexcept {
 			static_assert( RangeReturn::allowed_if_always_has_border );
 			return RangeReturn::pack_border(
-				iterator::lower_bound(tc::begin(rng), tc::end(rng), val, std::forward<SortPredicate>(pred)),
-				std::forward<Rng>(rng)
+				iterator::lower_bound(tc::begin(rng), tc::end(rng), val, tc_move_if_owned(pred)),
+				tc_move_if_owned(rng)
 			);
 		}
 
@@ -49,7 +49,7 @@ namespace tc {
 			static_assert( RangeReturn::allowed_if_always_has_border );
 			return RangeReturn::pack_border(
 				iterator::upper_bound(tc::begin(rng), tc::end(rng), val),
-				std::forward<Rng>(rng)
+				tc_move_if_owned(rng)
 			);
 		}
 
@@ -57,27 +57,27 @@ namespace tc {
 		[[nodiscard]] decltype(auto) upper_bound(Rng&& rng, Value const& val, SortPredicate&& pred) noexcept {
 			static_assert( RangeReturn::allowed_if_always_has_border );
 			return RangeReturn::pack_border(
-				iterator::upper_bound(tc::begin(rng), tc::end(rng), val, std::forward<SortPredicate>(pred)),
-				std::forward<Rng>(rng)
+				iterator::upper_bound(tc::begin(rng), tc::end(rng), val, tc_move_if_owned(pred)),
+				tc_move_if_owned(rng)
 			);
 		}
 
 		template<typename Rng, typename Value>
 		[[nodiscard]] decltype(auto) equal_range(Rng&& rng, Value const& val) noexcept {
 			auto pairit = iterator::equal_range(tc::begin(rng), tc::end(rng), val);
-			return tc::slice( std::forward<Rng>(rng), tc_move(pairit.first), tc_move(pairit.second) );
+			return tc::slice( tc_move_if_owned(rng), tc_move(pairit).first, tc_move(pairit).second );
 		}
 
 		template<typename Rng, typename Value, typename SortPredicate>
 		[[nodiscard]] decltype(auto) equal_range(Rng&& rng, Value const& val, SortPredicate&& pred) noexcept {
-			auto pairit = iterator::equal_range(tc::begin(rng), tc::end(rng), val, std::forward<SortPredicate>(pred));
-			return tc::slice( std::forward<Rng>(rng), tc_move(pairit.first), tc_move(pairit.second) );
+			auto pairit = iterator::equal_range(tc::begin(rng), tc::end(rng), val, tc_move_if_owned(pred));
+			return tc::slice( tc_move_if_owned(rng), tc_move(pairit).first, tc_move(pairit).second );
 		}
 
 		template<typename Rng, typename Value>
 		[[nodiscard]] decltype(auto) contains_inclusive_range(Rng&& rng, tc::interval<Value> const& intvlval) noexcept {
 			return upper_bound<tc::return_take>(
-				lower_bound<tc::return_drop>(std::forward<Rng>(rng),intvlval[tc::lo]),
+				lower_bound<tc::return_drop>(tc_move_if_owned(rng),intvlval[tc::lo]),
 				intvlval[tc::hi]
 			);
 		}
@@ -85,7 +85,7 @@ namespace tc {
 		template<typename Rng, typename Value, typename SortPredicate>
 		[[nodiscard]] decltype(auto) contains_inclusive_range(Rng&& rng, tc::interval<Value> const& intvlval, SortPredicate&& pred) noexcept {
 			return upper_bound<tc::return_take>(
-				lower_bound<tc::return_drop>(std::forward<Rng>(rng),intvlval[tc::lo],pred),
+				lower_bound<tc::return_drop>(tc_move_if_owned(rng),intvlval[tc::lo],pred),
 				intvlval[tc::hi],
 				pred
 			);
@@ -94,7 +94,7 @@ namespace tc {
 		template<typename Rng, typename Value>
 		[[nodiscard]] decltype(auto) contains_exclusive_range(Rng&& rng, tc::interval<Value> const& intvlval) noexcept {
 			return lower_bound<tc::return_take>(
-				upper_bound<tc::return_drop>(std::forward<Rng>(rng),intvlval[tc::lo]),
+				upper_bound<tc::return_drop>(tc_move_if_owned(rng),intvlval[tc::lo]),
 				intvlval[tc::hi]
 			);
 		}
@@ -102,7 +102,7 @@ namespace tc {
 		template<typename Rng, typename Value, typename SortPredicate>
 		[[nodiscard]] decltype(auto) contains_exclusive_range(Rng&& rng, tc::interval<Value> const& intvlval, SortPredicate&& pred) noexcept {
 			return lower_bound<tc::return_take>(
-				upper_bound<tc::return_drop>(std::forward<Rng>(rng),intvlval[tc::lo],pred),
+				upper_bound<tc::return_drop>(tc_move_if_owned(rng),intvlval[tc::lo],pred),
 				intvlval[tc::hi],
 				pred
 			);

@@ -20,7 +20,7 @@ namespace tc {
 		// Replace largest item in max-heap with t.
 		// Equivalent to
 		// std::ranges::pop_heap(cont, less);
-		// tc::back(cont) = std::forward<T>(t);
+		// tc::back(cont) = tc_move_if_owned(t);
 		// std::ranges::push_heap(cont, less);
 		auto const n = tc::size_raw(cont);
 		auto const IndexAndIterator = [&](decltype(n) i) noexcept {
@@ -49,7 +49,7 @@ namespace tc {
 				break;
 			}
 		}
-		*tc::get<1>(nitHole) = std::forward<T>(t);
+		*tc::get<1>(nitHole) = tc_move_if_owned(t);
 	}
 
 	template<typename Rng, typename Less = tc::fn_less, typename PredKeep = tc::constexpr_function<false>>
@@ -59,10 +59,10 @@ namespace tc {
 		//  * not an inplace sort algorithm
 		//  * first element is generated in O(n)
 		return tc::generator_range_output<tc::range_value_t<Rng const&>&>([
-			rng = tc::make_reference_or_value(std::forward<Rng>(rng)),
+			rng = tc::make_reference_or_value(tc_move_if_owned(rng)),
 			// std heap algorithm using less create max heap, we need min heap. Hence, we use greater.
 			greater = tc::reverse_binary_rel(less),
-			predKeep = tc::decay_copy(std::forward<PredKeep>(predKeep))
+			predKeep = tc::decay_copy(tc_move_if_owned(predKeep))
 		](auto&& sink) MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(sink, std::declval<tc::range_value_t<Rng const&>&>())), tc::constant<tc::continue_>> {
 			auto vec = tc::make_vector(*rng);
 			boost::range::make_heap(vec, greater);

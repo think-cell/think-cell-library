@@ -10,7 +10,7 @@
 
 #include "assert_defs.h"
 #include "functors.h"
-#include "tc_move.h"
+#include "move.h"
 
 #include "return_decltype.h"
 #include "type_traits_fwd.h"
@@ -98,13 +98,13 @@ namespace tc {
 	template<typename To, typename From>
 	[[nodiscard]] constexpr decltype(auto) derived_cast(From&& t) noexcept {
 		STATICASSERTSAME(std::remove_reference_t<To>, To);
-		return tc::derived_cast_detail::derived_cast_internal(tc::type::identity<To>(), std::forward<From>(t), /*bChecked*/tc::constant<true>());
+		return tc::derived_cast_detail::derived_cast_internal(tc::type::identity<To>(), tc_move_if_owned(t), /*bChecked*/tc::constant<true>());
 	}
 
 	template<typename To, typename From>
 	[[nodiscard]] constexpr decltype(auto) unchecked_derived_cast(From&& t) noexcept {
 		STATICASSERTSAME(std::remove_reference_t<To>, To);
-		return tc::derived_cast_detail::derived_cast_internal(tc::type::identity<To>(), std::forward<From>(t), /*bChecked*/tc::constant<false>());
+		return tc::derived_cast_detail::derived_cast_internal(tc::type::identity<To>(), tc_move_if_owned(t), /*bChecked*/tc::constant<false>());
 	}
 
 	/////////////////////////////////////////////
@@ -193,7 +193,7 @@ namespace tc {
 		template <typename T>
 		[[nodiscard]] constexpr T&& as_const(T&& t) noexcept { // needed in generic code when both values and references can occur
 			static_assert(!std::is_lvalue_reference<T&&>::value);
-			return std::forward<T&&>(t);
+			return static_cast<T&&>(t);
 		}
 
 		template< typename T >
@@ -253,7 +253,7 @@ namespace tc {
 
 	template<typename TTarget, typename TSource> requires (!tc::actual_integer<std::remove_reference_t<TSource>>) && tc::safely_convertible_to<TSource&&, TTarget>
 	[[nodiscard]] constexpr TTarget implicit_cast(TSource&& src) noexcept {
-		return std::forward<TSource>(src);
+		return tc_move_if_owned(src);
 	}
 
 	// bit filed cannot bind to universal reference
@@ -275,7 +275,7 @@ MODIFY_WARNINGS_END
 		TTarget
 	> reluctant_implicit_cast(TSource&& src) noexcept {
 		STATICASSERTSAME(std::remove_cvref_t<TTarget>, TTarget);
-		return std::forward<TSource>(src);
+		return tc_move_if_owned(src);
 	}
 
 	/////////////////////////////////////////////

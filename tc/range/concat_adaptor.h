@@ -62,14 +62,14 @@ namespace tc {
 
 				template<typename RngAdaptor>
 				constexpr auto operator()(RngAdaptor&& rngadaptor) const& return_MAYTHROW(
-					tc::for_each(std::forward<RngAdaptor>(rngadaptor).base_range(), m_sink)
+					tc::for_each(tc_move_if_owned(rngadaptor).base_range(), m_sink)
 				)
 			};
 		}
 
 		template<typename Sink>
 		constexpr auto make_sink(Sink&& sink) noexcept { // not inline in for_each_impl because of MSVC
-			return no_adl::sink<tc::decay_t<Sink>>{std::forward<Sink>(sink)};
+			return no_adl::sink<tc::decay_t<Sink>>{tc_move_if_owned(sink)};
 		}
 	}
 
@@ -85,7 +85,7 @@ namespace tc {
 		public:
 			template<typename... Rhs>
 			constexpr concat_adaptor_impl(tc::aggregate_tag_t, Rhs&&... rhs) noexcept
-				: m_tupleadaptbaserng{{ {{tc::aggregate_tag, std::forward<Rhs>(rhs)}}... }}
+				: m_tupleadaptbaserng{{ {{tc::aggregate_tag, tc_move_if_owned(rhs)}}... }}
 			{}
 
 			using index_seq = std::make_index_sequence<sizeof...(Rng)>;
@@ -122,15 +122,15 @@ namespace tc {
 		template<typename Self, typename Sink> requires concat_detail::no_adl::has_for_each<Self, Sink>::value
 		constexpr auto for_each_impl(Self&& self, Sink&& sink) return_MAYTHROW(
 			tc::for_each(
-				std::forward<Self>(self).m_tupleadaptbaserng,
-				concat_detail::make_sink(std::forward<Sink>(sink))
+				tc_move_if_owned(self).m_tupleadaptbaserng,
+				concat_detail::make_sink(tc_move_if_owned(sink))
 			)
 		)
 
 		template<typename Self, typename Sink> requires tc::is_concat_range<std::remove_cvref_t<Self>>::value
 		constexpr auto for_each_reverse_impl(Self&& self, Sink&& sink) MAYTHROW {
 			return tc::for_each(
-				tc::reverse(std::forward<Self>(self).m_tupleadaptbaserng),
+				tc::reverse(tc_move_if_owned(self).m_tupleadaptbaserng),
 				[&](auto&& rngadaptor) MAYTHROW {
 					return tc::for_each(tc::reverse(tc_move_if_owned(rngadaptor).base_range()), sink);
 				}
@@ -139,7 +139,7 @@ namespace tc {
 
 		template<typename ConcatRng, std::size_t... I>
 		[[nodiscard]] constexpr auto forward_base_ranges_as_tuple(ConcatRng&& rng, std::index_sequence<I...>) noexcept {
-			return tc::forward_as_tuple(tc::get<I>(std::forward<ConcatRng>(rng).m_tupleadaptbaserng).base_range()...);
+			return tc::forward_as_tuple(tc::get<I>(tc_move_if_owned(rng).m_tupleadaptbaserng).base_range()...);
 		}
 
 		struct concat_end_index final {
@@ -442,12 +442,12 @@ MODIFY_WARNINGS(((suppress)(4544))) // 'Func2': default template argument ignore
 
 			template<typename Rng>
 			[[nodiscard]] constexpr decltype(auto) operator()(Rng&& rng) const& noexcept {
-				return std::forward<Rng>(rng);
+				return tc_move_if_owned(rng);
 			}
 
 			template<typename... Rng> requires (1<sizeof...(Rng))
 			[[nodiscard]] constexpr auto operator()(Rng&&... rng) const& noexcept {
-				return tc::concat_adaptor<std::remove_cv_t<Rng>...>(tc::aggregate_tag, std::forward<Rng>(rng)...);
+				return tc::concat_adaptor<std::remove_cv_t<Rng>...>(tc::aggregate_tag, tc_move_if_owned(rng)...);
 			}
 		};
 	}
@@ -458,15 +458,15 @@ MODIFY_WARNINGS(((suppress)(4544))) // 'Func2': default template argument ignore
 			if constexpr( tc::safely_convertible_to<Rng&&, tc::empty_range> ) {
 				return tc::tuple<>{};
 			} else if constexpr( tc::is_concat_range<std::remove_cvref_t<Rng>>::value ) {
-				return forward_base_ranges_as_tuple(std::forward<Rng>(rng), typename std::remove_cvref_t<Rng>::index_seq());
+				return forward_base_ranges_as_tuple(tc_move_if_owned(rng), typename std::remove_cvref_t<Rng>::index_seq());
 			} else {
-				return tc::forward_as_tuple(std::forward<Rng>(rng));
+				return tc::forward_as_tuple(tc_move_if_owned(rng));
 			}
 		}
 	}
 
 	template<typename... Rng>
 	[[nodiscard]] constexpr decltype(auto) concat(Rng&&... rng) noexcept {
-		return tc::apply(tc::no_adl::fn_concat_impl(), tc::tuple_cat(tc::concat_detail::forward_range_as_tuple(std::forward<Rng>(rng))...));
+		return tc::apply(tc::no_adl::fn_concat_impl(), tc::tuple_cat(tc::concat_detail::forward_range_as_tuple(tc_move_if_owned(rng))...));
 	}
 }

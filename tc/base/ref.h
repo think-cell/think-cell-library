@@ -54,7 +54,7 @@ namespace tc {
 		struct make_type_erased_function_ptr final {
 			tc::no_adl::type_erased_function_ptr<bNoExcept, Ret, Args...> operator()() const& noexcept {
 				return [](tc::no_adl::any_ref anyref, Args... args) noexcept(bNoExcept) -> Ret { // implicit cast of stateless lambda to function pointer
-					return tc::invoke(anyref.get_ref<Func>(), std::forward<Args>(args)...); // MAYTHROW unless bNoExcept
+					return tc::invoke(anyref.get_ref<Func>(), tc_move_if_owned(args)...); // MAYTHROW unless bNoExcept
 				};
 			}
 		};
@@ -63,7 +63,7 @@ namespace tc {
 		struct make_type_erased_function_ptr<bNoExcept, Func, void, Args...> final {
 			tc::no_adl::type_erased_function_ptr<bNoExcept, void, Args...> operator()() const& noexcept {
 				return [](tc::no_adl::any_ref anyref, Args... args) noexcept(bNoExcept) { // implicit cast of stateless lambda to function pointer
-					tc::invoke(anyref.get_ref<Func>(), std::forward<Args>(args)...); // MAYTHROW unless bNoExcept
+					tc::invoke(anyref.get_ref<Func>(), tc_move_if_owned(args)...); // MAYTHROW unless bNoExcept
 				};
 			}
 		};
@@ -73,7 +73,7 @@ namespace tc {
 			tc::no_adl::type_erased_function_ptr<bNoExcept, tc::break_or_continue, Args...> operator()() const& noexcept {
 				return [](tc::no_adl::any_ref anyref, Args... args) noexcept(bNoExcept) -> tc::break_or_continue { // implicit cast of stateless lambda to function pointer
 					// Not tc::continue_if_not_break because it casts sink to const&.
-					return tc_internal_continue_if_not_break(tc::invoke(anyref.get_ref<Func>(), std::forward<Args>(args)...)); // MAYTHROW unless bNoExcept
+					return tc_internal_continue_if_not_break(tc::invoke(anyref.get_ref<Func>(), tc_move_if_owned(args)...)); // MAYTHROW unless bNoExcept
 				};
 			}
 		};
@@ -83,7 +83,7 @@ namespace tc {
 			function_ref_base(function_ref_base const&) noexcept = default;
 
 			Ret operator()(Args... args) const& noexcept(bNoExcept) {
-				return m_pfuncTypeErased(m_anyref, std::forward<Args>(args)...); // MAYTHROW unless bNoExcept
+				return m_pfuncTypeErased(m_anyref, tc_move_if_owned(args)...); // MAYTHROW unless bNoExcept
 			}
 				
 			template <typename Func> requires

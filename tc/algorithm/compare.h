@@ -252,15 +252,15 @@ namespace tc {
 
 	template< typename Lhs, typename Rhs, typename FnCompare = tc::fn_compare >
 	[[nodiscard]] constexpr auto lexicographical_compare_3way(Lhs const& lhs, Rhs const& rhs, FnCompare&& fnCompare = FnCompare()) noexcept {
-		return lexicographical_compare_3way_detail::lexicographical_compare_3way_impl<lexicographical_compare_3way_detail::eprefixALLOW>(lhs, rhs, std::forward<FnCompare>(fnCompare));
+		return lexicographical_compare_3way_detail::lexicographical_compare_3way_impl<lexicographical_compare_3way_detail::eprefixALLOW>(lhs, rhs, tc_move_if_owned(fnCompare));
 	}
 	template< typename Lhs, typename Rhs, typename FnCompare = tc::fn_compare >
 	[[nodiscard]] constexpr auto lexicographical_compare_3way_noprefix(Lhs const& lhs, Rhs const& rhs, FnCompare&& fnCompare = FnCompare()) noexcept {
-		return lexicographical_compare_3way_detail::lexicographical_compare_3way_impl<lexicographical_compare_3way_detail::eprefixFORBID>(lhs, rhs, std::forward<FnCompare>(fnCompare));
+		return lexicographical_compare_3way_detail::lexicographical_compare_3way_impl<lexicographical_compare_3way_detail::eprefixFORBID>(lhs, rhs, tc_move_if_owned(fnCompare));
 	}
 	template< typename Lhs, typename Rhs, typename FnCompare = tc::fn_compare >
 	[[nodiscard]] constexpr auto lexicographical_compare_3way_prefixequivalence(Lhs const& lhs, Rhs const& rhs, FnCompare&& fnCompare = FnCompare()) noexcept {
-		return lexicographical_compare_3way_detail::lexicographical_compare_3way_impl<lexicographical_compare_3way_detail::eprefixEQUIVALENT>(lhs, rhs, std::forward<FnCompare>(fnCompare));
+		return lexicographical_compare_3way_detail::lexicographical_compare_3way_impl<lexicographical_compare_3way_detail::eprefixEQUIVALENT>(lhs, rhs, tc_move_if_owned(fnCompare));
 	}
 
 	tc_define_fn( lexicographical_compare_3way );
@@ -353,10 +353,10 @@ namespace tc {
 			template< typename... Args >
 			constexpr auto operator()(Args&& ... args) const& MAYTHROW -> tc::transform_return_t<
 				Func,
-				decltype(tc::invoke(m_func, tc::invoke(m_transform, std::forward<Args>(args))...)),
-				decltype(tc::invoke(m_transform, std::forward<Args>(args)))...
+				decltype(tc::invoke(m_func, tc::invoke(m_transform, tc_move_if_owned(args))...)),
+				decltype(tc::invoke(m_transform, tc_move_if_owned(args)))...
 			> {
-				return tc::invoke(m_func, tc::invoke(m_transform, std::forward<Args>(args))...);
+				return tc::invoke(m_func, tc::invoke(m_transform, tc_move_if_owned(args))...);
 			}
 		};
 	}
@@ -364,9 +364,9 @@ namespace tc {
 	template< typename Func, typename Transform >
 	constexpr decltype(auto) projected(Func&& func, Transform&& transform) noexcept {
 		if constexpr( std::is_same<tc::decay_t<Transform>, tc::identity>::value ) {
-			return std::forward<Func>(func);
+			return tc_move_if_owned(func);
 		} else {
-			return no_adl::projected_impl<Func, Transform>{ std::forward<Func>(func), std::forward<Transform>(transform) };
+			return no_adl::projected_impl<Func, Transform>{ tc_move_if_owned(func), tc_move_if_owned(transform) };
 		}
 	}
 
@@ -375,7 +375,7 @@ namespace tc {
 
 	template<typename Pred>
 	auto reverse_binary_rel(Pred&& pred) noexcept {
-		return [pred=tc::decay_copy(std::forward<Pred>(pred))](auto const& lhs, auto const& rhs) noexcept {
+		return [pred=tc::decay_copy(tc_move_if_owned(pred))](auto const& lhs, auto const& rhs) noexcept {
 			return pred(rhs, lhs);
 		};
 	}
@@ -385,17 +385,17 @@ namespace tc {
 
 	template< typename FCompare>
 	constexpr auto lessfrom3way( FCompare&& fnCompare ) noexcept {
-		return tc::chained(tc_fn(std::is_lt), std::forward<FCompare>(fnCompare));
+		return tc::chained(tc_fn(std::is_lt), tc_move_if_owned(fnCompare));
 	}
 
 	template< typename FCompare>
 	constexpr auto greaterfrom3way( FCompare&& fnCompare ) noexcept {
-		return tc::chained(tc_fn(std::is_gt), std::forward<FCompare>(fnCompare));
+		return tc::chained(tc_fn(std::is_gt), tc_move_if_owned(fnCompare));
 	}
 
 	template< typename FCompare>
 	constexpr auto equalfrom3way( FCompare&& fnCompare ) noexcept {
-		return tc::chained(tc_fn(tc::is_eq), std::forward<FCompare>(fnCompare));
+		return tc::chained(tc_fn(tc::is_eq), tc_move_if_owned(fnCompare));
 	}
 
 	namespace tuple_adl {

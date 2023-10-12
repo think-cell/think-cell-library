@@ -25,7 +25,7 @@ namespace tc {
 
 			template<typename Sink>
 			constexpr friend decltype(auto) for_each_impl(make_lazy_range&& self, Sink&& sink) MAYTHROW {
-				return tc::for_each(tc_move(self).m_func(), std::forward<Sink>(sink));
+				return tc::for_each(tc_move(self).m_func(), tc_move_if_owned(sink));
 			}
 
 			friend auto range_output_t_impl(make_lazy_range&&) noexcept -> tc::range_output_t<decltype(std::declval<Func&&>()())>; // declaration only

@@ -23,7 +23,7 @@ namespace tc {
 			boost::iterators::random_access_traversal_tag
 		> && requires { itBound - it; } ) {
 			if (tc::assign_better(tc::fn_less_equal(), n, tc::make_size_proxy(itBound - it))) {
-				it = std::forward<Sentinel>(itBound);
+				it = tc_move_if_owned(itBound);
 			} else {
 				it += n;
 			}

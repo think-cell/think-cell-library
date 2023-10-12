@@ -158,14 +158,14 @@ namespace tc {
 			static constexpr interval<T> from_extent_impl( TPos&& pos, TExtent&& extent, tc::lohi const lohi ) noexcept {
 				switch_no_default(lohi) {
 					case tc::lo: {
-						auto end = pos + std::forward<TExtent>(extent);
+						auto end = pos + tc_move_if_owned(extent);
 						static_assert(tc::safely_convertible_to<decltype(end)&&, T>, "Cannot initialize an interval with an unsafe conversion");
-						return interval<T>(std::forward<TPos>(pos), tc_move(end));
+						return interval<T>(tc_move_if_owned(pos), tc_move(end));
 					}
 					case tc::hi: {
-						auto begin = pos - std::forward<TExtent>(extent);
+						auto begin = pos - tc_move_if_owned(extent);
 						static_assert(tc::safely_convertible_to<decltype(begin)&&, T>, "Cannot initialize an interval with an unsafe conversion");
-						return interval<T>(tc_move(begin), std::forward<TPos>(pos));
+						return interval<T>(tc_move(begin), tc_move_if_owned(pos));
 					}
 				}
 			}
@@ -174,8 +174,8 @@ namespace tc {
 			static constexpr interval<T> centered_interval_impl(TPos&& pos, TExtent&& extent) noexcept {
 				STATICASSERTSAME(tc::decay_t<TExtent>, difference_type, "Ambiguous interpretation: convert the base position or the provided extent, so that their types match");
 				// make use of the precondition center(a + c, b + c) = c + center(a, b)
-				auto begin = std::forward<TPos>(pos) - tc::internal_lower_half<bGeneralized>(extent);
-				auto end = begin + std::forward<TExtent>(extent);
+				auto begin = tc_move_if_owned(pos) - tc::internal_lower_half<bGeneralized>(extent);
+				auto end = begin + tc_move_if_owned(extent);
 				static_assert( tc::safely_convertible_to<decltype(begin)&&, T> );
 				static_assert( tc::safely_convertible_to<decltype(end)&&, T> );
 				return interval<T>( tc_move(begin), tc_move(end) );
@@ -185,13 +185,13 @@ namespace tc {
 			template< typename TPos, typename TExtent >
 			[[nodiscard]] static constexpr interval<T> from_extent( TPos&& pos, TExtent&& extent, tc::lohi const lohi ) noexcept
 			{
-				return from_extent_impl(std::forward<TPos>(pos), std::forward<TExtent>(extent), lohi);
+				return from_extent_impl(tc_move_if_owned(pos), tc_move_if_owned(extent), lohi);
 			}
 
 			template< bool bGeneralized, typename TPos, typename TExtent >
 			[[nodiscard]] static constexpr interval<T> centered_interval(TPos&& pos, TExtent&& extent) noexcept 
 			{
-				return centered_interval_impl<bGeneralized>(std::forward<TPos>(pos), std::forward<TExtent>(extent));
+				return centered_interval_impl<bGeneralized>(tc_move_if_owned(pos), tc_move_if_owned(extent));
 			}
 
 			template< typename TPos, typename TExtent >
@@ -199,13 +199,13 @@ namespace tc {
 			{
 				switch_no_default(ealign) {
 					case ealignLOW: {
-						return from_extent_impl(std::forward<TPos>(pos), std::forward<TExtent>(extent), tc::lo);
+						return from_extent_impl(tc_move_if_owned(pos), tc_move_if_owned(extent), tc::lo);
 					}
 					case ealignHIGH: {
-						return from_extent_impl(std::forward<TPos>(pos), std::forward<TExtent>(extent), tc::hi);
+						return from_extent_impl(tc_move_if_owned(pos), tc_move_if_owned(extent), tc::hi);
 					}
 					case ealignCENTER: {
-						return centered_interval_impl</*bGeneralized*/false>(std::forward<TPos>(pos), std::forward<TExtent>(extent));
+						return centered_interval_impl</*bGeneralized*/false>(tc_move_if_owned(pos), tc_move_if_owned(extent));
 					}
 				}
 			}
@@ -213,12 +213,12 @@ namespace tc {
 			template< typename TExtent >
 			constexpr void expand(TExtent&& extent) & noexcept {
 				(*this)[tc::lo] -= extent;
-				(*this)[tc::hi] += std::forward<TExtent>(extent);
+				(*this)[tc::hi] += tc_move_if_owned(extent);
 			}
 
 			template< typename TExtent >
 			constexpr void expand_to(TExtent&& extent) {
-				*this = interval<newT>::template centered_interval</*bGeneralized*/true>(tc::internal_midpoint</*bGeneralized*/true>((*this)[tc::lo], (*this)[tc::hi]), std::forward<TExtent>(extent));
+				*this = interval<newT>::template centered_interval</*bGeneralized*/true>(tc::internal_midpoint</*bGeneralized*/true>((*this)[tc::lo], (*this)[tc::hi]), tc_move_if_owned(extent));
 			}
 
 			constexpr void expand_to_integer() & noexcept {
@@ -237,13 +237,13 @@ namespace tc {
 
 			template< typename TExtent >
 			constexpr void expand_length(TExtent&& extent) & noexcept {
-				expand_to(length() + std::forward<TExtent>(extent));
+				expand_to(length() + tc_move_if_owned(extent));
 			}
 
 			template< typename TExtent >
 			constexpr void ensure_length(TExtent&& extent) & noexcept {
 				if (length() < extent) {
-					expand_to(std::forward<TExtent>(extent));
+					expand_to(tc_move_if_owned(extent));
 				}
 			}
 
@@ -319,7 +319,7 @@ namespace tc {
 				if( t<(*this)[tc::lo] ) {
 					return (*this)[tc::lo];
 				} else {
-					return tc::min(tc_modified((*this)[tc::hi], --_), std::forward<T2>(t));
+					return tc::min(tc_modified((*this)[tc::hi], --_), tc_move_if_owned(t));
 				}
 			}
 
@@ -468,8 +468,8 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 					"Consider tc::all_values_interval<T> != tc::all_values_interval<U>. "
 					"Use implicit_cast to enable the operation."
 				);
-				tc::assign_max( (*this)[tc::lo], std::forward<Rhs>(rhs)[tc::lo] );
-				tc::assign_min( (*this)[tc::hi], std::forward<Rhs>(rhs)[tc::hi] );
+				tc::assign_max( (*this)[tc::lo], tc_move_if_owned(rhs)[tc::lo] );
+				tc::assign_min( (*this)[tc::hi], tc_move_if_owned(rhs)[tc::hi] );
 				return *this;
 			}
 
@@ -483,7 +483,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 			constexpr void include(U&& u) & noexcept {
 				static_assert( tc::safely_convertible_to<U&&, newT> );
 				_ASSERTE( EmptyInterval()==*this || !empty() );
-				newT t = std::forward<U>(u);
+				newT t = tc_move_if_owned(u);
 				tc::assign_min( (*this)[tc::lo], t );
 				tc::nextafter_inplace(t);
 				tc::assign_max( (*this)[tc::hi], tc_move(t) );
@@ -493,7 +493,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 			constexpr void include_inclusive(U&& u) & noexcept {
 				_ASSERTE( EmptyInterval()==*this || !empty_inclusive() );
 				tc::assign_min( (*this)[tc::lo], u );
-				tc::assign_max( (*this)[tc::hi], std::forward<U>(u) );
+				tc::assign_max( (*this)[tc::hi], tc_move_if_owned(u) );
 			}
 
 			template<typename Rhs> requires tc::instance_or_derived<std::remove_reference_t<Rhs>, tc::interval>
@@ -506,8 +506,8 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 				);
 				_ASSERTDEBUG( EmptyInterval()==*this || !empty_inclusive() );
 				_ASSERTDEBUG( rhs.EmptyInterval()==rhs || !rhs.empty_inclusive() );
-				tc::assign_min( (*this)[tc::lo], std::forward<Rhs>(rhs)[tc::lo] );
-				tc::assign_max( (*this)[tc::hi], std::forward<Rhs>(rhs)[tc::hi] );
+				tc::assign_min( (*this)[tc::lo], tc_move_if_owned(rhs)[tc::lo] );
+				tc::assign_max( (*this)[tc::hi], tc_move_if_owned(rhs)[tc::hi] );
 				return *this;
 			}
 			[[nodiscard]] constexpr interval<newT> operator-() const& noexcept {
@@ -613,7 +613,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 	// tc::common_type_t is already decayed
 	template<typename T1, typename T2>
 	[[nodiscard]] constexpr auto make_interval(T1&& begin, T2&& end) return_ctor_MAYTHROW( // MAYTHROW if the conversion from T1 or T2 to their common_type may throw. (or their copy constructor, if they are the same type)
-		TC_FWD(interval<tc::common_type_t<T1, T2>>), (std::forward<T1>(begin), std::forward<T2>(end))
+		TC_FWD(interval<tc::common_type_t<T1, T2>>), (tc_move_if_owned(begin), tc_move_if_owned(end))
 	)
 
 	template<typename T1, typename T2>
@@ -621,19 +621,19 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 		tc::assert_not_isnan(t1);
 		tc::assert_not_isnan(t2);
 		if( t2 < t1 ) {
-			return interval< tc::common_type_t< T1, T2 > >(std::forward<T2>(t2), std::forward<T1>(t1));
+			return interval< tc::common_type_t< T1, T2 > >(tc_move_if_owned(t2), tc_move_if_owned(t1));
 		} else {
-			return interval< tc::common_type_t< T1, T2 > >(std::forward<T1>(t1), std::forward<T2>(t2));
+			return interval< tc::common_type_t< T1, T2 > >(tc_move_if_owned(t1), tc_move_if_owned(t2));
 		}
 	}
 
 	template<typename T, typename Extent>
 	[[nodiscard]] constexpr auto make_interval(T&& pos, Extent&& extent, EAlign ealign)
-		return_decltype_noexcept( interval< tc::decay_t<T> >::from_extent(std::forward<T>(pos), std::forward<Extent>(extent), ealign) )
+		return_decltype_noexcept( interval< tc::decay_t<T> >::from_extent(tc_move_if_owned(pos), tc_move_if_owned(extent), ealign) )
 	
 	template<typename T, typename Extent>
 	[[nodiscard]] constexpr auto make_interval(T&& pos, Extent&& extent, tc::lohi lohi)
-		return_decltype_noexcept( interval< tc::decay_t<T> >::from_extent(std::forward<T>(pos), std::forward<Extent>(extent), lohi) )
+		return_decltype_noexcept( interval< tc::decay_t<T> >::from_extent(tc_move_if_owned(pos), tc_move_if_owned(extent), lohi) )
 
 	template<typename Rng> requires tc::is_iota_range<Rng>::value
 	[[nodiscard]] constexpr auto make_interval(Rng const& rng) return_decltype_MAYTHROW(
@@ -642,7 +642,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 
 	template<typename T, typename Extent>
 	[[nodiscard]] constexpr auto make_centered_interval(T&& pos, Extent&& extent)
-		return_decltype_noexcept(interval< tc::decay_t<T> >::template centered_interval</*bGeneralized*/false>(std::forward<T>(pos), std::forward<Extent>(extent) ) )
+		return_decltype_noexcept(interval< tc::decay_t<T> >::template centered_interval</*bGeneralized*/false>(tc_move_if_owned(pos), tc_move_if_owned(extent) ) )
 
 	template<typename Func>
 	[[nodiscard]] constexpr auto make_interval_func(Func func)
@@ -650,7 +650,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 
 	template<typename T>
 	[[nodiscard]] constexpr auto make_singleton_interval(T&& value) noexcept {
-		return interval<tc::decay_t<T>>(std::forward<T>(value), tc_modified(value, tc::nextafter_inplace(_)));
+		return interval<tc::decay_t<T>>(tc_move_if_owned(value), tc_modified(value, tc::nextafter_inplace(_)));
 	}
 
 	namespace interval_adl {
@@ -665,8 +665,8 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 				"Use implicit_cast to enable the operation."
 			);
 			return tc::make_interval(
-				tc::max(std::forward<Lhs>(lhs)[tc::lo], std::forward<Rhs>(rhs)[tc::lo]),
-				tc::min(std::forward<Lhs>(lhs)[tc::hi], std::forward<Rhs>(rhs)[tc::hi])
+				tc::max(tc_move_if_owned(lhs)[tc::lo], tc_move_if_owned(rhs)[tc::lo]),
+				tc::min(tc_move_if_owned(lhs)[tc::hi], tc_move_if_owned(rhs)[tc::hi])
 			);
 		}
 
@@ -683,8 +683,8 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 			_ASSERTE( tc::interval<tc::range_value_t<Lhs>>::EmptyInterval()==lhs || !lhs.empty_inclusive() );
 			_ASSERTE( tc::interval<tc::range_value_t<Rhs>>::EmptyInterval()==rhs || !rhs.empty_inclusive() );
 			return tc::make_interval(
-				tc::min(std::forward<Lhs>(lhs)[tc::lo], std::forward<Rhs>(rhs)[tc::lo]),
-				tc::max(std::forward<Lhs>(lhs)[tc::hi], std::forward<Rhs>(rhs)[tc::hi])
+				tc::min(tc_move_if_owned(lhs)[tc::lo], tc_move_if_owned(rhs)[tc::lo]),
+				tc::max(tc_move_if_owned(lhs)[tc::hi], tc_move_if_owned(rhs)[tc::hi])
 			);
 		}
 	}
@@ -697,7 +697,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 	template<typename Rng, typename Pred>
 	[[nodiscard]] constexpr auto minmax_interval(Rng&& rng, Pred const& pred) noexcept {
 		std::optional<tc::interval<tc::range_value_t<Rng>>> ointvlMinMax;
-		tc::for_each(std::forward<Rng>(rng), [&](auto&& t) noexcept {
+		tc::for_each(tc_move_if_owned(rng), [&](auto&& t) noexcept {
 			if(!ointvlMinMax) {
 				ointvlMinMax.emplace(t, t);
 			} else if(!tc::assign_better(pred, (*ointvlMinMax)[tc::lo], tc_move_if_owned(t))) {
@@ -709,7 +709,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 
 	template<typename Rng>
 	[[nodiscard]] constexpr auto minmax_interval(Rng&& rng) noexcept {
-		return tc::minmax_interval(std::forward<Rng>(rng), fn_less());
+		return tc::minmax_interval(tc_move_if_owned(rng), fn_less());
 	}
 
 	template<typename Rng>
@@ -723,7 +723,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 
 	template< typename Rng, typename T >
 	[[nodiscard]] constexpr auto slice_by_interval(Rng&& rng, tc::interval<T> const& intvl) return_decltype_MAYTHROW(
-		tc::slice(std::forward<Rng>(rng),
+		tc::slice(tc_move_if_owned(rng),
 			tc::begin_next<tc::return_border>(rng, tc::explicit_cast<typename boost::range_size<std::remove_reference_t<Rng>>::type>(intvl[tc::lo])),
 			tc::begin_next<tc::return_border>(rng, tc::explicit_cast<typename boost::range_size<std::remove_reference_t<Rng>>::type>(intvl[tc::hi]))
 		)
@@ -887,7 +887,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 
 			template< typename A0 >
 			iterator emplace_hint(iterator& itWhere, A0&& a0) & noexcept {
-				iterator it = base_::emplace(itWhere, std::forward<A0>(a0) );
+				iterator it = base_::emplace(itWhere, tc_move_if_owned(a0) );
 				itWhere = it;
 				++itWhere;
 				return it;
@@ -895,7 +895,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 
 			template< typename A0, typename A1 >
 			iterator emplace_hint(iterator& itWhere, A0&& a0, A1&& a1) & noexcept {
-				iterator it = tc::vector< T >::emplace(itWhere, std::forward<A0>(a0), std::forward<A1>(a1) );
+				iterator it = tc::vector< T >::emplace(itWhere, tc_move_if_owned(a0), tc_move_if_owned(a1) );
 				itWhere = it;
 				++itWhere;
 				return it;
@@ -1442,7 +1442,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 			[](auto const& rngintvl, auto const& itBegin, auto const& itEnd, tc::unused /*itMax*/) noexcept {
 				return tc::slice(rngintvl, itBegin, itEnd);
 			},
-			std::forward<RngIntvl>(rngintvl)
+			tc_move_if_owned(rngintvl)
 		);
 	}
 
@@ -1453,7 +1453,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 				return tc::make_interval((*itBegin.element_base())[tc::lo], (*itMax.element_base())[tc::hi]);
 			},
 			tc::transform(
-				std::forward<RngIntvl>(rngintvl),
+				tc_move_if_owned(rngintvl),
 				[project = tc_move(project)](auto const& intvl) noexcept {
 					return intvl.transform(project);
 				}

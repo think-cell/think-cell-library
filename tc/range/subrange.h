@@ -9,7 +9,7 @@
 #pragma once
 
 #include "../base/assert_defs.h"
-#include "../base/tc_move.h"
+#include "../base/move.h"
 #include "../base/trivial_functors.h"
 #include "../base/modified.h"
 #include "../base/invoke.h"
@@ -91,7 +91,7 @@ namespace tc {
 			template< typename Sink >
 			constexpr auto operator()(Sink&& sink) && MAYTHROW {
 				_ASSERTE( tc::change(m_bFirstPass, false) );
-				return tc::for_each(tc_move(m_rng), std::forward<Sink>(sink));
+				return tc::for_each(tc_move(m_rng), tc_move_if_owned(sink));
 			}
 
 			Rng m_rng;
@@ -106,7 +106,7 @@ namespace tc {
 #else
 	template< typename Rng >
 	decltype(auto) assert_single_pass(Rng&& rng) noexcept {
-		return std::forward<Rng>(rng);
+		return tc_move_if_owned(rng);
 	}
 #endif
 	
@@ -117,9 +117,9 @@ namespace tc {
 		template<typename Rng>
 		static constexpr decltype(auto) whole_range(Rng&& rng) noexcept {
 			if constexpr( tc::instance<std::remove_reference_t<Rng>, tc::subrange> ) {
-				return std::forward<Rng>(rng).base_range();
+				return tc_move_if_owned(rng).base_range();
 			} else {
-				return std::forward<Rng>(rng);
+				return tc_move_if_owned(rng);
 			}
 		}
 
@@ -379,12 +379,12 @@ namespace tc {
 		public:
 			template< typename It >
 			constexpr void take_inplace( It&& it ) & noexcept {
-				m_idxEnd=tc::iterator2index<Rng>( std::forward<It>(it) );
+				m_idxEnd=tc::iterator2index<Rng>( tc_move_if_owned(it) );
 			}
 
 			template< typename It >
 			constexpr void drop_inplace( It&& it ) & noexcept {
-				m_idxBegin=tc::iterator2index<Rng>( std::forward<It>(it) );
+				m_idxBegin=tc::iterator2index<Rng>( tc_move_if_owned(it) );
 			}
 		};
 	}
@@ -398,14 +398,14 @@ namespace tc {
 	// subrange creation
 
 	template<tc::range_with_iterators Rng>
-	[[nodiscard]] constexpr auto all(Rng&& rng) return_ctor_MAYTHROW( tc::make_subrange_result_t< Rng >, (std::forward<Rng>(rng)) )
+	[[nodiscard]] constexpr auto all(Rng&& rng) return_ctor_MAYTHROW( tc::make_subrange_result_t< Rng >, (tc_move_if_owned(rng)) )
 
 	// slice from range + iterator pair
 	// slice from range + difference
 	template< typename Rng, typename Begin, typename End >
 	[[nodiscard]] constexpr auto slice(Rng&& rng, Begin&& begin, End&& end) return_ctor_MAYTHROW(
 		tc::make_subrange_result_t< Rng >,
-		(std::forward<Rng>(rng), std::forward<Begin>(begin), std::forward<End>(end))
+		(tc_move_if_owned(rng), tc_move_if_owned(begin), tc_move_if_owned(end))
 	)
 
 	template< typename It >
@@ -444,7 +444,7 @@ namespace tc {
 
 	template< typename It, typename Count >
 	[[nodiscard]] constexpr auto counted( It const& it, Count&& count ) noexcept {
-		return tc::make_iterator_range( it, it+std::forward<Count>(count) );
+		return tc::make_iterator_range( it, it+tc_move_if_owned(count) );
 	}
 
 	template< tc::char_type T, std::size_t N >
@@ -468,7 +468,7 @@ namespace tc {
 	template< typename Cont, typename It >
 	constexpr void take_inplace( Cont& cont, It&& it ) noexcept {
 		if constexpr( detail::has_mem_fn_take_inplace<Cont,It> ) {
-			cont.take_inplace(std::forward<It>(it));
+			cont.take_inplace(tc_move_if_owned(it));
 		} else if constexpr( (tc::instance<Cont, std::vector> || tc::instance<Cont, std::deque>) && !std::is_move_assignable<tc::range_value_t<Cont&>>::value ) {
 			if (tc::begin(cont) == it) {
 				cont.clear();
@@ -479,68 +479,68 @@ namespace tc {
 				}
 			}
 		} else {
-			cont.erase(std::forward<It>(it),tc::end(cont));
+			cont.erase(tc_move_if_owned(it),tc::end(cont));
 		}
 	}
 
 	template< typename Rng, typename End >
 	[[nodiscard]] constexpr auto take(Rng&& rng, End&& end) return_ctor_NOEXCEPT( // boost::iterator_range doesn't have a noexcept constructor
 		tc::make_subrange_result_t< Rng >,
-		(std::forward<Rng>(rng), tc::begin(rng), std::forward<End>(end))
+		(tc_move_if_owned(rng), tc::begin(rng), tc_move_if_owned(end))
 	)
 
 	template< typename C, typename T, typename A, typename It >
 	[[nodiscard]] std::basic_string<C,T,A> && take( std::basic_string<C,T,A>&& rng, It&& it ) noexcept {
-		tc::take_inplace(rng,std::forward<It>(it));
+		tc::take_inplace(rng,tc_move_if_owned(it));
 		return tc_move(rng);
 	}
 #if 0
 	// TODO: pending proper fix of chained calls in partition_range.h
 	template< typename Rng, typename It >
 	[[nodiscard]] constexpr subrange<Rng>&& take( subrange<Rng>&& rng, It&& it ) noexcept {
-		rng.take_inplace(std::forward<It>(it));
+		rng.take_inplace(tc_move_if_owned(it));
 		return tc_move(rng);
 	}
 #endif
 
 	template< typename Cont, typename It> requires detail::has_mem_fn_erase_from_begin<Cont,It>
 	constexpr void drop_inplace( Cont & cont, It&& it ) noexcept {
-		cont.erase(tc::begin(cont),std::forward<It>(it));
+		cont.erase(tc::begin(cont),tc_move_if_owned(it));
 	}
 
 	template< typename Cont, typename It> requires detail::has_mem_fn_drop_inplace<Cont,It>
 	constexpr void drop_inplace( Cont & cont, It&& it ) noexcept {
-		cont.drop_inplace(std::forward<It>(it));
+		cont.drop_inplace(tc_move_if_owned(it));
 	}
 
 	template< tc::char_ptr CharPtr, typename It>
 	constexpr void drop_inplace( CharPtr& pch, It&& it ) noexcept {
-		pch=std::forward<It>(it);
+		pch=tc_move_if_owned(it);
 	}
 
 	namespace detail {
 		template< typename Rng, typename It>
 		constexpr tc::make_subrange_result_t< Rng > drop_impl( Rng&& rng, It&& itBegin ) noexcept {
-			return tc::make_subrange_result_t< Rng >( std::forward<Rng>(rng), std::forward<It>(itBegin), tc::end(rng) );
+			return tc::make_subrange_result_t< Rng >( tc_move_if_owned(rng), tc_move_if_owned(itBegin), tc::end(rng) );
 		}
 
 		// C strings have efficient in-place drop
 		template< typename CharPtr, typename It> requires tc::char_ptr<std::remove_reference_t<CharPtr>>
 		constexpr std::decay_t<CharPtr> drop_impl( CharPtr&& pch, It&& it ) noexcept {
-			return tc_modified(pch, tc::drop_inplace(_, std::forward<It>(it)));
+			return tc_modified(pch, tc::drop_inplace(_, tc_move_if_owned(it)));
 		}
 	}
 
 	template< typename Rng, typename It >
 	[[nodiscard]] constexpr auto drop(Rng&& rng, It&& it) return_decltype_NOEXCEPT(
-		detail::drop_impl( std::forward<Rng>(rng), std::forward<It>(it) )
+		detail::drop_impl( tc_move_if_owned(rng), tc_move_if_owned(it) )
 	)
 
 #if 0
 	// TODO: pending proper fix of chained calls in partition_range.h
 	template< typename Rng, typename It >
 	[[nodiscard]] constexpr subrange<Rng>&& drop( subrange<Rng>&& rng, It&& it ) noexcept {
-		rng.drop_inplace(std::forward<It>(it));
+		rng.drop_inplace(tc_move_if_owned(it));
 		return tc_move(rng);
 	}
 #endif
@@ -563,12 +563,12 @@ namespace tc {
 			auto const itBound=tc::end(rng);
 			while (0<n) {
 				if(it==itBound) {
-					return RangeReturn::pack_no_border(std::forward<Rng>(rng), tc_move(it));
+					return RangeReturn::pack_no_border(tc_move_if_owned(rng), tc_move(it));
 				}
 				--n;
 				++it;
 			}
-			return RangeReturn::pack_border(tc_move(it), std::forward<Rng>(rng));
+			return RangeReturn::pack_border(tc_move(it), tc_move_if_owned(rng));
 		}
 
 		template< typename RangeReturn, bool bLinear, typename Rng >
@@ -580,18 +580,18 @@ namespace tc {
 			_ASSERTDEBUG(0<=n);
 			if constexpr( tc::common_range<Rng> ) {
 				if(n<=tc::size_raw(rng)) {
-					return RangeReturn::pack_border(tc::begin(rng)+n, std::forward<Rng>(rng));
+					return RangeReturn::pack_border(tc::begin(rng)+n, tc_move_if_owned(rng));
 				} else {
-					return RangeReturn::pack_no_border(std::forward<Rng>(rng));
+					return RangeReturn::pack_no_border(tc_move_if_owned(rng));
 				}
 			} else if constexpr( RangeReturn::allowed_if_always_has_border ) {
 #ifdef _DEBUG
-				return begin_next_detail::begin_next<RangeReturn, /*bLinear*/true>(std::forward<Rng>(rng), n, boost::iterators::forward_traversal_tag());
+				return begin_next_detail::begin_next<RangeReturn, /*bLinear*/true>(tc_move_if_owned(rng), n, boost::iterators::forward_traversal_tag());
 #else
-				return RangeReturn::pack_border(tc::begin(rng)+n, std::forward<Rng>(rng));
+				return RangeReturn::pack_border(tc::begin(rng)+n, tc_move_if_owned(rng));
 #endif
 			} else {
-				return begin_next_detail::begin_next<RangeReturn, bLinear>(std::forward<Rng>(rng), n, boost::iterators::forward_traversal_tag());
+				return begin_next_detail::begin_next<RangeReturn, bLinear>(tc_move_if_owned(rng), n, boost::iterators::forward_traversal_tag());
 			}
 		}
 	}
@@ -601,7 +601,7 @@ namespace tc {
 		Rng&& rng,
 		typename boost::range_size< std::remove_reference_t<Rng> >::type n=1
 	) noexcept {
-		return begin_next_detail::begin_next<RangeReturn, /*bLinear*/false>(std::forward<Rng>(rng), n, typename boost::range_traversal<Rng>::type());
+		return begin_next_detail::begin_next<RangeReturn, /*bLinear*/false>(tc_move_if_owned(rng), n, typename boost::range_traversal<Rng>::type());
 	}
 
 	template< typename RangeReturn, tc::range_with_iterators Rng>
@@ -609,7 +609,7 @@ namespace tc {
 		Rng&& rng,
 		typename boost::range_size< std::remove_reference_t<Rng> >::type n=1
 	) noexcept {
-		return begin_next_detail::begin_next<RangeReturn, /*bLinear*/true>(std::forward<Rng>(rng), n, typename boost::range_traversal<Rng>::type());
+		return begin_next_detail::begin_next<RangeReturn, /*bLinear*/true>(tc_move_if_owned(rng), n, typename boost::range_traversal<Rng>::type());
 	}
 
 	namespace end_prev_detail {
@@ -625,12 +625,12 @@ namespace tc {
 			auto const itBound=tc::begin(rng);
 			while (0<n) {
 				if(it==itBound) {
-					return RangeReturn::pack_no_border(std::forward<Rng>(rng));
+					return RangeReturn::pack_no_border(tc_move_if_owned(rng));
 				}
 				--n;
 				--it;
 			}
-			return RangeReturn::pack_border(it, std::forward<Rng>(rng));
+			return RangeReturn::pack_border(it, tc_move_if_owned(rng));
 		}
 
 		template< typename RangeReturn, typename Rng >
@@ -641,9 +641,9 @@ namespace tc {
 		) noexcept {
 			_ASSERTDEBUG(0 <= n);
 			if(n<=tc::size_raw(rng)) {
-				return RangeReturn::pack_border(tc::end(rng)-n, std::forward<Rng>(rng));
+				return RangeReturn::pack_border(tc::end(rng)-n, tc_move_if_owned(rng));
 			} else {
-				return RangeReturn::pack_no_border(std::forward<Rng>(rng));
+				return RangeReturn::pack_no_border(tc_move_if_owned(rng));
 			}
 		}
 	}
@@ -653,7 +653,7 @@ namespace tc {
 		Rng&& rng,
 		typename boost::range_size< std::remove_reference_t<Rng> >::type n=1
 	) noexcept {
-		return end_prev_detail::end_prev<RangeReturn>(std::forward<Rng>(rng), n, typename boost::range_traversal<Rng>::type());
+		return end_prev_detail::end_prev<RangeReturn>(tc_move_if_owned(rng), n, typename boost::range_traversal<Rng>::type());
 	}
 
 	////////////////////////////////////////////////////////////////////////////////////
@@ -678,7 +678,7 @@ namespace tc {
 
 				template<typename Sink2>
 				take_first_sink(Sink2&& sink, TakePred& takepred, tc::break_or_continue& boc) noexcept
-					: m_sink(std::forward<Sink2>(sink))
+					: m_sink(tc_move_if_owned(sink))
 					, m_takepred(takepred)
 					, m_boc(boc)
 				{}
@@ -688,7 +688,7 @@ namespace tc {
 					decltype(tc::continue_if_not_break(std::declval<Sink const&>(), std::declval<T>())),
 					tc::constant<tc::break_>
 				> {
-					auto const Take=[&]() MAYTHROW { return tc::continue_if_not_break(m_sink, std::forward<T>(t)); };
+					auto const Take=[&]() MAYTHROW { return tc::continue_if_not_break(m_sink, tc_move_if_owned(t)); };
 					switch_no_default(m_takepred.take(t)) {
 						case etakepredTAKEANDCONTINUE: {
 							auto boc=Take(); // MAYTHROW
@@ -710,7 +710,7 @@ namespace tc {
 					tc::constant<tc::break_>
 				> {
 					tc_auto_cref(pairitetakepred, m_takepred.take_range(rng)); // MAYTHROW
-					auto boc=tc::continue_if_not_break(tc::mem_fn_chunk(), m_sink, tc::take(std::forward<Rng>(rng), pairitetakepred.first)); // MAYTHROW
+					auto boc=tc::continue_if_not_break(tc::mem_fn_chunk(), m_sink, tc::take(tc_move_if_owned(rng), pairitetakepred.first)); // MAYTHROW
 					m_boc=boc;
 					switch_no_default(pairitetakepred.second) {
 						case etakepredTAKEANDCONTINUE: return boc;
@@ -753,7 +753,7 @@ namespace tc {
 		template< typename TakePred, bool bTruncate, typename Rng >
 		auto take_first_impl(Rng&& rng, std::size_t const n) noexcept {
 			static_assert(!tc::range_with_iterators<Rng>);
-			return [rng=tc::make_reference_or_value(std::forward<Rng>(rng)), n](auto&& sink) MAYTHROW {
+			return [rng=tc::make_reference_or_value(tc_move_if_owned(rng)), n](auto&& sink) MAYTHROW {
 				if(0<n) {
 					TakePred takepred(n);
 					tc::break_or_continue boc;
@@ -770,7 +770,7 @@ namespace tc {
 
 	template< typename RangeReturn, typename Rng, std::enable_if_t<!tc::range_with_iterators<Rng> && std::is_same<RangeReturn, tc::return_take>::value>* = nullptr >
 	[[nodiscard]] auto begin_next(Rng&& rng, std::size_t n=1) return_decltype_noexcept(
-		tc::take_first_detail::take_first_impl<take_first_detail::no_adl::take_first_pred, /*bTruncate*/ false>(std::forward<Rng>(rng), n)
+		tc::take_first_detail::take_first_impl<take_first_detail::no_adl::take_first_pred, /*bTruncate*/ false>(tc_move_if_owned(rng), n)
 	)
 
 	template< typename Cont >
@@ -794,7 +794,7 @@ namespace tc {
 
 			template<typename Sink2>
 			drop_first_sink(Sink2&& sink, std::size_t& nCount) noexcept
-				: m_sink(std::forward<Sink2>(sink))
+				: m_sink(tc_move_if_owned(sink))
 				, m_nCount(nCount)
 			{}
 
@@ -807,7 +807,7 @@ namespace tc {
 					--m_nCount;
 					return tc::constant<tc::continue_>();
 				} else {
-					return tc::continue_if_not_break(m_sink, std::forward<T>(t)); // MAYTHROW
+					return tc::continue_if_not_break(m_sink, tc_move_if_owned(t)); // MAYTHROW
 				}
 			}
 
@@ -822,7 +822,7 @@ namespace tc {
 					_ASSERT(tc::end(rng)==it);
 					return tc::constant<tc::continue_>();
 				} else {
-					return tc::continue_if_not_break(tc::mem_fn_chunk(), m_sink, tc::drop(std::forward<Rng>(rng), tc_move(it))); // MAYTHROW
+					return tc::continue_if_not_break(tc::mem_fn_chunk(), m_sink, tc::drop(tc_move_if_owned(rng), tc_move(it))); // MAYTHROW
 				}
 			}
 
@@ -834,7 +834,7 @@ namespace tc {
 
 	template< typename RangeReturn, typename Rng> requires (!tc::range_with_iterators<Rng>) && std::is_same<RangeReturn, tc::return_drop>::value
 	[[nodiscard]] auto begin_next(Rng&& rng, std::size_t const n=1) noexcept {
-		return [rng=tc::make_reference_or_value(std::forward<Rng>(rng)), n](auto&& sink) MAYTHROW {
+		return [rng=tc::make_reference_or_value(tc_move_if_owned(rng)), n](auto&& sink) MAYTHROW {
 			auto nCount=n;
 			auto boc=tc::for_each(*rng, no_adl::drop_first_sink<tc::decay_t<decltype(sink)>>(tc_move_if_owned(sink), nCount)); // MAYTHROW
 			_ASSERTEQUAL(nCount, 0);
@@ -891,7 +891,7 @@ namespace tc {
 	[[nodiscard]] constexpr auto as_span(Rng&& rng) noexcept 
 		-> tc::span_t<Rng&&>
 	{
-		return std::forward<Rng>(rng);
+		return tc_move_if_owned(rng);
 	}
 
 	//-------------------------------------------------------------------------------------------------------------------------

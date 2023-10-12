@@ -67,7 +67,7 @@ namespace tc {
 
 	template <typename Rng>
 	concept index_range
-		= tc::range_with_iterators<Rng> || (tc::has_index<Rng> && requires(Rng&& rng) { tc::begin_index(std::forward<Rng>(rng)); });
+		= tc::range_with_iterators<Rng> || (tc::has_index<Rng> && requires(Rng&& rng) { tc::begin_index(tc_move_if_owned(rng)); });
 
 	template<tc::common_range Rng>
 		requires (!tc::has_index<Rng>) && tc::borrowed_range<Rng>
@@ -93,19 +93,19 @@ namespace tc {
 
 	template<typename Rng, typename It>
 		requires (!tc::has_index<Rng>)
-	constexpr auto dereference_index(Rng&& rng, It&& it) noexcept(noexcept(*std::forward<It>(it)))
+	constexpr auto dereference_index(Rng&& rng, It&& it) noexcept(noexcept(*tc_move_if_owned(it)))
 		-> typename std::conditional_t<
 			tc::safely_convertible_to<decltype(*std::declval<It>()), std::iter_reference_t<tc::iterator_t<Rng>>>,
 			tc::type::identity<std::iter_reference_t<tc::iterator_t<Rng>>>,
 			tc::decay<std::iter_reference_t<tc::iterator_t<Rng>>>
 		>::type
 	{
-		return *std::forward<It>(it);
+		return *tc_move_if_owned(it);
 	}
 
 	template<tc::has_index Rng, typename Index>
 	constexpr auto dereference_index(Rng&& rng, Index&& idx) return_decltype_xvalue_by_ref_MAYTHROW(
-		std::forward<Rng>(rng).dereference_index(std::forward<Index>(idx))
+		tc_move_if_owned(rng).dereference_index(tc_move_if_owned(idx))
 	)
 
 	template<typename Rng, typename It>
@@ -208,12 +208,12 @@ namespace tc {
 	template<typename Rng, typename It, typename Difference>
 		requires (!tc::has_index<Rng>)
 	constexpr void advance_index(Rng const&, It& it, Difference&& d) MAYTHROW {
-		it += std::forward<Difference>(d);
+		it += tc_move_if_owned(d);
 	}
 
 	template<tc::has_index Rng, typename Index, typename Difference>
 	constexpr auto advance_index(Rng const& rng, Index& idx, Difference&& d) return_decltype_MAYTHROW(
-		rng.advance_index(idx, std::forward<Difference>(d))
+		rng.advance_index(idx, tc_move_if_owned(d))
 	)
 
 	TC_HAS_MEM_FN_XXX_CONCEPT_DEF(advance_index, const&, std::declval<typename T::tc_index &>(), std::declval<T const&>().distance_to_index(std::declval<typename T::tc_index const&>(), std::declval<typename T::tc_index const&>()))
@@ -230,12 +230,12 @@ namespace tc {
 		requires (!tc::has_index<Rng>) && std::contiguous_iterator<std::decay_t<It>>
 #endif
 	constexpr auto index_to_address(Rng&&, It&& it) MAYTHROW {
-		return std::to_address(std::forward<It>(it));
+		return std::to_address(tc_move_if_owned(it));
 	}
 
 	template<tc::has_index Rng, typename Index>
 	constexpr auto index_to_address(Rng&& rng, Index&& idx) return_decltype_MAYTHROW(
-		std::forward<Rng>(rng).index_to_address(std::forward<Index>(idx))
+		tc_move_if_owned(rng).index_to_address(tc_move_if_owned(idx))
 	)
 
 	TC_HAS_MEM_FN_XXX_CONCEPT_DEF(index_to_address, &&, std::declval<typename T::tc_index>())
@@ -273,11 +273,11 @@ namespace tc {
 	// make_iterator
 	template<typename Rng, typename It > requires (!tc::has_index< std::remove_reference_t<Rng> >)
 	constexpr decltype(auto) make_iterator(Rng&&, It&& it) noexcept {
-		return std::forward<It>(it);
+		return tc_move_if_owned(it);
 	}
 
 	template<typename Rng, typename Index > requires tc::has_index< std::remove_reference_t<Rng> >
 	constexpr decltype(auto) make_iterator(Rng&& rng, Index&& idx) noexcept {
-		return std::forward<Rng>(rng).make_iterator(std::forward<Index>(idx));
+		return tc_move_if_owned(rng).make_iterator(tc_move_if_owned(idx));
 	}
 }

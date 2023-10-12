@@ -24,7 +24,7 @@ namespace tc {
 	namespace cartesian_product_adaptor_detail {
 		template<typename T>
 		constexpr static T&& select_element(T&& val, tc::constant<true>) noexcept {
-			return std::forward<T>(val);
+			return tc_move_if_owned(val);
 		}
 
 		template<typename T>
@@ -43,7 +43,7 @@ namespace tc {
 			constexpr cartesian_product_adaptor() = default;
 			template<typename... Rhs>
 			constexpr cartesian_product_adaptor(aggregate_tag_t, Rhs&&... rhs) noexcept
-				: m_tupleadaptbaserng{{ {{aggregate_tag, std::forward<Rhs>(rhs)}}... }}
+				: m_tupleadaptbaserng{{ {{aggregate_tag, tc_move_if_owned(rhs)}}... }}
 			{}
 
 			static bool constexpr c_bIsCartesianProductAdaptor = true;
@@ -64,13 +64,13 @@ namespace tc {
 				template<typename T>
 				constexpr auto operator()(T&& val) const& return_decltype_MAYTHROW(
 					std::remove_reference_t<Self>::internal_for_each_impl( // recursive MAYTHROW
-						std::forward<Self>(m_self),
+						tc::forward_like<Self>(m_self),
 						m_sink,
 						tc::tuple_cat(
-							/*cast to const rvalue*/std::move(tc::as_const(m_ts)),
+							/*cast to const rvalue*/tc_move_always_even_const(tc::as_const(m_ts)),
 							tc::forward_as_tuple(
 								cartesian_product_adaptor_detail::select_element(
-									std::forward<T>(val),
+									tc_move_if_owned(val),
 									tc::constant<sizeof...(Rng) == sizeof...(Ts) + 1>()
 								)
 							)
@@ -87,7 +87,7 @@ namespace tc {
 			template<typename Self, typename Sink, typename... Ts, std::enable_if_t<sizeof...(Ts) < sizeof...(Rng)>* = nullptr>
 			static constexpr auto internal_for_each_impl(Self&& self, Sink const& sink, tc::tuple<Ts...> ts) return_decltype_MAYTHROW(
 				tc::for_each(
-					tc::get<sizeof...(Ts)>(std::forward<Self>(self).m_tupleadaptbaserng).base_range(),
+					tc::get<sizeof...(Ts)>(tc_move_if_owned(self).m_tupleadaptbaserng).base_range(),
 					cartesian_product_sink<Self, Sink, Ts...>{self, sink, ts}
 				) // recursive MAYTHROW
 			)
@@ -95,7 +95,7 @@ namespace tc {
 		public:
 			template<typename Self, typename Sink, std::enable_if_t<tc::decayed_derived_from<Self, cartesian_product_adaptor>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
 			friend constexpr auto for_each_impl(Self&& self, Sink const sink) return_decltype_MAYTHROW(
-				std::remove_reference_t<Self>::internal_for_each_impl(std::forward<Self>(self), sink, tc::make_tuple()) // MAYTHROW
+				std::remove_reference_t<Self>::internal_for_each_impl(tc_move_if_owned(self), sink, tc::make_tuple()) // MAYTHROW
 			)
 
 			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, cartesian_product_adaptor>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
@@ -123,7 +123,7 @@ namespace tc {
 			if constexpr( RangeReturn::requires_iterator ) {
 				typename std::remove_reference_t<CartesianProductAdaptor>::tc_index idx;
 				if (tc::continue_ == tc::for_each(
-					tc::zip(std::remove_reference_t<CartesianProductAdaptor>::base_ranges(std::forward<CartesianProductAdaptor>(rngtpl)), tpl, idx),
+					tc::zip(std::remove_reference_t<CartesianProductAdaptor>::base_ranges(tc_move_if_owned(rngtpl)), tpl, idx),
 					[&](auto&& baserng, auto const& t, auto& baseidx) MAYTHROW {
 						if( auto it = tc::find_first_or_unique(tc::type::identity<tc::return_element_or_null>(), IF_TC_CHECKS(bCheckUnique, ) tc_move_if_owned(baserng), t) ) { // MAYTHROW
 							baseidx = tc::iterator2index<decltype(baserng)>(tc_move(it));
@@ -133,13 +133,13 @@ namespace tc {
 						}
 					}
 				) ) {
-					return RangeReturn::pack_element(rngtpl.make_iterator(tc_move(idx)), std::forward<CartesianProductAdaptor>(rngtpl)); // MAYTHROW
+					return RangeReturn::pack_element(rngtpl.make_iterator(tc_move(idx)), tc_move_if_owned(rngtpl)); // MAYTHROW
 				} else {
-					return RangeReturn::template pack_no_element(std::forward<CartesianProductAdaptor>(rngtpl));
+					return RangeReturn::template pack_no_element(tc_move_if_owned(rngtpl));
 				}
 			} else if constexpr( std::same_as<RangeReturn, tc::return_bool> ) {
 				return tc::all_of(
-					tc::zip(std::remove_reference_t<CartesianProductAdaptor>::base_ranges(std::forward<CartesianProductAdaptor>(rngtpl)), tpl),
+					tc::zip(std::remove_reference_t<CartesianProductAdaptor>::base_ranges(tc_move_if_owned(rngtpl)), tpl),
 					[&](auto&& baserng, auto const& t) MAYTHROW {
 						return tc::find_first_or_unique(tc::type::identity<tc::return_bool>(), IF_TC_CHECKS(bCheckUnique, ) tc_move_if_owned(baserng), t); // MAYTHROW
 					}
@@ -147,7 +147,7 @@ namespace tc {
 			} else {
 				tc::range_value_t<CartesianProductAdaptor> tplFound; // TODO Support non-default constructible and non-assignable types.
 				if (tc::continue_ == tc::for_each(
-					tc::zip(std::remove_reference_t<CartesianProductAdaptor>::base_ranges(std::forward<CartesianProductAdaptor>(rngtpl)), tpl, tplFound),
+					tc::zip(std::remove_reference_t<CartesianProductAdaptor>::base_ranges(tc_move_if_owned(rngtpl)), tpl, tplFound),
 					[&](auto&& baserng, auto const& t, auto& tFound) MAYTHROW {
 						if( auto ot = tc::find_first_or_unique(tc::type::identity<tc::return_value_or_none>(), IF_TC_CHECKS(bCheckUnique, ) tc_move_if_owned(baserng), t) ) { // MAYTHROW
 							tFound = *tc_move(ot);
@@ -328,7 +328,7 @@ namespace tc {
 		if constexpr( 0 == sizeof...(Rng) ) {
 			return tc::single(tc::tuple<>());
 		} else {
-			return tc::cartesian_product_adaptor<Rng...>(tc::aggregate_tag, std::forward<Rng>(rng)...);
+			return tc::cartesian_product_adaptor<Rng...>(tc::aggregate_tag, tc_move_if_owned(rng)...);
 		}
 	}
 }

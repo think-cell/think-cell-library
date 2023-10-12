@@ -10,7 +10,7 @@
 
 #include "../base/assert_defs.h"
 #include "../base/generic_macros.h"
-#include "../base/tc_move.h"
+#include "../base/move.h"
 #include "../base/invoke.h"
 
 namespace tc {
@@ -50,19 +50,19 @@ namespace tc {
 	public: \
 		template<std::size_t nDepth=0, typename Func, std::enable_if_t<0==nDepth>* = nullptr> \
 		[[nodiscard]] constexpr auto transform(Func&& func) const& return_decltype_MAYTHROW( \
-			typename transform_result<tc::transform_value_t<Func, value_template<T> const&>, void>::type(tc::transform_tag, *this, std::forward<Func>(func)) \
+			typename transform_result<tc::transform_value_t<Func, value_template<T> const&>, void>::type(tc::transform_tag, *this, tc_move_if_owned(func)) \
 		) \
 		template<std::size_t nDepth=0, typename Func, std::enable_if_t<0==nDepth>* = nullptr> \
 		[[nodiscard]] constexpr auto transform(Func&& func) && return_decltype_MAYTHROW( \
-			typename transform_result<tc::transform_value_t<Func, value_template<T>>, void>::type(tc::transform_tag, tc_move_always(*this), std::forward<Func>(func)) \
+			typename transform_result<tc::transform_value_t<Func, value_template<T>>, void>::type(tc::transform_tag, tc_move_always(*this), tc_move_if_owned(func)) \
 		) \
 		template<std::size_t nDepth, typename Func, std::enable_if_t<0<nDepth>* = nullptr> \
 		[[nodiscard]] constexpr auto transform(Func&& func) const& MAYTHROW { \
-			return transform([&](auto const& val) MAYTHROW { return val.template transform<nDepth-1>(std::forward<Func>(func)); }); \
+			return transform([&](auto const& val) MAYTHROW { return val.template transform<nDepth-1>(tc_move_if_owned(func)); }); \
 		} \
 		template<std::size_t nDepth, typename Func, std::enable_if_t<0<nDepth>* = nullptr> \
 		[[nodiscard]] constexpr auto transform(Func&& func) && MAYTHROW { \
-			return transform([&](auto&& val) MAYTHROW { return tc_move_if_owned(val).template transform<nDepth-1>(std::forward<Func>(func)); }); \
+			return transform([&](auto&& val) MAYTHROW { return tc_move_if_owned(val).template transform<nDepth-1>(tc_move_if_owned(func)); }); \
 		} \
 	)
 

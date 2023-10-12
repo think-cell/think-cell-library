@@ -32,7 +32,7 @@ namespace tc {
 
 			explicit constexpr repeat_range(std::size_t ct, T&& t) noexcept
 				: m_ct(ct)
-				, m_t(aggregate_tag, std::forward<T>(t))
+				, m_t(aggregate_tag, tc_move_if_owned(t))
 			{}
 
 		private:
@@ -76,6 +76,6 @@ namespace tc {
 
 	template<typename TSize, typename T>
 	constexpr auto repeat_n( TSize&& ct, T && t ) return_ctor_noexcept(
-		no_adl::repeat_range<T>, ( tc::explicit_cast<std::size_t>(std::forward<TSize>(ct)), std::forward<T>(t) )
+		no_adl::repeat_range<T>, ( tc::explicit_cast<std::size_t>(tc_move_if_owned(ct)), tc_move_if_owned(t) )
 	)
 }

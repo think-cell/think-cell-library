@@ -23,7 +23,7 @@ namespace tc {
 	namespace no_adl {
 		template< typename Char, typename Rng >
 		struct [[nodiscard]] make_c_str_impl final : private tc::reference_or_value<Rng> {
-			explicit make_c_str_impl(Rng&& rng) noexcept: tc::reference_or_value<Rng>(tc::aggregate_tag, std::forward<Rng>(rng)) {}
+			explicit make_c_str_impl(Rng&& rng) noexcept: tc::reference_or_value<Rng>(tc::aggregate_tag, tc_move_if_owned(rng)) {}
 
 			// We don't want make_c_str_impl to be able to implicitly cast to bool. Deleting operator bool() won't work because
 			// a deleted function is still considered in overload resolution and will cause ambiguity between foo(bool) and foo(char const*).
@@ -54,45 +54,45 @@ namespace tc {
 	template< typename Char, tc::has_c_str<Char const> Rng0 >
 	auto make_c_str(Rng0&& rng0) noexcept {
 		static_assert(tc::decayed<Char>);
-		return tc::no_adl::make_c_str_impl<Char const, Rng0>(std::forward<Rng0>(rng0));
+		return tc::no_adl::make_c_str_impl<Char const, Rng0>(tc_move_if_owned(rng0));
 	}
 
 	template< typename Rng0 >
 	auto make_c_str(Rng0&& rng0) return_decltype_noexcept(
-		tc::make_c_str<std::remove_cv_t<typename std::pointer_traits<decltype(tc::as_c_str(std::declval<Rng0>()))>::element_type>>(std::forward<Rng0>(rng0))
+		tc::make_c_str<std::remove_cv_t<typename std::pointer_traits<decltype(tc::as_c_str(std::declval<Rng0>()))>::element_type>>(tc_move_if_owned(rng0))
 	)
 
 	template< typename Char, typename Rng0, typename... Rng >
 	auto make_c_str(Rng0&& rng0, Rng&& ... rng) MAYTHROW {
 		static_assert(tc::decayed<Char>);
-		return tc::no_adl::make_c_str_impl<Char const, tc::string<Char>>(tc::make_str<Char>(std::forward<Rng0>(rng0), std::forward<Rng>(rng)...));
+		return tc::no_adl::make_c_str_impl<Char const, tc::string<Char>>(tc::make_str<Char>(tc_move_if_owned(rng0), tc_move_if_owned(rng)...));
 	}
 
 	template< typename Rng0, typename... Rng >
 	auto make_c_str(Rng0&& rng0, Rng&& ... rng) MAYTHROW {
-		return tc::make_c_str<tc::range_value_t<decltype(tc::concat(std::declval<Rng0>(), std::declval<Rng>()...))>>(std::forward<Rng0>(rng0), std::forward<Rng>(rng)...);
+		return tc::make_c_str<tc::range_value_t<decltype(tc::concat(std::declval<Rng0>(), std::declval<Rng>()...))>>(tc_move_if_owned(rng0), tc_move_if_owned(rng)...);
 	}
 
 	template< typename Char, tc::has_c_str<Char> Rng0 >
 	auto make_mutable_c_str(Rng0&& rng0) noexcept {
 		static_assert(tc::decayed<Char>);
-		return tc::no_adl::make_c_str_impl<Char, Rng0>(std::forward<Rng0>(rng0));
+		return tc::no_adl::make_c_str_impl<Char, Rng0>(tc_move_if_owned(rng0));
 	}
 
 	template< typename Rng0 >
 	auto make_mutable_c_str(Rng0&& rng0) return_decltype_noexcept(
-		tc::make_mutable_c_str<std::remove_cv_t<typename std::pointer_traits<decltype(tc::as_c_str(std::declval<Rng0>()))>::element_type>>(std::forward<Rng0>(rng0))
+		tc::make_mutable_c_str<std::remove_cv_t<typename std::pointer_traits<decltype(tc::as_c_str(std::declval<Rng0>()))>::element_type>>(tc_move_if_owned(rng0))
 	)
 
 	template< typename Char, typename Rng0, typename... Rng >
 	auto make_mutable_c_str(Rng0&& rng0, Rng&& ... rng) MAYTHROW {
 		static_assert(tc::decayed<Char>);
-		return tc::no_adl::make_c_str_impl<Char, tc::string<Char>>(tc::make_str<Char>(std::forward<Rng0>(rng0), std::forward<Rng>(rng)...));
+		return tc::no_adl::make_c_str_impl<Char, tc::string<Char>>(tc::make_str<Char>(tc_move_if_owned(rng0), tc_move_if_owned(rng)...));
 	}
 
 	template< typename Rng0, typename... Rng >
 	auto make_mutable_c_str(Rng0&& rng0, Rng&& ... rng) MAYTHROW {
-		return tc::make_mutable_c_str<tc::range_value_t<decltype(tc::concat(std::declval<Rng0>(), std::declval<Rng>()...))>>(std::forward<Rng0>(rng0), std::forward<Rng>(rng)...);
+		return tc::make_mutable_c_str<tc::range_value_t<decltype(tc::concat(std::declval<Rng0>(), std::declval<Rng>()...))>>(tc_move_if_owned(rng0), tc_move_if_owned(rng)...);
 	}
 }
 

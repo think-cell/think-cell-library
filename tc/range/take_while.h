@@ -9,7 +9,7 @@
 #pragma once
 
 #include "../base/assert_defs.h"
-#include "../base/tc_move.h"
+#include "../base/move.h"
 #include "../base/conditional.h"
 #include "../base/invoke.h"
 #include "../base/trivial_functors.h"
@@ -32,15 +32,15 @@ namespace tc {
 			constexpr take_while_adaptor() = default;
 			template< typename RngRef, typename PredRef >
 			constexpr take_while_adaptor(RngRef&& rng, PredRef&& pred) noexcept
-				: take_while_adaptor::range_adaptor_base_range(aggregate_tag, std::forward<RngRef>(rng))
-				, m_pred(std::forward<PredRef>(pred))
+				: take_while_adaptor::range_adaptor_base_range(aggregate_tag, tc_move_if_owned(rng))
+				, m_pred(tc_move_if_owned(pred))
 			{}
 
 			template<tc::decayed_derived_from<take_while_adaptor> Self, typename Sink> 
 			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
-				tc::common_type_t<decltype(tc::for_each(std::forward<Self>(self).base_range(), sink)),tc::constant<tc::continue_>> boc = tc::constant<tc::continue_>();
+				tc::common_type_t<decltype(tc::for_each(tc_move_if_owned(self).base_range(), sink)),tc::constant<tc::continue_>> boc = tc::constant<tc::continue_>();
 				tc::for_each(
-					std::forward<Self>(self).base_range(),
+					tc_move_if_owned(self).base_range(),
 					[&](auto&& t) MAYTHROW -> tc::break_or_continue {
 						if (tc::invoke(self.m_pred, tc::as_const(t))) {
 							boc = tc::continue_if_not_break(sink, tc_move_if_owned(t));
@@ -92,5 +92,5 @@ namespace tc {
 
 	template<typename Rng, typename Pred = tc::identity>
 	constexpr auto take_while(Rng&& rng, Pred&& pred = Pred())
-		return_ctor_noexcept( TC_FWD( tc::take_while_adaptor<tc::decay_t<Pred>, Rng>), (std::forward<Rng>(rng),std::forward<Pred>(pred)) )
+		return_ctor_noexcept( TC_FWD( tc::take_while_adaptor<tc::decay_t<Pred>, Rng>), (tc_move_if_owned(rng),tc_move_if_owned(pred)) )
 }

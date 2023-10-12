@@ -29,9 +29,9 @@ namespace tc {
 				requires (!std::same_as<tc::iterator_t<Cont>, tc::iterator_t<Cont const>>) // we assume "deep const" <=> "assignment assigns elements"
 					&& std::same_as<std::remove_cvref_t<Cont>, Rng0> && tc::safely_assignable_from<Cont&, Rng0&&>
 			constexpr void cont_assign_impl(Cont&& cont, Rng0&& rng0, Rng&&... rng) MAYTHROW {
-				cont=std::forward<Rng0>(rng0);
+				cont=tc_move_if_owned(rng0);
 				if constexpr(0<sizeof...(Rng)) {
-					tc::append(cont, std::forward<Rng>(rng)...);
+					tc::append(cont, tc_move_if_owned(rng)...);
 				}
 			}
 	
@@ -42,9 +42,9 @@ namespace tc {
 					cont.clear();
 					if constexpr (0<sizeof...(Rng)) {
 						if constexpr( has_mem_fn_lower_bound<Cont> || has_mem_fn_hash_function<Cont> ) {
-							tc::cont_must_insert_range(cont, tc::concat(std::forward<Rng>(rng)...)); // MAYTHROW
+							tc::cont_must_insert_range(cont, tc::concat(tc_move_if_owned(rng)...)); // MAYTHROW
 						} else {
-							tc::append(cont, std::forward<Rng>(rng)...); // MAYTHROW
+							tc::append(cont, tc_move_if_owned(rng)...); // MAYTHROW
 						}
 					}
 				} else {
@@ -63,9 +63,9 @@ namespace tc {
 		template< typename Cont, typename... Rng>
 		constexpr void cont_assign_impl(Cont&& cont, Rng&&... rng) MAYTHROW {
 			if( !std::is_constant_evaluated() ) {
-				(tc::assert_no_overlap(cont, std::forward<Rng>(rng)), ...);
+				(tc::assert_no_overlap(cont, tc_move_if_owned(rng)), ...);
 			}
-			detail::cont_assign_impl(std::forward<Cont>(cont), std::forward<Rng>(rng)...); // MAYTHROW
+			detail::cont_assign_impl(tc_move_if_owned(cont), tc_move_if_owned(rng)...); // MAYTHROW
 		}
 	}
 

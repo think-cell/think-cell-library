@@ -24,8 +24,8 @@ namespace tc {
 			++itrhs;
 		}
 		return std::make_pair(
-			RangeReturn::pack_border(itlhs, std::forward<RngLhs>(rnglhs)),
-			RangeReturn::pack_border(itrhs, std::forward<RngRhs>(rngrhs))
+			RangeReturn::pack_border(itlhs, tc_move_if_owned(rnglhs)),
+			RangeReturn::pack_border(itrhs, tc_move_if_owned(rngrhs))
 		);
 	}
 
@@ -43,6 +43,6 @@ namespace tc {
 				return tc::break_;
 			}
 		});
-		return RangeReturn::pack_border(itlhs, std::forward<RngLhs>(rnglhs));
+		return RangeReturn::pack_border(itlhs, tc_move_if_owned(rnglhs));
 	}
 }

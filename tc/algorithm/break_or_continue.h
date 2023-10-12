@@ -90,7 +90,7 @@ namespace tc {
 
 	template<typename Sink, typename... Args>
 	constexpr auto continue_if_not_break(Sink const& sink, Args&&... args) return_decltype_MAYTHROW(
-		tc_internal_continue_if_not_break(tc::invoke(sink, std::forward<Args>(args)...))
+		tc_internal_continue_if_not_break(tc::invoke(sink, tc_move_if_owned(args)...))
 	)
 
 	#define tc_yield(...) tc_return_if_break(tc::continue_if_not_break(__VA_ARGS__))
@@ -107,7 +107,7 @@ namespace tc {
 		private:
 			using base_t = tc::derivable_t<tc::decay_t<Func>>;
 		public:
-			movable_functor_adaptor_base(Func&& func) noexcept : base_t(std::forward<Func>(func)) {}
+			movable_functor_adaptor_base(Func&& func) noexcept : base_t(tc_move_if_owned(func)) {}
 			movable_functor_adaptor_base(movable_functor_adaptor_base&&) = default; // not noexcept to "inherit" exception-specifier from base class
 			movable_functor_adaptor_base(movable_functor_adaptor_base const& mfa) noexcept
 				: base_t(tc_move_always(tc::as_mutable(tc::base_cast<base_t>(mfa))))
@@ -123,12 +123,12 @@ namespace tc {
 
 			template<typename... Args>
 			Ret operator()(Args&& ... args) & MAYTHROW {
-				return tc::base_cast<tc::decay_t<Func>>(*this)(std::forward<Args>(args)...);
+				return tc::base_cast<tc::decay_t<Func>>(*this)(tc_move_if_owned(args)...);
 			}
 
 			template<typename... Args>
 			Ret operator()(Args&& ... args) const& MAYTHROW {
-				return tc::base_cast<tc::decay_t<Func>>(*this)(std::forward<Args>(args)...);
+				return tc::base_cast<tc::decay_t<Func>>(*this)(tc_move_if_owned(args)...);
 			}
 		};
 
@@ -138,12 +138,12 @@ namespace tc {
 
 			template<typename... Args>
 			tc::break_or_continue operator()(Args&& ... args) & MAYTHROW {
-				return tc::continue_if_not_break(tc::base_cast<tc::decay_t<Func>>(*this), std::forward<Args>(args)...);
+				return tc::continue_if_not_break(tc::base_cast<tc::decay_t<Func>>(*this), tc_move_if_owned(args)...);
 			}
 
 			template<typename... Args>
 			tc::break_or_continue operator()(Args&& ... args) const& MAYTHROW {
-				return tc::continue_if_not_break(tc::base_cast<tc::decay_t<Func>>(*this), std::forward<Args>(args)...);
+				return tc::continue_if_not_break(tc::base_cast<tc::decay_t<Func>>(*this), tc_move_if_owned(args)...);
 			}
 		};
 
@@ -160,7 +160,7 @@ namespace tc {
 
 			template< typename Func > requires (!tc::decayed_derived_from<Func, move_only_function_base>)
 			move_only_function_base(Func&& func) noexcept
-				: m_func( tc::no_adl::movable_functor_adaptor<Ret, Func>( std::forward<Func>(func) ) )
+				: m_func( tc::no_adl::movable_functor_adaptor<Ret, Func>( tc_move_if_owned(func) ) )
 			{
 				static_assert(!tc::decayed_derived_from<Func, std::function< Ret(Args...) >>);
 				// TODO: static_assert(!tc::decayed_derived_from<Func, std::move_only_function< Ret(Args...) >>);

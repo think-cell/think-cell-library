@@ -44,6 +44,6 @@ namespace tc {
 
 	template<typename T>
 	[[nodiscard]] constexpr auto size_linear(T&& t) return_decltype_MAYTHROW(
-		make_size_proxy(tc::size_linear_raw(std::forward<T>(t)))
+		make_size_proxy(tc::size_linear_raw(tc_move_if_owned(t)))
 	)
 }

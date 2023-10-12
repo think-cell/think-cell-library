@@ -41,9 +41,9 @@ namespace tc {
 				} 
 			}
 			template<typename... Args>
-			optional(std::in_place_t, Args&& ... args) noexcept(noexcept(construct(std::forward<Args>(args)...)))
+			optional(std::in_place_t, Args&& ... args) noexcept(noexcept(construct(tc_move_if_owned(args)...)))
 			: m_bValue(true) {
-				construct(std::forward<Args>(args)...);
+				construct(tc_move_if_owned(args)...);
 			}
 			~optional() {
 				reset();
@@ -59,10 +59,10 @@ namespace tc {
 				}
 			}
 			template<typename... Args>
-			T& emplace(Args&& ... args) & noexcept(noexcept(construct(std::forward<Args>(args)...))) {
+			T& emplace(Args&& ... args) & noexcept(noexcept(construct(tc_move_if_owned(args)...))) {
 				reset();
 				VERIFY(tc::change(m_bValue, true));
-				construct(std::forward<Args>(args)...);
+				construct(tc_move_if_owned(args)...);
 				return *m_oValue;
 			}
 	
@@ -112,14 +112,14 @@ namespace tc {
 			tc::storage_for<T> m_oValue;
 	
 			template<typename... Args>
-			void construct(Args&& ... args) & noexcept(noexcept(std::declval<storage_for<T>&>().ctor(std::forward<Args>(args)...))) {
+			void construct(Args&& ... args) & noexcept(noexcept(std::declval<storage_for<T>&>().ctor(tc_move_if_owned(args)...))) {
 				_ASSERT(m_bValue); // allow querying the flag to prevent double-construction
 				_ASSERT(!m_bInsideDtor);
-				if constexpr (noexcept(m_oValue.ctor(std::forward<Args>(args)...))) {
-					m_oValue.ctor(std::forward<Args>(args)...);
+				if constexpr (noexcept(m_oValue.ctor(tc_move_if_owned(args)...))) {
+					m_oValue.ctor(tc_move_if_owned(args)...);
 				} else {
 					try {	
-						m_oValue.ctor(std::forward<Args>(args)...); // MAYTHROW
+						m_oValue.ctor(tc_move_if_owned(args)...); // MAYTHROW
 					} catch( ... ) {
 						m_bValue = false;
 						throw; // MSVC and gcc: throw in catch block of a noexcept function triggers warning even if try block never throws
@@ -188,8 +188,8 @@ namespace tc {
 			constexpr optional(std::nullopt_t) noexcept {}
 
 			template<typename U> requires tc::safely_constructible_from<TRef, U&&>
-			constexpr optional(U&& u) noexcept(noexcept(static_cast<TRef>(std::forward<U>(u))))
-				: m_pt(std::addressof(tc::as_lvalue(static_cast<TRef>(std::forward<U>(u))))) // tc::safely_constructible_from makes sure no reference to temporary is created
+			constexpr optional(U&& u) noexcept(noexcept(static_cast<TRef>(tc_move_if_owned(u))))
+				: m_pt(std::addressof(tc::as_lvalue(static_cast<TRef>(tc_move_if_owned(u))))) // tc::safely_constructible_from makes sure no reference to temporary is created
 			{}
 
 			template<typename TOptional> requires
@@ -206,8 +206,8 @@ namespace tc {
 			}
 
 			template<typename U> requires tc::safely_constructible_from<TRef, U&&>
-			constexpr TRef emplace(U&& u) /*no &*/ noexcept(noexcept(static_cast<TRef>(std::forward<U>(u)))) {
-				m_pt = std::addressof(tc::as_lvalue(static_cast<TRef>(std::forward<U>(u)))); // tc::safely_constructible_from makes sure no reference to temporary is created
+			constexpr TRef emplace(U&& u) /*no &*/ noexcept(noexcept(static_cast<TRef>(tc_move_if_owned(u)))) {
+				m_pt = std::addressof(tc::as_lvalue(static_cast<TRef>(tc_move_if_owned(u)))); // tc::safely_constructible_from makes sure no reference to temporary is created
 				return *m_pt;
 			}
 
@@ -256,7 +256,7 @@ namespace tc {
 	}
 	template <typename T> requires tc::empty_type<std::remove_cvref_t<T>> || std::is_rvalue_reference<T&&>::value
 	[[nodiscard]] constexpr optional_reference_or_value<T> make_optional_reference_or_value(T&& ref) noexcept {
-		return {std::in_place, std::forward<T>(ref)};
+		return {std::in_place, tc_move_if_owned(ref)};
 	}
 }
 
@@ -265,9 +265,9 @@ namespace tc {
 	[[nodiscard]] constexpr decltype(auto) value_or( Optional&& optional, T&& t ) MAYTHROW {
 		if constexpr( tc::instance_or_derived<std::remove_reference_t<T>, tc::make_lazy> ) {
 			static_assert( !tc::has_actual_common_reference<decltype(*std::declval<Optional>()), T&&> ); // Should value_or(std::optional<make_lazy<T>>(), make_lazy<T>()) return make_lazy<T>&& or T?
-			return tc_conditional_prvalue_as_val(optional, *std::forward<Optional>(optional), std::forward<T>(t)());
+			return tc_conditional_prvalue_as_val(optional, *tc_move_if_owned(optional), tc_move_if_owned(t)());
 		} else {
-			return tc_conditional_rvalue_as_ref(optional, *std::forward<Optional>(optional), std::forward<T>(t));
+			return tc_conditional_rvalue_as_ref(optional, *tc_move_if_owned(optional), tc_move_if_owned(t));
 		}
 	}
 
@@ -306,12 +306,12 @@ namespace tc {
 
 		template<typename Func>
 		constexpr auto invoke(Func&& func, tc::unused) return_decltype_xvalue_by_ref_MAYTHROW(
-			tc::invoke(std::forward<Func>(func)) // MAYTHROW
+			tc::invoke(tc_move_if_owned(func)) // MAYTHROW
 		)
 
 		template<typename Func, has_dereference_operator T>
 		constexpr auto invoke(Func&& func, T&& t) return_decltype_xvalue_by_ref_MAYTHROW(
-			tc::invoke(std::forward<Func>(func), *std::forward<T>(t)) // MAYTHROW
+			tc::invoke(tc_move_if_owned(func), *tc_move_if_owned(t)) // MAYTHROW
 		)
 
 		template<typename T, typename Func, typename ...FuncTail>
@@ -332,15 +332,15 @@ namespace tc {
 		DEFINE_ADL_TAG_TYPE(adl_tag);
 
 		template<typename T, typename Func>
-		auto and_then_impl(adl_tag_t, T&& t, Func func) noexcept(noexcept(tc::and_then_detail::invoke(tc_move(func), std::forward<T>(t))))
+		auto and_then_impl(adl_tag_t, T&& t, Func func) noexcept(noexcept(tc::and_then_detail::invoke(tc_move(func), tc_move_if_owned(t))))
 			-> typename tc::and_then_detail::and_then_result<T, Func>::type
 		{
 			if(t) {
-				if constexpr(std::is_void<decltype(tc::and_then_detail::invoke(tc_move(func), std::forward<T>(t)))>::value) {
-					tc::and_then_detail::invoke(tc_move(func), std::forward<T>(t)); // MAYTHROW
+				if constexpr(std::is_void<decltype(tc::and_then_detail::invoke(tc_move(func), tc_move_if_owned(t)))>::value) {
+					tc::and_then_detail::invoke(tc_move(func), tc_move_if_owned(t)); // MAYTHROW
 					return true;
 				} else {
-					return tc::and_then_detail::invoke(tc_move(func), std::forward<T>(t)); // MAYTHROW
+					return tc::and_then_detail::invoke(tc_move(func), tc_move_if_owned(t)); // MAYTHROW
 				}
 			} else {
 				return {};
@@ -349,15 +349,15 @@ namespace tc {
 
 		template<typename T, typename Func, typename ...FuncTail>
 		auto and_then_impl(adl_tag_t, T&& t, Func func, FuncTail&& ...funcTail) noexcept(noexcept(
-			and_then_impl(adl_tag, tc::and_then_detail::invoke(tc_move(func), std::forward<T>(t)), std::forward<FuncTail>(funcTail)...)
+			and_then_impl(adl_tag, tc::and_then_detail::invoke(tc_move(func), tc_move_if_owned(t)), tc_move_if_owned(funcTail)...)
 		)) // noexcept operator cannot see and_then_impl itself without ADL
 			-> typename tc::and_then_detail::and_then_result<T, Func, FuncTail...>::type
 		{
 			if(t) {
 				return and_then_impl( // MAYTHROW
 					adl_tag,
-					tc::and_then_detail::invoke(tc_move(func), std::forward<T>(t)), // MAYTHROW
-					std::forward<FuncTail>(funcTail)...
+					tc::and_then_detail::invoke(tc_move(func), tc_move_if_owned(t)), // MAYTHROW
+					tc_move_if_owned(funcTail)...
 				);
 			} else {
 				return {};
@@ -367,7 +367,7 @@ namespace tc {
 
 	template<typename T, typename... Func>
 	auto and_then(T&& t, Func&&... func) return_decltype_MAYTHROW(
-		tc::and_then_adl::and_then_impl(tc::and_then_adl::adl_tag, std::forward<T>(t), std::forward<Func>(func)...)
+		tc::and_then_adl::and_then_impl(tc::and_then_adl::adl_tag, tc_move_if_owned(t), tc_move_if_owned(func)...)
 	)
 
 	// For `tc::and_then(opt, tc::chained(fn_make_optional, f))`.

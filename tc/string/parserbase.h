@@ -59,23 +59,23 @@ namespace tc {
 			template<auto memfn, typename... Args>
 			void warning_at(iterator it, Args&&... args) & MAYTHROW {
 				_ASSERTDEBUG(*this);
-				memfn(m_errorhandler, *m_strInput, it, std::forward<Args>(args)...); // MAYTHROW
+				memfn(m_errorhandler, *m_strInput, it, tc_move_if_owned(args)...); // MAYTHROW
 			}
 			template<auto memfn, typename... Args>
 			void warning(Args&&... args) & MAYTHROW {
-				warning_at<memfn>(this->m_itchInput, std::forward<Args>(args)...); // MAYTHROW
+				warning_at<memfn>(this->m_itchInput, tc_move_if_owned(args)...); // MAYTHROW
 			}
 
 			template<auto memfn, typename... Args>
 			[[noreturn]] void error_at(iterator it, Args&&... args) & MAYTHROW {
 				_ASSERTDEBUG(*this);
 				m_bError = true;
-				memfn(m_errorhandler, *m_strInput, it, std::forward<Args>(args)...); // MAYTHROW
+				memfn(m_errorhandler, *m_strInput, it, tc_move_if_owned(args)...); // MAYTHROW
 				_ASSERTNORETURNFALSE;
 			}
 			template<auto memfn, typename... Args>
 			[[noreturn]] void error(Args&&... args) & MAYTHROW {
-				error_at<memfn>(this->m_itchInput, std::forward<Args>(args)...); // MAYTHROW
+				error_at<memfn>(this->m_itchInput, tc_move_if_owned(args)...); // MAYTHROW
 			}
 
 		protected:

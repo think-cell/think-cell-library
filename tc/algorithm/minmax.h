@@ -18,7 +18,7 @@ namespace tc {
 		struct best_impl final {
 
 			template<typename BetterRef>
-			constexpr best_impl(BetterRef&& better) noexcept : m_better(std::forward<BetterRef>(better))
+			constexpr best_impl(BetterRef&& better) noexcept : m_better(tc_move_if_owned(better))
 			{}
 
 		private:
@@ -28,7 +28,7 @@ namespace tc {
 		public:
 			template<typename T>
 			constexpr auto operator()(T&& t) const& noexcept -> T&& {
-				return std::forward<T>(t);
+				return tc_move_if_owned(t);
 			}
 			
 			template<typename T0, typename T1, typename... Args>
@@ -37,16 +37,16 @@ namespace tc {
 				auto b = m_better(tc::as_const(t1), tc::as_const(t0));
 				if constexpr (std::is_same<tc::constant<true>, decltype(b)>::value) {
 					// t1 is better
-					return operator()(std::forward<T1>(t1), std::forward<Args>(args)...);
+					return operator()(tc_move_if_owned(t1), tc_move_if_owned(args)...);
 				} else if constexpr (std::is_same<tc::constant<false>, decltype(b)>::value) {
 					// t0 is better or equal
-					return operator()(std::forward<T0>(t0), std::forward<Args>(args)...);
+					return operator()(tc_move_if_owned(t0), tc_move_if_owned(args)...);
 				} else {
 					STATICASSERTSAME(decltype(b), bool);
 					return tc_conditional_prvalue_as_val(
 						b,
-						/*t1 is better*/operator()(std::forward<T1>(t1), std::forward<Args>(args)...),
-						/*t0 is better or equal*/operator()(std::forward<T0>(t0), std::forward<Args>(args)...)
+						/*t1 is better*/operator()(tc_move_if_owned(t1), tc_move_if_owned(args)...),
+						/*t0 is better or equal*/operator()(tc_move_if_owned(t0), tc_move_if_owned(args)...)
 					);
 				}
 			}
@@ -58,17 +58,17 @@ namespace tc {
 		typename... Args
 	>
 	[[nodiscard]] constexpr auto best(Better&& better, Args&&... args) return_decltype_xvalue_by_ref_noexcept(
-		no_adl::best_impl<tc::decay_t<Better>>(std::forward<Better>(better))(std::forward<Args>(args)...)
+		no_adl::best_impl<tc::decay_t<Better>>(tc_move_if_owned(better))(tc_move_if_owned(args)...)
 	)
 
 	template<typename... Args>
 	[[nodiscard]] constexpr auto min(Args&&... args) return_decltype_xvalue_by_ref_noexcept(
-		best(tc::fn_less(), std::forward<Args>(args)...)
+		best(tc::fn_less(), tc_move_if_owned(args)...)
 	)
 
 	template<typename... Args>
 	[[nodiscard]] constexpr auto max(Args&&... args) return_decltype_xvalue_by_ref_noexcept(
-		best(tc::fn_greater(), std::forward<Args>(args)...)
+		best(tc::fn_greater(), tc_move_if_owned(args)...)
 	)
 
 	tc_define_fn(min);
@@ -95,7 +95,7 @@ namespace std {
 namespace tc {
 	template <typename Iter>
 	auto treat_as_forward_iterator(Iter&& iter) noexcept {
-		return no_adl::forward_iter<std::remove_reference_t<Iter>>{std::forward<Iter>(iter)};
+		return no_adl::forward_iter<std::remove_reference_t<Iter>>{tc_move_if_owned(iter)};
 	}
 
 	template <typename T>
@@ -116,7 +116,7 @@ namespace tc {
 		return std::minmax_element(
 			treat_as_forward_iterator(tc::begin(rng)),
 			treat_as_forward_iterator(tc::end(rng)),
-			std::forward<Pred>(pred)
+			tc_move_if_owned(pred)
 		);
 	}
 }

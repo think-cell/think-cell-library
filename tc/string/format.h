@@ -69,7 +69,7 @@ namespace tc {
 			template<typename Sink>
 			auto operator()(Sink&& sink) const& MAYTHROW {
 				tc_auto_cref(str, boost::lexical_cast< std::array<char,50> >(m_n+0/*force integral promotion, otherwise unsigned/signed char gets printed as character*/));
-				return tc::for_each(tc::transform(tc::ptr_begin(str), tc::fn_explicit_cast<tc::char_ascii>()), std::forward<Sink>(sink));
+				return tc::for_each(tc::transform(tc::ptr_begin(str), tc::fn_explicit_cast<tc::char_ascii>()), tc_move_if_owned(sink));
 			}
 
 			constexpr bool empty() const& noexcept { return false; }
@@ -226,7 +226,7 @@ MODIFY_WARNINGS_END
 
 			template<typename Sink>
 			void operator()(Sink&& sink) const& MAYTHROW {
-				tc::for_each(tc::concat(tc::as_blob(tc::implicit_cast<std::uint32_t>(tc::size_linear(this->base_range()))), tc::range_as_blob(this->base_range())), std::forward<Sink>(sink)); // THROW(tc::file_failure)
+				tc::for_each(tc::concat(tc::as_blob(tc::implicit_cast<std::uint32_t>(tc::size_linear(this->base_range()))), tc::range_as_blob(this->base_range())), tc_move_if_owned(sink)); // THROW(tc::file_failure)
 			}
 		};
 	}
@@ -234,7 +234,7 @@ MODIFY_WARNINGS_END
 	template< typename Rng >
 	auto size_prefixed(Rng&& rng) return_ctor_noexcept(
 		no_adl::size_prefixed_impl<Rng>,
-		(aggregate_tag, std::forward<Rng>(rng))
+		(aggregate_tag, tc_move_if_owned(rng))
 	)
 
 	inline auto size_prefixed(tc::empty_range) noexcept {
@@ -249,15 +249,15 @@ MODIFY_WARNINGS_END
 
 			template<typename Rhs>
 			bool_prefixed_impl(aggregate_tag_t, Rhs&& rhs) noexcept
-				: m_ot(aggregate_tag, std::forward<Rhs>(rhs))
+				: m_ot(aggregate_tag, tc_move_if_owned(rhs))
 			{}
 
 			template<typename Sink>
 			void operator()(Sink&& sink) const& MAYTHROW {
 				if(*m_ot) {
-					tc::for_each(tc::concat(tc::as_blob(true), tc::as_blob(**m_ot)), std::forward<Sink>(sink)); // THROW(tc::file_failure)
+					tc::for_each(tc::concat(tc::as_blob(true), tc::as_blob(**m_ot)), tc_move_if_owned(sink)); // THROW(tc::file_failure)
 				} else {
-					tc::for_each(tc::as_blob(false), std::forward<Sink>(sink)); // THROW(tc::file_failure)
+					tc::for_each(tc::as_blob(false), tc_move_if_owned(sink)); // THROW(tc::file_failure)
 				}
 			}
 		private:
@@ -268,6 +268,6 @@ MODIFY_WARNINGS_END
 	template< typename T > requires tc::instance<std::remove_reference_t<T>, std::optional> || tc::instance<std::remove_reference_t<T>, tc::optional>
 	auto bool_prefixed(T&& t) return_ctor_noexcept(
 		no_adl::bool_prefixed_impl<T>,
-		(aggregate_tag, std::forward<T>(t))
+		(aggregate_tag, tc_move_if_owned(t))
 	)
 }

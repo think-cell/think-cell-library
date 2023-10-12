@@ -17,7 +17,7 @@ namespace tc {
 	namespace invoke_with_constant_impl {
 		template<typename TResult, typename TIndex, TIndex I, typename Func, typename... Args>
 		TResult invoke_impl(Func func, Args&&... args) MAYTHROW {
-			return func(tc::constant<I>(), std::forward<Args>(args)...);
+			return func(tc::constant<I>(), tc_move_if_owned(args)...);
 		}
 
 		template<typename TIndex, TIndex I, TIndex... Is>
@@ -37,17 +37,17 @@ namespace tc {
 				template<TIndex I, TIndex... IsRemaining>
 				static result_type constexpr invoke_constexpr(Func&& func, TIndex nIndex, Args&&... args) MAYTHROW {
 					if (I == nIndex) {
-						return func(tc::constant<I>(), std::forward<Args>(args)...); // MAYTHROW
+						return func(tc::constant<I>(), tc_move_if_owned(args)...); // MAYTHROW
 					} else if constexpr (0 < sizeof...(IsRemaining)) {
-						return invoke_constexpr<IsRemaining...>(std::forward<Func>(func), nIndex, std::forward<Args>(args)...); // MAYTHROW
+						return invoke_constexpr<IsRemaining...>(tc_move_if_owned(func), nIndex, tc_move_if_owned(args)...); // MAYTHROW
 					} else {
 						_ASSERTFALSE;
-						return func(tc::constant<I>(), std::forward<Args>(args)...);
+						return func(tc::constant<I>(), tc_move_if_owned(args)...);
 					}
 				}
 
 				static result_type constexpr invoke_constexpr_outer(Func&& func, TIndex nIndex, Args&&... args) MAYTHROW {
-					return invoke_constexpr<Is...>(std::forward<Func>(func), nIndex, std::forward<Args>(args)...); // MAYTHROW (but won't because constexpr)
+					return invoke_constexpr<Is...>(tc_move_if_owned(func), nIndex, tc_move_if_owned(args)...); // MAYTHROW (but won't because constexpr)
 				}
 
 				static result_type invoke_non_constexpr(Func&& func, TIndex nIndex, Args&&... args) MAYTHROW {
@@ -59,7 +59,7 @@ namespace tc {
 					auto const nTableIndex = nIndex - IdxFirst<TIndex, Is...>;
 					_ASSERTNORETURN(0 <= nTableIndex && nTableIndex < tc::size(apfn));
 
-					return apfn[nTableIndex](std::forward<Func>(func), std::forward<Args>(args)...); // MAYTHROW
+					return apfn[nTableIndex](tc_move_if_owned(func), tc_move_if_owned(args)...); // MAYTHROW
 				}
 			};
 		};
@@ -72,9 +72,9 @@ namespace tc {
 		if constexpr (0 < ContiguousIntegerSequence::size()) {
 			using impl_type = typename invoke_with_constant_impl::invoke_with_constant_impl<ContiguousIntegerSequence>::template inner<Func, Args...>;
 			if (std::is_constant_evaluated()) {
-				return impl_type::invoke_constexpr_outer(std::forward<Func>(func), nIndex, std::forward<Args>(args)...);
+				return impl_type::invoke_constexpr_outer(tc_move_if_owned(func), nIndex, tc_move_if_owned(args)...);
 			} else {
-				return impl_type::invoke_non_constexpr(std::forward<Func>(func), nIndex, std::forward<Args>(args)...);
+				return impl_type::invoke_non_constexpr(tc_move_if_owned(func), nIndex, tc_move_if_owned(args)...);
 			}
 		}
 	}
@@ -83,7 +83,7 @@ namespace tc {
 	decltype(auto) invoke_with_constant(Func func, Enum e, Args&&... args) MAYTHROW {
 		return tc::invoke_with_constant<std::make_index_sequence<tc::size(tc::all_values<Enum>())>>(
 			[&](auto constn) MAYTHROW -> decltype(auto) {
-				return tc::invoke(func, tc::constant<tc_at_nodebug(tc::all_values<Enum>(), decltype(constn)::value)>(), std::forward<Args>(args)...);
+				return tc::invoke(func, tc::constant<tc_at_nodebug(tc::all_values<Enum>(), decltype(constn)::value)>(), tc_move_if_owned(args)...);
 			},
 			tc::all_values<Enum>().index_of(e)
 		);

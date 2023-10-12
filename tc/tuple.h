@@ -9,7 +9,7 @@
 #pragma once
 
 #include "base/invoke.h"
-#include "base/tc_move.h"
+#include "base/move.h"
 
 namespace tc {
 	// std::tuple from Microsofts STL is using a recursive implementation which is very slow.
@@ -90,7 +90,7 @@ namespace tc {
 				(std::tuple_size<std::remove_cvref_t<Src>>::value == sizeof...(T)) &&
 				(!tc::derived_from<std::remove_reference_t<Src>, tc_tuple_impl>) // make sure default assignment operator wins in overload resolution. e.g. tc::tuple is a mutable member.
 			constexpr auto/*=void, returning tuple& may turn xvalue into lvalue*/ operator=(Src&& src) /*no &*/ return_decltype_MAYTHROW(
-				(void(tc::get<n>(*SFINAE_VALUE(this)) = tc::get<n>(std::forward<Src>(src))), ...) // assignment MAYTHROW
+				(void(tc::get<n>(*SFINAE_VALUE(this)) = tc::get<n>(tc_move_if_owned(src))), ...) // assignment MAYTHROW
 			)
 
 #pragma push_macro("DEFINE_CONVERSION_OPERATOR")
@@ -135,12 +135,12 @@ namespace tc {
 	// Provide supporting functions that come with std::tuple.
 	template<typename... T>
 	[[nodiscard]] constexpr tc::tuple<tc::unwrap_ref_decay_t<T>...> make_tuple(T&&... t) MAYTHROW {
-		return {{ {tc::unwrap_ref_decay_t<T>(std::forward<T>(t))}... }};
+		return {{ {tc::unwrap_ref_decay_t<T>(tc_move_if_owned(t))}... }};
 	}
 
 	template<typename... T>
 	[[nodiscard]] constexpr tc::tuple<T&&...> forward_as_tuple(T&&... t) noexcept {
-		return {{ {std::forward<T>(t)}... }};
+		return {{ {tc_move_if_owned(t)}... }};
 	}
 
 	template<typename... T>
@@ -154,8 +154,8 @@ namespace tc {
 		tc::expanding_invoke_adl::expanding_invoke_impl(
 			tc::expanding_invoke_adl::expand_tag,
 			typename tc::invoke_no_adl::expanded_arguments<Tuple...>::index_sequence(),
-			std::forward<F>(f),
-			std::forward<Tuple>(tuple)...
+			tc_move_if_owned(f),
+			tc_move_if_owned(tuple)...
 		)
 	)
 
@@ -165,17 +165,17 @@ namespace tc {
 			[](auto&&... args) noexcept -> tc::type::apply_t<tc::tuple, tc::type::concat_t<typename tc::is_instance<tc::decay_t<Tuple>, tc::tuple>::arguments...>> {
 				return {{ {tc_move_if_owned(args)}... }}; // MAYTHROW
 			},
-			std::forward<Tuple>(tuple)...
+			tc_move_if_owned(tuple)...
 		);
 	}
 
 	template<typename Tuple, typename Fn>
 	[[nodiscard]] constexpr auto tuple_transform(Tuple&& tuple, Fn&& fn) MAYTHROW {
 		return tc::apply(
-			[fn=std::forward<Fn>(fn)](auto&&... args) MAYTHROW {
+			[fn=tc_move_if_owned(fn)](auto&&... args) MAYTHROW {
 				return tc::tuple<decltype(tc::invoke(fn, tc_move_if_owned(args)))...>{{ {tc::invoke(fn, tc_move_if_owned(args))}... }};
 			},
-			std::forward<Tuple>(tuple)
+			tc_move_if_owned(tuple)
 		);
 	}
 

@@ -86,7 +86,7 @@ namespace tc::xml {
 			static_assert(!has_discard_until<decltype((*transform<String, ErrorHandler, Output>::m_strInput))>::value);
 
 			explicit transform(String&& strInput, ErrorHandler errorhandler, Output& output) MAYTHROW
-				: base_(std::forward<String>(strInput), tc_move(errorhandler)), m_output(output)
+				: base_(tc_move_if_owned(strInput), tc_move(errorhandler)), m_output(output)
 				, m_itchOut(tc::begin(*(this->m_strInput)))
 			{}
 			
@@ -188,7 +188,7 @@ namespace tc::xml {
 			template<typename Str>
 			[[nodiscard]] auto match_or_insert_child(Namespace ons, Str&& strTag) & MAYTHROW
 				-> std::optional<decltype(
-				closing_element_on_dtor(std::declval<tc::string<char_type>&&>(), std::forward<Str>(strTag))
+				closing_element_on_dtor(std::declval<tc::string<char_type>&&>(), tc_move_if_owned(strTag))
 			)> {
 				auto strPrefix = prefix_for_namespace(ons);
 				if(this->child(ons, strTag)) { // MAYTHROW

@@ -80,7 +80,7 @@ namespace tc {
 
 		template<typename T>
 		[[nodiscard]] constexpr tc::decay_t<T> operator*(T&& t, sign sign_) noexcept {
-			return tc_modified( std::forward<T>(t), _ *= sign_ );
+			return tc_modified( tc_move_if_owned(t), _ *= sign_ );
 		}
 
 		template<tc::decayed T>
@@ -102,15 +102,15 @@ namespace tc {
 		public:
 			template<typename FuncArg>
 			constexpr directed(FuncArg&& func, tc::sign sign) noexcept
-				: m_func(std::forward<FuncArg>(func))
+				: m_func(tc_move_if_owned(func))
 				, m_sign(sign)
 			{}
 
 			template<typename Lhs, typename Rhs>
 			constexpr auto operator()(Lhs && lhs, Rhs && rhs) const& return_decltype_MAYTHROW(
 				tc::sign::neg==m_sign
-				?	m_func( std::forward<Rhs>(rhs), std::forward<Lhs>(lhs) )
-				:	m_func(std::forward<Lhs>(lhs), std::forward<Rhs>(rhs) )
+				?	m_func( tc_move_if_owned(rhs), tc_move_if_owned(lhs) )
+				:	m_func(tc_move_if_owned(lhs), tc_move_if_owned(rhs) )
 			)
 		};
 

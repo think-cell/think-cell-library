@@ -15,7 +15,7 @@ namespace {
 	struct A final {
 		template<typename Self>
 		static decltype(auto) test_(Self&& self) noexcept {
-			return (std::forward<Self>(self).i);
+			return (tc_move_if_owned(self).i);
 		}
 		int i;
 		
@@ -33,7 +33,7 @@ namespace {
 	struct B final {
 		template<typename Self>
 		static decltype(auto) test_(Self&& self) noexcept {
-			return (std::forward<Self>(self).i);
+			return (tc_move_if_owned(self).i);
 		}
 		int i;
 		
@@ -50,7 +50,7 @@ namespace {
 	struct C final {
 		template<typename Self>
 		static decltype(auto) test_(Self&& self) noexcept {
-			return (std::forward<Self>(self).i);
+			return (tc_move_if_owned(self).i);
 		}
 		int i;
 		

@@ -161,7 +161,7 @@ MODIFY_WARNINGS_END
 		struct [[nodiscard]] range_of_elements {
 			template<typename Rhs>
 			constexpr range_of_elements(aggregate_tag_t, Rhs&& rhs) noexcept
-				: m_rng(aggregate_tag, std::forward<Rhs>(rhs))
+				: m_rng(aggregate_tag, tc_move_if_owned(rhs))
 			{}
 
 			constexpr auto begin() const&
@@ -182,7 +182,7 @@ MODIFY_WARNINGS_END
 	}
 	template<typename Rng>
 	constexpr auto make_range_of_iterators(Rng&& rng)
-		return_ctor_noexcept( no_adl::range_of_elements< Rng >, (aggregate_tag, std::forward<Rng>(rng)) )
+		return_ctor_noexcept( no_adl::range_of_elements< Rng >, (aggregate_tag, tc_move_if_owned(rng)) )
 
 	namespace no_adl {
 		template<auto Begin, decltype(Begin) End

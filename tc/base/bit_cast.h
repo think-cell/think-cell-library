@@ -76,7 +76,7 @@ namespace tc {
 
 			template<typename T>
 			auto operator()(T&& t) const& return_decltype_MAYTHROW (
-				chunk(tc::single(/* no std::forward<T> */ t))
+				chunk(tc::single(/* no tc_move_if_owned */ t))
 			)
 		};
 	}
@@ -90,7 +90,7 @@ namespace tc {
 
 	template<typename T> requires std::is_trivially_copyable<std::remove_reference_t<T>>::value
 	[[nodiscard]] auto as_blob(T&& t) noexcept {
-		return tc::range_as_blob( tc::single( std::forward<T>(t) ) );
+		return tc::range_as_blob( tc::single( tc_move_if_owned(t) ) );
 	}
 
 	namespace assert_no_overlap_impl {

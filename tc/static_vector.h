@@ -59,13 +59,13 @@ namespace tc {
 			constexpr T& dereference(size_type n) & noexcept { return tc::as_mutable(tc::as_const(*this).dereference(n)); }
 		public:
 			template<typename... Args>
-			constexpr T& emplace_back(Args&& ... args) & noexcept(noexcept(m_aot[this->m_iEnd - 1].ctor_value(std::forward<Args>(args)...))) {
+			constexpr T& emplace_back(Args&& ... args) & noexcept(noexcept(m_aot[this->m_iEnd - 1].ctor_value(tc_move_if_owned(args)...))) {
 				_ASSERTE(!this->full());
 				auto& ot=m_aot[this->m_iEnd];
 				++this->m_iEnd;
 				// Inside element ctors, the element is already in the container.
 				try {
-					ot.ctor_value(std::forward<Args>(args)...); // MAYTHROW
+					ot.ctor_value(tc_move_if_owned(args)...); // MAYTHROW
 					return *ot;
 				} catch (...) {
 					--this->m_iEnd;
@@ -116,18 +116,18 @@ namespace tc {
 				_ASSERTE(!this->full());
 				T& t = m_a.m_at[this->m_iEnd];
 				++this->m_iEnd;
-				t = T(std::forward<Args>(args)...);
+				t = T(tc_move_if_owned(args)...);
 				return t;
 			}
 
 			template<typename... Args>
-			typename std::enable_if < !std::is_trivially_assignable<T&, T>::value || !noexcept(T(std::declval<Args&&>()...)), T&>::type emplace_back(Args&& ... args) & noexcept(noexcept(T(std::forward<Args>(args)...))) {
+			typename std::enable_if < !std::is_trivially_assignable<T&, T>::value || !noexcept(T(std::declval<Args&&>()...)), T&>::type emplace_back(Args&& ... args) & noexcept(noexcept(T(tc_move_if_owned(args)...))) {
 				_ASSERTE(!this->full());
 				T& t = m_a.m_at[this->m_iEnd];
 				++this->m_iEnd;
 				// Inside element ctors, the element is already in the container.
 				try {
-					tc::ctor(t, std::forward<Args>(args)...); // MAYTHROW
+					tc::ctor(t, tc_move_if_owned(args)...); // MAYTHROW
 					return t;
 				} catch (...) {
 					--this->m_iEnd;
@@ -230,7 +230,7 @@ namespace tc {
 				(tc::econstructionIMPLICIT==tc::elementwise_construction_restrictiveness<T, Args...>::value)
 			constexpr static_vector(tc::aggregate_tag_t, Args&& ... args) noexcept(std::conjunction<std::is_nothrow_constructible<T, Args&&>...>::value) {
 				static_assert(sizeof...(Args)<=N, "vector initializer list contains too many elements");
-				(this->emplace_back(std::forward<Args>(args)), ...);
+				(this->emplace_back(tc_move_if_owned(args)), ...);
 			}
 
 			template <typename... Args> requires
@@ -238,7 +238,7 @@ namespace tc {
 				(tc::econstructionEXPLICIT==tc::elementwise_construction_restrictiveness<T, Args...>::value)
 			constexpr explicit static_vector(tc::aggregate_tag_t, Args&& ... args) MAYTHROW {
 				static_assert(sizeof...(Args)<=N, "vector initializer list contains too many elements");
-				(tc::cont_emplace_back(*this, std::forward<Args>(args)), ...); // cont_emplace_back for lazy explicit_cast
+				(tc::cont_emplace_back(*this, tc_move_if_owned(args)), ...); // cont_emplace_back for lazy explicit_cast
 			}
 
 			constexpr static_vector(static_vector const& vec) noexcept(std::is_nothrow_copy_constructible<T>::value) {
@@ -283,7 +283,7 @@ namespace tc {
 			template<typename Rng>
 			constexpr void assign(Rng&& rng) & noexcept {
 				clear();
-				tc::append( *this, std::forward<Rng>(rng) );
+				tc::append( *this, tc_move_if_owned(rng) );
 			}
 
 			constexpr void resize(tc::static_vector_size_t const n, boost::container::default_init_t) & noexcept {
@@ -328,12 +328,12 @@ namespace tc {
 
 	template<tc::static_vector_size_t N, typename Rng>
 	constexpr auto make_static_vector(Rng&& rng) MAYTHROW {
-		return tc::explicit_cast<tc::static_vector<tc::range_value_t<Rng>, N>>(std::forward<Rng>(rng));
+		return tc::explicit_cast<tc::static_vector<tc::range_value_t<Rng>, N>>(tc_move_if_owned(rng));
 	}
 
 	template<tc::static_vector_size_t N, typename... Rng>
 	constexpr auto make_static_vector(Rng&&... rng) MAYTHROW {
-		return make_static_vector<N>(tc::concat(std::forward<Rng>(rng)...));
+		return make_static_vector<N>(tc::concat(tc_move_if_owned(rng)...));
 	}
 
 	template< typename T, tc::static_vector_size_t N >

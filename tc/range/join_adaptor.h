@@ -56,12 +56,12 @@ namespace tc {
 
 			template<typename Rng>
 			constexpr auto operator()(Rng&& rng) const& return_decltype_MAYTHROW(
-				tc::for_each(std::forward<Rng>(rng), m_sink)
+				tc::for_each(tc_move_if_owned(rng), m_sink)
 			)
 
 			template<typename SubRngRng, ENABLE_SFINAE>
 			auto chunk(SubRngRng&& rngrng) const& return_decltype_MAYTHROW(
-				SFINAE_VALUE(m_sink).chunk(tc::join(std::forward<SubRngRng>(rngrng)))
+				SFINAE_VALUE(m_sink).chunk(tc::join(tc_move_if_owned(rngrng)))
 			)
 		};
 
@@ -72,7 +72,7 @@ namespace tc {
 
 			template<typename Rng>
 			auto operator()(Rng&& rng) const& return_decltype_MAYTHROW(
-				tc::for_each(tc::reverse(std::forward<Rng>(rng)), m_sink)
+				tc::for_each(tc::reverse(tc_move_if_owned(rng)), m_sink)
 			)
 		};
 
@@ -83,7 +83,7 @@ namespace tc {
 
 			template<typename Sink, bool bReverse>
 			static constexpr auto adapted_sink(Sink&& sink, tc::constant<bReverse>) noexcept {
-				return join_sink<tc::decay_t<Sink>, bReverse>{std::forward<Sink>(sink)};
+				return join_sink<tc::decay_t<Sink>, bReverse>{tc_move_if_owned(sink)};
 			}
 
 			constexpr auto size() const& MAYTHROW
@@ -209,7 +209,7 @@ namespace tc {
 	namespace join_default {
 		template<typename RngRng>
 		constexpr join_adaptor<RngRng> join_impl(RngRng&& rngrng) noexcept {
-			return {aggregate_tag, std::forward<RngRng>(rngrng)};
+			return {aggregate_tag, tc_move_if_owned(rngrng)};
 		}
 	}
 

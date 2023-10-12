@@ -21,7 +21,7 @@ namespace tc {
 		template<typename Rng>
 		struct [[nodiscard]] may_remove_current_impl final { // TODO VS2019: if constexpr does not work well in lambda in VS15.8.0
 			tc::reference_or_value<Rng> m_rng;
-			constexpr explicit may_remove_current_impl(Rng&& rng) noexcept: m_rng(tc::aggregate_tag, std::forward<Rng>(rng)) {}
+			constexpr explicit may_remove_current_impl(Rng&& rng) noexcept: m_rng(tc::aggregate_tag, tc_move_if_owned(rng)) {}
 
 			template<typename Func>
 			constexpr auto operator()(Func func) /* no & */ MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(func, *tc::begin(*m_rng))), tc::constant<tc::continue_>> {
@@ -40,6 +40,6 @@ namespace tc {
 	template< typename Rng >
 	[[nodiscard]] constexpr auto may_remove_current(Rng&& rng) noexcept code_return_decltype(
 		static_assert( !tc::range_filter_by_move_element< std::remove_reference_t<Rng> >::value );,
-		no_adl::may_remove_current_impl<Rng>(std::forward<Rng>(rng))
+		no_adl::may_remove_current_impl<Rng>(tc_move_if_owned(rng))
 	)
 }

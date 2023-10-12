@@ -23,7 +23,7 @@ namespace {
 	template<typename... FuncRng>
 	constexpr auto make_select_range(int n, FuncRng&&... funcrng) return_ctor_MAYTHROW(
 		tc::select_range_adaptor<tc::remove_rvalue_reference_t<decltype(std::declval<FuncRng>()())>...>,
-		(tc::aggregate_tag, n, std::forward<FuncRng>(funcrng)...)
+		(tc::aggregate_tag, n, tc_move_if_owned(funcrng)...)
 	)
 
 	template <typename Lhs, typename Rhs>

@@ -9,7 +9,7 @@
 #pragma once
 
 #include "../base/assert_defs.h"
-#include "../base/tc_move.h" 
+#include "../base/move.h" 
 #include "../base/conditional.h"
 #include "../base/invoke.h"
 #include "../base/trivial_functors.h"
@@ -33,14 +33,14 @@ namespace tc {
 			template<typename T> requires tc::runtime_predicate<Pred, T> && tc::sinkable<Sink, T>
 			constexpr auto operator()(T&& t) const& noexcept(tc::nothrow_predicate<Pred, T> && tc::nothrow_sinkable<Sink, T>) {
 				return tc::explicit_cast<bool>(tc::invoke(m_pred, tc::as_const(t)))
-							? tc::continue_if_not_break(m_sink, std::forward<T>(t))
+							? tc::continue_if_not_break(m_sink, tc_move_if_owned(t))
 							: tc::constant<tc::continue_>();
 			}
 
 			template<typename T> requires tc::constant_predicate_true<Pred, T>  && tc::sinkable<Sink, T>
 			constexpr auto operator()(T&& t) const& noexcept(tc::nothrow_predicate<Pred, T> && tc::nothrow_sinkable<Sink, T>) {
 				tc::discard(tc::invoke(m_pred, tc::as_const(t)));
-				return tc::continue_if_not_break(m_sink, std::forward<T>(t));
+				return tc::continue_if_not_break(m_sink, tc_move_if_owned(t));
 			}
 			template<typename T> requires tc::constant_predicate_false<Pred, T>
 			constexpr auto operator()(T&& t) const& noexcept(tc::nothrow_predicate<Pred, T>) {
@@ -62,13 +62,13 @@ namespace tc {
 			constexpr filter_adaptor() = default;
 			template< typename RngRef, typename PredRef >
 			constexpr filter_adaptor(RngRef&& rng, PredRef&& pred) noexcept
-				: filter_adaptor::generator_range_adaptor(aggregate_tag, std::forward<RngRef>(rng))
-				, m_pred(std::forward<PredRef>(pred))
+				: filter_adaptor::generator_range_adaptor(aggregate_tag, tc_move_if_owned(rng))
+				, m_pred(tc_move_if_owned(pred))
 			{}
 
 			template<typename Sink>
 			constexpr auto adapted_sink(Sink&& sink, bool /*bReverse*/) const& noexcept {
-				return filter_sink<Pred, tc::decay_t<Sink>>{m_pred, std::forward<Sink>(sink)};
+				return filter_sink<Pred, tc::decay_t<Sink>>{m_pred, tc_move_if_owned(sink)};
 			}
 		};
 
@@ -145,6 +145,6 @@ namespace tc {
 
 	template<typename Rng, typename Pred = tc::identity>
 	constexpr auto filter(Rng&& rng, Pred&& pred = Pred())
-		return_ctor_noexcept( TC_FWD(tc::filter_adaptor<tc::decay_t<Pred>, Rng>), (std::forward<Rng>(rng),std::forward<Pred>(pred)) )
+		return_ctor_noexcept( TC_FWD(tc::filter_adaptor<tc::decay_t<Pred>, Rng>), (tc_move_if_owned(rng),tc_move_if_owned(pred)) )
 }
 

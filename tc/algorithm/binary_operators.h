@@ -22,10 +22,10 @@ namespace tc {
 			requires is_operation_available<Lhs&&, Rhs&&>::value \
 		[[nodiscard]] friend constexpr Result operator op(Lhs&& lhs, Rhs&& rhs) noexcept { \
 			static_assert(tc::decayed<conversion_t<Lhs, Rhs>>); \
-			Result _ = std::forward<Lhs>(lhs); \
+			Result _ = tc_move_if_owned(lhs); \
 			operation_body; \
 			if constexpr( std::is_same<Result, Lhs&&>::value ) { \
-				return std::forward<Lhs>(_); \
+				return tc_move_if_owned(_); \
 			} else { \
 				static_assert( \
 					std::is_same<Result, tc::decay_t<Lhs>>::value \
@@ -68,7 +68,7 @@ namespace tc {
 				&& is_compound_available<conversion_t<Lhs, Rhs>, Rhs> \
 			>; \
 		public: \
-			GENERIC_OP_BODY( op, _.operator op##=(std::forward<Rhs>(rhs)) ); \
+			GENERIC_OP_BODY( op, _.operator op##=(tc_move_if_owned(rhs)) ); \
 		}; \
 		\
 		template< typename Other, typename Base = void > \
@@ -89,8 +89,8 @@ namespace tc {
 			>; \
 		public: \
 			GENERIC_OP_BODY( op, { \
-				static_assert(!tc::generic_operator_helper::has_mem_fn_compound_ ##name<decltype((_)), decltype(std::forward<Rhs>(rhs))>); \
-				_ op##= std::forward<Rhs>(rhs); \
+				static_assert(!tc::generic_operator_helper::has_mem_fn_compound_ ##name<decltype((_)), decltype(tc_move_if_owned(rhs))>); \
+				_ op##= tc_move_if_owned(rhs); \
 			} ); \
 		}; \
 	} \
@@ -181,7 +181,7 @@ namespace tc {
 			Rhs const& m_rhs;
 			template<typename LhsElement>
 			constexpr auto operator()(LhsElement&& lhselem) const& return_decltype_xvalue_by_ref_MAYTHROW( // should be NOEXCEPT, but NOEXCEPT does not allow xvalues.
-				FnOp()(std::forward<LhsElement>(lhselem), m_rhs)
+				FnOp()(tc_move_if_owned(lhselem), m_rhs)
 			)
 		};
 
@@ -213,7 +213,7 @@ namespace tc {
 			} \
 			[[nodiscard]] friend constexpr decltype(auto) operator op(Lhs&& lhs, Rhs const& rhs) noexcept { \
 				PrePostOperation::pre(rhs); \
-				decltype(auto) _ = std::forward<Lhs>(lhs).template transform<nTransformDepth>(scalar_binary_op_detail::no_adl::func<fnop, Rhs>{rhs}); \
+				decltype(auto) _ = tc_move_if_owned(lhs).template transform<nTransformDepth>(scalar_binary_op_detail::no_adl::func<fnop, Rhs>{rhs}); \
 				PrePostOperation::post(_, rhs); \
 				return _; \
 			} \

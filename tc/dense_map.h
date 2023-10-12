@@ -138,10 +138,10 @@ namespace tc {
 
 			template<typename... Args> requires (0 < sizeof...(Args)) // dense_map(fill_tag) could exist, but it should be explicit
 			constexpr dense_map( tc::fill_tag_t, Args&&... val ) noexcept
-			: tc_member_init_cast(m_a, tc::fill_tag, std::forward<Args>(val)...) {}
+			: tc_member_init_cast(m_a, tc::fill_tag, tc_move_if_owned(val)...) {}
 
 			template<typename Rng>
-			constexpr dense_map(tc::range_tag_t, Rng&& rng) noexcept : tc_member_init_cast( m_a, std::forward<Rng>(rng) ) {}
+			constexpr dense_map(tc::range_tag_t, Rng&& rng) noexcept : tc_member_init_cast( m_a, tc_move_if_owned(rng) ) {}
 
 			// aggregate construction of tc::dense_map does not require tc::aggregate_tag because
 			//   1. number of arguments must be the same as the size of dense_map,
@@ -151,15 +151,15 @@ namespace tc {
 				requires
 					(!tc::tag<std::remove_reference_t<First>>)
 					&& (tc::econstructionIMPLICIT == tc::elementwise_construction_restrictiveness<Value, First&&, Second&&, Args&&...>::value)
-			constexpr dense_map(First&& first, Second&& second, Args&& ...args) noexcept(noexcept(tc::explicit_cast<decltype(m_a)>(tc::aggregate_tag, std::forward<First>(first), std::forward<Second>(second), std::forward<Args>(args)...)))
-			: tc_member_init_cast(m_a, tc::aggregate_tag, std::forward<First>(first), std::forward<Second>(second), std::forward<Args>(args)...) {}
+			constexpr dense_map(First&& first, Second&& second, Args&& ...args) noexcept(noexcept(tc::explicit_cast<decltype(m_a)>(tc::aggregate_tag, tc_move_if_owned(first), tc_move_if_owned(second), tc_move_if_owned(args)...)))
+			: tc_member_init_cast(m_a, tc::aggregate_tag, tc_move_if_owned(first), tc_move_if_owned(second), tc_move_if_owned(args)...) {}
 
 			template< typename First, typename Second, typename... Args>
 				requires
 					(!tc::tag<std::remove_reference_t<First>>)
 					&& (tc::econstructionEXPLICIT == tc::elementwise_construction_restrictiveness<Value, First&&, Second&&, Args&&...>::value)
-			constexpr explicit dense_map(First&& first, Second&& second, Args&& ...args) noexcept(noexcept(tc::explicit_cast<decltype(m_a)>(tc::aggregate_tag, std::forward<First>(first), std::forward<Second>(second), std::forward<Args>(args)...)))
-				: tc_member_init_cast( m_a, tc::aggregate_tag, std::forward<First>(first), std::forward<Second>(second), std::forward<Args>(args)... )
+			constexpr explicit dense_map(First&& first, Second&& second, Args&& ...args) noexcept(noexcept(tc::explicit_cast<decltype(m_a)>(tc::aggregate_tag, tc_move_if_owned(first), tc_move_if_owned(second), tc_move_if_owned(args)...)))
+				: tc_member_init_cast( m_a, tc::aggregate_tag, tc_move_if_owned(first), tc_move_if_owned(second), tc_move_if_owned(args)... )
 			{}
 
 			template< typename Func > requires tc::invocable<Func&, Key>
@@ -194,14 +194,14 @@ namespace tc {
 
 			template< typename Func, typename Value2 >
 			constexpr dense_map(transform_tag_t, other_dense_map<Value2> const& mapOther, Func&& func) MAYTHROW
-				: tc_member_init_cast( m_a, tc::transform(mapOther.m_a, std::forward<Func>(func)) )
+				: tc_member_init_cast( m_a, tc::transform(mapOther.m_a, tc_move_if_owned(func)) )
 			{}
 
 			template< typename Func, typename Value2 >
 			constexpr dense_map(transform_tag_t, other_dense_map<Value2>&& mapOther, Func func) MAYTHROW
 				: tc_member_init_cast( m_a,
-					// TODO rvalue elements for rvalue ranges: tc::transform(tc_move(mapOther.m_a), std::forward<Func>(func))
-					tc::transform(mapOther.m_a, tc::chained(std::forward<Func>(func), tc::fn_static_cast<Value2&&>()))
+					// TODO rvalue elements for rvalue ranges: tc::transform(tc_move(mapOther.m_a), tc_move_if_owned(func))
+					tc::transform(mapOther.m_a, tc::chained(tc_move_if_owned(func), tc::fn_static_cast<Value2&&>()))
 				)
 			{}
 
@@ -210,8 +210,8 @@ namespace tc {
 			template< typename ValuePri, typename ValueSec >
 			constexpr dense_map(Key keyPri, ValuePri&& valPri, ValueSec&& valSec) MAYTHROW :
 				dense_map(
-					tc_conditional_rvalue_as_ref(tc_front_nodebug(c_rngkey) == keyPri, std::forward<ValuePri>(valPri), std::forward<ValueSec>(valSec)),
-					tc_conditional_rvalue_as_ref(tc_front_nodebug(c_rngkey) == keyPri, std::forward<ValueSec>(valSec), std::forward<ValuePri>(valPri))
+					tc_conditional_rvalue_as_ref(tc_front_nodebug(c_rngkey) == keyPri, tc_move_if_owned(valPri), tc_move_if_owned(valSec)),
+					tc_conditional_rvalue_as_ref(tc_front_nodebug(c_rngkey) == keyPri, tc_move_if_owned(valSec), tc_move_if_owned(valPri))
 				)
 			{}
 			template <typename Value2>
@@ -248,7 +248,7 @@ namespace tc {
 			template <typename Value2>
 				requires (tc::safely_assignable_from<Value&, Value2&&>)
 			dense_map& operator=(other_dense_map<Value2>&& rhs) & noexcept(std::is_nothrow_assignable<Array, typename other_dense_map<Value2>::Array&&>::value) {
-				tc::cont_assign(m_a, tc_move(rhs.m_a));
+				tc::cont_assign(m_a, tc_move(rhs).m_a);
 				return *this;
 			}
 
@@ -362,22 +362,22 @@ namespace tc {
 	template <typename Key, typename Func>
 	[[nodiscard]] constexpr auto make_dense_map(tc::func_tag_t, Func&& func) return_ctor_MAYTHROW(
 		TC_FWD(tc::dense_map<Key, tc::decay_t<decltype(tc::invoke(tc::as_lvalue(tc::decay_copy(func)), tc_front_nodebug(tc::all_values<Key>())))>>),
-		(tc::func_tag, std::forward<Func>(func))
+		(tc::func_tag, tc_move_if_owned(func))
 	)
 
 	template <typename Key, /*always deduce Ts, otherwise use dense_map<Key, T>*/int = 0, typename... Ts>
 	[[nodiscard]] constexpr auto make_dense_map(tc::fill_tag_t, Ts&&... ts) noexcept {
-		return tc::dense_map<Key, tc::common_type_t<Ts...>>(tc::fill_tag, std::forward<Ts>(ts)...);
+		return tc::dense_map<Key, tc::common_type_t<Ts...>>(tc::fill_tag, tc_move_if_owned(ts)...);
 	}
 
 	template <typename Key, typename Rng>
 	[[nodiscard]] constexpr auto make_dense_map(tc::range_tag_t, Rng&& rng) noexcept {
-		return tc::dense_map<Key, tc::range_value_t<Rng>>(tc::range_tag, std::forward<Rng>(rng));
+		return tc::dense_map<Key, tc::range_value_t<Rng>>(tc::range_tag, tc_move_if_owned(rng));
 	}
 
 	template <typename Key, /*always deduce Ts, otherwise use dense_map<Key, T>*/int = 0, typename... Ts>
 	[[nodiscard]] constexpr auto make_dense_map(Ts&&... ts) noexcept {
-		return tc::dense_map<Key, tc::common_type_t<Ts...>>(std::forward<Ts>(ts)...);
+		return tc::dense_map<Key, tc::common_type_t<Ts...>>(tc_move_if_owned(ts)...);
 	}
 
 	namespace no_adl {
@@ -430,14 +430,14 @@ namespace tc {
 		>(tc::func_tag, [&](auto const key) noexcept
 			-> tc::tuple<tc::xvalue_decay_t<decltype(std::declval<DenseMap>()[key])>, tc::xvalue_decay_t<decltype(std::declval<DenseMaps>()[key])>...>
 		{
-			return {std::forward<DenseMap>(dm)[key], std::forward<DenseMaps>(dms)[key]...};
+			return {tc_move_if_owned(dm)[key], tc_move_if_owned(dms)[key]...};
 		});
 	}
 
 	template<typename DenseMap> requires tc::instance_or_derived<std::remove_reference_t<DenseMap>, tc::dense_map>
 	[[nodiscard]] constexpr auto enumerate(DenseMap&& dm) noexcept {
 		using Key = typename std::remove_reference_t<DenseMap>::dense_map_key_type;
-		return tc::zip(tc::dense_map<Key, Key>(tc::func_tag, tc::identity()), std::forward<DenseMap>(dm));
+		return tc::zip(tc::dense_map<Key, Key>(tc::func_tag, tc::identity()), tc_move_if_owned(dm));
 	}
 
 	namespace dense_map_adl {
@@ -453,7 +453,7 @@ namespace tc {
 			>
 		{
 			return {tc::func_tag, [&](auto const key0, auto const key1) return_decltype_xvalue_by_ref_noexcept(
-				std::forward<NestedDenseMap>(dm)[key0][key1]
+				tc_move_if_owned(dm)[key0][key1]
 			)};
 		}
 	}
@@ -473,13 +473,13 @@ namespace tc {
 	template <typename A0, typename A1, typename... Args> \
 		requires (tc::econstructionIMPLICIT==tc::construction_restrictiveness<base_, A0&&, A1&&, Args&&...>::value) \
 	constexpr class_name(A0&& a0, A1&& a1, Args&& ... args) noexcept(std::is_nothrow_constructible<base_, A0, A1, Args...>::value) \
-		: base_(std::forward<A0>(a0), std::forward<A1>(a1), std::forward<Args>(args)...) \
+		: base_(tc_move_if_owned(a0), tc_move_if_owned(a1), tc_move_if_owned(args)...) \
 	{} \
 	\
 	template <typename A0, typename A1, typename... Args> \
 		requires (tc::econstructionEXPLICIT==tc::construction_restrictiveness<base_, A0&&, A1&&, Args&&...>::value) \
 	constexpr explicit class_name(A0&& a0, A1&& a1, Args&& ... args) noexcept(std::is_nothrow_constructible<base_, A0, A1, Args...>::value) \
-		: base_(std::forward<A0>(a0), std::forward<A1>(a1), std::forward<Args>(args)...) \
+		: base_(tc_move_if_owned(a0), tc_move_if_owned(a1), tc_move_if_owned(args)...) \
 	{} \
 	\
 	/* inherit implicit copy and move constructors from dense_map (only if argument is actual class_name<T>)*/ \

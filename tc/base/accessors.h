@@ -56,7 +56,7 @@ namespace tc {
 	[[nodiscard]] constexpr type&& funcname() && noexcept = delete; /* Visual Studio gives improper error message if it returns a dummy type */ \
 	\
 	template<ENABLE_SFINAE> requires true \
-	[[nodiscard]] constexpr typename tc::no_adl::accessor_return_type<SFINAE_TYPE(type)>::const_ref_ref_type funcname() const&& noexcept { invariant(name); return std::move(name); } \
+	[[nodiscard]] constexpr typename tc::no_adl::accessor_return_type<SFINAE_TYPE(type)>::const_ref_ref_type funcname() const&& noexcept { invariant(name); return tc_move_always_even_const(name); } \
 	\
 	template<ENABLE_SFINAE> \
 	[[nodiscard]] constexpr type const&& funcname() const&& noexcept = delete; /* Visual Studio gives improper error message if it returns a dummy type */

@@ -87,16 +87,16 @@ namespace tc {
 				tc::base_cast<Sink>(*this)(std::declval<Args&&>()...)
 			)) {
 				check_sink_result<R, boc>();
-				tc::base_cast<Sink>(*this)(std::forward<Args>(args)...); // MAYTHROW
+				tc::base_cast<Sink>(*this)(tc_move_if_owned(args)...); // MAYTHROW
 				return {};
 			}
 
 			template<typename Rng> requires tc::has_mem_fn_chunk<Sink const&, Rng>
 			constexpr tc::constant<boc> chunk(Rng&& rng) const& noexcept(noexcept(
-				tc::base_cast<Sink>(*this).chunk(std::forward<Rng>(rng))
+				tc::base_cast<Sink>(*this).chunk(tc_move_if_owned(rng))
 			)) {
-				check_sink_result<decltype(tc::base_cast<Sink>(*this).chunk(std::forward<Rng>(rng))), boc>();
-				tc::base_cast<Sink>(*this).chunk(std::forward<Rng>(rng)); // MAYTHROW
+				check_sink_result<decltype(tc::base_cast<Sink>(*this).chunk(tc_move_if_owned(rng))), boc>();
+				tc::base_cast<Sink>(*this).chunk(tc_move_if_owned(rng)); // MAYTHROW
 				return {};
 			}
 		};
@@ -118,13 +118,13 @@ namespace tc {
 		requires std::is_same<BreakOrContinue, tc::break_or_continue>::value
 			|| std::is_same<BreakOrContinue, tc::guaranteed_break_or_continue_t<Sink>>::value
 	constexpr decltype(auto) verify_sink_result(Sink&& sink) noexcept {
-		return std::forward<Sink>(sink);
+		return tc_move_if_owned(sink);
 	}
 
 	template<typename BreakOrContinue, typename Sink>
 	constexpr void_generator_type_check_no_adl::verify_sink_result_impl<BreakOrContinue::value, tc::decay_t<Sink>> verify_sink_result(Sink&& sink) noexcept {
 		static_assert( std::is_same<guaranteed_break_or_continue_t<Sink>, tc::break_or_continue>::value, "Mismatch between range and sink result types (broken range implementation)." );
-		return {std::forward<Sink>(sink)};
+		return {tc_move_if_owned(sink)};
 	}
 
 	//-------------------------------------------------------------------------------------------------------------------------
@@ -173,22 +173,22 @@ namespace tc {
 
 	template<typename Rng, typename Sink> requires (for_each_detail::eoverloadCHUNK == for_each_detail::select_overload<Rng, Sink>::value)
 	constexpr auto for_each(Rng&& rng, Sink&& sink) return_MAYTHROW(
-		tc_internal_continue_if_not_break(/*do we really need that copy?*/tc::as_const(tc::as_lvalue(tc::decay_copy(sink))).chunk(std::forward<Rng>(rng)))
+		tc_internal_continue_if_not_break(/*do we really need that copy?*/tc::as_const(tc::as_lvalue(tc::decay_copy(sink))).chunk(tc_move_if_owned(rng)))
 	)
 
 	template<typename Rng, typename Sink> requires (for_each_detail::eoverloadADL == for_each_detail::select_overload<Rng, Sink>::value)
 	constexpr auto for_each(Rng&& rng, Sink&& sink) return_MAYTHROW(
-		for_each_impl(std::forward<Rng>(rng), std::forward<Sink>(sink))
+		for_each_impl(tc_move_if_owned(rng), tc_move_if_owned(sink))
 	)
 
 	template<typename Rng, typename Sink> requires (for_each_detail::eoverloadADLTAG == for_each_detail::select_overload<Rng, Sink>::value)
 	constexpr auto for_each(Rng&& rng, Sink&& sink) return_MAYTHROW(
-		for_each_impl(for_each_adl::adl_tag, std::forward<Rng>(rng), std::forward<Sink>(sink))
+		for_each_impl(for_each_adl::adl_tag, tc_move_if_owned(rng), tc_move_if_owned(sink))
 	)
 
 	template<typename Rng, typename Sink> requires (for_each_detail::eoverloadINVOKERNG == for_each_detail::select_overload<Rng, Sink>::value)
 	constexpr auto for_each(Rng&& rng, Sink&& sink) return_MAYTHROW(
-		tc_internal_continue_if_not_break(std::forward<Rng>(rng)(tc::verify_sink_result<for_each_detail::make_break_or_continue_t<decltype(std::declval<Rng>()(std::declval<Sink>()))>>(std::forward<Sink>(sink))))
+		tc_internal_continue_if_not_break(tc_move_if_owned(rng)(tc::verify_sink_result<for_each_detail::make_break_or_continue_t<decltype(std::declval<Rng>()(std::declval<Sink>()))>>(tc_move_if_owned(sink))))
 	)
 
 	template<typename Rng, typename Sink, /*not requires because of CWG issue 2369*/std::enable_if_t<for_each_detail::eoverloadINDEX == for_each_detail::select_overload<Rng, Sink>::value>* = nullptr>
@@ -250,7 +250,7 @@ namespace tc {
 				Sink m_sink;
 				template<std::size_t I>
 				constexpr auto operator()(tc::constant<I>) const& return_decltype_MAYTHROW(
-					tc::invoke(m_sink, tc::get<I>(std::forward<Tuple>(m_tuple)))
+					tc::invoke(m_sink, tc::get<I>(tc_move_if_owned(m_tuple)))
 				)
 			};
 		}
@@ -261,12 +261,12 @@ namespace tc {
 	namespace for_each_adl {
 		template<typename TIndex, TIndex... Is, typename Sink>
 		constexpr auto for_each_impl(adl_tag_t, std::integer_sequence<TIndex, Is...>, Sink&& sink) return_decltype_MAYTHROW(
-			for_each_detail::for_each_parameter_pack(tc::type::list<tc::constant<Is>...>(), std::forward<Sink>(sink))
+			for_each_detail::for_each_parameter_pack(tc::type::list<tc::constant<Is>...>(), tc_move_if_owned(sink))
 		)
 
 		template<typename... Ts, typename Sink>
 		constexpr auto for_each_impl(adl_tag_t, tc::type::list<Ts...>, Sink&& sink) return_decltype_MAYTHROW(
-			for_each_detail::for_each_parameter_pack(tc::type::list<tc::type::identity<Ts>...>(), std::forward<Sink>(sink))
+			for_each_detail::for_each_parameter_pack(tc::type::list<tc::type::identity<Ts>...>(), tc_move_if_owned(sink))
 		)
 
 		template<typename Tuple, typename Sink,
@@ -274,7 +274,7 @@ namespace tc {
 			typename IndexList = typename for_each_detail::integer_sequence_to_type_list<std::make_index_sequence<std::tuple_size<std::remove_reference_t<Tuple>>::value>>::type
 		>
 		constexpr auto for_each_impl(adl_tag_t, Tuple&& tuple, Sink&& sink) return_decltype_MAYTHROW(
-			for_each_detail::for_each_parameter_pack(IndexList(), for_each_detail::tuple_index_sink<Tuple, tc::decay_t<Sink>>{std::forward<Tuple>(tuple), std::forward<Sink>(sink)})
+			for_each_detail::for_each_parameter_pack(IndexList(), for_each_detail::tuple_index_sink<Tuple, tc::decay_t<Sink>>{tc_move_if_owned(tuple), tc_move_if_owned(sink)})
 		)
 
 		template<typename Rng, typename Sink, /*not requires because of CWG issue 2369*/std::enable_if_t<!std::is_reference<Rng>::value>* = nullptr>
@@ -320,7 +320,7 @@ namespace tc {
 		constexpr auto for_each_impl(Tuple&& tuple, Sink&& sink) return_decltype_MAYTHROW(
 			tc::for_each(
 				IndexSeq(),
-				for_each_detail::tuple_index_sink<Tuple, tc::decay_t<Sink>>{std::forward<Tuple>(tuple), std::forward<Sink>(sink)}
+				for_each_detail::tuple_index_sink<Tuple, tc::decay_t<Sink>>{tc_move_if_owned(tuple), tc_move_if_owned(sink)}
 			)
 		)
 
@@ -328,7 +328,7 @@ namespace tc {
 		constexpr auto for_each_reverse_impl(Tuple&& tuple, Sink&& sink) return_decltype_MAYTHROW(
 			tc::for_each(
 				ReverseIndexSeq(),
-				for_each_detail::tuple_index_sink<Tuple, tc::decay_t<Sink>>{std::forward<Tuple>(tuple), std::forward<Sink>(sink)}
+				for_each_detail::tuple_index_sink<Tuple, tc::decay_t<Sink>>{tc_move_if_owned(tuple), tc_move_if_owned(sink)}
 			)
 		)
 
@@ -340,7 +340,7 @@ namespace tc {
 
 	template<typename... Fn>
 	[[nodiscard]] constexpr auto break_or_continue_sequence(Fn&&... fn) MAYTHROW {
-		return tc::for_each(tc::forward_as_tuple(std::forward<Fn>(fn)...), [](auto fn) MAYTHROW {
+		return tc::for_each(tc::forward_as_tuple(tc_move_if_owned(fn)...), [](auto fn) MAYTHROW {
 			return fn(); // MAYTHROW
 		});
 	}

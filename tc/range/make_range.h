@@ -15,13 +15,13 @@ namespace tc {
 	constexpr decltype(auto) make_range(T0&& t0, T&&... t) noexcept {
 		if constexpr( (std::is_same<T0, T>::value && ...) ) {
 			return tc::make_array<std::conditional_t<std::is_reference<T0>::value, T0, std::remove_cv_t<T0>>>(tc::aggregate_tag,
-				std::forward<T0>(t0), std::forward<T>(t)...
+				tc_move_if_owned(t0), tc_move_if_owned(t)...
 			);
 		} else {
 			return tc::transform(
 				tc::make_tuple(
-					tc::make_reference_or_value(std::forward<T0>(t0)),
-					tc::make_reference_or_value(std::forward<T>(t))...
+					tc::make_reference_or_value(tc_move_if_owned(t0)),
+					tc::make_reference_or_value(tc_move_if_owned(t))...
 				),
 				tc::fn_indirection()
 			);

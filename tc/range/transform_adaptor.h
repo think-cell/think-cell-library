@@ -9,7 +9,7 @@
 #pragma once
 
 #include "../base/assert_defs.h"
-#include "../base/tc_move.h"
+#include "../base/move.h"
 
 #include "range_adaptor.h"
 #include "subrange.h"
@@ -28,7 +28,7 @@ namespace tc {
 
 			template<typename T>
 			constexpr auto operator()(T&& t) const& return_decltype_MAYTHROW(
-				tc::invoke(m_sink, tc::invoke(m_func, std::forward<T>(t)))
+				tc::invoke(m_sink, tc::invoke(m_func, tc_move_if_owned(t)))
 			)
 		};
 	}
@@ -47,8 +47,8 @@ namespace tc {
 			constexpr transform_adaptor() = default;
 			template< typename RngOther, typename FuncOther >
 			constexpr transform_adaptor( RngOther&& rng, FuncOther&& func ) noexcept
-				: transform_adaptor::generator_range_adaptor(aggregate_tag, std::forward<RngOther>(rng))
-				, m_func(std::forward<FuncOther>(func))
+				: transform_adaptor::generator_range_adaptor(aggregate_tag, tc_move_if_owned(rng))
+				, m_func(tc_move_if_owned(func))
 			{}
 
 			constexpr auto size() const& MAYTHROW requires tc::has_size<Rng> {
@@ -57,7 +57,7 @@ namespace tc {
 
 			template<typename Sink>
 			constexpr auto adapted_sink(Sink&& sink, bool /*bReverse*/) const& noexcept {
-				return tc::no_adl::transform_sink<Func, tc::decay_t<Sink>>{m_func, std::forward<Sink>(sink)};
+				return tc::no_adl::transform_sink<Func, tc::decay_t<Sink>>{m_func, tc_move_if_owned(sink)};
 			}
 
 			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, transform_adaptor>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
@@ -129,12 +129,12 @@ namespace tc {
 
 	template<typename Rng, typename Func>
 	[[nodiscard]] constexpr auto transform(Rng&& rng, Func&& func)
-		return_ctor_noexcept(TC_FWD(transform_adaptor<tc::decay_t<Func>, Rng >), (std::forward<Rng>(rng), std::forward<Func>(func)))
+		return_ctor_noexcept(TC_FWD(transform_adaptor<tc::decay_t<Func>, Rng >), (tc_move_if_owned(rng), tc_move_if_owned(func)))
 
 	template<typename Rng>
 	requires tc::instance2<std::remove_reference_t<Rng>, transform_adaptor>
 	[[nodiscard]] decltype(auto) untransform(Rng&& rng) noexcept {
-		return std::forward<Rng>(rng).base_range();
+		return tc_move_if_owned(rng).base_range();
 	}
 
 	template<typename Rng >
@@ -144,7 +144,7 @@ namespace tc {
 			>
 		>, transform_adaptor>
 	[[nodiscard]] auto untransform(Rng&& rng) noexcept {
-		return tc::slice(untransform(std::forward<Rng>(rng).base_range()), rng.begin_index(), rng.end_index());
+		return tc::slice(untransform(tc_move_if_owned(rng).base_range()), rng.begin_index(), rng.end_index());
 	}
 }
 

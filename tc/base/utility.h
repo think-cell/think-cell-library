@@ -9,7 +9,7 @@
 #pragma once
 
 #include "return_decltype.h"
-#include "tc_move.h"
+#include "move.h"
 
 #include <utility>
 
@@ -58,9 +58,9 @@ namespace tc {
 	template<std::size_t n, typename Arg, typename... Args>
 	[[nodiscard]] constexpr decltype(auto) select_nth(Arg&& arg, Args&&... args) noexcept {
 		if constexpr( 0 == n ) {
-			return std::forward<Arg>(arg);
+			return tc_move_if_owned(arg);
 		} else {
-			return tc::select_nth<n - 1>(std::forward<Args>(args)...);
+			return tc::select_nth<n - 1>(tc_move_if_owned(args)...);
 		}
 	}
 
@@ -69,7 +69,7 @@ namespace tc {
 
 	template<typename Cvref, typename T>
 	[[nodiscard]] constexpr decltype(auto) forward_like(T& t) noexcept {
-		return std::forward<tc::apply_cvref_t<T, Cvref>>(t);
+		return static_cast<tc::apply_cvref_t<T, Cvref>&&>(t);
 	}
 }
 
@@ -111,29 +111,29 @@ namespace tc_get_impl_adl { // Outside tc namespace to avoid finding tc::get lea
 #endif
 	template<typename T, typename Tuple, std::enable_if_t<tc::type::find_unique<typename tc::is_tuple_like<Tuple>::types, T>::found>* = nullptr>
 	constexpr auto get_impl(Tuple&& tpl) return_decltype_xvalue_by_ref_noexcept(
-		/*adl*/get<T>(std::forward<Tuple>(tpl))
+		/*adl*/get<T>(tc_move_if_owned(tpl))
 	)
 
 	template<std::size_t I, typename Tuple, std::enable_if_t<I < std::tuple_size<std::remove_reference_t<Tuple>>::value>* = nullptr>
 	constexpr auto get_impl(Tuple&& tpl) return_decltype_xvalue_by_ref_noexcept(
-		/*adl*/get<I>(std::forward<Tuple>(tpl))
+		/*adl*/get<I>(tc_move_if_owned(tpl))
 	)
 }
 
 namespace tc_get_impl {
 	template<typename T, typename Tuple>
 	[[nodiscard]] constexpr auto get(Tuple&& tpl) return_decltype_xvalue_by_ref_noexcept(
-		tc_get_impl_adl::get_impl<T>(std::forward<Tuple>(tpl))
+		tc_get_impl_adl::get_impl<T>(tc_move_if_owned(tpl))
 	)
 
 	template<std::size_t I, typename Tuple>
 	[[nodiscard]] constexpr auto get(Tuple&& tpl) return_decltype_xvalue_by_ref_noexcept(
-		tc_get_impl_adl::get_impl<I>(std::forward<Tuple>(tpl))
+		tc_get_impl_adl::get_impl<I>(tc_move_if_owned(tpl))
 	)
 
 	template<typename T, typename Src> requires std::same_as<T, std::remove_cvref_t<Src>>
 	[[nodiscard]] constexpr decltype(auto) get(Src&& src) noexcept {
-		return std::forward<Src>(src);
+		return tc_move_if_owned(src);
 	}
 }
 
@@ -167,7 +167,7 @@ namespace tc_swap_impl
 
 	template<typename T>
 	constexpr void swap_impl(T&& a, T&& b) return_MAYTHROW(
-		swap(std::forward<T>(a), std::forward<T>(b))
+		swap(tc_move_if_owned(a), tc_move_if_owned(b))
 	)
 
 	namespace named_swap
@@ -177,7 +177,7 @@ namespace tc_swap_impl
 		// T1 and T2 still have to be the same type because swap_impl takes two parameters with the same type.
 		template<typename T1, typename T2>
 		constexpr void swap(T1&& a, T2&& b) return_MAYTHROW(
-			swap_impl(std::forward<T1>(a), std::forward<T2>(b))
+			swap_impl(tc_move_if_owned(a), tc_move_if_owned(b))
 		)
 	}
 }

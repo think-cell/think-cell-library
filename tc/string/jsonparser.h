@@ -305,7 +305,7 @@ namespace tc {
 namespace tc::json {
 	template<typename Rng>
 	constexpr auto decode(Rng&& rng)
-		return_ctor_noexcept( no_adl::decode_adaptor<Rng>, (aggregate_tag, std::forward<Rng>(rng)) )
+		return_ctor_noexcept( no_adl::decode_adaptor<Rng>, (aggregate_tag, tc_move_if_owned(rng)) )
 
 	using no_adl::simple_error_handler;
 

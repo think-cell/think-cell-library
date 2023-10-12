@@ -28,7 +28,7 @@ namespace tc {
 #define STATIC_VIRTUAL_FORWARD_IMPL( Name, Decoration, DerivedCast, MaybeUncheckedDerivedCastTagWithComma ) \
 	template<typename Derived_=Derived, typename... Args> \
 	constexpr auto Name(Args&&... args) Decoration return_decltype_xvalue_by_ref_MAYTHROW( \
-		STATIC_VIRTUAL_DISPATCH_IMPL_NAME(Name)(static_cast<Derived_ Decoration>( DerivedCast<Derived_>(*MSVC_WORKAROUND_THIS)), MaybeUncheckedDerivedCastTagWithComma std::forward<Args>(args)...) \
+		STATIC_VIRTUAL_DISPATCH_IMPL_NAME(Name)(static_cast<Derived_ Decoration>( DerivedCast<Derived_>(*MSVC_WORKAROUND_THIS)), MaybeUncheckedDerivedCastTagWithComma tc_move_if_owned(args)...) \
 	)
 
 #define STATIC_VIRTUAL_FORWARD_ALL_IMPL( Name, DerivedCast, MaybeUncheckedDerivedCastTagWithComma ) \
@@ -41,7 +41,7 @@ namespace tc {
 	template<typename Derived_, typename... Args> \
 	static \
 	constexpr auto STATIC_VIRTUAL_DISPATCH_IMPL_NAME(Name)(Derived_&& derived, Args&&... args) return_decltype_xvalue_by_ref_MAYTHROW( \
-		std::forward<Derived_>(derived).STATIC_VIRTUAL_METHOD_NAME(Name)(std::forward<Args>(args)...) \
+		tc_move_if_owned(derived).STATIC_VIRTUAL_METHOD_NAME(Name)(tc_move_if_owned(args)...) \
 	) \
 	using Name ## _derived_type = Derived; \
 	using Name ## _declaring_type = this_type; \
@@ -57,7 +57,7 @@ namespace tc {
 	using Name ## _declaring_type = this_type; \
 	template<typename Derived_=Derived, typename... Args_> \
 	static constexpr auto Name(Args_&& ...args) return_decltype_xvalue_by_ref_MAYTHROW( \
-		Derived_:: STATIC_VIRTUAL_METHOD_NAME(Name) (std::forward<Args_>(args)...) \
+		Derived_:: STATIC_VIRTUAL_METHOD_NAME(Name) (tc_move_if_owned(args)...) \
 	)
 
 #define STATIC_VIRTUAL_WITH_DEFAULT_IMPL_MOD( Mod, Name ) \
@@ -113,7 +113,7 @@ namespace tc {
 	template<typename Derived_, typename... Args> requires (!requires { std::declval<Derived_>().STATIC_VIRTUAL_METHOD_NAME(Name)( std::declval<Args>()... ); }) \
 	static constexpr \
 	auto STATIC_VIRTUAL_DISPATCH_IMPL_NAME(Name)(Derived_&& derived, Args&&... args) return_decltype_xvalue_by_ref_MAYTHROW( \
-		std::forward<Derived_>(derived).STATIC_VIRTUAL_FALLBACK_NAME(Name)(std::forward<Args>(args)...) \
+		tc_move_if_owned(derived).STATIC_VIRTUAL_FALLBACK_NAME(Name)(tc_move_if_owned(args)...) \
 	) \
 	STATIC_VIRTUAL( Name ) \
 	Mod \

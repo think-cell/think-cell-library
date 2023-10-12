@@ -36,10 +36,10 @@ namespace tc {
 			template<typename Rhs0, typename Rhs1, typename Comp2>
 			explicit intersection_difference_adaptor(Rhs0&& rhs0, Rhs1&& rhs1, Comp2&& comp) noexcept
 				: m_tplbaserng{{
-					{{aggregate_tag, std::forward<Rhs0>(rhs0)}},
-					{{aggregate_tag, std::forward<Rhs1>(rhs1)}}
+					{{aggregate_tag, tc_move_if_owned(rhs0)}},
+					{{aggregate_tag, tc_move_if_owned(rhs1)}}
 				}},
-				m_comp(std::forward<Comp2>(comp))
+				m_comp(tc_move_if_owned(comp))
 			{
 				// For non-strictly sorted ranges, performs multiset intersect/difference, but the
 				// meaning when the ranges are not sorted at all is unclear, though well-defined.
@@ -55,7 +55,7 @@ namespace tc {
 				
 				template<typename T0, typename T1>
 				auto operator()(T0&& arg0, T1&&) const& MAYTHROW {
-					return tc::continue_if_not_break(m_sink, std::forward<T0>(arg0));
+					return tc::continue_if_not_break(m_sink, tc_move_if_owned(arg0));
 				}
 			};
 
@@ -67,19 +67,19 @@ namespace tc {
 				};
 				if constexpr (bIntersection) {
 					return tc::interleave_2(
-						*tc::get<0>(std::forward<Self>(self).m_tplbaserng),
-						*tc::get<1>(std::forward<Self>(self).m_tplbaserng),
-						std::forward<Self>(self).m_comp,
+						*tc::get<0>(tc_move_if_owned(self).m_tplbaserng),
+						*tc::get<1>(tc_move_if_owned(self).m_tplbaserng),
+						tc_move_if_owned(self).m_comp,
 						tc::noop(),
 						NotInRng0,
-						FForwardFirstArgOnly<tc::decay_t<Sink>>{std::forward<Sink>(sink)}
+						FForwardFirstArgOnly<tc::decay_t<Sink>>{tc_move_if_owned(sink)}
 					);
 				} else {
 					return tc::interleave_2(
-						*tc::get<0>(std::forward<Self>(self).m_tplbaserng),
-						*tc::get<1>(std::forward<Self>(self).m_tplbaserng),
-						std::forward<Self>(self).m_comp,
-						std::forward<Sink>(sink),
+						*tc::get<0>(tc_move_if_owned(self).m_tplbaserng),
+						*tc::get<1>(tc_move_if_owned(self).m_tplbaserng),
+						tc_move_if_owned(self).m_comp,
+						tc_move_if_owned(sink),
 						NotInRng0,
 						tc::noop()
 					);
@@ -96,8 +96,8 @@ namespace tc {
 	auto set_intersect_or_difference(Rng0&& rng0, Rng1&& rng1) noexcept {
 		static_assert(tc::instance<std::remove_reference_t<Rng1>, std::unordered_set>);
 		return tc::filter(
-			std::forward<Rng0>(rng0),
-			[rng1_ = reference_or_value< Rng1 >(tc::aggregate_tag, std::forward<Rng1>(rng1))](auto const& element) noexcept {
+			tc_move_if_owned(rng0),
+			[rng1_ = reference_or_value< Rng1 >(tc::aggregate_tag, tc_move_if_owned(rng1))](auto const& element) noexcept {
 				if constexpr(bIntersection) {
 					return tc::cont_find<tc::return_bool>(*rng1_, element);
 				} else {
@@ -109,12 +109,12 @@ namespace tc {
 
 	template<typename Rng0, typename Rng1>
 	auto set_intersect(Rng0&& rng0, Rng1&& rng1) noexcept {
-		return set_intersect_or_difference<true>(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1));
+		return set_intersect_or_difference<true>(tc_move_if_owned(rng0), tc_move_if_owned(rng1));
 	}
 
 	template<typename Rng0, typename Rng1>
 	auto set_difference(Rng0&& rng0, Rng1&& rng1) noexcept {
-		return set_intersect_or_difference<false>(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1));
+		return set_intersect_or_difference<false>(tc_move_if_owned(rng0), tc_move_if_owned(rng1));
 	}
 
 #pragma push_macro("DEFINE_INTERSECT_DIFFERENCE")
@@ -122,7 +122,7 @@ namespace tc {
 	template<typename Rng0, typename Rng1, typename Comp = tc::fn_compare> \
 	auto name(Rng0&& rng0, Rng1&& rng1, Comp&& comp = Comp()) return_ctor_noexcept( \
 		TC_FWD(intersection_difference_adaptor<bIntersect, bSubset, tc::decay_t<Comp>, Rng0, Rng1>), \
-		(std::forward<Rng0>(rng0), std::forward<Rng1>(rng1), std::forward<Comp>(comp)) \
+		(tc_move_if_owned(rng0), tc_move_if_owned(rng1), tc_move_if_owned(comp)) \
 	)
 
 	DEFINE_INTERSECT_DIFFERENCE(intersect, true, false)

@@ -35,7 +35,7 @@ namespace tc {
 
 	template< typename Cont >
 	auto safe_cont_erase( Cont& cont, tc::iterator_t<Cont const> it ) noexcept {
-		[[maybe_unused]] auto vt=tc::decay_copy(std::move(*it)); // *it may be const&
+		[[maybe_unused]] auto vt=tc::decay_copy(tc_move_always_even_const(*it)); // *it may be const&
 		return cont.erase(it);
 	}
 
@@ -70,7 +70,7 @@ namespace tc {
 	void cont_extend( Cont& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type n, Args &&... args) noexcept {
 		_ASSERT( cont.size()<=n );
 		tc::cont_reserve(cont, n);
-		NOBADALLOC(cont.resize(n, std::forward<Args>(args)...));
+		NOBADALLOC(cont.resize(n, tc_move_if_owned(args)...));
 	}
 
 	template< typename Cont, typename... Args,
@@ -78,7 +78,7 @@ namespace tc {
 	>
 	void cont_fill( Cont& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type n,  Args &&... args) noexcept {
 		cont.clear();
-		cont_extend( cont, n, std::forward<Args>(args)...);
+		cont_extend( cont, n, tc_move_if_owned(args)...);
 	}
 
 	template< typename Cont, typename... Args,
@@ -86,7 +86,7 @@ namespace tc {
 	>
 	[[nodiscard]] decltype(auto) cont_extend_at(Cont& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type n, Args &&... args) noexcept {
 		if( cont.size()<=n ) {
-			cont_extend( cont, n+1, std::forward<Args>(args)...);
+			cont_extend( cont, n+1, tc_move_if_owned(args)...);
 		}
 		static_assert( !tc::is_stashing_element<decltype(tc::at<tc::return_element>(cont,n))>::value );
 		return tc::at(cont,n);

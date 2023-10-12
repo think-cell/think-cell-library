@@ -57,7 +57,7 @@ namespace tc{
 
 				template<typename Arg1, typename Arg2>
 				constexpr auto operator()(Arg1&& arg1, Arg2&& arg2) const& noexcept {
-					return m_pred(std::forward<Arg2>(arg2), std::forward<Arg1>(arg1));
+					return m_pred(tc_move_if_owned(arg2), tc_move_if_owned(arg1));
 				}
 			};
 
@@ -103,14 +103,14 @@ namespace tc{
 	[[nodiscard]] constexpr decltype(auto) starts_with(LRng&& lrng, RRng const& rrng, Pred&& pred) noexcept {
 		static_assert(!equal_impl::no_adl::is_unordered_range<tc::decay_t<LRng>>::value);
 		auto itlrng = tc::begin(lrng);
-		return equal_impl::starts_with(itlrng, tc::end(lrng), rrng, std::forward<Pred>(pred))
-			? RangeReturn::pack_border(itlrng, std::forward<LRng>(lrng))
-			: RangeReturn::pack_no_border(std::forward<LRng>(lrng));
+		return equal_impl::starts_with(itlrng, tc::end(lrng), rrng, tc_move_if_owned(pred))
+			? RangeReturn::pack_border(itlrng, tc_move_if_owned(lrng))
+			: RangeReturn::pack_no_border(tc_move_if_owned(lrng));
 	}
 
 	template<typename RangeReturn, typename LRng, typename RRng>
 	[[nodiscard]] constexpr decltype(auto) starts_with(LRng&& lrng, RRng const& rrng) noexcept {
-		return starts_with<RangeReturn>(std::forward<LRng>(lrng), rrng, tc::fn_equal_to_or_parse_match());
+		return starts_with<RangeReturn>(tc_move_if_owned(lrng), rrng, tc::fn_equal_to_or_parse_match());
 	}
 
 	template<tc::range_with_iterators LRng, typename RRng, typename Pred> requires
@@ -123,7 +123,7 @@ namespace tc{
 		}
 		auto it = tc::begin(lrng);
 		tc_auto_cref(itEnd, tc::end(lrng));
-		return equal_impl::starts_with(it,itEnd,tc_move_if_owned(rrng),std::forward<Pred>(pred)) && (bHasSize || itEnd==it); // MAYTHROW
+		return equal_impl::starts_with(it,itEnd,tc_move_if_owned(rrng),tc_move_if_owned(pred)) && (bHasSize || itEnd==it); // MAYTHROW
 	}
 
 	// forward to the symmetric case above
@@ -160,11 +160,11 @@ namespace tc{
 		auto const itBeginL=tc::begin(lrng);
 		auto const itBeginR=tc::begin(rrng);
 		for(;;) {
-			if( itR==itBeginR ) return RangeReturn::pack_border(itL, std::forward<LRng>(lrng));
-			if( itL==itBeginL ) return RangeReturn::pack_no_border(std::forward<LRng>(lrng));
+			if( itR==itBeginR ) return RangeReturn::pack_border(itL, tc_move_if_owned(lrng));
+			if( itL==itBeginL ) return RangeReturn::pack_no_border(tc_move_if_owned(lrng));
 			--itR;
 			--itL;
-			if( !tc::explicit_cast<bool>(pred(tc::as_const(*itL),tc::as_const(*itR))) ) return RangeReturn::pack_no_border(std::forward<LRng>(lrng));
+			if( !tc::explicit_cast<bool>(pred(tc::as_const(*itL),tc::as_const(*itR))) ) return RangeReturn::pack_no_border(tc_move_if_owned(lrng));
 		}
 	}
 

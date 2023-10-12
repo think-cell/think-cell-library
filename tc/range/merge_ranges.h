@@ -18,12 +18,12 @@ namespace tc {
 			tc::sort_streaming(
 				tc::filter(
 					tc::transform(
-						std::forward<RngRng>(rngrng),
+						tc_move_if_owned(rngrng),
 						tc_fn(tc::all)
 					),
 					tc_fn(!tc::empty)
 				),
-				tc::projected(std::forward<Less>(less), tc::fn_front()),
+				tc::projected(tc_move_if_owned(less), tc::fn_front()),
 				[](auto& rng) noexcept {
 					tc::drop_first_inplace(rng);
 					return !tc::empty(rng);
@@ -35,6 +35,6 @@ namespace tc {
 
 	template<typename RngRng, typename Less = tc::fn_less>
 	auto merge_many_unique(RngRng&& rngrng, Less&& less = Less()) noexcept {
-		return tc::ordered_unique(tc::merge_many(std::forward<RngRng>(rngrng), less), less);
+		return tc::ordered_unique(tc::merge_many(tc_move_if_owned(rngrng), less), less);
 	}
 }

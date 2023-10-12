@@ -881,7 +881,7 @@ UNITTESTDEF(minTest) {
 					tc::transform(
 						tc::iota(0,1),
 						[&](int const n) noexcept -> S&& {
-							return std::move(s2[n]);
+							return tc_move_always(s2[n]);
 						}
 					),
 					tc::fn_min()
@@ -908,7 +908,7 @@ UNITTESTDEF(minTest) {
 		tc::projected(
 			tc::fn_min(),
 			[&](int const n) noexcept -> S&& {
-				return std::move(s2[n]);
+				return tc_move_always(s2[n]);
 			}
 		)(0,1).foo();
 	}

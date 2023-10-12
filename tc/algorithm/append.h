@@ -59,12 +59,12 @@ namespace tc {
 			Cont& m_cont;
 
 			template<typename T>
-			constexpr void operator()(T&& t) const& noexcept(noexcept(tc::cont_emplace_back(m_cont, std::forward<T>(t))))
+			constexpr void operator()(T&& t) const& noexcept(noexcept(tc::cont_emplace_back(m_cont, tc_move_if_owned(t))))
 				requires
 					(!tc::char_like<tc::range_value_t<Cont>> || tc::safely_convertible_to<T&&, tc::range_value_t<Cont>>) &&
-					requires { tc::cont_emplace_back(std::declval<Cont&>(), std::forward<T>(t)); }
+					requires { tc::cont_emplace_back(std::declval<Cont&>(), tc_move_if_owned(t)); }
 			{
-				tc::cont_emplace_back(m_cont, std::forward<T>(t)); // MAYTHROW
+				tc::cont_emplace_back(m_cont, tc_move_if_owned(t)); // MAYTHROW
 			}
 
 			// If appending random-access iterator range, use Cont::insert() to give insert the opportunity for optimizations.
@@ -94,7 +94,7 @@ namespace tc {
 			>* = nullptr>
 			constexpr auto chunk(Rng&& rng, int = 0) const& return_decltype_MAYTHROW(
 				tc::cont_reserve(this->m_cont, this->m_cont.size()+tc::size(rng)),
-				tc::implicit_cast<void>(tc::for_each(std::forward<Rng>(rng), tc::base_cast</*SFINAE_TYPE to workaround clang bug*/SFINAE_TYPE(base_)>(*this)))
+				tc::implicit_cast<void>(tc::for_each(tc_move_if_owned(rng), tc::base_cast</*SFINAE_TYPE to workaround clang bug*/SFINAE_TYPE(base_)>(*this)))
 			)
 		};
 	}
@@ -122,15 +122,15 @@ namespace tc {
 
 		if constexpr( !tc::range_with_iterators<Cont> || (
 			std::is_same<RangeReturn, tc::return_void>::value &&
-			noexcept(tc::for_each(std::forward<Rng>(rng), tc::appender(cont)))
+			noexcept(tc::for_each(tc_move_if_owned(rng), tc::appender(cont)))
 		) ) {
 			static_assert( std::is_same<RangeReturn, tc::return_void>::value, "RangeReturn not supported, if appending to stream." );
 
-			tc::for_each(std::forward<Rng>(rng), tc::appender(cont));
+			tc::for_each(tc_move_if_owned(rng), tc::appender(cont));
 		} else if constexpr( tc::random_access_range<Cont> || has_mem_fn_reserve<Cont> ) {
 			auto const nOffset = tc::size_raw(cont);
 			try {
-				tc::for_each(std::forward<Rng>(rng), tc::appender(cont));
+				tc::for_each(tc_move_if_owned(rng), tc::appender(cont));
 				if constexpr( !std::is_same<RangeReturn, tc::return_void>::value ) {
 					return RangeReturn::pack_border(
 						tc::begin_next<tc::return_border>(cont, nOffset),
@@ -148,7 +148,7 @@ namespace tc {
 				return it ? tc_modified(it, ++_) : tc::begin(cont);
 			};
 			try {
-				tc::for_each(std::forward<Rng>(rng), tc::appender(cont)); // MAYTHROW
+				tc::for_each(tc_move_if_owned(rng), tc::appender(cont)); // MAYTHROW
 				if constexpr( !std::is_same<RangeReturn, tc::return_void>::value ) {
 					return RangeReturn::pack_border(FirstAppendedElement(), cont);
 				}
@@ -161,7 +161,7 @@ namespace tc {
 
 	template< typename RangeReturn = tc::return_void, typename Cont, tc::appendable<Cont&>... Rng> requires (1 < sizeof...(Rng))
 	constexpr decltype(auto) append(Cont&& cont, Rng&&... rng) MAYTHROW {
-		return tc::append<RangeReturn>(std::forward<Cont>(cont), tc::concat(std::forward<Rng>(rng)...));
+		return tc::append<RangeReturn>(tc_move_if_owned(cont), tc::concat(tc_move_if_owned(rng)...));
 	}
 
 	namespace no_adl {
@@ -171,11 +171,11 @@ namespace tc {
 			tc::reference_or_value<Rng> m_rng;
 
 			append_on_dtor_t(Cont& cont, Rng&& rng) noexcept
-			: m_ocont(cont), m_rng(tc::aggregate_tag, std::forward<Rng>(rng))
+			: m_ocont(cont), m_rng(tc::aggregate_tag, tc_move_if_owned(rng))
 			{}
 
 			append_on_dtor_t(append_on_dtor_t&& other) noexcept
-			: m_ocont(tc_move(other.m_ocont)), m_rng(tc_move(other.m_rng))
+			: m_ocont(tc_move(other).m_ocont), m_rng(tc_move(other).m_rng)
 			{
 				other.m_ocont = std::nullopt;
 			}
@@ -191,7 +191,7 @@ namespace tc {
 
 	template<typename Cont, tc::appendable<Cont&> Rng>
 	constexpr decltype(auto) make_append_on_dtor(Cont& cont, Rng&& rng) MAYTHROW {
-		return no_adl::append_on_dtor_t<Cont, Rng>(cont, std::forward<Rng>(rng));
+		return no_adl::append_on_dtor_t<Cont, Rng>(cont, tc_move_if_owned(rng));
 	}
 
 	namespace explicit_convert_to_container_detail {
@@ -213,11 +213,11 @@ namespace tc {
 			requires explicit_convert_to_container_detail::use_ctor<TTarget, Rng0, RngN...>::value
 		constexpr TTarget explicit_convert_impl(adl_tag_t, tc::type::identity<TTarget>, Rng0&& rng0, RngN&&... rngN) MAYTHROW {
 			if constexpr(0<sizeof...(RngN)) {
-				TTarget cont=std::forward<Rng0>(rng0);
- 				tc::append(cont, std::forward<RngN>(rngN)...);
+				TTarget cont=tc_move_if_owned(rng0);
+ 				tc::append(cont, tc_move_if_owned(rngN)...);
 				return cont;
 			} else {
-				return std::forward<Rng0>(rng0);
+				return tc_move_if_owned(rng0);
 			}
 		}
 
@@ -225,7 +225,7 @@ namespace tc {
 			requires (!explicit_convert_to_container_detail::use_ctor<TTarget, Rng0, RngN...>::value)
 		constexpr TTarget explicit_convert_impl(adl_tag_t, tc::type::identity<TTarget>, Rng0&& rng0, RngN&&... rngN) MAYTHROW {
 			TTarget cont;
- 			tc::append(cont, std::forward<Rng0>(rng0), std::forward<RngN>(rngN)...);
+ 			tc::append(cont, tc_move_if_owned(rng0), tc_move_if_owned(rngN)...);
 			return cont;
 		}
 	}
@@ -233,42 +233,42 @@ namespace tc {
 	template< typename... Rng >
 	[[nodiscard]] auto make_vector(Rng&&... rng) MAYTHROW {
 		static_assert(0 < sizeof...(Rng));
-		return tc::explicit_cast<tc::vector<tc::range_value_t<decltype(tc::concat(std::forward<Rng>(rng)...))>>>(std::forward<Rng>(rng)...);
+		return tc::explicit_cast<tc::vector<tc::range_value_t<decltype(tc::concat(tc_move_if_owned(rng)...))>>>(tc_move_if_owned(rng)...);
 	}
 
 	template< typename Char, typename... Rng >
 	[[nodiscard]] auto make_str(Rng&&... rng) MAYTHROW {
 		static_assert(0 < sizeof...(Rng));
-		return tc::explicit_cast<tc::string<Char>>(std::forward<Rng>(rng)...);
+		return tc::explicit_cast<tc::string<Char>>(tc_move_if_owned(rng)...);
 	}
 
 	template< typename... Rng >
 	[[nodiscard]] auto make_str(Rng&&... rng) MAYTHROW {
 		static_assert(0 < sizeof...(Rng));
-		return tc::make_str<tc::range_value_t<decltype(tc::concat(std::forward<Rng>(rng)...))>>(std::forward<Rng>(rng)...);
+		return tc::make_str<tc::range_value_t<decltype(tc::concat(tc_move_if_owned(rng)...))>>(tc_move_if_owned(rng)...);
 	}
 
 	template< typename T, typename Rng >
 	[[nodiscard]] auto make_unique_unordered_set(Rng&& rng) MAYTHROW {
 		tc::unordered_set<T> set;
-		tc::cont_try_insert_range(set, std::forward<Rng>(rng));
+		tc::cont_try_insert_range(set, tc_move_if_owned(rng));
 		return set;
 	}
 
 	template< typename Rng >
 	[[nodiscard]] auto make_unique_unordered_set(Rng&& rng) MAYTHROW {
-		return make_unique_unordered_set<tc::range_value_t<Rng>>(std::forward<Rng>(rng));
+		return make_unique_unordered_set<tc::range_value_t<Rng>>(tc_move_if_owned(rng));
 	}
 
 	template< typename T, typename Rng >
 	[[nodiscard]] auto make_unordered_set(Rng&& rng) MAYTHROW {
 		tc::unordered_set<T> set;
-		tc::cont_must_insert_range(set, std::forward<Rng>(rng));
+		tc::cont_must_insert_range(set, tc_move_if_owned(rng));
 		return set;
 	}
 
 	template< typename Rng >
 	[[nodiscard]] auto make_unordered_set(Rng&& rng) MAYTHROW {
-		return make_unordered_set<tc::range_value_t<Rng>>(std::forward<Rng>(rng));
+		return make_unordered_set<tc::range_value_t<Rng>>(tc_move_if_owned(rng));
 	}
 }

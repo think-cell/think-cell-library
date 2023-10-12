@@ -446,14 +446,14 @@ namespace tc {
 				decltype(tc::get<I>(std::declval<Tuple>())),
 				tc::remove_rvalue_reference_t<decltype(tc::get<I>(std::declval<Tuple>()))>
 			>...>{{
-				{tc::get<I>(std::forward<Tuple>(tuple))}...
+				{tc::get<I>(tc_move_if_owned(tuple))}...
 			}};
 		}
 
 		template<std::size_t... I, tuple_like... Tuple>
 		constexpr auto zip_impl(std::index_sequence<I...>, Tuple&&... tuple) noexcept {
-			return tc::tuple<decltype(tuple_detail::zip_get<I>(std::forward<Tuple>(tuple)...))...>{{ // tc::make_tuple without extra copy
-				{tuple_detail::zip_get<I>(std::forward<Tuple>(tuple)...)}...
+			return tc::tuple<decltype(tuple_detail::zip_get<I>(tc_move_if_owned(tuple)...))...>{{ // tc::make_tuple without extra copy
+				{tuple_detail::zip_get<I>(tc_move_if_owned(tuple)...)}...
 			}};
 		}
 	}
@@ -464,8 +464,8 @@ namespace tc {
 		static_assert( ((std::tuple_size<std::remove_reference_t<Tuple0>>::value == std::tuple_size<std::remove_reference_t<Tuple>>::value) && ...) );
 		return tuple_detail::zip_impl(
 			std::make_index_sequence<std::tuple_size<std::remove_reference_t<Tuple0>>::value>(),
-			std::forward<Tuple0>(tuple0),
-			std::forward<Tuple>(tuple)...
+			tc_move_if_owned(tuple0),
+			tc_move_if_owned(tuple)...
 		);
 	}
 
@@ -478,7 +478,7 @@ namespace tc {
 	[[nodiscard]] constexpr auto enumerate(Tuple&& tuple) noexcept {
 		return tc::zip(
 			tc::index_sequence_as_tuple(std::make_integer_sequence<int, std::tuple_size<std::remove_reference_t<Tuple>>::value>()),
-			std::forward<Tuple>(tuple)
+			tc_move_if_owned(tuple)
 		);
 	}
 }

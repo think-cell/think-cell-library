@@ -45,12 +45,12 @@ namespace tc {
 
 			template<tc::decayed_derived_from<reverse_adaptor> Self, typename Sink>
 			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) return_MAYTHROW(
-				reverse_adaptor_detail::for_each_reverse(std::forward<Self>(self).base_range(), std::forward<Sink>(sink))
+				reverse_adaptor_detail::for_each_reverse(tc_move_if_owned(self).base_range(), tc_move_if_owned(sink))
 			)
 
 			template<tc::decayed_derived_from<reverse_adaptor> Self, typename Sink>
 			friend constexpr auto for_each_reverse_impl(Self&& self, Sink&& sink) return_MAYTHROW(
-				tc::for_each(std::forward<Self>(self).base_range(), std::forward<Sink>(sink))
+				tc::for_each(tc_move_if_owned(self).base_range(), tc_move_if_owned(sink))
 			)
 		};
 
@@ -187,7 +187,7 @@ namespace tc {
 	template<typename Rng>
 	constexpr auto reverse(Rng&& rng) return_ctor_noexcept(
 		tc::reverse_adaptor< Rng >,
-		(aggregate_tag, std::forward<Rng>(rng))
+		(aggregate_tag, tc_move_if_owned(rng))
 	)
 	
 	template<typename Rng>
@@ -197,8 +197,8 @@ namespace tc {
 		template<typename Self, typename Sink, typename std::remove_reference_t<Self>::is_generator_range_adaptor* = nullptr>
 		constexpr auto for_each_reverse_impl(Self&& self, Sink&& sink) return_decltype_MAYTHROW(
 			tc::for_each(
-				tc::reverse(std::forward<Self>(self).base_range()),
-				std::forward<Self>(self).adapted_sink(std::forward<Sink>(sink), /*bReverse*/tc::constant<true>())
+				tc::reverse(tc_move_if_owned(self).base_range()),
+				tc_move_if_owned(self).adapted_sink(tc_move_if_owned(sink), /*bReverse*/tc::constant<true>())
 			)
 		)
 	}
