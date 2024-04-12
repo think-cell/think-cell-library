@@ -16,6 +16,6 @@ namespace tc {
 
 	template< typename T >
 	[[nodiscard]] constexpr T& as_lvalue(T&& t) noexcept {
-		return t;
+		return static_cast<T&>(t);
 	}
 }
