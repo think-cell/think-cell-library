@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -17,7 +17,7 @@
 #include "../algorithm/size.h"
 #include "../algorithm/size_linear.h"
 #include "../algorithm/size_bounded.h"
-#include "../base/assign.h"
+#include "../base/change.h"
 #include "../base/rvalue_property.h"
 #include "../optional.h"
 #include "../storage_for.h"
@@ -47,19 +47,17 @@ namespace tc {
 	using return_drop = return_detail::no_adl::return_subrange_or_assert<no_adl::return_drop_or_empty>;
 
 	namespace no_adl {
-		template < typename It >
+		template<typename It>
 		struct universal_range;
-		template< typename Rng >
+		template<typename Rng>
 		struct subrange;
 	}
-	using no_adl::universal_range;
-	using no_adl::subrange;
 
 	//-------------------------------------------------------------------------------------------------------------------------
-	// Utility functions.
+	// ptr_iterator_t/ptr_begin/ptr_end
 #if !defined(_MSC_VER)
 	// On libc++ and libstdc++, std::pointer_trait is broken.
-	// E.g. on libc++, it is misisng a specialization for std::__wrap_iter (aka std::vector::iterator).
+	// E.g. on libc++, it is missing a specialization for std::__wrap_iter (aka std::vector::iterator).
 	template <tc::contiguous_range Rng>
 	using ptr_iterator_t = decltype(std::to_address(std::declval<tc::iterator_t<Rng>>()));
 #else
@@ -81,34 +79,6 @@ namespace tc {
 			return tc::ptr_begin(rng) + tc::size_linear_raw(rng);
 		}
 	}
-
-#ifdef _CHECKS
-	namespace no_adl {
-		template< typename Rng >
-		struct SSinglePassRange : tc::noncopyable {
-			explicit SSinglePassRange(Rng&& rng) noexcept
-			: m_rng(tc_move(rng)) {}
-			template< typename Sink >
-			constexpr auto operator()(Sink&& sink) && MAYTHROW {
-				_ASSERTE( tc::change(m_bFirstPass, false) );
-				return tc::for_each(tc_move(m_rng), tc_move_if_owned(sink));
-			}
-
-			Rng m_rng;
-			bool mutable m_bFirstPass = true;
-		};
-	}
-
-	template< typename Rng >
-	auto assert_single_pass(Rng&& rng) noexcept {
-		return no_adl::SSinglePassRange<Rng>(tc_move(rng)); // Disallow lvalue references.
-	}
-#else
-	template< typename Rng >
-	decltype(auto) assert_single_pass(Rng&& rng) noexcept {
-		return tc_move_if_owned(rng);
-	}
-#endif
 	
 	//-------------------------------------------------------------------------------------------------------------------------
 	// subrange
@@ -116,7 +86,7 @@ namespace tc {
 	namespace subrange_detail {
 		template<typename Rng>
 		static constexpr decltype(auto) whole_range(Rng&& rng) noexcept {
-			if constexpr( tc::instance<std::remove_reference_t<Rng>, tc::subrange> ) {
+			if constexpr( tc::instance<std::remove_reference_t<Rng>, no_adl::subrange> ) {
 				return tc_move_if_owned(rng).base_range();
 			} else {
 				return tc_move_if_owned(rng);
@@ -162,56 +132,33 @@ namespace tc {
 			};
 
 			template <typename It>
-			struct get_index<universal_range<It>> {
+			struct get_index<tc::no_adl::universal_range<It>> {
 				template <typename Rhs>
 				static constexpr auto begin(Rhs& rng) return_decltype_MAYTHROW(tc::begin(rng));
 				template <typename Rhs>
-				static constexpr auto begin(universal_range<It>, Rhs& rng) return_decltype_MAYTHROW(tc::begin(rng));
+				static constexpr auto begin(tc::no_adl::universal_range<It>, Rhs& rng) return_decltype_MAYTHROW(tc::begin(rng));
 
 				template <typename Rhs>
 				static constexpr auto end(Rhs& rng) return_decltype_MAYTHROW(tc::end(rng));
 				template <typename Rhs>
-				static constexpr auto end(universal_range<It>, Rhs& rng) return_decltype_MAYTHROW(tc::end(rng));
+				static constexpr auto end(tc::no_adl::universal_range<It>, Rhs& rng) return_decltype_MAYTHROW(tc::end(rng));
 			};
 
 			template <typename T>
-			struct get_index<universal_range<T*>> {
+			struct get_index<tc::no_adl::universal_range<T*>> {
 				template <typename Rhs>
 				static constexpr auto begin(Rhs& rng) return_decltype_MAYTHROW(tc::ptr_begin(rng));
 				template <typename Rhs>
-				static constexpr auto begin(universal_range<T*>, Rhs& rng) return_decltype_MAYTHROW(tc::ptr_begin(rng));
+				static constexpr auto begin(tc::no_adl::universal_range<T*>, Rhs& rng) return_decltype_MAYTHROW(tc::ptr_begin(rng));
 
 				template <typename Rhs>
 				static constexpr auto end(Rhs& rng) return_decltype_MAYTHROW(tc::ptr_end(rng));
 				template <typename Rhs>
-				static constexpr auto end(universal_range<T*>, Rhs& rng) return_decltype_MAYTHROW(tc::ptr_end(rng));
+				static constexpr auto end(tc::no_adl::universal_range<T*>, Rhs& rng) return_decltype_MAYTHROW(tc::ptr_end(rng));
 			};
 		}
 		using no_adl::get_index;
 	}
-
-	namespace no_adl {
-		// meta function to determine the correct type
-		template<typename Rng>
-		struct make_subrange_result {
-			using type = subrange<Rng>;
-		};
-
-		// collapse subrange< subrange< ... > > to single subrange
-		template <typename Rng> requires tc::instance<std::remove_reference_t<Rng>, tc::subrange> 
-		struct make_subrange_result<Rng> : make_subrange_result<tc::subrange_detail::whole_range_t<Rng>> {};
-
-		// turn subrange< borrowed_range< ... > > to subrange< universal_range<...> >
-		template <typename Rng> requires
-			(!tc::instance<std::remove_reference_t<Rng>, tc::subrange>) &&
-			(!tc::is_index_iterator<tc::iterator_t<Rng>>) && // storing two index_iterator is worse than storing ptr + two indices
-			tc::borrowed_range<Rng> && tc::common_range<Rng>
-		struct make_subrange_result<Rng> {
-			using type = subrange<universal_range<tc::iterator_t<Rng>>>;
-		};
-	}
-	template <typename Rng>
-	using make_subrange_result_t = typename no_adl::make_subrange_result<Rng>::type;
 
 	namespace no_adl {
 		// The universal range is the superset of all possible ranges build from iterator pairs It.
@@ -237,19 +184,19 @@ namespace tc {
 
 			template <typename It_ = It>
 			constexpr It begin() const& noexcept {
-				static_assert(tc::dependent_false<It_>::value, "tc::universal_range::begin() does not exist");
+				static_assert(tc::dependent_false<It_>::value, "universal_range::begin() does not exist");
 				return std::declval<It>();
 			}
 			template <typename It_ = It>
 			constexpr It end() const& noexcept {
-				static_assert(tc::dependent_false<It_>::value, "tc::universal_range::end() does not exist");
+				static_assert(tc::dependent_false<It_>::value, "universal_range::end() does not exist");
 				return std::declval<It>();
 			}
 		};
 	}
 
 	template <typename It>
-	constexpr auto enable_borrowed_range<universal_range<It>> = true;
+	constexpr auto enable_borrowed_range<no_adl::universal_range<It>> = true;
 
 	namespace no_adl {
 		template< typename Rng >
@@ -265,7 +212,7 @@ namespace tc {
 				>
 			>
 		{
-			static_assert( std::same_as<subrange, tc::make_subrange_result_t<Rng>>, "Use tc::make_subrange_result_t to construct subrange type." );
+			static_assert(!tc::instance<Rng, no_adl::subrange>, "Don't write the type directly.");
 
 		private:
 			using this_type = subrange;
@@ -321,7 +268,7 @@ namespace tc {
 
 			// ctor from whole range
 			template<typename Rhs> requires
-				(!tc::instance<std::remove_cvref_t<Rhs>, tc::subrange>) && (!tc::instance<std::remove_cvref_t<Rhs>, tc::universal_range>) && tc::safely_constructible_from<Rng, Rhs>
+				(!tc::instance<std::remove_cvref_t<Rhs>, no_adl::subrange>) && (!tc::instance<std::remove_cvref_t<Rhs>, no_adl::universal_range>) && tc::safely_constructible_from<Rng, Rhs>
 			constexpr subrange(Rhs&& rng) noexcept(
 				std::is_nothrow_constructible<base_, aggregate_tag_t, Rhs>::value &&
 				noexcept(subrange_detail::get_index<Rng>::begin(rng)) &&
@@ -334,7 +281,7 @@ namespace tc {
 
 			// ctor from other subrange
 			template <typename Rhs> requires
-				tc::instance<std::remove_cvref_t<Rhs>, tc::subrange> && tc::safely_constructible_from<Rng, subrange_detail::whole_range_t<Rhs>> &&
+				tc::instance<std::remove_cvref_t<Rhs>, no_adl::subrange> && tc::safely_constructible_from<Rng, subrange_detail::whole_range_t<Rhs>> &&
 				// If Rhs is the same subrange, we must not have a copy constructor we could have used instead.
 				(!std::same_as<std::remove_cvref_t<Rhs>, subrange> || !tc::borrowed_range<Rhs>) &&
 				// If we require index translation, we must have a random access range.
@@ -390,53 +337,52 @@ namespace tc {
 	}
 
 	template<typename Rng>
-	constexpr auto enable_stable_index_on_move<tc::subrange<Rng>> = tc::stable_index_on_move<Rng>;
+	constexpr auto enable_stable_index_on_move<no_adl::subrange<Rng>> = tc::stable_index_on_move<Rng>;
 	template <typename Rng>
-	constexpr auto enable_borrowed_range<tc::subrange<Rng>> = tc::borrowed_range<Rng>;
+	constexpr auto enable_borrowed_range<no_adl::subrange<Rng>> = tc::borrowed_range<Rng>;
+
+	template<typename Rng>
+	using subrange_arg_t = tc::mp_only<typename tc::is_instance<std::remove_reference_t<Rng>, no_adl::subrange>::arguments>;
 
 	//-------------------------------------------------------------------------------------------------------------------------
 	// subrange creation
+	template<tc::range_with_iterators Rng, typename Begin, typename End>
+	[[nodiscard]] constexpr auto slice(Rng&& rng, Begin&& begin, End&& end) noexcept {
+		// If we have a common borrowed range, we don't need to store rng.
+		// However, if we have index iteratores, storing two index_iterators is worse then storing the reference + two indices.
+		if constexpr (tc::borrowed_range<Rng> && tc::common_range<Rng> && !tc::is_index_iterator<tc::iterator_t<Rng>>) {
+			return no_adl::subrange<no_adl::universal_range<tc::iterator_t<Rng>>>(tc_move_if_owned(rng), tc_move_if_owned(begin), tc_move_if_owned(end));
+		} else {
+			return no_adl::subrange<subrange_detail::whole_range_t<Rng>>(tc_move_if_owned(rng), tc_move_if_owned(begin), tc_move_if_owned(end));
+		}
+	}
+	template<typename Rng>
+	using slice_t = decltype(slice(std::declval<Rng>(), std::declval<tc::iterator_t<Rng>>(), std::declval<tc::iterator_t<Rng>>()));
 
 	template<tc::range_with_iterators Rng>
-	[[nodiscard]] constexpr auto all(Rng&& rng) return_ctor_MAYTHROW( tc::make_subrange_result_t< Rng >, (tc_move_if_owned(rng)) )
+	[[nodiscard]] constexpr auto all(Rng&& rng) return_ctor_MAYTHROW(tc::slice_t<Rng>, (tc_move_if_owned(rng)))
 
-	// slice from range + iterator pair
-	// slice from range + difference
-	template< typename Rng, typename Begin, typename End >
-	[[nodiscard]] constexpr auto slice(Rng&& rng, Begin&& begin, End&& end) return_ctor_MAYTHROW(
-		tc::make_subrange_result_t< Rng >,
-		(tc_move_if_owned(rng), tc_move_if_owned(begin), tc_move_if_owned(end))
-	)
-
-	template< typename It >
-	[[nodiscard]] constexpr auto make_iterator_range( It itBegin, It itEnd ) return_ctor_MAYTHROW(
-		tc::subrange<tc::universal_range<It>>,
-		( tc::universal_range<It>(), tc_move(itBegin), tc_move(itEnd) )
-	)
-
-	namespace make_iterator_range_detail {
-		template< typename IndexRange, bool bConst >
-		[[nodiscard]] constexpr decltype(auto) get_range( tc::index_iterator<IndexRange, bConst> const& itBegin, tc::index_iterator<IndexRange, bConst> const& itEnd ) noexcept {
-			if constexpr (!tc::empty_type<IndexRange>) _ASSERTEQUAL(std::addressof(itBegin.get_range()), std::addressof(itEnd.get_range()));
-			return itBegin.get_range();
+	template<typename It>
+	[[nodiscard]] constexpr auto make_iterator_range(It itBegin, It itEnd) noexcept {
+		if constexpr (tc::is_index_iterator<It>) {
+			if constexpr (!tc::empty_type<std::remove_reference_t<decltype(itBegin.get_range())>>) {
+				_ASSERTEQUAL(std::addressof(itBegin.get_range()), std::addressof(itEnd.get_range()));
+			}
+			return slice(itBegin.get_range(), tc_move(itBegin).get_index(), tc_move(itEnd).get_index());
+		} else {
+			return no_adl::subrange<no_adl::universal_range<It>>(no_adl::universal_range<It>(), tc_move(itBegin), tc_move(itEnd));
 		}
 	}
 
-	template< typename IndexRange, bool bConst >
-	[[nodiscard]] constexpr auto make_iterator_range( tc::index_iterator<IndexRange, bConst> itBegin, tc::index_iterator<IndexRange, bConst> itEnd ) return_ctor_MAYTHROW(
-		TC_FWD(tc::make_subrange_result_t< tc::conditional_const_t<IndexRange,bConst> & >),
-		( make_iterator_range_detail::get_range(itBegin, itEnd), tc_move(itBegin).get_index(), tc_move(itEnd).get_index() )
-	) 
-
-	template <typename It>
+	template<typename It>
 	using iterator_range = decltype(tc::make_iterator_range(std::declval<It>(), std::declval<It>()));
-	template <typename Rng>
+	template<typename Rng>
 		requires tc::safely_convertible_to<Rng&&, tc::iterator_range<tc::iterator_t<Rng>>>
 	using iterator_range_t = tc::iterator_range<tc::iterator_t<Rng>>;
 
-	template< typename T >
+	template<typename T>
 	[[nodiscard]] constexpr auto make_empty_range() noexcept {
-		return tc::make_iterator_range( std::add_pointer_t<T>(), std::add_pointer_t<T>() );
+		return tc::make_iterator_range(std::add_pointer_t<T>(), std::add_pointer_t<T>());
 	}
 
 	//-------------------------------------------------------------------------------------------------------------------------
@@ -448,7 +394,7 @@ namespace tc {
 	}
 
 	template< tc::char_type T, std::size_t N >
-	[[nodiscard]] auto as_array(T (&at)[N] ) return_decltype_noexcept(
+	[[nodiscard]] constexpr auto as_array(T (&at)[N] ) return_decltype_noexcept(
 		tc::counted( std::addressof(at[0]), N )
 	)
 
@@ -485,7 +431,7 @@ namespace tc {
 
 	template< typename Rng, typename End >
 	[[nodiscard]] constexpr auto take(Rng&& rng, End&& end) return_ctor_NOEXCEPT( // boost::iterator_range doesn't have a noexcept constructor
-		tc::make_subrange_result_t< Rng >,
+		tc::slice_t<Rng>,
 		(tc_move_if_owned(rng), tc::begin(rng), tc_move_if_owned(end))
 	)
 
@@ -494,14 +440,11 @@ namespace tc {
 		tc::take_inplace(rng,tc_move_if_owned(it));
 		return tc_move(rng);
 	}
-#if 0
-	// TODO: pending proper fix of chained calls in partition_range.h
 	template< typename Rng, typename It >
-	[[nodiscard]] constexpr subrange<Rng>&& take( subrange<Rng>&& rng, It&& it ) noexcept {
+	[[nodiscard]] constexpr no_adl::subrange<Rng>&& take( no_adl::subrange<Rng>&& rng, It&& it ) noexcept {
 		rng.take_inplace(tc_move_if_owned(it));
 		return tc_move(rng);
 	}
-#endif
 
 	template< typename Cont, typename It> requires detail::has_mem_fn_erase_from_begin<Cont,It>
 	constexpr void drop_inplace( Cont & cont, It&& it ) noexcept {
@@ -520,8 +463,8 @@ namespace tc {
 
 	namespace detail {
 		template< typename Rng, typename It>
-		constexpr tc::make_subrange_result_t< Rng > drop_impl( Rng&& rng, It&& itBegin ) noexcept {
-			return tc::make_subrange_result_t< Rng >( tc_move_if_owned(rng), tc_move_if_owned(itBegin), tc::end(rng) );
+		constexpr auto drop_impl( Rng&& rng, It&& itBegin ) noexcept {
+			return tc::slice_t<Rng>( tc_move_if_owned(rng), tc_move_if_owned(itBegin), tc::end(rng) );
 		}
 
 		// C strings have efficient in-place drop
@@ -535,15 +478,11 @@ namespace tc {
 	[[nodiscard]] constexpr auto drop(Rng&& rng, It&& it) return_decltype_NOEXCEPT(
 		detail::drop_impl( tc_move_if_owned(rng), tc_move_if_owned(it) )
 	)
-
-#if 0
-	// TODO: pending proper fix of chained calls in partition_range.h
 	template< typename Rng, typename It >
-	[[nodiscard]] constexpr subrange<Rng>&& drop( subrange<Rng>&& rng, It&& it ) noexcept {
+	[[nodiscard]] constexpr no_adl::subrange<Rng>&& drop( no_adl::subrange<Rng>&& rng, It&& it ) noexcept {
 		rng.drop_inplace(tc_move_if_owned(it));
 		return tc_move(rng);
 	}
-#endif
 
 	////////////////////////////////
 	// begin_next/end_prev
@@ -749,29 +688,42 @@ namespace tc {
 				std::size_t m_nCount;
 			};
 		}
+	}
 
+	namespace take_first_adaptor_adl {
 		template< typename TakePred, bool bTruncate, typename Rng >
-		auto take_first_impl(Rng&& rng, std::size_t const n) noexcept {
-			static_assert(!tc::range_with_iterators<Rng>);
-			return [rng=tc::make_reference_or_value(tc_move_if_owned(rng)), n](auto&& sink) MAYTHROW {
-				if(0<n) {
-					TakePred takepred(n);
+		struct take_first_adaptor : tc::range_adaptor_base_range<Rng>, tc::range_output_from_base_range {
+			take_first_adaptor(Rng&& rng, std::size_t const n) noexcept
+				: take_first_adaptor::range_adaptor_base_range(aggregate_tag, tc_move_if_owned(rng)), m_n(n)
+			{
+				static_assert(!tc::range_with_iterators<Rng>);
+			}
+
+			template<tc::decayed_derived_from<take_first_adaptor> Self, typename Sink>
+			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
+				if(0<self.m_n) {
+					TakePred takepred(self.m_n);
 					tc::break_or_continue boc;
-					if(tc::break_==tc::for_each(*rng, no_adl::take_first_sink<tc::decay_t<decltype(sink)>, TakePred>(tc_move_if_owned(sink), takepred, boc))) { // MAYTHROW
+					if(tc::break_==tc::for_each(
+						tc_move_if_owned(self).base_range(),
+						tc::take_first_detail::no_adl::take_first_sink<tc::decay_t<decltype(sink)>, TakePred>(tc_move_if_owned(sink), takepred, boc)
+					)) { // MAYTHROW
 						return VERIFYINITIALIZED(boc);
 					} else { // boc won't be initialized if rng is empty
 						_ASSERT(bTruncate);
 					}
 				}
 				return tc::continue_;
-			};
-		}
+			}
+		private:
+			std::size_t m_n;
+		};
 	}
 
-	template< typename RangeReturn, typename Rng, std::enable_if_t<!tc::range_with_iterators<Rng> && std::is_same<RangeReturn, tc::return_take>::value>* = nullptr >
-	[[nodiscard]] auto begin_next(Rng&& rng, std::size_t n=1) return_decltype_noexcept(
-		tc::take_first_detail::take_first_impl<take_first_detail::no_adl::take_first_pred, /*bTruncate*/ false>(tc_move_if_owned(rng), n)
-	)
+	template< std::same_as<tc::return_take> RangeReturn, typename Rng> requires (!tc::range_with_iterators<Rng>)
+	[[nodiscard]] auto begin_next(Rng&& rng, std::size_t n=1) noexcept {
+		return tc::take_first_adaptor_adl::take_first_adaptor<take_first_detail::no_adl::take_first_pred, /*bTruncate*/ false, Rng>(tc_move_if_owned(rng), n);
+	}
 
 	template< typename Cont >
 	void drop_first_inplace(Cont& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type n) noexcept {
@@ -832,14 +784,27 @@ namespace tc {
 		};
 	}
 
-	template< typename RangeReturn, typename Rng> requires (!tc::range_with_iterators<Rng>) && std::is_same<RangeReturn, tc::return_drop>::value
-	[[nodiscard]] auto begin_next(Rng&& rng, std::size_t const n=1) noexcept {
-		return [rng=tc::make_reference_or_value(tc_move_if_owned(rng)), n](auto&& sink) MAYTHROW {
-			auto nCount=n;
-			auto boc=tc::for_each(*rng, no_adl::drop_first_sink<tc::decay_t<decltype(sink)>>(tc_move_if_owned(sink), nCount)); // MAYTHROW
-			_ASSERTEQUAL(nCount, 0);
-			return boc;
+	namespace drop_first_adaptor_adl {
+		template<typename Rng>
+		struct drop_first_adaptor : tc::range_adaptor_base_range<Rng>, tc::range_output_from_base_range {
+			drop_first_adaptor(Rng&& rng, std::size_t const n) noexcept
+				: drop_first_adaptor::range_adaptor_base_range(aggregate_tag, tc_move_if_owned(rng)), m_n(n) {}
+
+			template<tc::decayed_derived_from<drop_first_adaptor> Self, typename Sink>
+			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
+				auto nCount=self.m_n;
+				auto boc=tc::for_each(tc_move_if_owned(self).base_range(), no_adl::drop_first_sink<tc::decay_t<decltype(sink)>>(tc_move_if_owned(sink), nCount)); // MAYTHROW
+				_ASSERTEQUAL(nCount, 0);
+				return boc;
+			}
+		private:
+			std::size_t m_n;
 		};
+	}
+
+	template< std::same_as<tc::return_drop> RangeReturn, typename Rng> requires (!tc::range_with_iterators<Rng>)
+	[[nodiscard]] auto begin_next(Rng&& rng, std::size_t const n=1) noexcept {
+		return tc::drop_first_adaptor_adl::drop_first_adaptor<Rng>(tc_move_if_owned(rng), n);
 	}
 
 	template< typename Cont >
@@ -874,15 +839,15 @@ namespace tc {
 
 	//-------------------------------------------------------------------------------------------------------------------------
 	// span
-	template <typename T>
-	using span = subrange<universal_range<T*>>;
+	template<typename T>
+	using span = no_adl::subrange<no_adl::universal_range<T*>>;
 
 	namespace span_detail {
 		template <typename Rng>
 		using unchecked_span_t = span<std::remove_pointer_t<tc::ptr_iterator_t<Rng>>>;
 	}
 
-	template <tc::contiguous_range Rng>
+	template<tc::contiguous_range Rng>
 		requires tc::safely_convertible_to<Rng&&, span_detail::unchecked_span_t<Rng>>
 	using span_t = span_detail::unchecked_span_t<Rng>;
 
@@ -898,7 +863,7 @@ namespace tc {
 	// range common reference
 	namespace no_adl {
 		template <typename It, typename TSource>
-		struct is_class_safely_constructible<tc::subrange<tc::universal_range<It>>, TSource> final
+		struct is_class_safely_constructible<subrange<universal_range<It>>, TSource> final
 			: tc::constant<
 				std::is_same<tc::decay_t<TSource>, tc::empty_range>::value ||
 				tc::borrowed_range<TSource>
@@ -906,13 +871,13 @@ namespace tc {
 		{};
 
 		template <typename Rng1, typename Rng2>
-		struct common_iterator_range_impl {};
+		struct common_iterator_range {};
 
 		// Rng have common iterator
 		template <typename Rng1, typename Rng2>
 			requires tc::safely_constructible_from<tc::iterator_range<tc::common_type_t<tc::iterator_t<Rng1>, tc::iterator_t<Rng2>>>, Rng1>
 				&& tc::safely_constructible_from<tc::iterator_range<tc::common_type_t<tc::iterator_t<Rng1>, tc::iterator_t<Rng2>>>, Rng2>
-		struct common_iterator_range_impl<Rng1, Rng2> {
+		struct common_iterator_range<Rng1, Rng2> {
 			using type = tc::iterator_range<tc::common_type_t<tc::iterator_t<Rng1>, tc::iterator_t<Rng2>>>;
 		};
 		// Rng have common pointer iterator
@@ -920,32 +885,24 @@ namespace tc {
 			requires (!requires { typename tc::common_type_t<tc::iterator_t<Rng1>, tc::iterator_t<Rng2>>; })
 				&& tc::safely_constructible_from<tc::iterator_range<tc::common_type_t<tc::ptr_iterator_t<Rng1>, tc::ptr_iterator_t<Rng2>>>, Rng1>
 				&& tc::safely_constructible_from<tc::iterator_range<tc::common_type_t<tc::ptr_iterator_t<Rng1>, tc::ptr_iterator_t<Rng2>>>, Rng2>
-		struct common_iterator_range_impl<Rng1, Rng2> {
+		struct common_iterator_range<Rng1, Rng2> {
 			using type = tc::iterator_range<tc::common_type_t<tc::ptr_iterator_t<Rng1>, tc::ptr_iterator_t<Rng2>>>;
 		};
 
 		// special case: empty_range
-		template <typename Rng>
-			requires requires { typename tc::iterator_range_t<Rng>; }
-		struct common_iterator_range_impl<Rng, tc::empty_range> {
+		template <typename Rng, typename EmptyRng>
+			requires requires { typename tc::iterator_range_t<Rng>; } && std::same_as<std::remove_cvref_t<EmptyRng>, tc::empty_range>
+		struct common_iterator_range<Rng, EmptyRng> {
 			using type = tc::iterator_range_t<Rng>;
 		};
-		template <typename Rng>
-			requires requires { typename tc::iterator_range_t<Rng>; }
-		struct common_iterator_range_impl<tc::empty_range, Rng> {
+		template <typename Rng, typename EmptyRng>
+			requires requires { typename tc::iterator_range_t<Rng>; } && std::same_as<std::remove_cvref_t<EmptyRng>, tc::empty_range>
+		struct common_iterator_range<EmptyRng, Rng> {
 			using type = tc::iterator_range_t<Rng>;
 		};
 
-		template <typename Rng1, typename Rng2>
-		using common_iterator_range_impl_t = typename common_iterator_range_impl<Rng1, Rng2>::type;
-		template <typename... T>
-		using common_iterator_range_t = tc::type::accumulate_with_front_t<tc::type::list<T...>, common_iterator_range_impl_t>;
-
-		// If the Ts have a common iterator range, that is their common reference.
-		template <typename ... T>
-			requires (!tc::has_actual_common_reference<T...>) && requires { typename common_iterator_range_t<T...>; }
-		struct common_reference_xvalue_as_ref<T...> final {
-			using type = common_iterator_range_t<T...>;
-		};
+		// If T0 and T1 have a common iterator range, that is their common reference.
+		template <typename T0, typename T1> requires requires { typename common_iterator_range<T0, T1>::type; }
+		struct common_reference_impl<T0, T1> : common_iterator_range<T0, T1> {};
 	}
 }

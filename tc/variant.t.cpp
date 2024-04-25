@@ -1,6 +1,6 @@
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -39,10 +39,10 @@ namespace {
 		copy_move_tracker2(convert1to2_tag, copy_move_tracker&& tracker) noexcept : copy_move_tracker(tc_move(tracker)) {}
 	};
 
-	copy_move_tracker2 explicit_convert_impl(tc::explicit_convert_adl::adl_tag_t, tc::type::identity<copy_move_tracker2>, copy_move_tracker1 const& tracker) noexcept {
+	copy_move_tracker2 explicit_convert_impl(tc::explicit_convert_adl::adl_tag_t, std::type_identity<copy_move_tracker2>, copy_move_tracker1 const& tracker) noexcept {
 		return {convert1to2_tag{}, tracker};
 	}
-	copy_move_tracker2 explicit_convert_impl(tc::explicit_convert_adl::adl_tag_t, tc::type::identity<copy_move_tracker2>, copy_move_tracker1&& tracker) noexcept {
+	copy_move_tracker2 explicit_convert_impl(tc::explicit_convert_adl::adl_tag_t, std::type_identity<copy_move_tracker2>, copy_move_tracker1&& tracker) noexcept {
 		return {convert1to2_tag{}, tc_move(tracker)};
 	}
 

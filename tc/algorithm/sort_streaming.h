@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -67,8 +67,8 @@ namespace tc {
 			auto vec = tc::make_vector(*rng);
 			boost::range::make_heap(vec, greater);
 			while( auto const it = tc::front<tc::return_element_or_null>(vec) ) {
-				tc_yield(sink, *it); // MAYTHROW
-				if( tc::invoke(predKeep, *it) ) {
+				tc_return_if_break(tc::continue_if_not_break(sink, *it)) // MAYTHROW
+				if( tc_invoke(predKeep, *it) ) {
 					tc::replace_heap(vec, tc::range_value_t<decltype(vec)>(tc_move_always(*it)), greater);
 				} else {
 					boost::range::pop_heap(vec, greater);

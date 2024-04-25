@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -20,7 +20,7 @@ namespace tc {
 
 		if (!bSkipSelf) {
 			_ASSERT(tc::back(aitLimit) != tc::back(ait));
-			tc_yield(func, tc::begin_next<tc::return_take>(tc::as_const(ait)));
+			tc_return_if_break(tc::continue_if_not_break(func, tc::begin_next<tc::return_take>(tc::as_const(ait))))
 			++tc::back(ait);
 		} else if(tc::back(aitLimit) != tc::back(ait)) {
 			++tc::back(ait);
@@ -29,19 +29,19 @@ namespace tc {
 		for (;;) {
 			if (tc::front(aitLimit) == tc::front(ait)) {
 				for (; tc::back(ait) != tc::back(aitLimit); ++tc::back(ait)) {
-					tc_yield(func, tc::begin_next<tc::return_drop>(tc::as_const(ait)));
+					tc_return_if_break(tc::continue_if_not_break(func, tc::begin_next<tc::return_drop>(tc::as_const(ait))))
 				}
 				return tc::constant<tc::continue_>();
 			}
 			if (tc::back(aitLimit) == tc::back(ait)) {
 				while (tc::front(ait) != tc::front(aitLimit)) {
 					--tc::front(ait);
-					tc_yield(func, tc::begin_next<tc::return_take>(tc::as_const(ait)));
+					tc_return_if_break(tc::continue_if_not_break(func, tc::begin_next<tc::return_take>(tc::as_const(ait))))
 				}
 				return tc::constant<tc::continue_>();
 			}
 			--tc::front(ait);
-			tc_yield(func, tc::as_const(ait));
+			tc_return_if_break(tc::continue_if_not_break(func, tc::as_const(ait)))
 			++tc::back(ait);
 		}
 	}
@@ -53,7 +53,7 @@ namespace tc {
 		if (tc::break_ == tc::for_each_iterator_pair_outwards(rng, tc_move(it), bSkipSelf, [&](auto const& rngit) noexcept {
 			return tc::for_each(rngit, [&](auto const& it) noexcept {
 				oitc.ctor(it);
-				if (tc::explicit_cast<bool>(tc::invoke(pred, tc::as_const(**oitc)))) { return tc::break_; }
+				if (tc::explicit_cast<bool>(tc_invoke(pred, tc::as_const(**oitc)))) { return tc::break_; }
 				oitc.dtor();
 				return tc::continue_;
 			});

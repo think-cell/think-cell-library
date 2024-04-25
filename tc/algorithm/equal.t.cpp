@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -38,7 +38,7 @@ UNITTESTDEF( equal_vec_int_pred ) {
 	TEST_init_hack(tc::vector, int, v123, {1,2,3});
 	TEST_init_hack(tc::vector, int, v234, {2,3,4});
 
-	static auto constexpr ofByOne = [](int const lhs, int const rhs) noexcept { return (lhs + 1) == rhs; }; // unsymmetrical to uncover wrong order of argument application to the predicate
+	tc_static_auto_constexpr_lambda(ofByOne) = [](int const lhs, int const rhs) noexcept { return (lhs + 1) == rhs; }; // unsymmetrical to uncover wrong order of argument application to the predicate
 
 	_ASSERT(tc::equal(v123, v234, ofByOne));
 	_ASSERT(!tc::equal(v234, v123, ofByOne));
@@ -89,7 +89,7 @@ UNITTESTDEF( equal_generator_pred ) {
 	auto g123 = tc::make_generator_range(v123);
 	auto g234 = tc::make_generator_range(v234);
 
-	static auto constexpr ofByOne = [](int const lhs, int const rhs) noexcept { return (lhs + 1) == rhs; };  // unsymmetrical to uncover wrong order of argument application to the predicate
+	tc_static_auto_constexpr_lambda(ofByOne) = [](int const lhs, int const rhs) noexcept { return (lhs + 1) == rhs; };  // unsymmetrical to uncover wrong order of argument application to the predicate
 
 	//_ASSERT(tc::equal(g123, g234, ofByOne)); // Fails to compile with proper msg, as it should be.
 
@@ -116,14 +116,15 @@ UNITTESTDEF( variadic_assign_better ) {
 }
 
 namespace no_adl {
-	template<typename Better, typename List, typename=void>
+	template<typename Better, typename List>
 	struct has_assign_better_impl final: tc::constant<false> {};
 
 	template<typename Better, typename Var, typename... Val>
-	struct has_assign_better_impl<Better, tc::type::list<Var, Val...>, tc::void_t<decltype(tc::assign_better(std::declval<Better>(), std::declval<Var>(), std::declval<Val>()...))>> final: tc::constant<true> {};
+		requires requires(Better&& better, Var&& var, Val&&... val) { tc::assign_better(tc_move_if_owned(better), tc_move_if_owned(var), tc_move_if_owned(val)...);}
+	struct has_assign_better_impl<Better, boost::mp11::mp_list<Var, Val...>> final: tc::constant<true> {};
 
 	template<typename Better, typename... T>
-	using has_assign_better = has_assign_better_impl<Better, tc::type::list<T...>>;
+	using has_assign_better = has_assign_better_impl<Better, boost::mp11::mp_list<T...>>;
 }
 #ifndef __EMSCRIPTEN__
 static_assert(!no_adl::has_assign_better<tc::fn_less, std::atomic<int>, int>::value);

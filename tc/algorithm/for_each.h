@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -101,13 +101,13 @@ namespace tc {
 			}
 		};
 
-		template<typename Sink, typename = void>
+		template<typename Sink>
 		struct guaranteed_break_or_continue final {
 			using type = tc::break_or_continue;
 		};
 
-		template<typename Sink>
-		struct guaranteed_break_or_continue<Sink, tc::void_t<typename std::remove_reference_t<Sink>::guaranteed_break_or_continue>> final {
+		template<typename Sink> requires requires { typename std::remove_reference_t<Sink>::guaranteed_break_or_continue; }
+		struct guaranteed_break_or_continue<Sink> final {
 			using type = typename std::remove_reference_t<Sink>::guaranteed_break_or_continue;
 		};
 	}
@@ -199,7 +199,7 @@ namespace tc {
 	) -> tc::common_type_t<decltype(tc::continue_if_not_break(std::declval<tc::decay_t<Sink> const&>(), rng.dereference_index(tc::as_lvalue(rng.begin_index())))), tc::constant<tc::continue_>> {
 		tc::decay_t<Sink> const sink = sink_; // do we really need that copy?
 		for (auto i = rng.begin_index(); !rng.at_end_index(i); rng.increment_index(i)) {
-			tc_yield(sink, rng.dereference_index(i));
+			tc_return_if_break(tc::continue_if_not_break(sink, rng.dereference_index(i)))
 		}
 		return tc::constant<tc::continue_>();
 	}
@@ -213,19 +213,30 @@ namespace tc {
 		tc::decay_t<Sink> const sink = sink_; // do we really need that copy?
 		auto const itEnd = tc::end(rng);
 		for(auto it = tc::begin(rng); it!= itEnd; ++it) {
-			tc_yield(sink, *it);
+			tc_return_if_break(tc::continue_if_not_break(sink, *it))
 		}
 		return tc::constant<tc::continue_>();
 	}
 
 	namespace for_each_detail {
-		template<typename... T, typename Sink, typename R = typename tc::common_type_break_or_continue_t<decltype(tc::continue_if_not_break(std::declval<Sink>(), T()))...>>
-		constexpr R for_each_parameter_pack(tc::type::list<T...>, Sink const sink) MAYTHROW /*ICE on MSVC 2017: noexcept((noexcept(tc::continue_if_not_break(sink, T())) && ...))*/ {
+		template<typename T>
+		constexpr auto type_value = std::type_identity<T>{};
+
+		template<auto Value>
+		constexpr auto type_value<tc::constant<Value>> = tc::constant<Value>{};
+
+		// If the type is a type list, we turn it into a tuple of type values.
+		// That way `tc::for_each(tc::zip(list1, list2), []<typename U, typename V>(std::type_identity<U>, std::type_identity<V>) { ... })` just works.
+		template<typename ... T>
+		constexpr auto type_value<boost::mp11::mp_list<T...>> = tc::make_tuple(type_value<T>...);
+
+		template<typename... T, typename Sink, typename R = typename tc::common_type_break_or_continue_t<decltype(tc::continue_if_not_break(std::declval<Sink>(), type_value<T>))...>>
+		constexpr R for_each_parameter_pack(boost::mp11::mp_list<T...>, Sink const sink) noexcept((noexcept(tc::continue_if_not_break(sink, type_value<T>)) && ...)) {
 			if constexpr (std::is_same<tc::constant<tc::continue_>, R>::value) {
-				(sink(T()), ...); // plain call, tc::invoke on std::integral_constant or tc::type has no value.
+				(tc_invoke(sink, type_value<T>), ...);
 				return tc::constant<tc::continue_>();
 			} else {
-				auto const boc = tc::continue_if(((tc::continue_ == tc_internal_continue_if_not_break(sink(T()))) && ...));
+				auto const boc = tc::continue_if(((tc::continue_ == tc_internal_continue_if_not_break(tc_invoke(sink, type_value<T>))) && ...));
 
 				if constexpr (std::is_same<tc::constant<tc::break_>, R>::value) {
 					return tc::constant<tc::break_>();
@@ -236,43 +247,33 @@ namespace tc {
 		}
 
 		namespace no_adl {
-			template<typename IntSeq>
-			struct integer_sequence_to_type_list;
-
-			template<typename TIndex, TIndex... Is>
-			struct integer_sequence_to_type_list<std::integer_sequence<TIndex, Is...>> {
-				using type = tc::type::list<tc::constant<Is>...>;
-			};
-
 			template<typename Tuple, typename Sink>
 			struct tuple_index_sink final {
 				Tuple&& m_tuple;
 				Sink m_sink;
 				template<std::size_t I>
 				constexpr auto operator()(tc::constant<I>) const& return_decltype_MAYTHROW(
-					tc::invoke(m_sink, tc::get<I>(tc_move_if_owned(m_tuple)))
+					tc_invoke(m_sink, tc::get<I>(tc_move_if_owned(m_tuple)))
 				)
 			};
 		}
-		using no_adl::integer_sequence_to_type_list;
 		using no_adl::tuple_index_sink;
 	}
 
 	namespace for_each_adl {
 		template<typename TIndex, TIndex... Is, typename Sink>
 		constexpr auto for_each_impl(adl_tag_t, std::integer_sequence<TIndex, Is...>, Sink&& sink) return_decltype_MAYTHROW(
-			for_each_detail::for_each_parameter_pack(tc::type::list<tc::constant<Is>...>(), tc_move_if_owned(sink))
+			for_each_detail::for_each_parameter_pack(boost::mp11::mp_list<tc::constant<Is>...>(), tc_move_if_owned(sink))
 		)
 
 		template<typename... Ts, typename Sink>
-		constexpr auto for_each_impl(adl_tag_t, tc::type::list<Ts...>, Sink&& sink) return_decltype_MAYTHROW(
-			for_each_detail::for_each_parameter_pack(tc::type::list<tc::type::identity<Ts>...>(), tc_move_if_owned(sink))
+		constexpr auto for_each_impl(adl_tag_t, boost::mp11::mp_list<Ts...>, Sink&& sink) return_decltype_MAYTHROW(
+			for_each_detail::for_each_parameter_pack(boost::mp11::mp_list<Ts...>(), tc_move_if_owned(sink))
 		)
 
-		template<typename Tuple, typename Sink,
-			std::enable_if_t<tc::instance_or_derived<std::remove_reference_t<Tuple>, std::tuple>>* = nullptr,
-			typename IndexList = typename for_each_detail::integer_sequence_to_type_list<std::make_index_sequence<std::tuple_size<std::remove_reference_t<Tuple>>::value>>::type
-		>
+		template<tc::tuple_like Tuple, typename Sink,
+			typename IndexList = tc::mp_integer_list<std::make_index_sequence<std::tuple_size<std::remove_reference_t<Tuple>>::value>>
+			TC_REQUIRES_CWG2369_WORKAROUND(!tc::range_with_iterators<Tuple>)
 		constexpr auto for_each_impl(adl_tag_t, Tuple&& tuple, Sink&& sink) return_decltype_MAYTHROW(
 			for_each_detail::for_each_parameter_pack(IndexList(), for_each_detail::tuple_index_sink<Tuple, tc::decay_t<Sink>>{tc_move_if_owned(tuple), tc_move_if_owned(sink)})
 		)
@@ -289,64 +290,60 @@ namespace tc {
 			auto const itEnd = tc::end(rng);
 			while (it != itEnd) {
 				auto itNext = tc_modified(it, ++_);
-				tc_yield(sink, tc_move_always(rng.extract(it).value()));
+				tc_return_if_break(tc::continue_if_not_break(sink, tc_move_always(rng.extract(it).value())))
 				it = itNext;
 			}
 			return tc::constant<tc::continue_>();
 		}
 	}
 
-	namespace range_output_tuple_impl {
-		template<template<typename...> typename TupleT, typename Tuple>
-		using type = tc::type::unique_t<tc::type::transform_t<
-			tc::type::transform_t<
-				typename tc::is_instance_or_derived<std::remove_reference_t<Tuple>, TupleT>::arguments,
-				tc::type::rcurry<tc::apply_cvref_t, Tuple>::template type
-			>,
-			tc::remove_rvalue_reference_t
-		>>;
+	namespace range_output_tuple_impl::no_adl {
+		struct fn_range_output final {
+			template<typename... Ts> boost::mp11::mp_unique<boost::mp11::mp_list<Ts...>> operator()(Ts&&...) const& {
+				return {}; // unevaluated, not declaration only because of return_invoke workaround
+			}
+		};
 	}
 
 	namespace range_output_t_adl {
 		template<typename... Ts>
-		auto range_output_t_impl(adl_tag_t, tc::type::list<Ts...>) -> tc::type::unique_t<tc::type::list<tc::type::identity<Ts>...>>; // declaration only
+		auto range_output_t_impl(adl_tag_t, boost::mp11::mp_list<Ts...>)
+			-> boost::mp11::mp_unique<boost::mp11::mp_list<std::remove_const_t<decltype(for_each_detail::type_value<Ts>)>...>>; // declaration only
 
-		template<typename Tuple>
-		auto range_output_t_impl(adl_tag_t, Tuple&&) -> range_output_tuple_impl::type<std::tuple, Tuple&&>; // declaration only
+		template<tc::tuple_like Tuple TC_REQUIRES_CWG2369_WORKAROUND(!tc::range_with_iterators<Tuple>)
+		auto range_output_t_impl(adl_tag_t, Tuple&& tpl)
+			-> decltype(tc_apply(range_output_tuple_impl::no_adl::fn_range_output(), std::declval<Tuple>())); // declaration only
 	}
-
-	namespace tuple_adl {
-		template<typename Tuple, typename Sink, typename IndexSeq = std::make_index_sequence<std::remove_reference_t<Tuple>::tc_tuple_impl::size>>
-		constexpr auto for_each_impl(Tuple&& tuple, Sink&& sink) return_decltype_MAYTHROW(
-			tc::for_each(
-				IndexSeq(),
-				for_each_detail::tuple_index_sink<Tuple, tc::decay_t<Sink>>{tc_move_if_owned(tuple), tc_move_if_owned(sink)}
-			)
+	
+	namespace make_lazy_adl {
+		template<typename Lazy, typename Sink,
+			std::enable_if_t<tc::instance<std::remove_reference_t<Lazy>, tc::make_lazy>>* = nullptr
+		>
+		constexpr auto for_each_impl(Lazy&& lazy, Sink&& sink) return_decltype_MAYTHROW(
+			tc::for_each(tc_move_if_owned(lazy)(),tc_move_if_owned(sink))
 		)
-
-		template<typename Tuple, typename Sink, typename ReverseIndexSeq = tc::make_reverse_integer_sequence<std::size_t, 0, std::remove_reference_t<Tuple>::tc_tuple_impl::size>>
-		constexpr auto for_each_reverse_impl(Tuple&& tuple, Sink&& sink) return_decltype_MAYTHROW(
-			tc::for_each(
-				ReverseIndexSeq(),
-				for_each_detail::tuple_index_sink<Tuple, tc::decay_t<Sink>>{tc_move_if_owned(tuple), tc_move_if_owned(sink)}
-			)
-		)
-
-		template<typename Tuple>
-		auto range_output_t_impl(Tuple&&) -> range_output_tuple_impl::type<tc::tuple, Tuple&&> {} // unevaluated
 	}
 
 	TC_HAS_EXPR(for_each, (Rng)(Sink), tc::for_each(std::declval<Rng>(), std::declval<Sink>()))
-
-	template<typename... Fn>
-	[[nodiscard]] constexpr auto break_or_continue_sequence(Fn&&... fn) MAYTHROW {
-		return tc::for_each(tc::forward_as_tuple(tc_move_if_owned(fn)...), [](auto fn) MAYTHROW {
-			return fn(); // MAYTHROW
-		});
-	}
 }
 
-#define TC_BREAK_OR_CONTINUE_SEQUENCE_IMPL(...) ([&]() MAYTHROW { return TC_EXPAND(__VA_ARGS__); })
+#define TC_RETURN_BREAK_OR_CONTINUE_SEQUENCE_TYPE(state, _, elem) \
+	decltype(elem),
+#define TC_RETURN_BREAK_OR_CONTINUE_SEQUENCE_EVAL(state, _, i, elem) \
+	tc_return_if_break_impl( \
+		tc::implicit_cast<BreakOrContinue>(tc::constant<tc::break_>()), \
+		elem \
+	)
 
-#define tc_break_or_continue_sequence(exprseq) \
-	tc::break_or_continue_sequence(TC_PP_ENUM_TRANSFORMED_SEQ(TC_PP_APPLY_MACRO, TC_BREAK_OR_CONTINUE_SEQUENCE_IMPL, exprseq))
+#define tc_return_break_or_continue_impl(exprseq) \
+	using BreakOrContinue = tc::common_type_break_or_continue_t< \
+		BOOST_PP_SEQ_FOR_EACH(TC_RETURN_BREAK_OR_CONTINUE_SEQUENCE_TYPE, _, exprseq) \
+		tc::constant<tc::continue_> \
+	>; \
+	BOOST_PP_SEQ_FOR_EACH_I(TC_RETURN_BREAK_OR_CONTINUE_SEQUENCE_EVAL, _, exprseq) \
+	if constexpr(!std::same_as<BreakOrContinue, tc::constant<break_>>) { \
+		return tc::implicit_cast<BreakOrContinue>(tc::constant<tc::continue_>()); \
+	}
+
+#define tc_return_break_or_continue(exprseq) \
+	tc_return_break_or_continue_impl(exprseq)

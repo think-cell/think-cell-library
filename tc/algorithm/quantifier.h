@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -60,11 +60,9 @@ template< typename Rng, typename Pred >
 }
 
 template< typename Rng, typename Pred >
-[[nodiscard]] bool eager_any_of(Rng&& rng, Pred pred) MAYTHROW {
+[[nodiscard]] bool eager_any_of(Rng&& rng, Pred&& pred) MAYTHROW {
 	tc::any_accu any;
-	tc::for_each(rng, [&](auto&& t) noexcept {
-		any(tc::invoke(pred, tc_move_if_owned(t)));
-	});
+	tc::for_each(tc::transform(rng, tc_move_if_owned(pred)), std::ref(any));
 	return any;
 }
 
@@ -85,7 +83,7 @@ namespace all_same_result {
 }
 
 namespace no_adl {
-	template<typename T, typename Equal=tc::fn_equal_to>
+	template<typename T, typename Equal=tc::decay_t<decltype(tc::equal_to)>>
 	struct [[nodiscard]] accumulator_all_same final {
 		static_assert(tc::decayed<Equal>);
 
@@ -170,17 +168,27 @@ namespace no_adl {
 using no_adl::accumulator_all_same;
 using no_adl::return_all_same_result;
 
-template<typename RangeReturn, typename Rng, typename Equal = tc::fn_equal_to >
-[[nodiscard]] constexpr decltype(auto) all_same_element(Rng&& rng, Equal&& equal = Equal()) MAYTHROW {
+template<typename RangeReturn, typename Rng, typename Equal = decltype(tc::equal_to)>
+[[nodiscard]] constexpr decltype(auto) all_same_element(Rng&& rng, Equal&& equal = {}) MAYTHROW {
 	return no_adl::all_same_element_impl<RangeReturn, Rng, Equal>::fn(tc_move_if_owned(rng), tc_move_if_owned(equal));
 }
 
-template< typename Rng, typename Equal = tc::fn_equal_to >
-[[nodiscard]] constexpr bool all_same(Rng&& rng, Equal&& equal = Equal()) noexcept {
-	return tc::fn_visit(
-		[](auto&&) noexcept { return true; },
-		[](tc::all_same_result::empty_t) noexcept { return true; },
-		[](tc::all_same_result::not_same_t) noexcept { return false; }
-	)(tc::all_same_element<tc::return_all_same_result>(tc_move_if_owned(rng), tc_move_if_owned(equal)));
+template< typename Rng, typename Equal = tc::decay_t<decltype(tc::equal_to)>>
+[[nodiscard]] constexpr bool all_same(Rng&& rng, Equal equal = {}) noexcept {
+	if constexpr(tc::range_with_iterators<Rng>) {
+		auto const itBegin = tc::begin(rng);
+		auto const itEnd = tc::end(rng);
+		if(itBegin != itEnd) {
+			tc_auto_cref(front, *itBegin);
+			for(auto it = itBegin; ++it != itEnd;) {
+				if(!equal(front, *it)) return false;
+			}
+		}
+		return true;
+	} else {
+		return !std::holds_alternative<tc::all_same_result::not_same_t>(
+			tc::all_same_element<tc::return_all_same_result>(tc_move_if_owned(rng), tc_move(equal))
+		);
+	}
 }
 }

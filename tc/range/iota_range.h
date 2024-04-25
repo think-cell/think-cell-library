@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -50,7 +50,7 @@ namespace tc {
 			using difference_type = typename std::conditional_t<
 				has_subtract<T>,
 				delayed_iterator_difference_type<T>,
-				tc::type::identity<std::ptrdiff_t>
+				std::type_identity<std::ptrdiff_t>
 			>::type;
 
 			using value_type = T;
@@ -69,7 +69,7 @@ namespace tc {
 
 			constexpr T && operator*() && noexcept { return tc_move(value); }
 			constexpr T const& operator*() const& noexcept { return value; }
-			constexpr T const&& operator*() const&& noexcept { return value; }
+			constexpr T const&& operator*() const&& noexcept { return tc_move_always_even_const(value); }
 
 			template<typename U>
 			friend constexpr bool operator ==(counting_iterator<T> const& a, counting_iterator<U> const& b) return_MAYTHROW(
@@ -148,8 +148,8 @@ MODIFY_WARNINGS_END
 		struct is_iota_range_impl final: tc::constant<false> {};
 
 		template<typename T>
-		struct is_iota_range_impl<tc::subrange<tc::universal_range<tc::counting_iterator<T>>>> final: tc::constant<true> {
-			STATICASSERTSAME(decltype(tc::iota(std::declval<T>(), std::declval<T>())), tc::subrange<tc::universal_range<tc::counting_iterator<T>>>);
+		struct is_iota_range_impl<subrange<universal_range<tc::counting_iterator<T>>>> final: tc::constant<true> {
+			STATICASSERTSAME(decltype(tc::iota(std::declval<T>(), std::declval<T>())), subrange<universal_range<tc::counting_iterator<T>>>);
 		};
 	}
 
@@ -216,7 +216,7 @@ MODIFY_WARNINGS_END
 		};
 
 		template <typename RangeReturn, IF_TC_CHECKS(typename CheckUnique,) typename Enum>
-		[[nodiscard]] constexpr decltype(auto) find_first_or_unique_impl(tc::type::identity<RangeReturn>, IF_TC_CHECKS(CheckUnique bCheckUnique,) all_values<Enum> rng, Enum e) MAYTHROW {
+		[[nodiscard]] constexpr decltype(auto) find_first_or_unique_impl(std::type_identity<RangeReturn>, IF_TC_CHECKS(CheckUnique bCheckUnique,) all_values<Enum> rng, Enum e) MAYTHROW {
 			if constexpr( RangeReturn::requires_iterator ) {
 				return RangeReturn::pack_element(tc::begin(rng) + tc::explicit_cast<decltype(tc::end(rng) - tc::begin(rng))>(rng.index_of(e)), rng);
 			} else {
@@ -237,4 +237,7 @@ MODIFY_WARNINGS_END
 			return tc::constant<static_cast<Enum>(tc_at_nodebug(tc::all_values<Enum>(), constn()))>();
 		}
 	);
+
+	template<typename Derived, typename Counter>
+	using iota_range_adaptor = tc::index_range_adaptor<Derived, tc::no_adl::universal_range</*It*/tc::counting_iterator<Counter>>, tc::index_range_adaptor_flags::inherit_traversal>;
 }

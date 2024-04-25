@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -14,7 +14,7 @@
 #include "../base/modified.h"
 
 #include "for_each.h"
-#include "../base/assign.h"
+#include "../base/change.h"
 
 #include <boost/range/iterator.hpp>
 
@@ -24,11 +24,12 @@
 
 namespace tc{
 	namespace no_adl {
-		template< typename Lhs, typename Rhs, typename Enable = void >
+		template< typename Lhs, typename Rhs>
 		struct has_parse_match final : tc::constant<false> {};
 
 		template< typename Lhs, typename Rhs >
-		struct has_parse_match<Lhs, Rhs, tc::void_t<decltype(std::declval<Lhs const&>().parse_match(std::declval<Rhs const&>()))>> final : tc::constant<true> {};
+			requires requires (Lhs const& lhs, Rhs const& rhs) { lhs.parse_match(rhs); }
+		struct has_parse_match<Lhs, Rhs> final : tc::constant<true> {};
 	}
 
 	template<typename Lhs, typename Rhs, std::enable_if_t<!no_adl::has_parse_match<Lhs, Rhs>::value && !no_adl::has_parse_match<Rhs, Lhs>::value>* =nullptr>
@@ -73,9 +74,9 @@ namespace tc{
 					, m_pred(pred)
 				{}
 
-				template<typename Elem> requires requires(Pred& pred, It& it, Elem const& elem) {pred(tc::as_const(*it), elem);}
+				template<typename Elem> requires requires(Pred& pred, It& it, Elem const& elem) { tc_invoke(pred, tc::as_const(*it), elem); }
 				constexpr break_or_continue operator()(Elem const& elem) const& noexcept {
-					if (m_it == m_itEnd || !tc::explicit_cast<bool>(m_pred(tc::as_const(*m_it), elem))) { return tc::break_; }
+					if (m_it == m_itEnd || !tc::explicit_cast<bool>(tc_invoke(m_pred, tc::as_const(*m_it), elem))) { return tc::break_; }
 					++m_it;
 					return tc::continue_;
 				}
@@ -113,8 +114,9 @@ namespace tc{
 		return starts_with<RangeReturn>(tc_move_if_owned(lrng), rrng, tc::fn_equal_to_or_parse_match());
 	}
 
-	template<tc::range_with_iterators LRng, typename RRng, typename Pred> requires
-		requires(LRng const& lrng, RRng&& rrng){equal_impl::starts_with(tc::as_lvalue(tc::begin(lrng)), tc::as_const(tc::as_lvalue(tc::end(lrng))), tc_move_if_owned(rrng), std::declval<Pred>());}
+	template<tc::range_with_iterators LRng, typename RRng, typename Pred>
+		requires (tc::prefers_for_each<std::remove_reference_t<RRng>> || (!tc::prefers_for_each<LRng>))
+			&& requires(LRng const& lrng, RRng&& rrng){ equal_impl::starts_with(tc::as_lvalue(tc::begin(lrng)), tc::as_const(tc::as_lvalue(tc::end(lrng))), tc_move_if_owned(rrng), std::declval<Pred>()); }
 	[[nodiscard]] constexpr bool equal(LRng const& lrng, RRng&& rrng, Pred&& pred) MAYTHROW {
 		static_assert(!equal_impl::no_adl::is_unordered_range<tc::decay_t<LRng>>::value);
 		constexpr bool bHasSize=tc::has_size<LRng> && tc::has_size<RRng>;
@@ -127,7 +129,9 @@ namespace tc{
 	}
 
 	// forward to the symmetric case above
-	template<typename LRng, tc::range_with_iterators RRng, typename Pred> requires (!tc::range_with_iterators< LRng >)
+	template<typename LRng, tc::range_with_iterators RRng, typename Pred>
+		requires tc::prefers_for_each<std::remove_reference_t<LRng>>
+			&& (!tc::prefers_for_each<RRng>)
 	[[nodiscard]] constexpr bool equal(LRng&& lrng, RRng const& rrng, Pred pred) noexcept {
 		return tc::equal(rrng, tc_move_if_owned(lrng), equal_impl::no_adl::reverse_pred<Pred>(pred));
 	}
@@ -172,14 +176,14 @@ namespace tc{
 		template<typename T>
 		concept safe_value =
 			!tc::range_with_iterators<T> ||
-			!tc::range_with_iterators<tc::type::only_t<typename tc::is_instance<T, std::optional>::arguments>>;
+			!tc::range_with_iterators<tc::mp_only<typename tc::is_instance<T, std::optional>::arguments>>;
 	}
 
 	template <typename Lhs, typename Rhs>
 	[[nodiscard]] constexpr bool value_equal_to(Lhs const& lhs, Rhs const& rhs) noexcept {
 		if constexpr( tc::range_with_iterators<Lhs> && tc::range_with_iterators<Rhs> ) {
-			STATICASSERTEQUAL( (tc::instance<Lhs, std::optional>), (tc::instance<Rhs, std::optional>) );
-			return tc::equal(lhs, rhs, tc::fn_equal_to());
+			STATICASSERTEQUAL( TC_FWD(tc::instance<Lhs, std::optional>), TC_FWD(tc::instance<Rhs, std::optional>) );
+			return tc::equal(lhs, rhs, tc::equal_to);
 		} else {
 			static_assert( value_equal_to_detail::safe_value<Lhs> );
 			static_assert( value_equal_to_detail::safe_value<Rhs> );

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -40,7 +40,7 @@ namespace tc {
 
 		template< typename T, std::size_t N>
 		struct [[nodiscard]] integral_as_padded_dec_impl : protected integral_as_padded_dec_impl<T,N-1> {
-			friend auto range_output_t_impl(integral_as_padded_dec_impl const&) -> tc::type::list<tc::char_ascii>; // declaration only
+			friend auto range_output_t_impl(integral_as_padded_dec_impl const&) -> boost::mp11::mp_list<tc::char_ascii>; // declaration only
 			static constexpr unsigned long long c_nTenPow=integral_as_padded_dec_impl<T,N-1>::c_nTenPow*10;
 			constexpr integral_as_padded_dec_impl( T n ) noexcept : integral_as_padded_dec_impl<T,N-1>(n) {}
 
@@ -51,7 +51,7 @@ namespace tc {
 			> {
 				static_assert( std::is_unsigned<T>::value );
 				if( this->m_n<integral_as_padded_dec_impl::c_nTenPow ) {
-					tc_yield(sink, tc::char_ascii('0'));
+					tc_return_if_break(tc::continue_if_not_break(sink, tc::char_ascii('0')))
 				}
 				return tc::base_cast< integral_as_padded_dec_impl<T,N-1> >(*this)(tc_move(sink));
 			}
@@ -61,7 +61,7 @@ namespace tc {
 
 		template< typename T>
 		struct [[nodiscard]] integral_as_padded_dec_impl<T,1> {
-			friend auto range_output_t_impl(integral_as_padded_dec_impl const&) -> tc::type::list<tc::char_ascii>; // declaration only
+			friend auto range_output_t_impl(integral_as_padded_dec_impl const&) -> boost::mp11::mp_list<tc::char_ascii>; // declaration only
 			T m_n;
 			static constexpr unsigned long long c_nTenPow=1;
 			constexpr integral_as_padded_dec_impl( T n ) noexcept : m_n(n) {}
@@ -105,7 +105,7 @@ namespace tc {
 		// Wrapper to print integers as hex
 		template< typename T, unsigned int nWidth, tc::casing c>
 		struct [[nodiscard]] as_hex_impl final {
-			friend auto range_output_t_impl(as_hex_impl const&) -> tc::type::list<tc::char_ascii>; // declaration only
+			friend auto range_output_t_impl(as_hex_impl const&) -> boost::mp11::mp_list<tc::char_ascii>; // declaration only
 		private:
 			typename boost::uint_t< CHAR_BIT*sizeof(T) >::exact m_n;
 		public:
@@ -123,7 +123,7 @@ namespace tc {
 				} while( nWidth*4<=nShift && 0==(m_n>>nShift) );
 				for(;;) {
 					auto const nDigit=(m_n>>nShift)&0xf;
-					tc_yield(sink, nDigit<10 ? tc::char_ascii('0')+nDigit : tc::char_ascii(tc::lowercase==c ? 'a' : 'A')+(nDigit-10));
+					tc_return_if_break(tc::continue_if_not_break(sink, nDigit<10 ? tc::char_ascii('0')+nDigit : tc::char_ascii(tc::lowercase==c ? 'a' : 'A')+(nDigit-10)))
 					if constexpr (!std::is_same<return_t, tc::constant<tc::break_>>::value) {
 						if (0 == nShift) break;
 						nShift -= 4;
@@ -180,7 +180,7 @@ MODIFY_WARNINGS_END
 		auto pairnit=std::make_pair(tc::explicit_cast<T>(0),tc::begin(rng));
 		auto const itEnd=tc::end(rng);
 		if( pairnit.second!=itEnd ) {
-			if (tc::explicit_cast<tc::range_value_t<Rng&>>('-') == *pairnit.second) {
+			if (tc::char_ascii('-') == *pairnit.second) {
 				++pairnit.second;
 				while (pairnit.second != itEnd) {
 					unsigned int const nDigit = *pairnit.second - tc::explicit_cast<tc::range_value_t<Rng&>>('0');
@@ -191,7 +191,7 @@ MODIFY_WARNINGS_BEGIN(((disable)(4244))) // conversion from 'const unsigned int'
 MODIFY_WARNINGS_END
 					++pairnit.second;
 				}
-			} else if (tc::explicit_cast<tc::range_value_t<Rng&>>('+') == *pairnit.second) {
+			} else if (tc::char_ascii('+') == *pairnit.second) {
 				pairnit = unsigned_integer_from_string_head<T>(tc::begin_next<tc::return_drop>(rng));
 			} else {
 				pairnit = unsigned_integer_from_string_head<T>(rng);
@@ -217,57 +217,4 @@ MODIFY_WARNINGS_END
 		if( pairnit.second!=tc::end(rng) ) throw tc::integer_parse_exception();
 		return pairnit.first;
 	}
-
-	namespace no_adl {
-		template<typename Rng>
-		struct [[nodiscard]] size_prefixed_impl : private tc::range_adaptor_base_range<Rng> {
-			friend auto range_output_t_impl(size_prefixed_impl const&) -> tc::type::list<unsigned char const&>; // declaration only
-			using tc::range_adaptor_base_range<Rng>::range_adaptor_base_range;
-
-			template<typename Sink>
-			void operator()(Sink&& sink) const& MAYTHROW {
-				tc::for_each(tc::concat(tc::as_blob(tc::implicit_cast<std::uint32_t>(tc::size_linear(this->base_range()))), tc::range_as_blob(this->base_range())), tc_move_if_owned(sink)); // THROW(tc::file_failure)
-			}
-		};
-	}
-
-	template< typename Rng >
-	auto size_prefixed(Rng&& rng) return_ctor_noexcept(
-		no_adl::size_prefixed_impl<Rng>,
-		(aggregate_tag, tc_move_if_owned(rng))
-	)
-
-	inline auto size_prefixed(tc::empty_range) noexcept {
-		static constexpr std::uint32_t nSize=0;
-		return tc::as_blob(nSize);
-	}
-
-	namespace no_adl {
-		template<typename T>
-		struct [[nodiscard]] bool_prefixed_impl {
-			friend auto range_output_t_impl(bool_prefixed_impl const&) -> tc::type::list<unsigned char const&>; // declaration only
-
-			template<typename Rhs>
-			bool_prefixed_impl(aggregate_tag_t, Rhs&& rhs) noexcept
-				: m_ot(aggregate_tag, tc_move_if_owned(rhs))
-			{}
-
-			template<typename Sink>
-			void operator()(Sink&& sink) const& MAYTHROW {
-				if(*m_ot) {
-					tc::for_each(tc::concat(tc::as_blob(true), tc::as_blob(**m_ot)), tc_move_if_owned(sink)); // THROW(tc::file_failure)
-				} else {
-					tc::for_each(tc::as_blob(false), tc_move_if_owned(sink)); // THROW(tc::file_failure)
-				}
-			}
-		private:
-			tc::reference_or_value<T> m_ot;
-		};
-	}
-
-	template< typename T > requires tc::instance<std::remove_reference_t<T>, std::optional> || tc::instance<std::remove_reference_t<T>, tc::optional>
-	auto bool_prefixed(T&& t) return_ctor_noexcept(
-		no_adl::bool_prefixed_impl<T>,
-		(aggregate_tag, tc_move_if_owned(t))
-	)
 }

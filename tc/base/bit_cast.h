@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -30,6 +30,13 @@ namespace tc {
 
 	static_assert(!tc::range_with_iterators< void const* >);
 
+	namespace range_as_blob_detail {
+		// not static local lambda to workaround MSVC bugs: 1. static local instantiation. 2. reference to constexpr
+		auto as_blob_ptr(auto ptr) noexcept {
+			return reinterpret_cast<same_cvref_t<unsigned char, std::remove_pointer_t<decltype(ptr)>>*>(ptr);
+		};
+	}
+
 	template<tc::contiguous_range Rng>
 	[[nodiscard]] auto range_as_blob(Rng&& rng) noexcept {
 		using cv_value_type = std::remove_pointer_t<decltype(tc::ptr_begin(rng))>;
@@ -40,16 +47,12 @@ namespace tc {
 				reinterpret_cast<same_cvref_t<unsigned char, cv_value_type>*>(tc::ptr_end(rng))
 			);
 		} else {
-			// not inside blob_range_t because templates cannot be declared inside of a local class
-			static auto constexpr as_blob_ptr=[](auto ptr) noexcept {
-				return reinterpret_cast<same_cvref_t<unsigned char, std::remove_pointer_t<decltype(ptr)>>*>(ptr);
-			};
 			struct blob_range_t final {
 				explicit blob_range_t(Rng&& rng) noexcept : m_rng(tc_move(rng)) {}
-				auto begin() & noexcept { return as_blob_ptr(tc::ptr_begin(m_rng)); }
-				auto begin() const& noexcept { return as_blob_ptr(tc::ptr_begin(m_rng)); }
-				auto end() & noexcept { return as_blob_ptr(tc::ptr_end(m_rng)); }
-				auto end() const& noexcept { return as_blob_ptr(tc::ptr_end(m_rng)); }
+				auto begin() & noexcept { return range_as_blob_detail::as_blob_ptr(tc::ptr_begin(m_rng)); }
+				auto begin() const& noexcept { return range_as_blob_detail::as_blob_ptr(tc::ptr_begin(m_rng)); }
+				auto end() & noexcept { return range_as_blob_detail::as_blob_ptr(tc::ptr_end(m_rng)); }
+				auto end() const& noexcept { return range_as_blob_detail::as_blob_ptr(tc::ptr_end(m_rng)); }
 			private:
 				static_assert(!std::is_reference<Rng>::value);
 				std::remove_cv_t<Rng> m_rng;

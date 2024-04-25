@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -11,6 +11,10 @@
 #include "base/enum.h"
 #include "base/inplace.h"
 #include "base/modified.h"
+
+#ifdef TC_PRIVATE
+#include "Library/Persistence/SaveableTraits.h"
+#endif
 
 //////////////////////////////////////
 // EAlign
@@ -93,7 +97,7 @@ namespace tc {
 	namespace no_adl {
 		// cannot be implemented as a lambda because lambdas are not assignable
 		template<typename Func>
-		struct [[nodiscard]] directed final {
+		struct [[nodiscard]] directed {
 		private:
 			static_assert(tc::decayed<Func>);
 			Func m_func;
@@ -119,3 +123,17 @@ namespace tc {
 	}
 	using no_adl::directed;
 }
+
+#ifdef TC_PRIVATE
+namespace tc::sign_adl {
+	// persistence of old EDirection was -1/1, which we must stay compatible with
+	void LoadType_impl(sign& t, CXmlReader& loadhandler) THROW(ExLoadFail);
+}
+
+namespace no_adl {
+	template<>
+	struct SaveableTraits<tc::sign> final {
+		static void DoSave(tc::sign t, CSaveHandler& savehandler) MAYTHROW;
+	};
+}
+#endif

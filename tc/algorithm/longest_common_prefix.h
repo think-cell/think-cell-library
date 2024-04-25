@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -19,7 +19,7 @@ namespace tc {
 		tc_auto_cref(itrhsEnd, tc::end(rngrhs));
 		auto itlhs=tc::begin(rnglhs);
 		auto itrhs=tc::begin(rngrhs);
-		while(itlhs < itlhsEnd && itrhs < itrhsEnd && tc::invoke(pred, *itlhs, *itrhs)) {
+		while(itlhs < itlhsEnd && itrhs < itrhsEnd && tc_invoke(pred, *itlhs, *itrhs)) {
 			++itlhs;
 			++itrhs;
 		}
@@ -36,7 +36,7 @@ namespace tc {
 		tc_auto_cref(itlhsEnd, tc::end(rnglhs));
 		auto itlhs=tc::begin(rnglhs);
 		tc::for_each(rngrhs, [&](auto const& rhs) noexcept {
-			if (itlhs!=itlhsEnd && tc::invoke(pred,*itlhs, rhs)) {
+			if (itlhs!=itlhsEnd && tc_invoke(pred,*itlhs, rhs)) {
 				++itlhs;
 				return tc::continue_;
 			} else {

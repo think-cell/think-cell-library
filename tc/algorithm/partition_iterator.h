@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -85,7 +85,7 @@ namespace tc {
 
 				// The parent of the root of the tree is a special header node (representing end()) whose
 				// parent is again the root node.
-				static auto constexpr PathToRoot=[]( node_type* pnode ) noexcept ->TNodeVector {
+				tc_static_auto_constexpr_lambda(PathToRoot) = []( node_type* pnode ) noexcept ->TNodeVector {
 					TNodeVector vecpnode;
 					node_type* pnodeParent=node_type::from_impl(pnode->parent());
 
@@ -172,8 +172,8 @@ namespace tc {
 		////////////////////////////////////////////////////////////////////////
 		// Iterator functions forwarding to partition_point
 
-		template< typename It, typename Value, typename UnaryPredicate >
-		[[nodiscard]] It lower_bound(It itBegin,It itEnd,Value const& val,UnaryPredicate pred) noexcept {
+		template <typename It, typename Value, typename UnaryPredicate = tc::fn_less>
+		[[nodiscard]] It lower_bound(It itBegin,It itEnd,Value const& val,UnaryPredicate pred = {}) noexcept {
 			return iterator::partition_point(
 				itBegin,
 				itEnd,
@@ -181,33 +181,18 @@ namespace tc {
 			);
 		}
 
-		template< typename It, typename Value, typename UnaryPredicate >
-		[[nodiscard]] It upper_bound(It itBegin,It itEnd,Value const& val,UnaryPredicate&& pred) noexcept {
+		template <typename It, typename Value, typename UnaryPredicate = tc::fn_less>
+		[[nodiscard]] It upper_bound(It itBegin,It itEnd,Value const& val,UnaryPredicate&& pred = {}) noexcept {
 			return iterator::partition_point(itBegin,itEnd,[&](auto const& _) noexcept { return !pred(val, _); });
 		}
 
-		template< typename It, typename Value, typename SortPredicate >
-		[[nodiscard]] std::pair<It,It> equal_range(It itBegin,It itEnd,Value const& val,SortPredicate pred) noexcept {
+		template <typename It, typename Value, typename SortPredicate = tc::fn_less>
+		[[nodiscard]] std::pair<It,It> equal_range(It itBegin,It itEnd,Value const& val,SortPredicate pred = {}) noexcept {
 			// Construct std::pair<It,It> initialized so that transform_iterator functor
 			// does have to be neither default-constructible nor assignable. This is non-standard conformant,
 			// but may be practical.
 			It itEqualBegin=iterator::lower_bound(itBegin,itEnd,val,pred);
 			return std::pair<It,It>( itEqualBegin, iterator::upper_bound(itEqualBegin,itEnd,val,pred) );
-		}
-
-		template< typename It, typename Value >
-		[[nodiscard]] It lower_bound(It itBegin,It itEnd,Value const& val) noexcept {
-			return iterator::lower_bound( itBegin, itEnd, val, tc::fn_less() );
-		}
-
-		template< typename It, typename Value >
-		[[nodiscard]] It upper_bound(It itBegin,It itEnd,Value const& val) noexcept {
-			return iterator::upper_bound( itBegin, itEnd, val, tc::fn_less() );
-		}
-
-		template< typename It, typename Value >
-		[[nodiscard]] std::pair<It,It> equal_range(It itBegin,It itEnd,Value const& val) noexcept {
-			return iterator::equal_range( itBegin, itEnd, val, tc::fn_less() );
 		}
 	}
 	using namespace iterator;

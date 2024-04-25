@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -11,7 +11,7 @@
 #include "type_traits.h"
 #include "noncopyable.h"
 #include "tag_type.h"
-#include "assign.h"
+#include "change.h"
 
 namespace tc {
 	namespace no_adl {
@@ -74,6 +74,9 @@ namespace tc {
 				return m_valSaved;
 			}
 		};
+
+		template <typename T>
+		scoped_restorer(T&&) -> scoped_restorer<T&&>;
 	}
 	using no_adl::scoped_restorer;
 
@@ -97,6 +100,11 @@ namespace tc {
 			}
 			using scoped_restorer<T>::operator=;
 		};
+
+		template <typename T, typename T2>
+		scoped_assigner(T&&, T2&&) -> scoped_assigner<T>;
+		template <typename T, typename T2>
+		scoped_assigner(scoped_change_tag_t, T&&, T2&&) -> scoped_assigner<T>;
 	}
 	using no_adl::scoped_assigner;
 
@@ -111,6 +119,9 @@ namespace tc {
 				tc::assign_better(tc_move(better), var, tc_move_if_owned(val));
 			}
 		};
+
+		template <typename T, typename Val, typename Better>
+		scoped_assigner_better(T&, Val&&, Better) -> scoped_assigner_better<T&>;
 	}
 	using no_adl::scoped_assigner_better;
 }

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -260,10 +260,10 @@ STATICASSERTSAME(char, tc::range_value_t<decltype(tc::concat("abc", tc::as_dec(1
 STATICASSERTSAME(char, tc::range_value_t<decltype(tc::concat(tc::as_dec(10), "abc", tc::string<char>("de")))>);
 STATICASSERTSAME(char, tc::range_value_t<decltype(tc::concat(tc::as_dec(10), "abc", tc::concat("xy", tc::as_dec(5)), tc::string<char>("de")))>);
 STATICASSERTSAME(int, tc::range_value_t<decltype(tc::transform(tc::concat("ab", tc_utf16("cd")), tc::fn_static_cast<int>()))>);
-static_assert(!tc::has_range_value<decltype(tc::concat("xy", tc::as_dec(5), L"a"))>::value);
-static_assert(!tc::has_range_value<decltype(tc::concat("abc", tc::as_dec(10), tc::concat("xy", tc::as_dec(5), L"a"), tc::string<char>("de")))>::value);
-static_assert(tc::has_range_value<decltype(tc::concat(tc::as_dec(5), tc::as_dec(10)))>::value);
-static_assert(!tc::has_range_value<decltype(tc::transform(tc::concat("ab", tc_utf16("cd")), tc::fn_increment()))>::value);
+static_assert(!tc::has_range_value<decltype(tc::concat("xy", tc::as_dec(5), L"a"))>);
+static_assert(!tc::has_range_value<decltype(tc::concat("abc", tc::as_dec(10), tc::concat("xy", tc::as_dec(5), L"a"), tc::string<char>("de")))>);
+static_assert(tc::has_range_value<decltype(tc::concat(tc::as_dec(5), tc::as_dec(10)))>);
+static_assert(!tc::has_range_value<decltype(tc::transform(tc::concat("ab", tc_utf16("cd")), tc::fn_increment()))>);
 static_assert(tc::is_concat_range<decltype(tc::concat(tc::as_dec(5), "abc"))>::value);
 static_assert(tc::is_concat_range<decltype(tc::concat("abc", L"def"))>::value);
 static_assert(tc::is_concat_range<decltype(tc::concat("abc", tc::string<char>("def")))>::value);

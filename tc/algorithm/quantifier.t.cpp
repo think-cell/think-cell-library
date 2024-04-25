@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -18,7 +18,7 @@ UNITTESTDEF( quantifiers ) {
 	tc::vector<int> all_even{2,4,6,8};
 	tc::vector<int> all_odd{3,5,7,9};
 
-	static auto constexpr even = [](int const i) noexcept { return i%2==0; };
+	tc_static_auto_constexpr_lambda(even) = [](int const i) noexcept { return i%2==0; };
 
 	int const existing_value = 5;
 	int const non_existing_value = 9;

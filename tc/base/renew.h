@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -12,6 +12,7 @@
 #include "explicit_cast_fwd.h"
 
 #include <algorithm>
+#include <typeinfo>
 
 namespace tc {
 	template<typename T >
@@ -38,20 +39,14 @@ namespace tc {
 #endif
 	}
 
-	// needed in GCC
-	template< typename T, std::size_t N >
-	constexpr void dtor( T (&a)[N] ) noexcept { // can call dtor on const&, but does not seem sensible
-		for( std::size_t i=0; i!=N; ++i) {
-			dtor(a[i]);
-		}
-	}
-
-	template <typename T, typename... Args> requires (0 == sizeof...(Args)) || tc::safely_constructible_from<T, Args&&...>
+	template <typename T, typename... Args> requires (0==sizeof...(Args) && std::is_trivially_default_constructible<T>::value/*value initialization*/) || tc::safely_constructible_from<T, Args&&...>
 	constexpr void ctor(T& t, Args&&... args) noexcept(std::is_nothrow_constructible<T, Args&&...>::value) {
+MODIFY_WARNINGS_BEGIN(((disable)(4244))) // double to float is tc::safely_constructible_from but triggers warning/error 4244 with std::construct_at.
 		std::construct_at(std::addressof(t), tc_move_if_owned(args)...);
+MODIFY_WARNINGS_END
 	}
 
-	template <typename T, typename... Args>
+	template <typename T, typename... Args> requires (!((0==sizeof...(Args) && std::is_trivially_default_constructible<T>::value/*value initialization*/) || tc::safely_constructible_from<T, Args&&...>)) && tc::explicit_castable_from<T, Args&&...>
 	constexpr void ctor(T& t, Args&&... args) noexcept(noexcept(tc::explicit_cast<T>(std::declval<Args>()...))) {
 		if constexpr( std::is_move_constructible<T>::value ) {
 			if( std::is_constant_evaluated() ) {
@@ -95,27 +90,37 @@ namespace tc {
 		static_assert(!std::is_trivially_default_constructible<T>::value || 0 < sizeof...(Args), "You must decide between renew_default and renew_value!");
 		renew_detail::renew(t, tc_move_if_owned(args)...);
 	}
+
+	template<typename Lhs, typename... Rhs>
+	constexpr void assign_explicit_cast(Lhs& lhs, Rhs&&... rhs) MAYTHROW {
+		lhs=tc::explicit_cast<Lhs>(tc_move_if_owned(rhs)...);
+	}
 }
 
-// Sean Parent says that assignment should correspond to implicit construction, not explicit construction
-// Use tc::renew to call explicit constructors, but beware of self-assignment. 
-
-// WATCH OUT, NOT SELF-ASSIGN AWARE
-#define ASSIGN_BY_RENEW( T, S ) \
-	T& operator=( S s ) & noexcept \
-	{ \
-		static_assert( std::convertible_to< S, T >, "assignment must correspond to implicit construction" ); \
-		/* \
-		- Lvalues may alias (parts of) *this, so don't use renew. \
-		- For rvalue references passed to the C++ library, the caller must ensure that they can be treated as temporaries, e.g., that they don't alias,
-		  incl. for move assignment, see C++11 Standard 17.6.4.9 or http://www.open-std.org/jtc1/sc22/wg21/docs/lwg-defects.html#1204 . \
-		  We adopt the same policy. \
-		- Values cannot alias. */ \
-		/* check for overlap of memory ranges, most general check for self-assignment I could come up with, even if it does not catch all cases, e.g., heap-allocated memory */ \
-		tc::assert_no_overlap(*this, tc_move_if_owned(s)); \
-		tc::renew( *this, tc_move_if_owned(s) ); \
+#define ASSIGN_BY_RENEW_IMPL(Lhs, Rhs, /*SelfAssignCheck*/...) \
+	Lhs& operator=(Rhs rhs) & noexcept { \
+		/*static_assert( std::convertible_to< S, T >, "assignment must correspond to implicit construction" ); */ \
+		__VA_ARGS__ { \
+			tc::renew(*this, tc_move_if_owned(rhs)); \
+		} \
 		return *this; \
 	}
+
+#define COPY_SELF_ASSIGN_CHECK(Lhs, Rhs) \
+	static_assert(std::same_as<Lhs, std::remove_cvref_t<Rhs>> && std::is_lvalue_reference<Rhs>::value); \
+	if(std::addressof(rhs)!=this)
+
+// Self assignment check only need to be applied if std::remove_cvref_t<Rhs> and Lhs are the same type and Rhs is an lvalue reference, because
+//   1. for rvalue references passed to the C++ library, the caller must ensure that they can be treated as temporaries, e.g., that they don't alias.
+//      - https://eel.is/c++draft/res.on.arguments#note-2
+//      - https://eel.is/c++draft/lib.types.movedfrom#2
+//   2. values cannot alias.
+//   3. for same type copy assignment, rhs must be unchanged. https://en.cppreference.com/w/cpp/named_req/CopyAssignable
+
+// ASSIGN_BY_RENEW:  assignment which has no danger of overlapping/self assignment. We must look case by case if Lhs and Rhs are different types and may overlap.
+#define ASSIGN_BY_RENEW(Lhs, Rhs) ASSIGN_BY_RENEW_IMPL(TC_FWD(Lhs), TC_FWD(Rhs), static_assert(!std::same_as<Lhs, std::remove_cvref_t<Rhs>> || !std::is_lvalue_reference<Rhs>::value);)
+// COPY_ASSIGN_BY_RENEW: same type copy assignment. check against self assignment is always needed because of dtor->ctor.
+#define COPY_ASSIGN_BY_RENEW(Lhs, Rhs) ASSIGN_BY_RENEW_IMPL(TC_FWD(Lhs), TC_FWD(Rhs), COPY_SELF_ASSIGN_CHECK(TC_FWD(Lhs), TC_FWD(Rhs)))
 
 #define ASSIGN_BY_SWAP(T) \
 	T& operator=( T other ) & noexcept { \

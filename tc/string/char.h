@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -23,11 +23,11 @@ namespace tc {
 #pragma push_macro("CUSTOMIZE_COMMON_TYPE_CHAR_ASCII")
 #define CUSTOMIZE_COMMON_TYPE_CHAR_ASCII(char_type) \
 		template<> \
-		struct common_type_decayed<tc::char_ascii, char_type> { \
+		struct common_type_decayed_impl<tc::char_ascii, char_type> { \
 			using type = char_type; \
 		}; \
 		template<> \
-		struct common_type_decayed<char_type, tc::char_ascii> { \
+		struct common_type_decayed_impl<char_type, tc::char_ascii> { \
 			using type = char_type; \
 		};
 
@@ -64,7 +64,7 @@ struct std::char_traits<tc::restricted_enum<Char, chFirst, chLast>> final {
 		return a < b;
 	}
 
-	static constexpr std::size_t length(const char_type* s) {
+	static constexpr std::size_t length(const char_type* s) noexcept {
 		std::size_t n = 0;
 		if(s) {
 			while(char_type() != *s++)
@@ -73,7 +73,7 @@ struct std::char_traits<tc::restricted_enum<Char, chFirst, chLast>> final {
 		return n;
 	}
 
-	static constexpr const char_type* find(const char_type* p, std::size_t count, const char_type& ch) {
+	static constexpr const char_type* find(const char_type* p, std::size_t count, const char_type& ch) noexcept {
 		while(0<count) {
 			if(*p == ch) {
 				return p;
@@ -85,7 +85,7 @@ struct std::char_traits<tc::restricted_enum<Char, chFirst, chLast>> final {
 		return nullptr;
 	}
 
-	static constexpr int compare(const char_type* s1, const char_type* s2, std::size_t count) {
+	static constexpr int compare(const char_type* s1, const char_type* s2, std::size_t count) noexcept {
 		for(std::size_t i=0; i<count; ++i) {
 			if (*s1<*s2) return -1;
 			else if (*s2<*s1) return 1;
@@ -93,7 +93,7 @@ struct std::char_traits<tc::restricted_enum<Char, chFirst, chLast>> final {
 		return 0;
 	}
 
-	static char_type* move(char_type* dest, const char_type* src, std::size_t count) {
+	static char_type* move(char_type* dest, const char_type* src, std::size_t count) noexcept {
 		if (src <= dest && dest < src+count) {
 			std::copy_backward(src, src+count, dest+count);
 		} else {
@@ -102,7 +102,7 @@ struct std::char_traits<tc::restricted_enum<Char, chFirst, chLast>> final {
 		return dest;
 	}
 
-	static char_type* copy(char_type* dest, const char_type* src, std::size_t count) {
+	static char_type* copy(char_type* dest, const char_type* src, std::size_t count) noexcept {
 		return move(dest, src, count); // copy works correctly just like move in clang and gcc's implementation
 	}
 };

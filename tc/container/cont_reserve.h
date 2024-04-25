@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -15,13 +15,20 @@
 #include "../algorithm/filter_inplace.h"
 #include "../algorithm/element.h"
 
+#include <boost/container/container_fwd.hpp>
+
 namespace tc {
 
-	template< typename Cont >
-	typename boost::range_size< Cont >::type cont_extended_memory(Cont const& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type n=2) noexcept {
-		// factor*cont.size() does not suffice for memory operation guarantee
+	template <typename SizeT>
+	SizeT cont_extended_memory(SizeT const nCurrentCapacity, std::type_identity_t<SizeT> const nRequestedCapacity) noexcept {
 		// 64 bit is enough to hold any memory money can buy
-		return tc::max(n,static_cast< typename Cont::size_type >(static_cast<std::uint64_t>(cont.capacity())*8/5));
+		return tc::max(nRequestedCapacity, static_cast<SizeT>(static_cast<std::uint64_t>(nCurrentCapacity)*8/5));
+	}
+
+	template< typename Cont >
+	typename boost::range_size< Cont >::type cont_extended_memory(Cont const& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type const n) noexcept {
+		// factor*cont.size() does not suffice for memory operation guarantee
+		return tc::cont_extended_memory(cont.capacity(), n);
 	}
 
 	template< typename Cont >
@@ -64,13 +71,38 @@ namespace tc {
 		_ASSERT(tc::empty(cont)); // no one put anything into the container during reentrance
 	}
 
-	template< typename Cont, typename... Args,
-		typename = decltype(std::declval<Cont&>().resize(std::declval<typename boost::range_size< std::remove_reference_t<Cont> >::type>(), std::declval<Args&&>()...))
-	>
-	void cont_extend( Cont& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type n, Args &&... args) noexcept {
-		_ASSERT( cont.size()<=n );
-		tc::cont_reserve(cont, n);
-		NOBADALLOC(cont.resize(n, tc_move_if_owned(args)...));
+	namespace cont_extend_detail {
+		template<typename Cont, typename... Args> requires
+			requires { std::declval<Cont&>().resize(std::declval<typename boost::range_size< std::remove_reference_t<Cont> >::type>(), std::declval<Args&&>()...); }
+		void cont_extend_impl(Cont& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type n, Args&&... args) noexcept {
+			_ASSERT( cont.size()<=n );
+			tc::cont_reserve(cont, n);
+			NOBADALLOC(cont.resize(n, tc_move_if_owned(args)...));
+		}
+	}
+
+	// value initialize extended elements
+	template<typename Cont, typename... Args> requires
+		requires { std::declval<Cont&>().resize(std::declval<typename boost::range_size< std::remove_reference_t<Cont> >::type>(), std::declval<Args&&>()...); }
+	void cont_extend(Cont& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type n, Args&&... args) noexcept {
+		tc::cont_extend_detail::cont_extend_impl(cont, n, tc_move_if_owned(args)...);
+	}
+
+	// default initialize extended elements
+	template<typename Cont> requires
+		// Many containers don't support default initialization of trivially default constructible types and use value initialization instead.
+		// We enable boost::container::default_init tag where needed.
+		//   1. for containers that support boost::container::default_init_t, forward it.
+		//   2. for containers that do not support boost::container::default_init_t: do not forward it and use cont.resize(n) (most likely value initialization) if available.
+		//      TODO: use the right format once default initialization is supported
+		requires { std::declval<Cont&>().resize(std::declval<typename boost::range_size< std::remove_reference_t<Cont> >::type>(), boost::container::default_init); } ||
+		requires { std::declval<Cont&>().resize(std::declval<typename boost::range_size< std::remove_reference_t<Cont> >::type>()); }
+	void cont_extend(Cont& cont, typename boost::range_size< std::remove_reference_t<Cont> >::type n, boost::container::default_init_t) noexcept {
+		if constexpr (requires { cont.resize(n, boost::container::default_init);}) {
+			tc::cont_extend_detail::cont_extend_impl(cont, n, boost::container::default_init);
+		} else {
+			tc::cont_extend_detail::cont_extend_impl(cont, n); // should be default initialized but container does not support it yet and use value initialization instead.
+		}
 	}
 
 	template< typename Cont, typename... Args,

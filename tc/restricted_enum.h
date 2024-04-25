@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -57,19 +57,19 @@ namespace tc {
 
 			template<typename U>
 				requires tc::explicit_castable_from<T, U const&>
-			static bool constructable_from(U const& u) noexcept {
+			static bool constructible_from(U const& u) noexcept {
 				return restricted_enum(c_tFirst) <= u && u <= restricted_enum(c_tLast); // We reuse the SFINAE from the comparison operators of restricted_enum.
 			}
 
 			template<typename U>
 				requires tc::explicit_castable_from<T, U const&>
-			explicit constexpr restricted_enum(U const& u) noexcept : tc_member_init_cast(m_t, u) {
+			explicit constexpr restricted_enum(U const& u) noexcept : tc_member_init(m_t, u) {
 				_ASSERTE(tc::to_underlying(c_tFirst) <= tc::to_underlying(m_t) && tc::to_underlying(m_t) <= tc::to_underlying(c_tLast));
 			}
 
 			// Implicit ctor from a more restrictive type.
 			template<typename U, U uFirst, U uLast>
-				requires std::convertible_to<U, T> && (tc::cmp_less_equal(tc::to_underlying(c_tFirst), tc::to_underlying(uFirst)) && tc::cmp_less_equal(tc::to_underlying(uLast), tc::to_underlying(c_tLast)))
+				requires std::convertible_to<U, T> && (std::cmp_less_equal(tc::to_underlying(c_tFirst), tc::to_underlying(uFirst)) && std::cmp_less_equal(tc::to_underlying(uLast), tc::to_underlying(c_tLast)))
 			constexpr restricted_enum(restricted_enum<U, uFirst, uLast> const rhs) noexcept : m_t(tc::implicit_cast<U>(rhs)) {}
 
 			// Explicit ctor otherwise.
@@ -80,23 +80,21 @@ namespace tc {
 			// Assignment allows explicit constructors as well.
 			// This is needed for spirit: it needs to assign to a restricted_enum attribute.
 			template<typename U>
-				requires std::is_constructible<restricted_enum<T, tFirst, tLast>, U const&>::value
-			constexpr restricted_enum& operator=(U const& rhs) & noexcept {
-				tc::renew(*this, rhs);
-				return *this;
+			constexpr restricted_enum& operator=(U&& u) & noexcept requires tc::explicit_castable_from<restricted_enum, U&&> {
+				return *this=tc::explicit_cast<restricted_enum>(tc_move_if_owned(u));
 			}
 
 			template <typename U>
 				requires std::same_as<U, T>
 					|| (tc::char_type<T> && tc::char_type<U> && detail::is_only_ascii(tFirst, tLast))
 			constexpr operator U() const& noexcept {
-				return tc::explicit_cast<U>(m_t);
+				tc_return_cast(m_t);
 			}
 
 			template<tc::actual_integer Integral>
 				requires requires (T& value, Integral n) { value += n; }
 			constexpr restricted_enum& operator+=(Integral const n) noexcept {
-				_ASSERTE(tc::cmp_less_equal(c_tFirst - m_t, n) && tc::cmp_less_equal(n, c_tLast - m_t));
+				_ASSERTE(std::cmp_less_equal(c_tFirst - m_t, n) && std::cmp_less_equal(n, c_tLast - m_t));
 				m_t = static_cast<T>(m_t + n);
 				return *this;
 			}
@@ -104,7 +102,7 @@ namespace tc {
 			template<tc::actual_integer Integral>
 				requires requires (T& value, Integral n) { value -= n; }
 			constexpr restricted_enum& operator-=(Integral const n) noexcept {
-				_ASSERTE(tc::cmp_less_equal(m_t - c_tLast, n) && tc::cmp_less_equal(n, m_t - c_tFirst));
+				_ASSERTE(std::cmp_less_equal(m_t - c_tLast, n) && std::cmp_less_equal(n, m_t - c_tFirst));
 				m_t = static_cast<T>(m_t - n);
 				return *this;
 			}
@@ -124,7 +122,7 @@ namespace tc {
 		)
 
 		template<typename T, T tFirst, T tLast>
-		constexpr auto from_underlying_impl(tc::type::identity<restricted_enum<T, tFirst, tLast>>, tc::underlying_type_t<restricted_enum<T, tFirst, tLast>> const t) return_decltype_noexcept(
+		constexpr auto from_underlying_impl(std::type_identity<restricted_enum<T, tFirst, tLast>>, tc::underlying_type_t<restricted_enum<T, tFirst, tLast>> const t) return_decltype_noexcept(
 			// Range check for T done in its from_underlying implementation.
 			// Range check for [tFirst, tLast] done in constructor.
 			restricted_enum<T, tFirst, tLast>(tc::from_underlying<T>(t))

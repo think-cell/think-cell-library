@@ -1,18 +1,15 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
+
 #include "assert_defs.h"
-#include "functors.h"
-#include "return_decltype.h"
-#include "explicit_cast_fwd.h"
 #include "casts.h"
-#include "invoke.h"
 #ifndef __EMSCRIPTEN__
 #include <atomic>
 #endif
@@ -108,8 +105,6 @@ template<typename Lhs, typename Rhs>
 
 namespace no_adl
 {
-	DEFINE_FN2(tc::equal_to, fn_equal_to) // no tc_define_fn to avoid ADL
-
 	DEFINE_FN2(!tc::equal_to, fn_not_equal_to)
 
 	struct[[nodiscard]] fn_less{
@@ -145,7 +140,6 @@ namespace no_adl
 	};
 }
 
-using no_adl::fn_equal_to;
 using no_adl::fn_not_equal_to;
 using no_adl::fn_less;
 using no_adl::fn_greater_equal;
@@ -153,7 +147,7 @@ using no_adl::fn_greater;
 using no_adl::fn_less_equal;
 
 /////////////////////////////////////////////////////////////////////
-// assign
+// change
 
 template< typename Better, typename Var, typename Val  >
 constexpr auto assign_better( Better better, Var&& var, Val&& val ) noexcept {
@@ -175,7 +169,7 @@ constexpr auto assign_better( Better better, Var&& var, Val&& val ) noexcept {
 				return false;
 			}
 		}
-	)( tc::invoke(better, tc::as_const(val), tc::as_const(var)) );
+	)( tc_invoke(better, tc::as_const(val), tc::as_const(var)) );
 }
 
 template< typename Var, typename Val >

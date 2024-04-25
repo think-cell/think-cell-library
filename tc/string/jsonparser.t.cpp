@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -401,9 +401,9 @@ UNITTESTDEF(JSONTestSuiteStress) {
 }
 
 UNITTESTDEF(JSONDecode) {
-	static auto constexpr Test = [](tc::span<char const> strJson, tc::span<char const> strExpected) noexcept {
+	tc_static_auto_constexpr_lambda(Test) = [](tc::span<char const> strJson, tc::span<char const> strExpected) noexcept {
 		auto const MakeParser = [&]() noexcept {
-			return tc::json::parser(tc::concat("\"", strJson, "\""), tc::json::simple_error_handler(tc::never_called()));
+			return tc::json::parser(tc::concat("\"", strJson, "\""), tc::json::assert_no_error);
 		};
 		_ASSERT(tc::equal(tc::as_lvalue(MakeParser()).expect_string(), tc::make_generator_range(strExpected)));
 		_ASSERT(tc::equal(tc::make_generator_range(tc::as_lvalue(MakeParser()).expect_string()), strExpected));
@@ -421,7 +421,7 @@ UNITTESTDEF(JSONDecode) {
 #pragma pop_macro("AS_ARRAY")
 
 UNITTESTDEF(JSONArray_Manual) {
-	auto parser = tc::json::parser("[1, 2, 3]", tc::json::simple_error_handler(tc::never_called()));
+	auto parser = tc::json::parser("[1, 2, 3]", tc::json::assert_no_error);
 
 	parser.expect_array();
 
@@ -437,7 +437,7 @@ UNITTESTDEF(JSONArray_Manual) {
 	parser.expect_array_end();
 }
 UNITTESTDEF(JSONArray_ManualLoop) {
-	auto parser = tc::json::parser("[1, 2, 3]", tc::json::simple_error_handler(tc::never_called()));
+	auto parser = tc::json::parser("[1, 2, 3]", tc::json::assert_no_error);
 
 	parser.expect_array();
 	for (auto i = 1; parser.element(); ++i) {
@@ -445,7 +445,7 @@ UNITTESTDEF(JSONArray_ManualLoop) {
 	}
 }
 UNITTESTDEF(JSONArray_FuncIdx) {
-	auto parser = tc::json::parser("[1, 2, 3]", tc::json::simple_error_handler(tc::never_called()));
+	auto parser = tc::json::parser("[1, 2, 3]", tc::json::assert_no_error);
 
 	auto rng = parser.expect_array([&](std::size_t const idx) noexcept {
 		return std::pair(tc::explicit_cast<int>(idx), parser.expect_number<int>());
@@ -453,7 +453,7 @@ UNITTESTDEF(JSONArray_FuncIdx) {
 	TEST_RANGE_EQUAL(rng, TC_FWD(tc::literal_range_of<std::pair(0, 1), std::pair(1, 2), std::pair(2, 3)>));
 }
 UNITTESTDEF(JSONArray_Func) {
-	auto parser = tc::json::parser("[1, 2, 3]", tc::json::simple_error_handler(tc::never_called()));
+	auto parser = tc::json::parser("[1, 2, 3]", tc::json::assert_no_error);
 
 	auto rng = parser.expect_array([&] {
 		return parser.expect_number<int>();
@@ -462,7 +462,7 @@ UNITTESTDEF(JSONArray_Func) {
 }
 
 UNITTESTDEF(JSONObject_ManualLoop) {
-	auto parser = tc::json::parser(R"({"a": 1, "b": 2, "c": 3})", tc::json::simple_error_handler(tc::never_called()));
+	auto parser = tc::json::parser(R"({"a": 1, "b": 2, "c": 3})", tc::json::assert_no_error);
 
 	parser.expect_object();
 	while (auto const key = parser.key()) {
@@ -477,7 +477,7 @@ UNITTESTDEF(JSONObject_ManualLoop) {
 	}
 }
 UNITTESTDEF(JSONObject_Members) {
-	auto parser = tc::json::parser(R"({"a": 1, "b": 2, "c": 3})", tc::json::simple_error_handler(tc::never_called()));
+	auto parser = tc::json::parser(R"({"a": 1, "b": 2, "c": 3})", tc::json::assert_no_error);
 
 	int a, b, c, d;
 	d = -1;

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -74,7 +74,7 @@ namespace tc::no_adl {
 		tc::safely_constructible_from<TTarget, TSource> ||
 		( // class type might have a convert operator to std::optional
 			std::is_class<TSourceNocvref>::value &&
-			!std::is_constructible<TTarget, TSource>::value // in this case TTarget must not be constructible from the class type to avoid ambiguity
+			!safely_constructible_from_detail::object_constructible_from<TTarget, TSource> // in this case TTarget must not be constructible from the class type to avoid ambiguity
 		)
 	> {};
 
@@ -105,8 +105,8 @@ namespace tc::no_adl {
 
 	template<typename TFirst, typename TSecond, typename TPair> requires tc::instance<std::remove_reference_t<TPair>, std::pair>
 	struct is_class_safely_constructible<std::pair<TFirst, TSecond>, TPair> final: tc::constant<
-		tc::safely_constructible_from<TFirst, decltype(std::get<0>(std::declval<TPair>()))> &&
-		tc::safely_constructible_from<TSecond, decltype(std::get<1>(std::declval<TPair>()))>
+		tc::safely_constructible_from<TFirst, decltype((std::declval<TPair>().first))> &&
+		tc::safely_constructible_from<TSecond, decltype((std::declval<TPair>().second))>
 	> {};
 
 
@@ -114,21 +114,21 @@ namespace tc::no_adl {
 	// common_type_decayed
 
 	template<>
-	struct common_type_decayed<bool, tc::decay_t<decltype(boost::indeterminate)>> {
+	struct common_type_decayed_impl<bool, tc::decay_t<decltype(boost::indeterminate)>> {
 		using type = boost::tribool;
 	};
 
 	template<>
-	struct common_type_decayed<tc::decay_t<decltype(boost::indeterminate)>, bool> {
+	struct common_type_decayed_impl<tc::decay_t<decltype(boost::indeterminate)>, bool> {
 		using type = boost::tribool;
 	};
 
 	template<typename T>
-	struct common_type_decayed<T, std::nullopt_t> : std::conditional<tc::instance<T, std::optional>, T, std::optional<T>> {};
+	struct common_type_decayed_impl<T, std::nullopt_t> : std::conditional<tc::instance<T, std::optional>, T, std::optional<T>> {};
 
 	template<typename T>
-	struct common_type_decayed<std::nullopt_t, T> : common_type_decayed<T, std::nullopt_t> {};
+	struct common_type_decayed_impl<std::nullopt_t, T> : common_type_decayed_impl<T, std::nullopt_t> {};
 
 	template<>
-	struct common_type_decayed<std::nullopt_t, std::nullopt_t> : common_type_decayed_base<std::nullopt_t, std::nullopt_t> {};
+	struct common_type_decayed_impl<std::nullopt_t, std::nullopt_t> : std::type_identity<std::nullopt_t> {};
 } // namespace tc::no_adl

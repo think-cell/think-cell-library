@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -32,19 +32,19 @@ namespace tc {
 
 			template<typename T> requires tc::runtime_predicate<Pred, T> && tc::sinkable<Sink, T>
 			constexpr auto operator()(T&& t) const& noexcept(tc::nothrow_predicate<Pred, T> && tc::nothrow_sinkable<Sink, T>) {
-				return tc::explicit_cast<bool>(tc::invoke(m_pred, tc::as_const(t)))
+				return tc::explicit_cast<bool>(tc_invoke(m_pred, tc::as_const(t)))
 							? tc::continue_if_not_break(m_sink, tc_move_if_owned(t))
 							: tc::constant<tc::continue_>();
 			}
 
 			template<typename T> requires tc::constant_predicate_true<Pred, T>  && tc::sinkable<Sink, T>
 			constexpr auto operator()(T&& t) const& noexcept(tc::nothrow_predicate<Pred, T> && tc::nothrow_sinkable<Sink, T>) {
-				tc::discard(tc::invoke(m_pred, tc::as_const(t)));
+				tc::discard(tc_invoke(m_pred, tc::as_const(t)));
 				return tc::continue_if_not_break(m_sink, tc_move_if_owned(t));
 			}
 			template<typename T> requires tc::constant_predicate_false<Pred, T>
 			constexpr auto operator()(T&& t) const& noexcept(tc::nothrow_predicate<Pred, T>) {
-				tc::discard(tc::invoke(m_pred, tc::as_const(t)));
+				tc::discard(tc_invoke(m_pred, tc::as_const(t)));
 				return tc::constant<tc::continue_>();
 			}
 		};
@@ -53,7 +53,7 @@ namespace tc {
 		struct filter_adaptor;
 
 		template< typename Pred, typename Rng >
-		struct [[nodiscard]] filter_adaptor<Pred, Rng, false> : tc::generator_range_adaptor<Rng>, tc::range_output_from_base_range {
+		struct [[nodiscard]] filter_adaptor<Pred, Rng, false> : tc::generator_range_adaptor<Rng> {
 		protected:
 			static_assert(tc::decayed<Pred>);
 			Pred m_pred;
@@ -70,6 +70,16 @@ namespace tc {
 			constexpr auto adapted_sink(Sink&& sink, bool /*bReverse*/) const& noexcept {
 				return filter_sink<Pred, tc::decay_t<Sink>>{m_pred, tc_move_if_owned(sink)};
 			}
+
+		private:
+			template<typename T>
+			using is_not_constant_predicate_false = tc::constant<!tc::constant_predicate_false<Pred, T>>;
+
+			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, filter_adaptor>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
+			friend auto range_output_t_impl(Self&&) -> boost::mp11::mp_filter<
+				is_not_constant_predicate_false,
+				tc::range_output_t<decltype(std::declval<Self>().base_range())>
+			> {} // unevaluated
 		};
 
 		template< typename Pred, typename Rng >
@@ -86,6 +96,8 @@ namespace tc {
 
 		public:
 			using typename base_::tc_index;
+			static constexpr bool c_bHasStashingIndex=tc::has_stashing_index<std::remove_reference_t<Rng>>::value;
+			static constexpr bool c_bPrefersForEach = true;
 
 			constexpr filter_adaptor() = default;
 			using base_::base_;
@@ -93,7 +105,7 @@ namespace tc {
 		private:
 			void increment_until_kept(tc_index& idx) const& MAYTHROW {
 				// always call operator() const, which is assumed to be thread-safe
-				while(!this->at_end_index(idx) && !tc::explicit_cast<bool>(tc::invoke(this->m_pred, tc::as_const(this->dereference_index(idx))))) {
+				while(!this->at_end_index(idx) && !tc::explicit_cast<bool>(tc_invoke(this->m_pred, tc::as_const(this->dereference_index(idx))))) {
 					tc::increment_index(this->base_range(), idx);
 				}
 			}
@@ -115,7 +127,7 @@ namespace tc {
 				do {
 					tc::decrement_index(this->base_range(), idx);
 					// always call operator() const, which is assumed to be thread-safe
-				} while(!tc::explicit_cast<bool>(tc::invoke(this->m_pred, tc::as_const(this->dereference_index(idx)))));
+				} while(!tc::explicit_cast<bool>(tc_invoke(this->m_pred, tc::as_const(this->dereference_index(idx)))));
 			}
 
 			STATIC_FINAL(middle_point)( tc_index & idx, tc_index const& idxEnd ) const& MAYTHROW -> void
@@ -125,16 +137,9 @@ namespace tc {
 				tc::middle_point(this->base_range(), idx, idxEnd);
 			
 				// always call operator() const, which is assumed to be thread-safe
-				while(idxBegin != idx && !tc::explicit_cast<bool>(tc::invoke(this->m_pred, tc::as_const(this->dereference_index(idx))))) {
+				while(idxBegin != idx && !tc::explicit_cast<bool>(tc_invoke(this->m_pred, tc::as_const(this->dereference_index(idx))))) {
 					tc::decrement_index(this->base_range(), idx);
 				}
-			}
-		public:
-			static constexpr decltype(auto) element_base_index(tc_index const& idx) noexcept {
-				return idx;
-			}
-			static constexpr decltype(auto) element_base_index(tc_index&& idx) noexcept {
-				return tc_move(idx);
 			}
 		};
 	}

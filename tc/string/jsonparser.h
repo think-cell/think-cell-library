@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -33,7 +33,7 @@ namespace tc::json {
 	namespace no_adl {
 		template<typename Func>
 		struct simple_error_handler {
-			explicit simple_error_handler(Func func) noexcept
+			explicit constexpr simple_error_handler(Func func) noexcept
 				: m_func(tc_move(func))
 			{}
 
@@ -125,6 +125,7 @@ namespace tc::json {
 			using typename decode_adaptor::range_iterator_from_index::tc_index;
 
 			static constexpr bool c_bHasStashingIndex=tc::has_stashing_index<std::remove_reference_t<Rng>>::value;
+			static constexpr bool c_bPrefersForEach = true;
 
 		private:
 			using this_type = decode_adaptor;
@@ -266,8 +267,11 @@ namespace tc::json {
 				return idx.m_baseidx;
 			}
 
-			template<ENABLE_SFINAE, typename Sink>
-			auto operator()(Sink sink) const& MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(sink, tc::dereference_index(SFINAE_VALUE(this)->base_range(), std::declval<tc_index const&>))), tc::constant<tc::continue_>>{
+			template<typename Sink>
+			auto operator()(Sink const sink) const& MAYTHROW -> tc::common_type_t<
+				decltype(tc::continue_if_not_break(sink, std::declval<Char const&>())),
+				tc::constant<tc::continue_>
+			> {
 				auto& base=this->base_range();
 				auto idx=this->base_begin_index();
 				for(;;) {
@@ -309,9 +313,13 @@ namespace tc::json {
 
 	using no_adl::simple_error_handler;
 
-	template<typename T>
-	auto const assert_and_throw=tc::json::simple_error_handler([](tc::unused) THROW(T) {
+	// The inline here is necessary to ensure that the type of the lambda is the same in all compilation units.
+	template <typename T>
+	inline auto constexpr assert_and_throw = tc::json::simple_error_handler([](tc::unused) THROW(T) {
 		_ASSERTNOTIFYFALSE; throw T();
+	});
+	inline auto constexpr assert_no_error = tc::json::simple_error_handler([](tc::unused) noexcept {
+		_ASSERTNORETURNFALSE;
 	});
 
 	namespace no_adl {
@@ -320,7 +328,16 @@ namespace tc::json {
 		private:
 			tc::tuple<Keys...> m_tplkey;
 
-			using ResultT = tc::common_type_t<decltype(std::declval<Keys>().m_t())...>;
+			template <typename Fn, typename Parser>
+			static decltype(auto) invoke_with_parser(Fn const& fn, Parser& parser) {
+				if constexpr (tc::invocable<Fn const&, Parser&>) {
+					RETURNS_VOID(tc_invoke(fn, parser));
+				} else {
+					return fn();
+				}
+			}
+
+			using ResultT = tc::common_type_t<boost::mp11::mp_eval_or<void, tc::invoke_result_t, decltype(std::declval<Keys>().m_t)>...>;
 			using OptionalResultT = std::conditional_t<std::is_void<ResultT>::value, bool, std::optional<ResultT>>;
 			OptionalResultT m_oresult = {}; // value initialize: bool to false, optional to nullopt
 
@@ -337,9 +354,9 @@ namespace tc::json {
 					if (m_oresult) {
 						parser.template may_contain_only_one_of_keys<c_astrKeys>(); // MAYTHROW
 					} else if constexpr (c_bHasResult) {
-						m_oresult.emplace(key.m_t());
+						tc::optional_emplace(m_oresult, invoke_with_parser(key.m_t, parser));
 					} else {
-						key.m_t();
+						invoke_with_parser(key.m_t, parser);
 						m_oresult = true;
 					}
 					return true;
@@ -479,7 +496,7 @@ namespace tc::json {
 			auto number() & MAYTHROW {
 				using Result = std::optional<decltype(tc::slice(this->input(), this->position(), this->position()))>;
 
-				static auto constexpr digits = "0123456789"_tc;
+				tc_static_auto_constexpr(digits, "0123456789"_tc);
 				auto const skip_one_or_more_digits = [&]() MAYTHROW {
 					if (!this->one_of(digits)) {
 						this->template error<tc_mem_fn(.number_expected)>(); // MAYTHROW
@@ -661,9 +678,7 @@ namespace tc::json {
 						}
 					};
 
-					static auto constexpr bAlwaysBreaks = std::is_same<decltype(invoke_sink(0)), tc::constant<tc::break_>>::value;
-					static auto constexpr bNeverBreaks = std::is_same<decltype(invoke_sink(0)), tc::constant<tc::continue_>>::value;
-					if constexpr (bAlwaysBreaks) {
+					if constexpr (std::is_same<decltype(invoke_sink(0)), tc::constant<tc::break_>>::value) {
 						if (element()) {
 							tc::discard(invoke_sink(0));
 							while (element()) skip_value();
@@ -671,7 +686,7 @@ namespace tc::json {
 						} else {
 							return tc::continue_;
 						}
-					} else if constexpr (bNeverBreaks) {
+					} else if constexpr (std::is_same<decltype(invoke_sink(0)), tc::constant<tc::continue_>>::value) {
 						for (std::size_t idx = 0; element(); ++idx) {
 							tc::discard(invoke_sink(idx));
 						}
@@ -689,7 +704,7 @@ namespace tc::json {
 			}
 			template<typename Func> requires tc::invocable<Func&> && (!tc::invocable<Func&, std::size_t>)
 			auto elements(Func func) & MAYTHROW {
-				return elements([func = tc_move(func)](std::size_t) return_decltype_xvalue_by_ref_MAYTHROW(func()));
+				return elements([func = tc_move(func)](std::size_t) return_decltype_allow_xvalue_MAYTHROW(func()));
 			}
 			template<typename Func> requires tc::invocable<Func&> || tc::invocable<Func&, std::size_t>
 			auto expect_array(Func func) & MAYTHROW {
@@ -707,7 +722,13 @@ namespace tc::json {
 				-> tc::common_type_t<decltype(tc::continue_if_not_break(std::declval<Sink const&>(), std::size_t(0))), tc::constant<tc::continue_>> {
 				for (std::size_t idx = 0; element(); ++idx) {
 					try {
-						tc_yield(sink, idx);
+						auto const boc = tc::continue_if_not_break(sink, idx);
+						if constexpr (!std::same_as<std::remove_const_t<decltype(boc)>, tc::constant<tc::continue_>>) {
+							if (tc::break_ == boc) {
+								while (element()) skip_value();
+								return tc::constant<tc::break_>();
+							}
+						}
 					} catch (skip_exception const&) {
 						while (element()) skip_value();
 						throw;
@@ -721,7 +742,7 @@ namespace tc::json {
 			}
 
 			template<typename Func>
-			auto optional_single_element(Func func) & MAYTHROW {
+			auto expect_single_element_or_empty_array(Func func) & MAYTHROW {
 				expect_array();
 				using T = decltype(func());
 				using OptT = std::conditional_t<std::is_void<T>::value, bool, std::optional<T>>;
@@ -732,7 +753,7 @@ namespace tc::json {
 							func();
 							ot = true;
 						} else {
-							ot.emplace(func());
+							tc::optional_emplace(ot, func());
 						}
 					} catch (skip_exception const&) {
 						while (element()) skip_value();
@@ -743,7 +764,7 @@ namespace tc::json {
 				return ot;
 			}
 			template<typename Func>
-			auto required_single_element(Func func) & MAYTHROW {
+			auto expect_single_element(Func func) & MAYTHROW {
 				expect_array();
 				expect_element();
 				try {

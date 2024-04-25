@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -290,11 +290,11 @@ namespace tc::xml {
 			using base_::expect_child;
 
 			using base_::skip_child;
-			using base_::expect_skip_child;
 
 			// Output the injected close tag for an empty element when the empty element close tag is parsed
 			void skip_rest_of_element() & MAYTHROW { OutputEmptyElementCloseTag(); base_::skip_rest_of_element(); }
-			bool element_end() & MAYTHROW { OutputEmptyElementCloseTag(); return base_::element_end(); }
+			// We deliberately do not offer bool element_end() because we want our code to be like the XML schema syntax.
+			// Match whatever comes before the end, and if it does not match, expect_element_end().
 			void expect_element_end() & MAYTHROW { OutputEmptyElementCloseTag(); base_::expect_element_end(); }
 
 		private:

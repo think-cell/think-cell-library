@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -10,7 +10,7 @@
 
 #include "../range/subrange.h"
 #include "../storage_for.h"
-#include "../base/assign.h"
+#include "../base/change.h"
 #include "accumulate.h"
 #include "compare.h"
 
@@ -39,7 +39,7 @@ namespace tc {
 							}
 							aoref[1-i].ctor( aggregate_tag, *ait[1-i] ); // MAYTHROW
 							try {
-								if( tc::invoke(better, tc::as_const(**aoref[1-i]), tc::as_const(**aoref[i])) ) { // MAYTHROW
+								if( tc_invoke(better, tc::as_const(**aoref[1-i]), tc::as_const(**aoref[i])) ) { // MAYTHROW
 									break; // only path where aoref[1-i] is not destroyed
 								}
 							} catch(...) {

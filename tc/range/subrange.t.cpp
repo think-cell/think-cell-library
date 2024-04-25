@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -21,16 +21,16 @@
 
 namespace {
 	// non-borrowed ranges are subranges
-	STATICASSERTSAME(tc::make_subrange_result_t<std::string>, tc::subrange<std::string>);
+	STATICASSERTSAME(tc::slice_t<std::string>, tc::no_adl::subrange<std::string>);
 	// borrowed range are iterator_ranges
-	STATICASSERTSAME(tc::make_subrange_result_t<std::string&>, tc::iterator_range_t<std::string&>);
-	STATICASSERTSAME(tc::make_subrange_result_t<std::string_view>, tc::iterator_range_t<std::string_view>);
-	STATICASSERTSAME(tc::make_subrange_result_t<std::string_view&>, tc::iterator_range_t<std::string_view>);
+	STATICASSERTSAME(tc::slice_t<std::string&>, tc::iterator_range_t<std::string&>);
+	STATICASSERTSAME(tc::slice_t<std::string_view>, tc::iterator_range_t<std::string_view>);
+	STATICASSERTSAME(tc::slice_t<std::string_view&>, tc::iterator_range_t<std::string_view>);
 	// unwrapping
-	STATICASSERTSAME(tc::make_subrange_result_t<tc::subrange<std::string>>, tc::subrange<std::string>);
-	STATICASSERTSAME(tc::make_subrange_result_t<tc::subrange<std::string>&>, tc::iterator_range_t<std::string&>);
-	STATICASSERTSAME(tc::make_subrange_result_t<tc::span<char const>>, tc::span<char const>);
-	STATICASSERTSAME(tc::make_subrange_result_t<tc::span<char const>&>, tc::span<char const>);
+	STATICASSERTSAME(tc::slice_t<tc::no_adl::subrange<std::string>>, tc::no_adl::subrange<std::string>);
+	STATICASSERTSAME(tc::slice_t<tc::no_adl::subrange<std::string>&>, tc::iterator_range_t<std::string&>);
+	STATICASSERTSAME(tc::slice_t<tc::span<char const>>, tc::span<char const>);
+	STATICASSERTSAME(tc::slice_t<tc::span<char const>&>, tc::span<char const>);
 
 
 	UNITTESTDEF( subrange_array ) {
@@ -38,22 +38,22 @@ namespace {
 		int arr[4] = {1,2,3,4};
 		auto arr_rng = tc::slice_by_interval(arr, tc::make_interval(1, 3));
 
-		void(tc::implicit_cast<tc::subrange<tc::universal_range<int *>>>(arr_rng));
-		void(tc::implicit_cast<tc::subrange<tc::universal_range<int const*>>>(arr_rng));
+		void(tc::implicit_cast<tc::no_adl::subrange<tc::no_adl::universal_range<int *>>>(arr_rng));
+		void(tc::implicit_cast<tc::no_adl::subrange<tc::no_adl::universal_range<int const*>>>(arr_rng));
 	}
 
 
 	UNITTESTDEF( const_subrange_char_ptr ) {
-		tc::subrange<tc::universal_range<char const*>>{"test"};
+		tc::no_adl::subrange<tc::no_adl::universal_range<char const*>>{"test"};
 	}
 
 	//-------------------------------------------------------------------------------------------------------------------------
 
-	using SRVI = tc::make_subrange_result_t<tc::vector<int>&>;
-	using CSRVI = tc::make_subrange_result_t<tc::vector<int> const&>;
+	using SRVI = tc::slice_t<tc::vector<int>&>;
+	using CSRVI = tc::slice_t<tc::vector<int> const&>;
 
-	using SSRVI = tc::make_subrange_result_t<tc::make_subrange_result_t<tc::vector<int>&>>;
-	using CSSRVI = tc::make_subrange_result_t<tc::make_subrange_result_t<tc::vector<int> const&>>;
+	using SSRVI = tc::slice_t<tc::slice_t<tc::vector<int>&>>;
+	using CSSRVI = tc::slice_t<tc::slice_t<tc::vector<int> const&>>;
 
 	[[maybe_unused]] void ref_test(SRVI & rng) noexcept {
 		CSRVI const_rng(rng);
@@ -197,9 +197,9 @@ namespace {
 			tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3,5,6)),
 			tc::union_range(
 				[](auto sink) noexcept -> tc::break_or_continue {
-					tc_yield(sink, 1);
-					tc_yield(sink, 3);
-					tc_yield(sink, 5);
+					tc_return_if_break(tc::continue_if_not_break(sink, 1))
+					tc_return_if_break(tc::continue_if_not_break(sink, 3))
+					tc_return_if_break(tc::continue_if_not_break(sink, 5))
 					return tc::continue_;
 				},
 				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 2,6))
@@ -256,8 +256,7 @@ namespace {
 			_ASSERTEQUAL(tc::size(vecn), 3);
 			_ASSERTEQUAL(std::addressof(*tc::begin(rng)), std::addressof(*tc::begin(vecn)));
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
-			// rewrite the following line to ::value once VC++ compiler bug is resolved https://developercommunity.visualstudio.com/content/problem/1088659/class-local-to-function-template-erroneously-cant.html
-			static_assert(!std::is_const_v<std::remove_reference_t<decltype(rng)>>);
+			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
 				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
 				rng
@@ -295,8 +294,7 @@ namespace {
 			_ASSERTEQUAL(tc::size(vecn), 3);
 			_ASSERTEQUAL(std::addressof(*tc::begin(rng)), std::addressof(*tc::begin(vecn)));
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
-			// rewrite the following line to ::value once VC++ compiler bug is resolved https://developercommunity.visualstudio.com/content/problem/1088659/class-local-to-function-template-erroneously-cant.html
-			static_assert(!std::is_const_v<std::remove_reference_t<decltype(rng)>>);
+			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
 				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
 				rng
@@ -342,8 +340,7 @@ namespace {
 				std::addressof(*tc::begin(rng))
 			);
 			static_assert(std::is_lvalue_reference<decltype(rng)>::value);
-			// rewrite the following line to ::value once VC++ compiler bug is resolved https://developercommunity.visualstudio.com/content/problem/1088659/class-local-to-function-template-erroneously-cant.html
-			static_assert(!std::is_const_v<std::remove_reference_t<decltype(rng)>>);
+			static_assert(!std::is_const<std::remove_reference_t<decltype(rng)>>::value);
 			TEST_RANGE_EQUAL(
 				tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,3)),
 				rng
@@ -416,7 +413,7 @@ namespace {
 
 		}
 
-		static auto constexpr Pred = [](int const lhs, int const rhs) noexcept {
+		tc_static_auto_constexpr_lambda(Pred) = [](int const lhs, int const rhs) noexcept {
 			return std::abs(lhs-rhs) <=1;
 		};
 
@@ -504,7 +501,7 @@ namespace {
 			tc::transform(
 				tc::adjacent_unique(
 					tc::make_range_of_iterators(tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,2,3,3,3,4,7,8,8,11,11))),
-					tc::projected(tc::fn_equal_to(), tc::fn_indirection())
+					tc::projected(tc::equal_to, tc::fn_indirection())
 				),
 				tc::fn_indirection()
 			),
@@ -515,7 +512,7 @@ namespace {
 			tc::transform(
 				tc::reverse(tc::adjacent_unique(
 					tc::make_range_of_iterators(tc_as_constexpr(tc::make_array(tc::aggregate_tag, 1,2,2,3,3,3,4,7,8,8,11,11))),
-					tc::projected(tc::fn_equal_to(), tc::fn_indirection())
+					tc::projected(tc::equal_to, tc::fn_indirection())
 				)),
 				tc::fn_indirection()
 			),
@@ -584,8 +581,8 @@ namespace {
 	}
 
 	UNITTESTDEF( take_first_sink ) {
-		static auto constexpr rngn = [](auto sink) noexcept {
-			for(int i=0;;++i) { tc_yield(sink, i); }
+		tc_static_auto_constexpr_lambda(rngn) = [](auto sink) noexcept {
+			for(int i=0;;++i) { tc_return_if_break(tc::continue_if_not_break(sink, i)) }
 		};
 
 		_ASSERTEQUAL(tc::for_each(tc::begin_next<tc::return_take>(rngn), [](int) noexcept {}), tc::continue_);
@@ -603,8 +600,8 @@ namespace {
 	}
 
 	UNITTESTDEF( drop_first_sink ) {
-		static auto constexpr rngn = [](auto sink) noexcept {
-			for(int i=0; i < 7;++i) { tc_yield(sink, i); }
+		tc_static_auto_constexpr_lambda(rngn) = [](auto sink) noexcept {
+			for(int i=0; i < 7;++i) { tc_return_if_break(tc::continue_if_not_break(sink, i)) }
 			return tc::continue_;
 		};
 
@@ -650,7 +647,7 @@ namespace {
 #endif
 
 	UNITTESTDEF(and_then) {
-		static auto constexpr fn=[](auto const n) noexcept {return n+1;};
+		tc_static_auto_constexpr_lambda(fn) = [](auto const n) noexcept {return n+1;};
 		std::optional<int> on(12);
 
 		auto n1=tc::and_then(on, fn);

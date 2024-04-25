@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -248,7 +248,7 @@ namespace tc::xml {
 						} while(tc::char_ascii('&')!=tc::dereference_index(base, idx));
 						tc_return_if_break( tc::for_each(tc::slice(base, idxBegin, idx), sink) );
 					}
-					tc_yield(sink, ProcessEscaped<true>(idx));
+					tc_return_if_break(tc::continue_if_not_break(sink, ProcessEscaped<true>(idx)))
 				}
 			}
 		};
@@ -266,6 +266,16 @@ namespace tc::xml {
 		template<typename WithString>
 		with_iterator_range(WithString) -> with_iterator_range<WithString>; // CTAD not working for aggregates (clang)
 	}
+	using no_adl::simple_error_handler;
+
+	// The inline here is necessary to ensure that the type of the lambda is the same in all compilation units.
+	template <typename T>
+	inline auto constexpr assert_and_throw = tc::xml::simple_error_handler([](tc::unused) THROW(T) {
+		_ASSERTNOTIFYFALSE; throw T();
+	});
+	inline auto constexpr assert_no_error = tc::xml::simple_error_handler([](tc::unused) noexcept {
+		_ASSERTNORETURNFALSE;
+	});
 
 	template<typename Rng>
 	constexpr auto decode(Rng&& rng)
@@ -273,7 +283,7 @@ namespace tc::xml {
 
 	template<typename String>
 	auto split_qualified_name(String const& str) noexcept {
-		tc_auto_cref(itch, tc::find_unique<tc::return_border_after_or_begin>(str, tc::explicit_cast<tc::range_value_t<String>>(':')));
+		tc_auto_cref(itch, tc::find_unique<tc::return_border_after_or_begin>(str, tc::char_ascii(':')));
 		return std::make_pair(
 			tc::begin(str)==itch ? tc::take(str, itch) : tc::take(str, tc_modified(itch, --_)),
 			tc::drop(str, itch)
@@ -284,10 +294,8 @@ namespace tc::xml {
 		template< typename T, typename = void >
 		struct has_discard_until : std::false_type { };
 
-		// specialization recognizes types that do have a nested ::type member:
-		template< typename T >
-		struct has_discard_until<T, std::void_t<decltype(&std::declval<T>().discard_until)> > : std::true_type {};
-
+		template< typename T > requires requires(T t) { &t.discard_until; }
+		struct has_discard_until<T> : std::true_type {};
 #pragma push_macro("case_whitespace")
 #define case_whitespace case tc::explicit_cast<char_type>('\t'): case tc::explicit_cast<char_type>('\n'): case tc::explicit_cast<char_type>('\r'): case tc::explicit_cast<char_type>(' ')
 
@@ -318,7 +326,7 @@ namespace tc::xml {
 				// It undefines a previously defined namespace prefix for its scope.
 				// https://www.w3.org/TR/2006/REC-xml-names11-20060816/#scoping
 				_ASSERT(!tc::empty(strURI));
-				return std::addressof(*tc::cont_try_emplace(m_setstrns, tc::make_str(decode(strURI))).first);
+				return std::addressof(*tc::cont_try_emplace(m_setstrns, decode(strURI)).first);
 			}
 		};
 
@@ -438,25 +446,12 @@ namespace tc::xml {
 				return child(/*ons*/ nullptr, strName); // MAYTHROW
 			}
 
-			// For <mso:control id="..."> return the range 'mso:control'
-			auto qualified_tag_name() const& noexcept {
-				_ASSERTANYOF(m_exmlentity, (exmlentityEMPTYELEMENT)(exmlentityEMPTYELEMENTCLOSING)(exmlentityOPENINGTAG)(exmlentityCLOSINGTAG));
-				return m_strMain;
-			}
-
-			// For <mso:control id="..."> return the pair ['mso', 'control']
-			// as a std::pair of subranges.
-			// The namespace prefix may be an empty range.
-			auto prefix_and_tag_name() const& noexcept {
-				return split_qualified_name(qualified_tag_name());
-			}
-
 			// For <mso:control id="..."> return a std::pair<Namespace, String>
 			// with the namespace for prefix 'mso' and local name 'control'.
 			// Namespace may be nullptr if the current tag has no namespace.
 			// https://www.w3.org/TR/2006/REC-xml-names11-20060816/#concepts
 			auto expanded_name() & MAYTHROW {
-				auto const pairstrstr = prefix_and_tag_name();
+				auto const pairstrstr = split_qualified_name(qualified_tag_name());
 				auto const ons = namespace_for_prefix(pairstrstr.first);
 				
 				// Namespace prefixes must be declared
@@ -468,6 +463,7 @@ namespace tc::xml {
 				return std::make_pair(ons, pairstrstr.second);
 			}
 
+			// Do not use in typical parsing code. Instead use more specific child(ns, "...").
 			bool child() & MAYTHROW {
 				EnsureFreshSkipWhitespaceCharacters(); // MAYTHROW
 				switch_no_default(m_exmlentity) {
@@ -504,74 +500,85 @@ namespace tc::xml {
 				return skip_child(/*ons*/ nullptr, strName); // MAYTHROW
 			}
 
-			void expect_skip_child(Namespace ons, auto const& strName) & MAYTHROW {
-				if (!skip_child(ons, strName)) {
-					this->template error_at<tc_mem_fn(.child_expected)>(m_itchEntityBegin, strName); // MAYTHROW
-				}
-			}
-
-			void expect_skip_child(auto const& strName) & MAYTHROW {
-				expect_skip_child(/*ons*/ nullptr, strName); // MAYTHROW
-			}
 
 			void skip_rest_of_element() & MAYTHROW {
 				EnsureFresh(); // MAYTHROW
 				m_bConsumed=true;
-				if(exmlentityEMPTYELEMENTCLOSING!=m_exmlentity) {
-					int nOpenElements=1;
-					for(;;) {
-						switch(m_exmlentity) {
-						case exmlentityOPENINGTAG:
-							++nOpenElements;
-							break;
-						case exmlentityCLOSINGTAG:
-							--nOpenElements;
-							if(0==nOpenElements) return;
-							break;
-						default: ;
-						}
-						Next(); // MAYTHROW
-					}
-				}
+				SkipRestOfElementInternal(); // MAYTHROW
 			}
-			
-			void skip_child_or_characters() & MAYTHROW {
+
+			bool skip() & MAYTHROW {
 				EnsureFresh(); // MAYTHROW
-				m_bConsumed=false;
+				m_bConsumed=true;
 				switch_no_default(m_exmlentity) {
 				case exmlentityEMPTYELEMENT:
 				case exmlentityCDATA:
 				case exmlentityCHARACTERS:
 					Next(); // MAYTHROW
-					break;
+					return true;
 				case exmlentityOPENINGTAG:
 					Next(); // MAYTHROW
-					skip_rest_of_element(); // MAYTHROW
-					break;
-				case exmlentityEMPTYELEMENTCLOSING:
-				case exmlentityCLOSINGTAG:
-					;
-				}
-			}
-
-			bool element_end() & MAYTHROW {
-				EnsureFreshSkipWhitespaceCharacters(); // MAYTHROW
-				switch_no_default(m_exmlentity) {
-				case exmlentityEMPTYELEMENTCLOSING:
-				case exmlentityCLOSINGTAG:
-					m_bConsumed=true;
+					SkipRestOfElementInternal(); // MAYTHROW
 					return true;
-				case exmlentityEMPTYELEMENT:
-				case exmlentityOPENINGTAG:
-					m_bConsumed=false;
+				case exmlentityEMPTYELEMENTCLOSING:
+				case exmlentityCLOSINGTAG:
 					return false;
 				}
 			}
 
+			// We deliberately do not offer bool element_end() because we want our code to be like the XML schema syntax.
+			// Match whatever comes before the end, and if it does not match, expect_element_end().
 			void expect_element_end() & MAYTHROW {
-				if (!element_end()) {
+				EnsureFreshSkipWhitespaceCharacters(); // MAYTHROW
+				m_bConsumed=true;
+				switch_no_default(m_exmlentity) {
+				case exmlentityEMPTYELEMENT:
+				case exmlentityOPENINGTAG:
 					this->template error_at<tc_mem_fn(.element_end_expected)>(m_itchEntityBegin); // MAYTHROW
+				case exmlentityEMPTYELEMENTCLOSING:
+				case exmlentityCLOSINGTAG: ;
 				}
+			}
+
+			bool find_child(Namespace ons, auto const& strName) & MAYTHROW {
+				EnsureFresh(); // MAYTHROW
+				m_bConsumed=true;
+				for(;;) {
+					switch_no_default(m_exmlentity) {
+					case exmlentityEMPTYELEMENTCLOSING:
+					case exmlentityCLOSINGTAG:
+						return false;
+					case exmlentityEMPTYELEMENT:
+					case exmlentityOPENINGTAG:
+						{
+							auto const paironsstr = expanded_name(); // MAYTHROW
+							if(ons==paironsstr.first && tc::equal(strName, paironsstr.second)) return true;
+						}
+						if(exmlentityOPENINGTAG==m_exmlentity) {
+							Next(); // MAYTHROW
+							SkipRestOfElementInternal(); // MAYTHROW
+						}
+						break;
+					case exmlentityCDATA:
+					case exmlentityCHARACTERS:
+						break;
+					}
+					Next(); // MAYTHROW
+				}
+			}
+
+			bool find_child(auto const& strName) & MAYTHROW {
+				return find_child(/*ons*/ nullptr, strName); // MAYTHROW
+			}
+
+			void expect_find_child(Namespace ons, auto const& strName) & MAYTHROW {
+				if (!find_child(ons, strName)) {
+					this->template error_at<tc_mem_fn(.child_expected)>(m_itchEntityBegin, strName); // MAYTHROW
+				}
+			}
+
+			void expect_find_child(auto const& strName) & MAYTHROW {
+				expect_find_child(/*ons*/ nullptr, strName); // MAYTHROW
 			}
 
 			[[nodiscard]] auto attribute(auto const& strName) & noexcept {
@@ -599,7 +606,7 @@ namespace tc::xml {
 				);
 			}
 
-			[[nodiscard]] auto expect_attribute(auto& strName) & MAYTHROW {
+			[[nodiscard]] auto expect_attribute(auto const& strName) & MAYTHROW {
 				auto ostr = attribute(strName);
 				if (!ostr) {
 					this->template error_at<tc_mem_fn(.attribute_expected)>(m_itchEntityBegin, m_strMain, strName); // MAYTHROW
@@ -646,7 +653,7 @@ namespace tc::xml {
 			}
 			
 		protected:
-			tc::make_subrange_result_t< String const& > m_strMain;
+			tc::slice_t< String const& > m_strMain;
 			EXmlEntity m_exmlentity=exmlentitySTART;
 			bool m_bConsumed;
 				
@@ -658,9 +665,15 @@ namespace tc::xml {
 #endif
 			tc::vector<std::pair<tc::string< char_type >, Namespace>> m_stkpairstrns; // must not store sub_range in case input string is discarded
 
+			// For <mso:control id="..."> return the range 'mso:control'
+			auto qualified_tag_name() const& noexcept {
+				_ASSERTANYOF(m_exmlentity, (exmlentityEMPTYELEMENT)(exmlentityEMPTYELEMENTCLOSING)(exmlentityOPENINGTAG)(exmlentityCLOSINGTAG));
+				return m_strMain;
+			}
+
 		private:
 			tc::iterator_t<String const> m_itchEntityBegin;
-			tc::vector<std::pair<tc::make_subrange_result_t< String const& >, tc::make_subrange_result_t< String const& >>> m_vecpairstrAttributes;
+			tc::vector<std::pair<tc::slice_t< String const& >, tc::slice_t< String const& >>> m_vecpairstrAttributes;
 			
 			void WithCharacters(auto func) & MAYTHROW {
 				IF_TC_CHECKS(bool bOnce = false;)
@@ -698,6 +711,24 @@ namespace tc::xml {
 					if(ch2==*this->m_itchInput && bHave1) break;
 				}
 				++this->m_itchInput;
+			}
+
+			void SkipRestOfElementInternal() & MAYTHROW {
+				int nOpenElements=1;
+				for(;;) {
+					switch(m_exmlentity) {
+					case exmlentityOPENINGTAG:
+						++nOpenElements;
+						break;
+					case exmlentityCLOSINGTAG:
+					case exmlentityEMPTYELEMENTCLOSING:
+						--nOpenElements;
+						if(0==nOpenElements) return;
+						break;
+					default: ;
+					}
+					Next(); // MAYTHROW
+				}
 			}
 
 			void Next() & MAYTHROW {
@@ -864,7 +895,7 @@ namespace tc::xml {
 										SkipUntil(ch);
 
 										auto strValue = tc::slice(this->input(), itchBegin, this->m_itchInput);
-										if(auto ostrPrefix = [&]() MAYTHROW -> std::optional<tc::make_subrange_result_t<String const&>> {
+										if(auto ostrPrefix = [&]() MAYTHROW -> std::optional<tc::slice_t<String const&>> {
 											if(auto ostr = tc::starts_with<tc::return_drop_or_none>(strAttribute, tc_ascii("xmlns"))) {
 												if(tc::starts_with<tc::return_bool>(*ostr, tc_ascii(":"))) {
 													tc::drop_first_inplace(*ostr);
@@ -945,7 +976,6 @@ namespace tc::xml {
 		template<typename String, typename ErrorHandler> typename parser<String, ErrorHandler>::Namespace const parser<String, ErrorHandler>::c_nsStackSeparator = std::addressof(c_strDummy);
 #endif
 	}
-	using no_adl::simple_error_handler;
 	using no_adl::namespace_info;
 	using no_adl::parser;
 

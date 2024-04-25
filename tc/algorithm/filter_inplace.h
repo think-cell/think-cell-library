@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -175,9 +175,9 @@ namespace tc {
 		}
 
 		template <typename... Ts>
-		constexpr void emplace_back(Ts&&... ts) & noexcept {
+		constexpr void emplace_back(Ts&&... ts) & MAYTHROW {
 			_ASSERTE( tc::end(m_cont)!=m_itOutput );
-			tc::renew(*m_itOutput, tc_move_if_owned(ts)...);
+			tc::assign_explicit_cast(*m_itOutput, tc_move_if_owned(ts)...); // MAYTHROW
 			++m_itOutput;
 		}
 	};
@@ -186,14 +186,14 @@ namespace tc {
 	// filter_inplace
 
 	template<typename Cont, typename Pred = tc::identity>
-	void filter_inplace(Cont & cont, tc::iterator_t<Cont> it, Pred pred = Pred()) MAYTHROW {
+	void filter_inplace(Cont & cont, tc::iterator_t<Cont> it, Pred pred = Pred()) noexcept(noexcept(tc_invoke(pred, *it))) {
 		for (auto const itEnd = tc::end(cont); it != itEnd; ++it) {
-			if (!tc::explicit_cast<bool>(tc::invoke(pred, *it))) { // MAYTHROW
+			if (!tc::explicit_cast<bool>(tc_invoke(pred, *it))) {
 				tc::range_filter< tc::decay_t<Cont> > rngfilter(cont, it);
 				++it;
 				while (it != itEnd) {
 					// taking further action to destruct *it when returning false is legitimate use case, so do do not enforce const
-					if (tc::invoke(pred, *it)) { // MAYTHROW
+					if (tc_invoke(pred, *it)) {
 						rngfilter.keep(it++); // may invalidate it, so move away first
 					} else {
 						++it;
@@ -205,9 +205,7 @@ namespace tc {
 	}
 
 	template<typename Cont, typename Pred = tc::identity>
-	void filter_inplace(Cont& cont, Pred&& pred = Pred()) MAYTHROW {
-		tc::filter_inplace( cont, tc::begin(cont), tc_move_if_owned(pred) );
-	}
-
-
+	void filter_inplace(Cont& cont, Pred&& pred = Pred()) return_MAYTHROW(
+		tc::filter_inplace(cont, tc::begin(cont), tc_move_if_owned(pred))
+	)
 }

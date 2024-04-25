@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -33,7 +33,7 @@ namespace {
 }
 
 UNITTESTDEF(conditional_range) {
-	static auto constexpr verify = [](auto&& rng1, auto&& rng2) {
+	tc_static_auto_constexpr_lambda(verify) = [](auto&& rng1, auto&& rng2) {
 		auto const select_first = make_select_range(0, tc_lazy(rng1), tc_lazy(rng2));
 		TEST_RANGE_EQUAL(select_first, rng1); // generator
 		_ASSERT(iterator_range_equal(select_first, rng1)); // iterator

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -29,10 +29,10 @@ namespace tc {
 
 	namespace explicit_convert_adl {
 		template<typename EnumSuper, typename EnumSub> requires tc::is_sub_enum_of<EnumSub, EnumSuper>::value
-		constexpr tc::enumset<EnumSuper> explicit_convert_impl(adl_tag_t, tc::type::identity<tc::enumset<EnumSuper>>, tc::enumset<EnumSub> const setesub) noexcept;
+		constexpr tc::enumset<EnumSuper> explicit_convert_impl(adl_tag_t, std::type_identity<tc::enumset<EnumSuper>>, tc::enumset<EnumSub> const setesub) noexcept;
 
 		template<typename EnumSub, typename EnumSuper> requires tc::is_sub_enum_of<EnumSub, EnumSuper>::value
-		constexpr tc::enumset<EnumSub> explicit_convert_impl(adl_tag_t, tc::type::identity<tc::enumset<EnumSub>>, tc::enumset<EnumSuper> const setesuper) noexcept;
+		constexpr tc::enumset<EnumSub> explicit_convert_impl(adl_tag_t, std::type_identity<tc::enumset<EnumSub>>, tc::enumset<EnumSuper> const setesuper) noexcept;
 	}
 
 	namespace enumset_adl {
@@ -46,32 +46,36 @@ namespace tc {
 
 		template< typename Enum >
 		struct enumset /*final*/
-			: tc::setlike<>
-			, tc::range_iterator_from_index< enumset<Enum>, tc::iterator_t<tc::all_values<Enum> const> >
+			: tc::setlike<tc::index_range_adaptor<
+				enumset<Enum>,
+				tc::all_values<Enum>,
+				tc::index_range_adaptor_flags::inherit_dereference|tc::index_range_adaptor_flags::inherit_end
+			>>
 		{
 		private:
 			using this_type = enumset;
 			static constexpr tc::all_values<Enum> c_rnge{};
 		public:
-			using typename this_type::range_iterator_from_index::tc_index;
-			static constexpr bool c_bHasStashingIndex = false;
+			using typename this_type::index_range_adaptor::tc_index;
+			static constexpr bool c_bHasStashingIndex = tc::has_stashing_index<tc::all_values<Enum>>::value;
 
 			friend tc::counting_iterator<enumset<Enum>>;
 			template< typename OtherEnum > friend struct enumset;
 
 			template<typename EnumSuper, typename EnumSub> requires tc::is_sub_enum_of<EnumSub, EnumSuper>::value
-			friend constexpr tc::enumset<EnumSuper> tc::explicit_convert_adl::explicit_convert_impl(tc::explicit_convert_adl::adl_tag_t, tc::type::identity<tc::enumset<EnumSuper>>, tc::enumset<EnumSub> const setesub) noexcept;
+			friend constexpr tc::enumset<EnumSuper> tc::explicit_convert_adl::explicit_convert_impl(tc::explicit_convert_adl::adl_tag_t, std::type_identity<tc::enumset<EnumSuper>>, tc::enumset<EnumSub> const setesub) noexcept;
 
 			template<typename EnumSub, typename EnumSuper> requires tc::is_sub_enum_of<EnumSub, EnumSuper>::value
-			friend constexpr tc::enumset<EnumSub> tc::explicit_convert_adl::explicit_convert_impl(tc::explicit_convert_adl::adl_tag_t, tc::type::identity<tc::enumset<EnumSub>>, tc::enumset<EnumSuper> const setesuper) noexcept;
+			friend constexpr tc::enumset<EnumSub> tc::explicit_convert_adl::explicit_convert_impl(tc::explicit_convert_adl::adl_tag_t, std::type_identity<tc::enumset<EnumSub>>, tc::enumset<EnumSuper> const setesuper) noexcept;
 
 #ifdef TC_PRIVATE
 			void DoSave(CSaveHandler& savehandler) const& MAYTHROW;
 			friend void LoadType_impl<>(enumset& sete, CXmlReader& loadhandler) THROW(ExLoadFail);
 #endif
+
+			using bitset_type = tc::uint_least_t<tc::size(c_rnge)>;
+			PUBLIC_MEMBER_PUBLIC_ACCESSOR(bitset_type, m_bitset); // Necessarily public so enumset can be used as a template parameter.
 		private:
-			using bitset_type = typename tc::integer<tc::size(c_rnge)>::unsigned_;
-			PRIVATE_MEMBER_PUBLIC_ACCESSOR(bitset_type, m_bitset);
 
 			template<typename N>
 			static constexpr bitset_type lsb_mask(N const nDigits) noexcept {
@@ -82,27 +86,29 @@ namespace tc {
 					return static_cast<bitset_type>(-1)>>(std::numeric_limits<bitset_type>::digits - nDigits);
 				}
 			}
-			static constexpr bitset_type mask() noexcept {
-				return lsb_mask(tc::size(c_rnge));
-			}
-			static constexpr tc_index make_index(int nIndex) {
-				return tc::at<tc::return_element>(c_rnge, tc::explicit_cast<typename boost::range_size<tc::all_values<Enum>>::type>(nIndex));
+			
+			static constexpr tc_index make_index(int nIndex) noexcept {
+				return tc_modified(tc::begin_index(c_rnge), tc::advance_index(c_rnge, _, tc::explicit_cast<typename boost::range_size<tc::all_values<Enum>>::type>(nIndex)));
 			}
 
 		public:
+			static constexpr bitset_type mask() noexcept {
+				return lsb_mask(tc::size(c_rnge));
+			}
+			
 			constexpr enumset() noexcept : m_bitset(0) {} // makes all bits 0
 			constexpr enumset(tc::empty_range) noexcept: enumset() {}
 			constexpr enumset(tc::all_values<Enum>) noexcept : m_bitset(mask()) {}
 			template<typename U>
-			constexpr enumset(enumset_from_underlying_tag_t, U bitset) noexcept : tc_member_init_cast( m_bitset, bitset ) {
+			constexpr enumset(enumset_from_underlying_tag_t, U bitset) noexcept : tc_member_init( m_bitset, bitset ) {
 				_ASSERTE( !(m_bitset&~mask()) );
 			}
 			constexpr enumset(Enum e) noexcept : enumset(enumset_from_underlying_tag, tc::explicit_cast<bitset_type>(1) << c_rnge.index_of(e)) {}
 			template<ENABLE_SFINAE>
 			constexpr enumset(tc::interval<SFINAE_TYPE(Enum)> const& intvle) noexcept
 				: enumset(enumset_from_underlying_tag,
-					(tc::explicit_cast<typename tc::integer<tc::size(c_rnge) + 1>::unsigned_>(1) << c_rnge.index_of(intvle[tc::hi]))
-					- (tc::explicit_cast<typename tc::integer<tc::size(c_rnge) + 1>::unsigned_>(1) << c_rnge.index_of(intvle[tc::lo]))
+					(tc::explicit_cast<tc::uint_least_t<tc::size(c_rnge) + 1>>(1) << c_rnge.index_of(intvle[tc::hi]))
+					- (tc::explicit_cast<tc::uint_least_t<tc::size(c_rnge) + 1>>(1) << c_rnge.index_of(intvle[tc::lo]))
 				)
 			{
 				_ASSERTE( !intvle.empty_inclusive() );
@@ -177,24 +183,15 @@ namespace tc {
 				return 0 == m_bitset ? this->end_index() : make_index(tc::index_of_least_significant_bit(m_bitset));
 			}
 
-			STATIC_FINAL_MOD(constexpr, end_index)() const& noexcept -> tc_index {
-				return tc::end(c_rnge);
+			STATIC_FINAL_MOD(constexpr, increment_index)(tc_index& idx) const& noexcept -> void {
+				_ASSERT( idx != this->end_index() );
+				bitset_type const bitsetRemaining = m_bitset & ~lsb_mask(tc::distance_to_index(c_rnge, tc::begin_index(c_rnge), idx) + 1);
+				idx = 0 == bitsetRemaining ? this->end_index() : make_index(tc::index_of_least_significant_bit(bitsetRemaining));
 			}
 
-			STATIC_FINAL_MOD(constexpr, dereference_index)(tc_index it) const& noexcept -> Enum {
-				_ASSERT( it != this->end_index() );
-				return *it;
-			}
-
-			STATIC_FINAL_MOD(constexpr, increment_index)(tc_index& it) const& noexcept -> void {
-				_ASSERT( it != this->end_index() );
-				bitset_type const bitsetRemaining = m_bitset & ~lsb_mask(it - tc::begin(c_rnge) + 1);
-				it = 0 == bitsetRemaining ? this->end_index() : make_index(tc::index_of_least_significant_bit(bitsetRemaining));
-			}
-
-			STATIC_FINAL_MOD(constexpr, decrement_index)(tc_index& it) const& noexcept -> void {
-				_ASSERT( it != this->begin_index() );
-				it = make_index(tc::index_of_most_significant_bit(tc::explicit_cast<unsigned long>(m_bitset & lsb_mask(it - tc::begin(c_rnge)))));
+			STATIC_FINAL_MOD(constexpr, decrement_index)(tc_index& idx) const& noexcept -> void {
+				_ASSERT( idx != this->begin_index() );
+				idx = make_index(tc::index_of_most_significant_bit(tc::explicit_cast<unsigned long>(m_bitset & lsb_mask(tc::distance_to_index(c_rnge, tc::begin_index(c_rnge), idx)))));
 			}
 		};
 
@@ -255,7 +252,7 @@ namespace tc {
 
 	namespace explicit_convert_adl {
 		template<typename EnumSuper, typename EnumSub> requires tc::is_sub_enum_of<EnumSub, EnumSuper>::value
-		constexpr tc::enumset<EnumSuper> explicit_convert_impl(adl_tag_t, tc::type::identity<tc::enumset<EnumSuper>>, tc::enumset<EnumSub> const setesub) noexcept {
+		constexpr tc::enumset<EnumSuper> explicit_convert_impl(adl_tag_t, std::type_identity<tc::enumset<EnumSuper>>, tc::enumset<EnumSub> const setesub) noexcept {
 			return tc::enumset<EnumSuper>(
 				tc::enumset_from_underlying_tag,
 				tc::explicit_cast<typename tc::enumset<EnumSuper>::bitset_type>(setesub.m_bitset_()) << tc::all_values<EnumSuper>::index_of(tc::explicit_cast<EnumSuper>(tc::contiguous_enum<EnumSub>::begin()))
@@ -263,7 +260,7 @@ namespace tc {
 		}
 
 		template<typename EnumSub, typename EnumSuper> requires tc::is_sub_enum_of<EnumSub, EnumSuper>::value
-		constexpr tc::enumset<EnumSub> explicit_convert_impl(adl_tag_t, tc::type::identity<tc::enumset<EnumSub>>, tc::enumset<EnumSuper> const setesuper) noexcept {
+		constexpr tc::enumset<EnumSub> explicit_convert_impl(adl_tag_t, std::type_identity<tc::enumset<EnumSub>>, tc::enumset<EnumSuper> const setesuper) noexcept {
 			_ASSERTE(tc::is_subset(setesuper, tc::explicit_cast<tc::enumset<EnumSuper>>(tc::enumset(tc::all_values<EnumSub>()))));
 			return tc::enumset<EnumSub>(
 				tc::enumset_from_underlying_tag,

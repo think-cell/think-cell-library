@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -30,7 +30,7 @@ namespace tc {
 		struct invoke_with_constant_impl<std::integer_sequence<TIndex, Is...>> {
 			template<typename Func, typename... Args>
 			struct inner {
-				using result_type = tc::common_reference_prvalue_as_val_t<
+				using result_type = tc::common_reference_t<
 					decltype(std::declval<std::decay_t<Func>&>()(tc::constant<Is>(), std::declval<Args>()...))...
 				>;
 
@@ -50,16 +50,19 @@ namespace tc {
 					return invoke_constexpr<Is...>(tc_move_if_owned(func), nIndex, tc_move_if_owned(args)...); // MAYTHROW (but won't because constexpr)
 				}
 
+			private:
+				// TODO: move back as static local after MSVC compiler bug is fixed: https://developercommunity.visualstudio.com/t/code-generation-bug-on-static-variable-i/10541326
+				// tc_static_auto_constexpr with std::array triggers pdb problem.
+				static constexpr std::add_pointer_t<result_type(std::remove_reference_t<Func>, Args&&...)> c_apfn[] = {
+					invoke_impl<result_type, TIndex, Is, std::decay_t<Func>, Args...>
+					...
+				};
+			public:
 				static result_type invoke_non_constexpr(Func&& func, TIndex nIndex, Args&&... args) MAYTHROW {
-					static constexpr std::add_pointer_t<result_type(std::remove_reference_t<Func>, Args&&...)> apfn[] = {
-						invoke_impl<result_type, TIndex, Is, std::decay_t<Func>, Args...>
-						...
-					};
-
 					auto const nTableIndex = nIndex - IdxFirst<TIndex, Is...>;
-					_ASSERTNORETURN(0 <= nTableIndex && nTableIndex < tc::size(apfn));
+					_ASSERTNORETURN(0 <= nTableIndex && nTableIndex < tc::size(c_apfn));
 
-					return apfn[nTableIndex](tc_move_if_owned(func), tc_move_if_owned(args)...); // MAYTHROW
+					return c_apfn[nTableIndex](tc_move_if_owned(func), tc_move_if_owned(args)...); // MAYTHROW
 				}
 			};
 		};
@@ -83,7 +86,7 @@ namespace tc {
 	decltype(auto) invoke_with_constant(Func func, Enum e, Args&&... args) MAYTHROW {
 		return tc::invoke_with_constant<std::make_index_sequence<tc::size(tc::all_values<Enum>())>>(
 			[&](auto constn) MAYTHROW -> decltype(auto) {
-				return tc::invoke(func, tc::constant<tc_at_nodebug(tc::all_values<Enum>(), decltype(constn)::value)>(), tc_move_if_owned(args)...);
+				return tc_invoke_pack(func, tc::constant<tc_at_nodebug(tc::all_values<Enum>(), decltype(constn)::value)>(), tc_move_if_owned(args));
 			},
 			tc::all_values<Enum>().index_of(e)
 		);

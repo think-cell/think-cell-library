@@ -9,14 +9,14 @@
 		</Expand>
 	</Type>
 
-	<Type Name="tc::dense_map_adl::dense_map&lt;*,*&gt;">
+	<Type Name="tc::NQE::dense_map&lt;*,*&gt;">
 		<DisplayString>dense_map</DisplayString>
 		<Expand>
 			<CustomListItems Condition="m_a.m_a[0]" Optional="true">
 				<Variable Name="index" InitialValue="0" />
 				<Size>sizeof(m_a)/sizeof(void*)</Size>
 				<Loop>
-					<Item Name="[{($T1)((int)tc::no_adl::all_values&lt;$T1&gt;::_natvis_begin + index),en}]">m_a[index]</Item>
+					<Item Name="[{($T1)((int)tc::NQ::all_values&lt;$T1&gt;::_natvis_begin + index),en}]">m_a[index]</Item>
 					<Exec>++index</Exec>
 				</Loop>
 			</CustomListItems>
@@ -24,14 +24,14 @@
 				<Variable Name="index" InitialValue="0" />
 				<Size>sizeof(m_a)/sizeof(m_a[0])</Size>
 				<Loop>
-					<Item Name="[{($T1)((int)tc::no_adl::all_values&lt;$T1&gt;::_natvis_begin + index),en}]">m_a[index]</Item>
+					<Item Name="[{($T1)((int)tc::NQ::all_values&lt;$T1&gt;::_natvis_begin + index),en}]">m_a[index]</Item>
 					<Exec>++index</Exec>
 				</Loop>
 			</CustomListItems>
 		</Expand>
 	</Type>
 
-	<Type Name="tc::interval_adl::interval&lt;*&gt;">
+	<Type Name="tc::NQ5::interval&lt;*&gt;">
 		<DisplayString>interval ({m_a[0]}, {m_a[1]})</DisplayString>
 		<Expand>
 			<Item Name="begin">m_a[0]</Item>
@@ -47,7 +47,7 @@
 		</Expand>
 	</Type>
 
-	<Type Name="tc::geo::point_adl::point&lt;*&gt;">
+	<Type Name="tc::geo::NQA::point&lt;*&gt;">
 		<DisplayString>point ({m_a[0]}, {m_a[1]})</DisplayString>
 		<Expand>
 			<Item Name="x">m_a[0]</Item>

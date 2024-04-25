@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -48,7 +48,7 @@ namespace tc {
 			STATIC_VIRTUAL(distance_to_index)
 			STATIC_VIRTUAL(middle_point)
 
-			STATIC_VIRTUAL_WITH_DEFAULT_IMPL_MOD(
+			STATIC_VIRTUAL_WITH_FALLBACK_MOD(
 				TC_FWD(
 					template<typename Derived_ = Derived> requires has_mem_fn_end_index<Derived_> && tc::is_equality_comparable<Index>::value
 					constexpr
@@ -98,11 +98,11 @@ namespace tc {
 
 			template<typename It>
 			constexpr static decltype(auto) iterator2index(It&& it) noexcept {
-				if constexpr(std::same_as<Index, std::remove_cvref_t<It>>) {
+				if constexpr(std::same_as<Index, tc::decay_t<It>>) {
 					return tc_move_if_owned(it);
 				} else {
-					static_assert(std::same_as<Index, std::remove_cvref_t<decltype(it.m_idx)>>);
-					return (tc_move_if_owned(it).m_idx);
+					static_assert(std::same_as<Index, tc::decay_t<decltype(tc_unwrap_temporary(tc_move_if_owned(it)).m_idx)>>);
+					return tc_rewrap_temporary(It, tc_unwrap_temporary(tc_move_if_owned(it)).m_idx);
 				}
 			}
 		};
@@ -111,15 +111,19 @@ namespace tc {
 
 	namespace no_adl {
 		template<typename Rng>
-		struct TC_EMPTY_BASES range_adaptor_base_range : private tc::reference_or_value<Rng> {
+		struct TC_EMPTY_BASES range_adaptor_base_range : /*not private to enable use as non-type template parameter*/ tc::reference_or_value<Rng, /*bBestAccess*/true> {
 		private:
-			static_assert( !std::is_rvalue_reference<Rng>::value );
+			static_assert(!std::is_rvalue_reference<Rng>::value);
+			using base_= tc::reference_or_value<Rng, true>;
+			using base_::operator->;
+			using base_::operator*;
+			using base_::best_access;
 
 		public:
 			constexpr range_adaptor_base_range()=default;
 			template<typename Rhs>
 			constexpr range_adaptor_base_range(tc::aggregate_tag_t, Rhs&& rhs) noexcept
-				: tc::reference_or_value<Rng>(tc::aggregate_tag, tc_move_if_owned(rhs))
+				: tc::reference_or_value<Rng, /*bBestAccess*/true>(tc::aggregate_tag, tc_move_if_owned(rhs))
 			{}
 
 			constexpr decltype(auto) base_range() & noexcept { return **this; }
@@ -172,7 +176,7 @@ namespace tc {
 
 			template<typename Derived_ = Derived>
 			constexpr auto operator()(T t) const& return_decltype_MAYTHROW(
-				tc::invoke(tc::derived_cast<Derived_>(this)->m_sink, tc_move_if_owned(t))
+				tc_invoke(tc::derived_cast<Derived_>(this)->m_sink, tc_move_if_owned(t))
 			)
 		};
 
@@ -203,7 +207,7 @@ namespace tc {
 				) || ...)
 			>;
 
-			template<typename Rng> requires tc::has_mem_fn_chunk<Sink const&, Rng> && tc::type::all_of<tc::range_output_t<Rng>, is_valid_chunk_output>::value
+			template<typename Rng> requires tc::has_mem_fn_chunk<Sink const&, Rng> && boost::mp11::mp_all_of<tc::range_output_t<Rng>, is_valid_chunk_output>::value
 			constexpr auto chunk(Rng&& rng) const& noexcept(noexcept(m_sink.chunk(std::declval<Rng>()))) {
 				return m_sink.chunk(tc_move_if_owned(rng));
 			}
@@ -212,15 +216,15 @@ namespace tc {
 
 	namespace generator_range_output_adaptor_adl {
 		template<typename Rng, typename... T>
-		struct [[nodiscard]] TC_EMPTY_BASES generator_range_output_adaptor : generator_range_output_adaptor<Rng, tc::type::list<T...>> {
-			using generator_range_output_adaptor<Rng, tc::type::list<T...>>::generator_range_output_adaptor;
+		struct [[nodiscard]] TC_EMPTY_BASES generator_range_output_adaptor : generator_range_output_adaptor<Rng, boost::mp11::mp_list<T...>> {
+			using generator_range_output_adaptor<Rng, boost::mp11::mp_list<T...>>::generator_range_output_adaptor;
 		};
 
 		template<typename Rng, typename... T>
-		struct [[nodiscard]] TC_EMPTY_BASES generator_range_output_adaptor<Rng, tc::type::list<T...>> : tc::generator_range_adaptor<Rng> {
+		struct [[nodiscard]] TC_EMPTY_BASES generator_range_output_adaptor<Rng, boost::mp11::mp_list<T...>> : tc::generator_range_adaptor<Rng> {
 			using generator_range_adaptor<Rng>::generator_range_adaptor;
 			friend auto range_output_t_impl(generator_range_output_adaptor const&)
-				-> tc::type::unique_t<tc::type::list<tc::remove_rvalue_reference_t<T>...>>; // declaration only
+				-> boost::mp11::mp_unique<boost::mp11::mp_list<tc::remove_rvalue_reference_t<T>...>>; // declaration only
 
 			template<typename Sink>
 			constexpr auto adapted_sink(Sink&& sink, bool /*bReverse*/) const& noexcept {
@@ -241,6 +245,34 @@ namespace tc {
 		};
 	}
 	using range_output_from_base_range_adl::range_output_from_base_range;
+
+#ifdef _CHECKS
+	namespace no_adl {
+		template< typename Rng >
+		struct SSinglePassRange : tc::noncopyable {
+			explicit SSinglePassRange(Rng&& rng) noexcept
+			: m_rng(tc_move(rng)) {}
+			template< typename Sink >
+			constexpr auto operator()(Sink&& sink) && MAYTHROW {
+				_ASSERTE( tc::change(m_bFirstPass, false) );
+				return tc::for_each(tc_move(m_rng), tc_move_if_owned(sink));
+			}
+
+			Rng m_rng;
+			bool mutable m_bFirstPass = true;
+		};
+	}
+
+	template< typename Rng >
+	auto assert_single_pass(Rng&& rng) noexcept {
+		return no_adl::SSinglePassRange<Rng>(tc_move(rng)); // Disallow lvalue references.
+	}
+#else
+	template< typename Rng >
+	decltype(auto) assert_single_pass(Rng&& rng) noexcept {
+		return tc_move_if_owned(rng);
+	}
+#endif
 
 	//-------------------------------------------------------------------------------------------------------------------------
 	// iterator/index based ranges
@@ -370,33 +402,28 @@ namespace tc {
 		private:
 			static constexpr auto inherit_dereference = static_cast<bool>(Flags & index_range_adaptor_flags::inherit_dereference);
 
-			STATIC_OVERRIDE_MOD(constexpr,dereference_index)(tc_index const& idx) & MAYTHROW -> decltype(tc::dereference_index(this->base_range(), idx))
+			STATIC_OVERRIDE_MOD(constexpr, dereference_index)(auto&& idx) & MAYTHROW -> decltype(auto)
 				requires inherit_dereference
 			{
-				return tc::dereference_index(this->base_range(),idx);
+				return tc::dereference_index(this->base_range(), tc_move_if_owned(idx));
 			}
-			STATIC_OVERRIDE_MOD(constexpr,dereference_index)(tc_index const& idx) const& MAYTHROW -> decltype(tc::dereference_index(this->base_range(), idx))
+			STATIC_OVERRIDE_MOD(constexpr, dereference_index)(auto&& idx) const& MAYTHROW -> decltype(auto)
 				requires inherit_dereference
 			{
-				return tc::dereference_index(this->base_range(),idx);
-			}
-
-			STATIC_OVERRIDE_MOD(constexpr, index_to_address)(tc_index const& idx) & MAYTHROW
-				requires inherit_dereference && tc::has_index_to_address<std::remove_reference_t<Rng>>
-			{
-				return tc::index_to_address(this->base_range(), idx);
-			}
-			STATIC_OVERRIDE_MOD(constexpr, index_to_address)(tc_index const& idx) const& MAYTHROW
-				requires inherit_dereference && tc::has_index_to_address<std::remove_reference_t<Rng>>
-			{
-				return tc::index_to_address(this->base_range(), idx);
+				return tc::dereference_index(this->base_range(), tc_move_if_owned(idx));
 			}
 
 		public:
-			constexpr decltype(auto) dereference_untransform(tc_index const& idx) const& noexcept
+			constexpr decltype(auto) dereference_untransform(auto&& idx) const& noexcept
 				requires inherit_dereference
 			{
-				return this->base_range().dereference_untransform(idx);
+				return this->base_range().dereference_untransform(tc_move_if_owned(idx));
+			}
+
+			static constexpr decltype(auto) element_base_index(auto&& idx) noexcept
+				requires inherit_dereference
+			{
+				return tc_move_if_owned(idx);
 			}
 
 		private:
@@ -431,6 +458,18 @@ namespace tc {
 			{
 				tc::middle_point(this->base_range(),idxBegin,idxEnd);
 			}
+
+
+			STATIC_OVERRIDE_MOD(constexpr, index_to_address)(tc_index const& idx) & noexcept
+				requires inherit_dereference && inherit_traversal && tc::has_index_to_address<std::remove_reference_t<Rng>>
+			{
+				return tc::index_to_address(this->base_range(), idx);
+			}
+			STATIC_OVERRIDE_MOD(constexpr, index_to_address)(tc_index const& idx) const& noexcept
+				requires inherit_dereference && inherit_traversal && tc::has_index_to_address<std::remove_reference_t<Rng>>
+			{
+				return tc::index_to_address(this->base_range(), idx);
+			}
 		};
 	}
 	using no_adl::index_range_adaptor;
@@ -453,7 +492,7 @@ namespace tc {
 			static constexpr auto base_ranges(Self&& self) noexcept { // TODO C++23 deducing *this
 				return tc::tuple_transform(
 					tc_move_if_owned(self).m_tupleadaptbaserng,
-					tc_mem_fn_xvalue_by_ref(.base_range)
+					tc_mem_fn(.base_range)
 				);
 			}
 
@@ -461,20 +500,20 @@ namespace tc {
 			using Derived = AdaptorTemplate<true, Rng...>;
 			using this_type = product_index_range_adaptor;
 
-			STATIC_OVERRIDE_MOD(constexpr, dereference_index)(tc_index const& idx) const& noexcept {
+			STATIC_OVERRIDE_MOD(template<typename Index> constexpr, dereference_index)(Index&& idx) const& MAYTHROW {
 				return tc::tuple_transform(
 					tc::zip(this->m_tupleadaptbaserng, idx),
-					[](auto&& adaptbaserng, auto const& baseidx) noexcept -> decltype(auto) {
-						return tc::dereference_index(adaptbaserng.base_range(), baseidx);
+					[](auto&& adaptbaserng, auto&& baseidx) MAYTHROW -> decltype(auto) {
+						return tc::dereference_index(adaptbaserng.base_range(), tc::forward_like<Index>(baseidx));
 					}
 				);
 			}
 
-			STATIC_OVERRIDE_MOD(constexpr, dereference_index)(tc_index const& idx) & noexcept {
+			STATIC_OVERRIDE_MOD(template<typename Index> constexpr, dereference_index)(Index&& idx) & MAYTHROW {
 				return tc::tuple_transform(
 					tc::zip(this->m_tupleadaptbaserng, idx),
-					[](auto&& adaptbaserng, auto const& baseidx) noexcept -> decltype(auto) {
-						return tc::dereference_index(adaptbaserng.base_range(), baseidx);
+					[](auto&& adaptbaserng, auto&& baseidx) MAYTHROW -> decltype(auto) {
+						return tc::dereference_index(adaptbaserng.base_range(), tc::forward_like<Index>(baseidx));
 					}
 				);
 			}

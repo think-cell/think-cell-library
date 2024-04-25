@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -91,11 +91,11 @@ namespace tc
 			}
 
 			template<typename It = Derived>
-			constexpr auto operator[](iterator_facade_detail::difference_type<It> index) const& return_decltype_xvalue_by_ref_MAYTHROW(
+			constexpr auto operator[](iterator_facade_detail::difference_type<It> index) const& return_decltype_allow_xvalue_MAYTHROW(
 				*(tc::derived_cast<It>(*MSVC_WORKAROUND_THIS) + iterator_facade_detail::as_difference_type<It>(index))
 			)
 			template<typename It = Derived>
-			constexpr auto operator[](iterator_facade_detail::difference_type<It> index) && return_decltype_xvalue_by_ref_MAYTHROW(
+			constexpr auto operator[](iterator_facade_detail::difference_type<It> index) && return_decltype_allow_xvalue_MAYTHROW(
 				*(tc::derived_cast<It>(*MSVC_WORKAROUND_THIS) += iterator_facade_detail::as_difference_type<It>(index))
 			)
 		};

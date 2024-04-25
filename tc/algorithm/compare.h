@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -17,7 +17,7 @@
 #include "../base/empty_chain.h"
 #include "../range/transform_adaptor.h"
 
-#include "../base/assign.h"
+#include "../base/change.h"
 #include "find.h"
 #include "../interval_types.h"
 #if defined(__clang__) && !defined(__cpp_lib_three_way_comparison) // three way comparison operators are not implemented for library types in Xcode13/14. TODO Xcode15
@@ -90,7 +90,7 @@ namespace tc {
 
 	namespace explicit_convert_adl {
 		template<std::same_as<std::weak_ordering> TTarget, std::same_as<std::partial_ordering> TSource>
-		constexpr TTarget explicit_convert_impl(adl_tag_t, tc::type::identity<TTarget>, TSource const& order) noexcept {
+		constexpr TTarget explicit_convert_impl(adl_tag_t, std::type_identity<TTarget>, TSource const& order) noexcept {
 			if(std::is_lt(order)) {
 				return std::weak_ordering::less;
 			} else if(tc::is_eq(order)) {
@@ -187,7 +187,7 @@ namespace tc {
 
 	#define tc_hash_aspect( maskmember, maskvalue, member ) \
 		if((t.m_ ## maskmember) & (maskmember ## maskvalue)) { \
-			tc::hash_append(h, t. ## member ); \
+			tc::hash_append(h, t.member ); \
 			tc::hash_append(h, true); \
 		} else { \
 			tc::hash_append(h, false); \
@@ -302,7 +302,7 @@ namespace std { // ADL
 	
 	template<typename... T>
 	[[nodiscard]] constexpr auto operator<=>(std::variant<T...> const& lhs, std::variant<T...> const& rhs) noexcept
-		requires requires { typename tc::type::list<decltype(tc::compare(std::declval<T const&>(), std::declval<T const&>()))...>; }
+		requires requires { typename boost::mp11::mp_list<decltype(tc::compare(std::declval<T const&>(), std::declval<T const&>()))...>; }
 	{
 		if(lhs.valueless_by_exception() && rhs.valueless_by_exception()) {
 			return std::weak_ordering::equivalent;
@@ -350,14 +350,12 @@ namespace tc {
 			tc::verify_functor_t<tc::decay_t<Func>> m_func;
 			tc::verify_functor_t<tc::decay_t<Transform>> m_transform;
 
-			template< typename... Args >
-			constexpr auto operator()(Args&& ... args) const& MAYTHROW -> tc::transform_return_t<
-				Func,
-				decltype(tc::invoke(m_func, tc::invoke(m_transform, tc_move_if_owned(args))...)),
-				decltype(tc::invoke(m_transform, tc_move_if_owned(args)))...
-			> {
-				return tc::invoke(m_func, tc::invoke(m_transform, tc_move_if_owned(args))...);
-			}
+			template <typename... Args>
+			constexpr auto operator()(Args&&... args) const& return_decltype_allow_xvalue_slow_MAYTHROW(
+				tc_invoke_pack(m_func, tc_invoke(m_transform, tc_move_if_owned(args)))
+			)
+
+			using is_transparent = void;
 		};
 	}
 
@@ -399,7 +397,7 @@ namespace tc {
 	}
 
 	namespace tuple_adl {
-		template<typename... T, typename... U> requires requires { typename tc::type::list<decltype(tc::compare(std::declval<T const&>(), std::declval<U const&>()))...>; }
+		template<typename... T, typename... U> requires requires { typename boost::mp11::mp_list<decltype(tc::compare(std::declval<T const&>(), std::declval<U const&>()))...>; }
 		constexpr auto operator<=>(tc::tuple<T...> const& lhs, tc::tuple<U...> const& rhs) noexcept {
 			STATICASSERTEQUAL(sizeof...(T), sizeof...(U));
 			return tc::lexicographical_compare_3way(

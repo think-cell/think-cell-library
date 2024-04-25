@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -121,12 +121,20 @@ namespace tc {
 		));
 	}
 
+	namespace no_adl {
+		template<typename Cont>
+		struct fn_cont_must_emplace { // MSVC workaround: not a lambda for shorter symbol names
+			Cont& m_cont;
+			void operator()(auto&& u) const& MAYTHROW {
+				tc::cont_must_emplace(m_cont, tc_move_if_owned(u));
+			}
+		};
+	}
+
+
 	template< typename Cont, typename Rng >
 	void cont_must_insert_range(Cont& cont, Rng&& rng) MAYTHROW {
-		tc::for_each(
-			tc_move_if_owned(rng),
-			[&](auto&& _) MAYTHROW { tc::cont_must_emplace(cont, tc_move_if_owned(_)); }
-		);
+		tc::for_each(tc_move_if_owned(rng), no_adl::fn_cont_must_emplace<Cont>{cont});
 	}
 
 	template< typename Cont, typename... Args >
@@ -139,6 +147,16 @@ namespace tc {
 		return pairitb;
 	}
 
+	namespace no_adl {
+		template<typename Cont>
+		struct fn_cont_try_emplace { // MSVC workaround: not a lambda for shorter symbol names
+			Cont& m_cont;
+			void operator()(auto&& u) const& MAYTHROW {
+				tc::cont_try_emplace(m_cont, tc_move_if_owned(u));
+			}
+		};
+	}
+
 	template< typename Cont, typename Rng >
 	void cont_try_insert_range(Cont& cont, Rng&& rng) MAYTHROW {
 		/*
@@ -147,37 +165,37 @@ namespace tc {
 			efficient to access a range as generator range: If filters and costly
 			transforms are involved, a generator range needs to dereference only once.
 		*/
-		tc::for_each(
-			tc_move_if_owned(rng),
-			[&](auto&& _) MAYTHROW { tc::cont_try_emplace(cont, tc_move_if_owned(_)); }
-		);
+		tc::for_each(tc_move_if_owned(rng), no_adl::fn_cont_try_emplace<Cont>{cont});
 	}
 
 	// std::map::try_emplace enforces eager construction of the key_type object
-	template<typename Key, typename Val, typename Compare, typename Alloc, typename K, typename... Args>
-	auto map_try_emplace(tc::map<Key, Val, Compare, Alloc>& map, K&& key, Args&& ...args) MAYTHROW -> std::pair<tc::iterator_t<tc::map<Key, Val, Compare, Alloc>>, bool> {
+	template<typename Key, typename Val, typename Compare, typename Alloc>
+	auto map_try_emplace(tc::map<Key, Val, Compare, Alloc>& map, auto&& key, auto&& val) MAYTHROW
+		-> std::pair<tc::iterator_t<tc::map<Key, Val, Compare, Alloc>>, bool>
+	{
 		if (auto it = map.lower_bound(key); tc::end(map) == it || map.key_comp()(key, it->first)) {
-			// MSVC 19.29 does not correctly parse the following statement, if tc_move is used instead of tc_move_always.
-			return std::make_pair( tc::cont_must_emplace_before(map, tc_move_always(it), std::piecewise_construct, std::forward_as_tuple(tc_move_if_owned(key)), std::forward_as_tuple(tc_move_if_owned(args)...)), true );
+			return {
+				tc::cont_must_emplace_before(map, tc_move(it), tc_move_if_owned(key), tc_move_if_owned(val)),
+				true
+			};
 		} else {
-			return std::make_pair(tc_move(it), false);
+			return {tc_move(it), false};
 		}
 	}
 
-	template<typename Key, typename Val, typename Compare, typename Alloc, typename K, typename ...Args>
-	void map_emplace_or_assign(tc::map<Key, Val, Compare, Alloc>& map, K&& key, Args&& ...args) MAYTHROW {
+	template<typename Key, typename Val, typename Compare, typename Alloc>
+	void map_emplace_or_assign(tc::map<Key, Val, Compare, Alloc>& map, auto&& key, auto&& val) MAYTHROW {
 		if (auto it = map.lower_bound(key); tc::end(map) == it || map.key_comp()(key, it->first)) {
-			// MSVC 19.29 does not correctly parse the following statement, if tc_move is used instead of tc_move_always.
-			tc::cont_must_emplace_before(map, tc_move_always(it), std::piecewise_construct, std::forward_as_tuple(tc_move_if_owned(key)), std::forward_as_tuple(tc_move_if_owned(args)...));
+			tc::cont_must_emplace_before(map, tc_move(it), tc_move_if_owned(key), tc_move_if_owned(val)); // MAYTHROW
 		} else {
-			tc::renew( it->second, tc_move_if_owned(args)... );
+			tc::assign_explicit_cast(it->second, tc_move_if_owned(val)); // MAYTHROW
 		}
 	}
 
 	template<typename Key, typename T, typename Hash, typename KeyEqual, typename Allocator, typename ...Args, typename K>
 	void map_emplace_or_assign(tc::unordered_map<Key, T, Hash, KeyEqual, Allocator>& map, K&& key, Args&& ...args) MAYTHROW {
-		if (auto const pairitb = map.try_emplace(tc::reluctant_explicit_cast<std::remove_reference_t<decltype(map)>::key_type>(tc_move_if_owned(key)), tc_move_if_owned(args)...); !pairitb.second ) {
-			tc::renew( pairitb.first->second, tc_move_if_owned(args)... );
+		if (auto const pairitb = map.try_emplace(tc::reluctant_explicit_cast<std::remove_reference_t<decltype(map)>::key_type>(tc_move_if_owned(key)), tc_move_if_owned(args)...); !pairitb.second ) { // MAYTHROW
+			tc::assign_explicit_cast( pairitb.first->second, tc_move_if_owned(args)... ); // MAYTHROW
 		}
 	}
 }

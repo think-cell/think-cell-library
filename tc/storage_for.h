@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -276,7 +276,7 @@ namespace tc {
 		template< typename T >
 		// TODO: inline into derived class
 		struct [[nodiscard]] storage_for_dtor_at_end_of_scope : storage_for<T> {
-			~storage_for_dtor_at_end_of_scope() { this->dtor(); }
+			constexpr ~storage_for_dtor_at_end_of_scope() { this->dtor(); }
 		};
 
 		template<typename T>
@@ -337,16 +337,4 @@ namespace tc {
 
 MODIFY_WARNINGS_END
 
-#ifdef _MSC_VER
-
-# define scoped_construct(var, ...) tc::scoped_constructor< decltype((var)) > UNIQUE_IDENTIFIER((var), __VA_ARGS__ );
-
-#else
-
-# define scoped_construct_0(var) tc::scoped_constructor< decltype((var)) > UNIQUE_IDENTIFIER((var));
-# define scoped_construct_1(var, ...) tc::scoped_constructor< decltype((var)) > UNIQUE_IDENTIFIER((var), __VA_ARGS__ );
-
-# define scoped_construct(...) \
-	BOOST_PP_CAT(scoped_construct_, BOOST_PP_GREATER(BOOST_PP_VARIADIC_SIZE(__VA_ARGS__), 1))(__VA_ARGS__)
-
-#endif
+#define scoped_construct(var, ...) tc::scoped_constructor< decltype((var)) > UNIQUE_IDENTIFIER((var) __VA_OPT__(,) __VA_ARGS__ );

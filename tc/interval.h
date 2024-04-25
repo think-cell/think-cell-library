@@ -1,14 +1,13 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "base/generic_macros.h"
 #include "base/type_traits.h"
 #include "base/tag_type.h"
 #include "base/integer.h"
@@ -47,6 +46,22 @@ namespace tc {
 
 	template<typename Clock, typename Duration>
 	constexpr tc::interval<std::chrono::time_point<Clock, Duration>> all_values_interval<std::chrono::time_point<Clock, Duration>> = tc::interval<std::chrono::time_point<Clock, Duration>>(std::chrono::time_point<Clock, Duration>::min(), std::chrono::time_point<Clock,Duration>::max());
+
+	namespace zero_adl {
+		DEFINE_ADL_TAG_TYPE(zero)
+
+		template<tc::actual_arithmetic T>
+		constexpr T explicit_convert_impl(std::type_identity<T>, zero_t) noexcept {
+			return 0;
+		}
+
+		template<tc::instance<std::chrono::duration> Duration>
+		constexpr Duration explicit_convert_impl(std::type_identity<Duration>, zero_t) noexcept {
+			return Duration::zero();
+		}
+	}
+	using zero_adl::zero_t;
+	using zero_adl::zero;
 
 #ifdef TC_PRIVATE
 	template< typename T >
@@ -108,7 +123,7 @@ namespace tc {
 		struct swap_if_negative_scalar final : tc::no_prepost_scalar_operation {
 			template<typename T, typename Scalar>
 			static void post(tc::interval<T>& intvl, Scalar const& scalar) {
-				if( scalar < tc::explicit_cast<Scalar>(0) ) intvl.swap();
+				if( scalar < tc::explicit_cast<Scalar>(tc::zero) ) intvl.swap();
 			}
 		};
 	}
@@ -225,7 +240,7 @@ namespace tc {
 				static_assert(std::floating_point<T>);
 				// Rounding an empty interval may make it non-empty, which might not be intended.
 				_ASSERTE(!empty());
-				(*this)[tc::lo] = std::floor((*this)[tc::lo]);
+				(*this)[tc::lo] = tc::floor((*this)[tc::lo]);
 				(*this)[tc::hi] = std::ceil((*this)[tc::hi]);
 			}
 
@@ -260,18 +275,41 @@ namespace tc {
 			}
 
 			[[nodiscard]] constexpr difference_type distance(T const& t) const& noexcept {
+				_ASSERTE( !empty() );
+				if( t < (*this)[tc::lo] ) {
+					return (*this)[tc::lo] - t;
+				} else if( (*this)[tc::hi] < t ) {
+					return tc_modified(t - (*this)[tc::hi], tc::nextafter_inplace(_));
+				} else {
+					tc_return_cast(tc::zero);
+				}
+			}
+
+			[[nodiscard]] constexpr difference_type distance_inclusive(T const& t) const& noexcept {
 				_ASSERTE( !empty_inclusive() );
 				if( t < (*this)[tc::lo] ) {
 					return (*this)[tc::lo] - t;
 				} else if( (*this)[tc::hi] < t ) {
 					return t - (*this)[tc::hi];
 				} else {
-					return 0;
+					tc_return_cast(tc::zero);
+				}
+			}
+
+			[[nodiscard]] constexpr difference_type distance_inclusive(interval const& intvl) const& noexcept {
+				_ASSERTE( !empty_inclusive() );
+				_ASSERTE( !intvl.empty_inclusive() );
+				if( intvl[tc::hi] < (*this)[tc::lo] ) {
+					return (*this)[tc::lo] - intvl[tc::hi];
+				} else if( (*this)[tc::hi] < intvl[tc::lo] ) {
+					return intvl[tc::lo] - (*this)[tc::hi];
+				} else {
+					tc_return_cast(tc::zero);
 				}
 			}
 
 		private:
-			template<typename Self, typename S, typename R = tc::common_reference_xvalue_as_ref_t<tc::apply_cvref_t<T, Self&&>, S&&>>
+			template<typename Self, typename S, typename R = tc::common_reference_t<tc::apply_cvref_t<T, Self&&>, S&&>>
 			static R clamp_inclusive_(Self&& self, S&& s) noexcept {
 				_ASSERT( !self.empty_inclusive() );
 				if( s<self[tc::lo] ) {
@@ -363,7 +401,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 					}
 					return t;
 				} else {
-					tc_return_cast( 0 );
+					tc_return_cast( tc::zero );
 				}
 			}
 
@@ -699,7 +737,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 		std::optional<tc::interval<tc::range_value_t<Rng>>> ointvlMinMax;
 		tc::for_each(tc_move_if_owned(rng), [&](auto&& t) noexcept {
 			if(!ointvlMinMax) {
-				ointvlMinMax.emplace(t, t);
+				tc::optional_emplace(ointvlMinMax, t, t);
 			} else if(!tc::assign_better(pred, (*ointvlMinMax)[tc::lo], tc_move_if_owned(t))) {
 				tc::assign_better(std::not_fn(pred), (*ointvlMinMax)[tc::hi], tc_move_if_owned(t));
 			}
@@ -714,7 +752,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 
 	template<typename Rng>
 	[[nodiscard]] auto minmax_interval_elements(Rng&& rng) noexcept {
-		auto pairit = tc::minmax_element(rng);
+		auto pairit = std::minmax_element(tc::begin(rng), tc::end(rng)); // libcxx doesn't have std::ranges::minmax_element yet
 		return tc::make_interval(pairit.first, pairit.second);
 	}
 
@@ -730,6 +768,9 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 	)
 
 	namespace no_adl {
+		template <typename Src, typename Dst, typename Shift>
+		struct flip_and_shift_transform;
+
 		template<typename Src, typename Dst = Src>
 		struct [[nodiscard]] linear_interval_transform final {
 		private:
@@ -742,10 +783,12 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 			template <typename OtherSrc, typename OtherDst, typename Shift>
 			friend struct flip_and_shift_transform;
 
+			linear_interval_transform() noexcept = default;
+
 			template <typename OtherSrc, typename OtherDst>
 			explicit linear_interval_transform(linear_interval_transform<OtherSrc,OtherDst> const& func) noexcept
-				: tc_member_init_cast( m_intvlsrc, func.m_intvlsrc )
-				, tc_member_init_cast( m_intvldst, func.m_intvldst )
+				: tc_member_init( m_intvlsrc, func.m_intvlsrc )
+				, tc_member_init( m_intvldst, func.m_intvldst )
 			{}
 
 			linear_interval_transform(tc::interval<Src> const& intvlsrc, tc::interval<Dst> const& intvldst) noexcept
@@ -764,6 +807,9 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 					_ASSERT( std::isfinite(m_intvldst.length()) );
 				}
 			}
+
+			template<typename Dst2, typename Shift>
+			[[nodiscard]] linear_interval_transform<Src, Dst2> transform_output(flip_and_shift_transform<Dst, Dst2, Shift> const& func) const& noexcept;
 
 			/* Desired properties of f = interval_transform(src, dst):
 				exactness: f(s[lohi]) == d[lohi]
@@ -786,14 +832,14 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 			}
 
 			auto length_transform() const& noexcept {
-				return [srcLength = m_intvlsrc.length(), dstLength = m_intvldst.length()](Src const& src) noexcept -> Dst {
-					if( 0 == srcLength ) {
+				return [srcdiff = m_intvlsrc.length(), dstdiff = m_intvldst.length()](auto const& srcdiffOffset) noexcept {
+					if( tc::explicit_cast<decltype(srcdiff)>(tc::zero) == srcdiff ) {
 						// The inclusive source interval is a single point. The operations is well-defined ("0*0/0") if,
 						//  * 0 == m_intvldst.length() guaranteed by constructor, and
-						_ASSERTEQUAL( src, 0 );
-						return 0;
+						_ASSERTEQUAL( srcdiffOffset, tc::explicit_cast<decltype(srcdiff)>(tc::zero) );
+						return tc::explicit_cast<decltype(dstdiff)>(tc::zero);
 					} else {
-						return tc::scale_muldiv(dstLength, src, srcLength);
+						return tc::scale_muldiv(dstdiff, srcdiffOffset, srcdiff);
 					}
 				};
 			}
@@ -843,6 +889,13 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 		};
 		template<typename Shift>
 		flip_and_shift_transform(tc::sign sign, Shift shift) -> flip_and_shift_transform<Shift>;
+
+		template<typename Src, typename Dst>
+		template<typename Dst2, typename Shift>
+		[[nodiscard]] linear_interval_transform<Src, Dst2> linear_interval_transform<Src,Dst>::transform_output(flip_and_shift_transform<Dst, Dst2, Shift> const& func) const& noexcept {
+			// tc::chained(func, *this) without intermediate rounding to Dst
+			return {m_intvlsrc, m_intvldst.transform(func)};
+		}
 	}
 	using no_adl::flip_and_shift_transform;
 
@@ -1021,7 +1074,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 			}
 
 			void erase(T const& t) & noexcept {
-				erase(TInterval(t, tc_modified(t, ++_)));
+				*this -= TInterval(t, tc_modified(t, ++_));
 			}
 
 			bool intersects(TInterval const& intvl) const& noexcept {
@@ -1331,7 +1384,7 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 					while(itintervalA!=tc::end(m_cont) && itintervalB!=tc::end(intvlset.m_cont)) {
 						TInterval intvl=*itintervalA & *itintervalB;
 						if( !intvl.empty() ) {
-							tc_yield( func, *itintervalA, *itintervalB, intvl);
+							tc_return_if_break(tc::continue_if_not_break( func, *itintervalA, *itintervalB, intvl))
 						}
 						if((*itintervalA)[tc::hi] < (*itintervalB)[tc::hi]) {
 							++itintervalA;
@@ -1378,6 +1431,12 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 				}
 			}
 
+#ifdef TC_PRIVATE
+			void DoSave(CSaveHandler& savehandler) const& MAYTHROW;
+			template<typename U, typename UInterval, typename USetOrVectorImpl>
+			friend void LoadType_impl(interval_set<U, UInterval, USetOrVectorImpl>& ent, CXmlReader& loadhandler) THROW(ExLoadFail);
+#endif
+
 			// DEPRECATED
 			using iterator = tc::iterator_t<Cont>;
 
@@ -1406,48 +1465,49 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 			}
 
 			T accumulated_length() const& noexcept {
-				return tc::accumulate( tc::transform( m_cont, tc_mem_fn(.length) ), tc::implicit_cast<T>(0), tc::fn_assign_plus() );
+				return tc::accumulate( tc::transform( m_cont, tc_mem_fn(.length) ), tc::explicit_cast<T>(tc::zero), tc::fn_assign_plus() );
 			}
 		};
 	}
 
-	template<typename ResultWrapper, typename RngIntvl>
-	[[nodiscard]] auto ordered_overlapping_intervals_impl(ResultWrapper resultwrapper, RngIntvl&& rngintvl) noexcept {
-		return [rngintvl=tc::make_reference_or_value(tc_move_if_owned(rngintvl)), resultwrapper = tc_move(resultwrapper)](auto sink) noexcept {
+	template<typename ResultWrapper, typename RngIntvl, typename Less>
+	[[nodiscard]] auto ordered_overlapping_intervals_impl(ResultWrapper resultwrapper, RngIntvl&& rngintvl, Less less) noexcept {
+		return [rngintvl=tc::make_reference_or_value(tc_move_if_owned(rngintvl)), resultwrapper = tc_move(resultwrapper), less = tc_move(less)](auto sink) noexcept {
 			if(!tc::empty(*rngintvl)) {
-				_ASSERTDEBUG(tc::is_sorted(*rngintvl, tc::projected(tc::fn_less(), [](auto const& intvl) noexcept { return intvl[tc::lo]; })));
+				_ASSERTDEBUG(tc::is_sorted(*rngintvl, tc::projected(less, tc_member([tc::lo]))));
 				auto itintvlOverlapBegin=tc::begin(*rngintvl);
 				auto itintvlLastOverlap=itintvlOverlapBegin;
 				tc_return_if_break(tc::for_each(tc::make_range_of_iterators(tc::begin_next<tc::return_drop>(*rngintvl)), [&](auto const& itintvlCurr) noexcept {
 					tc_auto_cref(intvlLastOverlap, *itintvlLastOverlap);
 					tc_auto_cref(intvlCurr, *itintvlCurr);
-					if(intvlLastOverlap[tc::hi] < intvlCurr[tc::lo]) {
-						tc_yield(sink, resultwrapper(*rngintvl, itintvlOverlapBegin, itintvlCurr, itintvlLastOverlap));
+					if(less(intvlLastOverlap[tc::hi], intvlCurr[tc::lo])) {
+						tc_return_if_break(tc::continue_if_not_break(sink, resultwrapper(*rngintvl, itintvlOverlapBegin, itintvlCurr, itintvlLastOverlap)))
 						itintvlOverlapBegin=itintvlCurr;
 						itintvlLastOverlap=itintvlCurr;
-					} else if(intvlLastOverlap[tc::hi] < intvlCurr[tc::hi]) {
+					} else if(less(intvlLastOverlap[tc::hi], intvlCurr[tc::hi])) {
 						itintvlLastOverlap=itintvlCurr;
 					}
 					return tc::continue_;
 				}));
-				tc_yield(sink, resultwrapper(*rngintvl, itintvlOverlapBegin, tc::end(*rngintvl), itintvlLastOverlap));
+				tc_return_if_break(tc::continue_if_not_break(sink, resultwrapper(*rngintvl, itintvlOverlapBegin, tc::end(*rngintvl), itintvlLastOverlap)))
 			}
 			return tc::continue_;
 		};
 	}
 
-	template<typename RngIntvl>
-	[[nodiscard]] auto ordered_overlapping_intervals(RngIntvl&& rngintvl) noexcept {
+	template<typename RngIntvl, typename Less = tc::fn_less>
+	[[nodiscard]] auto ordered_overlapping_intervals(RngIntvl&& rngintvl, Less&& less = Less()) noexcept {
 		return ordered_overlapping_intervals_impl(
 			[](auto const& rngintvl, auto const& itBegin, auto const& itEnd, tc::unused /*itMax*/) noexcept {
 				return tc::slice(rngintvl, itBegin, itEnd);
 			},
-			tc_move_if_owned(rngintvl)
+			tc_move_if_owned(rngintvl),
+			tc_move_if_owned(less)
 		);
 	}
 
-	template<typename RngIntvl, typename Project>
-	auto ordered_concatenated_intervals(RngIntvl&& rngintvl, Project project) noexcept {
+	template<typename RngIntvl, typename Project, typename Less = tc::fn_less>
+	auto ordered_concatenated_intervals(RngIntvl&& rngintvl, Project project, Less&& less = Less()) noexcept {
 		return ordered_overlapping_intervals_impl(
 			[](tc::unused /*rng*/, auto const& itBegin, tc::unused /*itEnd*/, auto const& itMax) noexcept {
 				return tc::make_interval((*itBegin.element_base())[tc::lo], (*itMax.element_base())[tc::hi]);
@@ -1457,7 +1517,8 @@ MODIFY_WARNINGS(((suppress)(4552))) // '-': operator has no effect; expected ope
 				[project = tc_move(project)](auto const& intvl) noexcept {
 					return intvl.transform(project);
 				}
-			)
+			),
+			tc_move_if_owned(less)
 		);
 	}
 } // namespace tc

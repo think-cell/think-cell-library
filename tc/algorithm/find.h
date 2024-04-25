@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -21,7 +21,7 @@ namespace tc {
 	namespace no_adl {
 #ifdef _MSC_VER
 		template<typename RangeReturn, typename Rng>
-		struct element_return_type : tc::type::identity<decltype(RangeReturn::pack_no_element(std::declval<Rng>()))> {};
+		struct element_return_type : std::type_identity<decltype(RangeReturn::pack_no_element(std::declval<Rng>()))> {};
 #endif
 	}
 
@@ -39,16 +39,26 @@ namespace tc {
 			if constexpr( RangeReturn::requires_iterator ) {
 				auto const itEnd=tc::end(rng); // MAYTHROW
 				for( auto it=tc::begin(rng) /*MAYTHROW*/; it!=itEnd; ++it /*MAYTHROW*/ ) {
-					decltype(auto) ref = *it; // MAYTHROW
-					if (tc::explicit_cast<bool>(tc::invoke(pred, tc::as_const(ref)) /*MAYTHROW*/)) {
+					if constexpr(std::same_as<decltype(pred), tc::constexpr_function<true>>) { // tc::front
 #ifdef _CHECKS
-						if constexpr( c_bCheckUnique ) {
-							for( auto it2 = tc_modified(it, ++_); it2!=itEnd; ++it2 ) { // hand-rolled loop to avoid dependency to subrange
-								_ASSERTE( !tc::explicit_cast<bool>(tc::invoke(pred, tc::as_const(*it2))) );
-							}
+						if constexpr( c_bCheckUnique ) { // tc::only
+							_ASSERTE( tc_modified(it, ++_) == itEnd );
 						}
 #endif
-						return RangeReturn::pack_element(tc_move(it),tc_move_if_owned(rng),tc_move_if_owned(ref)); // MAYTHROW
+						return RangeReturn::pack_element(tc_move(it),tc_move_if_owned(rng)); // MAYTHROW
+
+					} else {
+						decltype(auto) ref = *it; // MAYTHROW
+						if (tc::explicit_cast<bool>(tc_invoke(pred, tc::as_const(ref)) /*MAYTHROW*/)) {
+#ifdef _CHECKS
+							if constexpr( c_bCheckUnique ) {
+								for( auto it2 = tc_modified(it, ++_); it2!=itEnd; ++it2 ) { // hand-rolled loop to avoid dependency to subrange
+									_ASSERTE( !tc::explicit_cast<bool>(tc_invoke(pred, tc::as_const(*it2))) );
+								}
+							}
+#endif
+							return RangeReturn::pack_element(tc_move(it),tc_move_if_owned(rng),tc_move_if_owned(ref)); // MAYTHROW
+						}
 					}
 				}
 				return RangeReturn::pack_no_element(tc_move_if_owned(rng));
@@ -57,7 +67,7 @@ namespace tc {
 				if constexpr( c_bCheckUnique ) {
 					std::optional<tc::element_return_type_t<RangeReturn, Rng>> ot;
 					tc::for_each(tc_move_if_owned(rng), [&](auto&& t) MAYTHROW {
-						if( tc::explicit_cast<bool>(tc::invoke(pred, tc::as_const(t)) /*MAYTHROW*/) ) {
+						if( tc::explicit_cast<bool>(tc_invoke(pred, tc::as_const(t)) /*MAYTHROW*/) ) {
 							VERIFYCRITICALPRED(ot, !_).emplace(RangeReturn::template pack_element<Rng>(tc_move_if_owned(t)) /* MAYTHROW */);
 						}
 					}); // MAYTHROW
@@ -67,7 +77,7 @@ namespace tc {
 				{
 					tc::storage_for_without_dtor<tc::element_return_type_t<RangeReturn, Rng>> ot;
 					if( tc::break_ == tc::for_each(tc_move_if_owned(rng), [&](auto&& t) MAYTHROW {
-						if (tc::explicit_cast<bool>(tc::invoke(pred, tc::as_const(t)) /*MAYTHROW*/)) {
+						if (tc::explicit_cast<bool>(tc_invoke(pred, tc::as_const(t)) /*MAYTHROW*/)) {
 							ot.ctor(RangeReturn::template pack_element<Rng>(tc_move_if_owned(t)) /* MAYTHROW */);
 							return tc::break_; // We assume for_each never throws exceptions after the sink returned break_.
 						} else {
@@ -99,9 +109,13 @@ namespace tc {
 			auto const itBegin=tc::begin(rng);
 			for( auto it=tc::end(rng); it!=itBegin; ) {
 				--it;
-				decltype(auto) ref = *it;
-				if (tc::explicit_cast<bool>(tc::invoke(pred, tc::as_const(ref)))) {
-					return RangeReturn::pack_element(it,tc_move_if_owned(rng),tc_move_if_owned(ref));
+				if constexpr(std::same_as<Pred, tc::constexpr_function<true>>) { // tc::back
+					return RangeReturn::pack_element(tc_move(it), tc_move_if_owned(rng));
+				} else {
+					decltype(auto) ref = *it;
+					if (tc::explicit_cast<bool>(tc_invoke(pred, tc::as_const(ref)))) {
+						return RangeReturn::pack_element(tc_move(it), tc_move_if_owned(rng), tc_move_if_owned(ref));
+					}
 				}
 			}
 		} else {
@@ -111,13 +125,13 @@ namespace tc {
 				int iFound = 0;
 				aic[iFound].ctor(it);
 				tc_scope_exit { aic[iFound].dtor(); }; //iFound captured by reference
-				if (tc::explicit_cast<bool>(tc::invoke(pred, tc::as_const(**aic[iFound])))) {
+				if (tc::explicit_cast<bool>(tc_invoke(pred, tc::as_const(**aic[iFound])))) {
 					for (;;) {
 						++it;
 						if (itEnd==it) break;
 						aic[1 - iFound].ctor(it);
 						tc_scope_exit { aic[1 - iFound].dtor(); };
-						if (tc::invoke(pred, tc::as_const(**aic[1 - iFound]))) {
+						if (tc_invoke(pred, tc::as_const(**aic[1 - iFound]))) {
 							iFound = 1 - iFound;
 						}
 					}
@@ -140,7 +154,7 @@ namespace tc {
 
 	namespace find_first_or_unique_default {
 		template< typename RangeReturn, IF_TC_CHECKS(bool c_bCheckUnique,) typename Rng, typename T >
-		[[nodiscard]] constexpr decltype(auto) find_first_or_unique_impl(tc::type::identity<RangeReturn>, IF_TC_CHECKS(tc::constant<c_bCheckUnique>,) Rng&& rng, T const& t) MAYTHROW {
+		[[nodiscard]] constexpr decltype(auto) find_first_or_unique_impl(std::type_identity<RangeReturn>, IF_TC_CHECKS(tc::constant<c_bCheckUnique>,) Rng&& rng, T const& t) MAYTHROW {
 			static_assert(
 				!tc::has_key_type<std::remove_cvref_t<Rng>>::value,
 				"Do you want to use tc::cont_find?"
@@ -152,12 +166,12 @@ namespace tc {
 
 	template< typename RangeReturn, typename Rng, typename T >
 	[[nodiscard]] constexpr decltype(auto) find_unique(Rng&& rng, T&& t) MAYTHROW {
-		return find_first_or_unique(tc::type::identity<RangeReturn>(), IF_TC_CHECKS(tc::constant<true>(),) tc_move_if_owned(rng), tc_move_if_owned(t));
+		return find_first_or_unique(std::type_identity<RangeReturn>(), IF_TC_CHECKS(tc::constant<true>(),) tc_move_if_owned(rng), tc_move_if_owned(t));
 	}
 
 	template< typename RangeReturn, typename Rng, typename T >
 	[[nodiscard]] constexpr decltype(auto) find_first(Rng&& rng, T&& t) MAYTHROW {
-		return find_first_or_unique(tc::type::identity<RangeReturn>(), IF_TC_CHECKS(tc::constant<false>(),) tc_move_if_owned(rng), tc_move_if_owned(t));
+		return find_first_or_unique(std::type_identity<RangeReturn>(), IF_TC_CHECKS(tc::constant<false>(),) tc_move_if_owned(rng), tc_move_if_owned(t));
 	}
 
 	template< typename RangeReturn, typename Rng, typename T >

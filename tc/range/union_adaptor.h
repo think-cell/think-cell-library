@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -16,6 +16,33 @@
 #include "meta.h"
 
 namespace tc {
+	namespace union_adaptor_detail::no_adl {
+		template<typename Sink, bool bDisjoint>
+		struct union_adaptor_sink {
+			Sink const m_sink;
+
+			constexpr auto operator()(interleave_2_detail::lhs_tag_t, auto&& lhs) const& MAYTHROW {
+				return tc_invoke(m_sink, tc_move_if_owned(lhs));
+			}
+			constexpr auto operator()(interleave_2_detail::rhs_tag_t, auto&& rhs) const& MAYTHROW {
+				return tc_invoke(m_sink, tc_move_if_owned(rhs));
+			}
+			constexpr auto operator()(interleave_2_detail::lhsrhs_tag_t, auto&& lhs, tc::unused) const& MAYTHROW {
+				if constexpr(bDisjoint) {
+					_ASSERTFALSE;
+				}
+				return tc_invoke(m_sink, tc_move_if_owned(lhs));
+			}
+		};
+
+		template<typename Comp>
+		struct SNegateComp { // MSVC workaround: not a lambda for shorter symbol names
+			Comp const m_comp;
+			constexpr auto operator()(auto const& lhs, auto const& rhs) const& MAYTHROW {
+				return tc::negate(tc_invoke(m_comp, lhs, rhs));
+			}
+		};
+	}
 
 	namespace union_adaptor_adl {
 
@@ -24,7 +51,7 @@ namespace tc {
 			typename Rng0,
 			typename Rng1,
 			bool bDisjoint = false,
-			bool bHasIterator = tc::range_with_iterators< Rng0 > && tc::range_with_iterators< Rng1 >
+			bool bHasIterator = tc::ranges_with_common_reference<Rng0, Rng1>
 		>
 		struct union_adaptor;
 
@@ -49,46 +76,30 @@ namespace tc {
 				m_comp(tc_move_if_owned(comp))
 			{}
 
-		private:
-			template<typename Sink>
-			struct FForwardFirstArgOnly final {
-				Sink const& m_sink;
-
-				template<typename T0, typename T1>
-				auto operator()(T0&& arg0, T1&&) const {
-					_ASSERT(!bDisjoint);
-					return tc::continue_if_not_break(m_sink, tc_move_if_owned(arg0));
-				}
-			};
-
 		public:
 			template<tc::decayed_derived_from<union_adaptor> Self, typename Sink>
-			friend auto for_each_impl(Self&& self, Sink const sink) MAYTHROW {
-				return tc::interleave_2(
+			friend auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
+				return interleave_2_detail::internal_interleave_2(
 					tc::get<0>(tc_move_if_owned(self).m_tupleadaptbaserng).base_range(),
 					tc::get<1>(tc_move_if_owned(self).m_tupleadaptbaserng).base_range(),
 					tc_move_if_owned(self).m_comp,
-					std::ref(sink),
-					std::ref(sink),
-					FForwardFirstArgOnly<Sink>{sink}
+					union_adaptor_detail::no_adl::union_adaptor_sink<Sink, bDisjoint>{tc_move_if_owned(sink)}
 				);
 			}
 
 			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, union_adaptor>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
-			friend auto range_output_t_impl(Self&&) -> tc::type::unique_t<tc::type::concat_t<
+			friend auto range_output_t_impl(Self&&) -> boost::mp11::mp_unique<boost::mp11::mp_append<
 				tc::range_output_t<decltype(tc::get<0>(std::declval<Self>().m_tupleadaptbaserng).base_range())>,
 				tc::range_output_t<decltype(tc::get<1>(std::declval<Self>().m_tupleadaptbaserng).base_range())>
 			>> {} // unevaluated
 
 			template<tc::decayed_derived_from<union_adaptor> Self, typename Sink>
-			friend auto for_each_reverse_impl(Self&& self, Sink const sink) MAYTHROW {
-				return tc::interleave_2(
+			friend auto for_each_reverse_impl(Self&& self, Sink&& sink) MAYTHROW {
+				return interleave_2_detail::internal_interleave_2(
 					tc::reverse(tc::get<0>(tc_move_if_owned(self).m_tupleadaptbaserng).base_range()),
 					tc::reverse(tc::get<1>(tc_move_if_owned(self).m_tupleadaptbaserng).base_range()),
-					/*comp*/[&](auto const& lhs, auto const& rhs) noexcept { return tc::negate(self.m_comp(lhs, rhs)); },
-					std::ref(sink),
-					std::ref(sink),
-					FForwardFirstArgOnly<Sink>{sink}
+					union_adaptor_detail::no_adl::SNegateComp<Comp>{tc_move_if_owned(self).m_comp},
+					union_adaptor_detail::no_adl::union_adaptor_sink<Sink, bDisjoint>{tc_move_if_owned(sink)}
 				);
 			}
 		};
@@ -127,6 +138,8 @@ namespace tc {
 			using union_adaptor<Comp, Rng0, Rng1, bDisjoint, false>::union_adaptor;
 
 			static constexpr bool c_bHasStashingIndex=tc::has_stashing_index<std::remove_reference_t<Rng0>>::value || tc::has_stashing_index<std::remove_reference_t<Rng1>>::value;
+			static constexpr bool c_bPrefersForEach = true;
+
 		private:
 			void find_order(tc_index& idx) const& noexcept {
 				if (base_at_end_index<0>(idx)) {
@@ -161,9 +174,9 @@ namespace tc {
 				return tc::get<N>(idx) == tc::get<N>(this->m_tupleadaptbaserng).base_begin_index();
 			}
 
-			template<int N>
-			auto base_dereference_index(tc_index const& idx) const& return_decltype_MAYTHROW(
-				tc::dereference_index(tc::get<N>(this->m_tupleadaptbaserng).base_range(), tc::get<N>(idx))
+			template<int N, typename Index>
+			auto base_dereference_index(Index&& idx) const& return_decltype_MAYTHROW(
+				tc::dereference_index(tc::get<N>(this->m_tupleadaptbaserng).base_range(), tc::get<N>(tc_move_if_owned(idx)))
 			)
 
 			STATIC_FINAL(at_end_index)(tc_index const& idx) const& noexcept -> bool {
@@ -176,11 +189,17 @@ namespace tc {
 				return idx;
 			}
 
-			STATIC_FINAL(dereference_index)(tc_index const& idx) const& noexcept -> decltype(auto) {
-				return tc_conditional_prvalue_as_val( std::is_lteq(idx.m_order), base_dereference_index<0>(idx), base_dereference_index<1>(idx) );
+			STATIC_FINAL(dereference_index)(auto&& idx) const& MAYTHROW -> decltype(auto) {
+				return tc_conditional_prvalue_as_val(
+					std::is_lteq(idx.m_order),
+					base_dereference_index<0>(tc_move_if_owned(idx)),
+					base_dereference_index<1>(tc_move_if_owned(idx))
+				);
 			}
 
-			STATIC_FINAL(end_index)() const& noexcept -> tc_index {
+			STATIC_FINAL(end_index)() const& noexcept -> tc_index
+				requires tc::has_end_index<Rng0> && tc::has_end_index<Rng1>
+			{
 				tc_index idx{{tc::get<0>(this->m_tupleadaptbaserng).base_end_index(), tc::get<1>(this->m_tupleadaptbaserng).base_end_index()}, std::weak_ordering::less};
 				return idx;
 			}
@@ -200,7 +219,9 @@ namespace tc {
 				find_order(idx);
 			}
 
-			STATIC_FINAL(decrement_index)(tc_index& idx) const& noexcept -> void {
+			STATIC_FINAL(decrement_index)(tc_index& idx) const& noexcept -> void
+				requires tc::has_decrement_index<Rng0> && tc::has_decrement_index<Rng1>
+			{
 				if (base_at_begin_index<0>(idx)) {
 					_ASSERT(!base_at_begin_index<1>(idx));
 					base_decrement_index<1>(idx);
@@ -226,7 +247,9 @@ namespace tc {
 			}
 
 			// partition_point would be a more efficient customization point
-			STATIC_FINAL(middle_point)(tc_index& idx, tc_index const& idxEnd) const& noexcept -> void {
+			STATIC_FINAL(middle_point)(tc_index& idx, tc_index const& idxEnd) const& noexcept -> void
+				requires tc::has_middle_point<Rng0> && tc::has_middle_point<Rng1>
+			{
 				if (tc::get<0>(idx) == tc::get<0>(idxEnd)) {
 					tc::middle_point(tc::get<1>(this->m_tupleadaptbaserng).base_range(), tc::get<1>(idx), tc::get<1>(idxEnd));
 					idx.m_order = std::weak_ordering::greater;
@@ -285,7 +308,7 @@ namespace tc {
 		= tc::stable_index_on_move<Rng0> && tc::stable_index_on_move<Rng1>;
 
 	template<typename Comp, typename Rng0, typename Rng1, bool bDisjoint>
-	[[nodiscard]] auto split_union(subrange<union_adaptor<Comp, Rng0, Rng1, bDisjoint> &> const& rngsubunion) return_decltype_NOEXCEPT( // make_tuple is noexcept(false); the rest of this should only throw bad_alloc
+	[[nodiscard]] auto split_union(no_adl::subrange<union_adaptor<Comp, Rng0, Rng1, bDisjoint> &> const& rngsubunion) return_decltype_NOEXCEPT( // make_tuple is noexcept(false); the rest of this should only throw bad_alloc
 		tc::make_tuple(
 			tc::slice(tc::get<0>(rngsubunion.base_range().m_tupleadaptbaserng).base_range(), tc::get<0>(rngsubunion.begin_index()), tc::get<0>(rngsubunion.end_index())),
 			tc::slice(tc::get<1>(rngsubunion.base_range().m_tupleadaptbaserng).base_range(), tc::get<1>(rngsubunion.begin_index()), tc::get<1>(rngsubunion.end_index()))

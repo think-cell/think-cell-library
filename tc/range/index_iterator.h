@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -63,9 +63,17 @@ namespace tc {
 					return derived();
 				}
 
-				constexpr reference operator*() const& noexcept {
+				constexpr decltype(auto) operator*() const& noexcept {
 					_ASSERT(m_bValid);
 					return *tc::base_cast<It>(*this);
+				}
+				constexpr decltype(auto) operator*() const&& noexcept {
+					_ASSERT(m_bValid);
+					return *tc::base_cast<It>(tc_move_always_even_const(*this));
+				}
+				constexpr decltype(auto) operator*() && noexcept {
+					_ASSERT(m_bValid);
+					return *tc::base_cast<It>(tc_move_always(*this));
 				}
 
 				constexpr pointer operator->() const& noexcept {
@@ -147,13 +155,13 @@ namespace tc {
 			using difference_type = decltype(std::declval<IndexRange const&>().distance_to_index(std::declval<typename IndexRange::tc_index const&>(), std::declval<typename IndexRange::tc_index const&>()));
 		};
 
-		template< typename IndexRange, typename = void>
+		template< typename IndexRange>
 		struct value_type_base {
 			using value_type = void;
 		};
 
-		template< typename IndexRange >
-		struct value_type_base<IndexRange, tc::void_t<tc::range_value_t<IndexRange>>> {
+		template< typename IndexRange > requires requires { typename tc::range_value_t<IndexRange>; }
+		struct value_type_base<IndexRange> {
 			using value_type = tc::range_value_t<IndexRange>;
 		};
 	}
@@ -205,7 +213,7 @@ namespace std {
 
 		// Note that we cannot provide rebind or pointer_to, but don't need that for our use cases either.
 
-		static constexpr element_type* to_address(pointer const& ptr)
+		static constexpr element_type* to_address(pointer const& ptr) noexcept
 		{
 			return ptr.get_range().index_to_address(ptr.get_index());
 		}
@@ -223,6 +231,8 @@ namespace tc {
 		struct index_iterator : tc::iterator_facade<index_iterator<IndexRange, bConst>>
 		{
 			static_assert(tc::decayed<IndexRange>);
+
+			static constexpr bool c_bHasStashingElement = IndexRange::c_bHasStashingIndex;
 
 		private:
 			friend class boost::iterator_core_access;
@@ -289,9 +299,15 @@ namespace tc {
 				}
 			}
 
-			constexpr decltype(auto) operator*() const noexcept(noexcept(m_oidxrng->dereference_index(m_idx))) {
-				return m_oidxrng->dereference_index(m_idx);
-			}
+			constexpr decltype(auto) operator*() const& return_MAYTHROW(
+				m_oidxrng->dereference_index(m_idx)
+			)
+			constexpr decltype(auto) operator*() const&& return_MAYTHROW(
+				(*tc_move_always_even_const(m_oidxrng)).dereference_index(tc_move_always_even_const(m_idx))
+			)
+			constexpr decltype(auto) operator*() && return_MAYTHROW(
+				(*tc_move_always(m_oidxrng)).dereference_index(tc_move_always(m_idx))
+			)
 
 			constexpr this_type& operator++() noexcept(noexcept(m_oidxrng->increment_index(m_idx))) {
 				tc::as_const(*m_oidxrng).increment_index(m_idx);
@@ -304,7 +320,7 @@ namespace tc {
 			}
 
 			explicit constexpr operator bool() const& noexcept {
-				return tc::explicit_cast<bool>(m_oidxrng);
+				tc_return_cast(m_oidxrng);
 			}
 
 			constexpr bool operator==(end_sentinel) const& noexcept {
@@ -340,15 +356,10 @@ namespace tc {
 	template <typename Rng> requires tc::empty_type<Rng> && is_index_iterator<tc::iterator_t<Rng>>
 	constexpr auto enable_borrowed_range<Rng> = true;
 
-	namespace no_adl {
-		template <typename IndexRange, bool b>
-		struct is_stashing_element<tc::index_iterator<IndexRange,b>> : tc::constant<IndexRange::c_bHasStashingIndex> {};
-	}
-
 	namespace iterator2index_detail {
 		template<typename It, typename Rng>
-		concept iterator_of = tc::derived_from<std::remove_cvref_t<It>, tc::iterator_t<std::remove_cvref_t<Rng>>>
-			|| tc::derived_from<std::remove_cvref_t<It>, tc::iterator_t<std::remove_cvref_t<Rng> const>>;
+		concept iterator_of = tc::decayed_derived_from<It, tc::iterator_t<std::remove_cvref_t<Rng>>>
+			|| tc::decayed_derived_from<It, tc::iterator_t<std::remove_cvref_t<Rng> const>>;
 	}
 
 	template<typename Rng, typename It>

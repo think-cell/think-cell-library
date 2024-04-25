@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -40,13 +40,9 @@ namespace tc {
 			tc::verify_functor_t<tc::decay_t<FuncFirst>> m_funcFirst;
 
 			template <typename... Args>
-			constexpr auto operator()(Args&&... args) const& MAYTHROW -> tc::transform_return_t<
-				FuncSecond,
-				decltype(tc::invoke(m_funcSecond, tc::invoke(m_funcFirst, tc_move_if_owned(args)...))),
-				decltype(tc::invoke(m_funcFirst, tc_move_if_owned(args)...))
-			> {
-				return tc::invoke(m_funcSecond, tc::invoke(m_funcFirst, tc_move_if_owned(args)...));
-			}
+			constexpr auto operator()(Args&&... args) const& return_decltype_allow_xvalue_slow_MAYTHROW(
+				tc_invoke(m_funcSecond, tc_invoke_pack(m_funcFirst, tc_move_if_owned(args)))
+			)
 
 			constexpr auto inverted() const& MAYTHROW {
 				return chained_impl<decltype(m_funcFirst.inverted()), decltype(m_funcSecond.inverted())>{

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -119,43 +119,42 @@ namespace tc {
 					std::array<
 						std::pair<
 							tc::decay_t<decltype(self.base_begin_index())>,
-							std::optional<tc::reference_or_value<decltype(tc::dereference_index(rng, self.base_begin_index()))>>
+							std::optional<tc::reference_or_value<decltype(tc::dereference_index(rng, std::declval<tc::decay_t<decltype(self.base_begin_index())>&>()))>>
 						>,
 						2
 					> apairidxref;
 					auto* ppairidxorefPrev = std::addressof(apairidxref[1]);
 					auto* ppairidxorefCurrent = std::addressof(apairidxref[0]);
 					ppairidxorefCurrent->first = { self.base_begin_index() };
+					using BreakOrContinue = tc::common_type_t<decltype(tc::continue_if_not_break(sink, **ppairidxorefCurrent->second)), tc::constant<tc::continue_>>;
 
-					return [&]() -> tc::common_type_t<decltype(tc::continue_if_not_break(sink, **ppairidxorefCurrent->second)), tc::constant<tc::continue_>> {
-						bool bFirst = true;
+					bool bFirst = true;
 
-						while( !tc::at_end_index(rng, ppairidxorefCurrent->first) ) { // MAYTHROW
-							_ASSERTDEBUG( std::is_trivially_destructible<decltype(ppairidxorefPrev->second)>::value || !ppairidxorefCurrent->second );
-							ppairidxorefCurrent->second.emplace(aggregate_tag, tc::dereference_index(rng, ppairidxorefCurrent->first) /* MAYTHROW */ );
-							if( tc::change(bFirst, false) || [&]() MAYTHROW {
-								bool const bEqual = self.m_equals(tc::as_const(**ppairidxorefPrev->second), tc::as_const(**ppairidxorefCurrent->second)); // MAYTHROW
-								if constexpr( !std::is_trivially_destructible<decltype(ppairidxorefPrev->second)>::value ) {
-									ppairidxorefPrev->second = std::nullopt;
-								}
-								return !bEqual;
-							}() ) {
-								tc_yield(sink, **ppairidxorefCurrent->second) /* MAYTHROW */;
+					while( !tc::at_end_index(rng, ppairidxorefCurrent->first) ) { // MAYTHROW
+						_ASSERTDEBUG( std::is_trivially_destructible<decltype(ppairidxorefPrev->second)>::value || !ppairidxorefCurrent->second );
+						tc::optional_emplace(ppairidxorefCurrent->second, aggregate_tag, tc::dereference_index(rng, ppairidxorefCurrent->first) /* MAYTHROW */ );
+						if( tc::change(bFirst, false) || [&]() MAYTHROW {
+							bool const bEqual = self.m_equals(tc::as_const(**ppairidxorefPrev->second), tc::as_const(**ppairidxorefCurrent->second)); // MAYTHROW
+							if constexpr( !std::is_trivially_destructible<decltype(ppairidxorefPrev->second)>::value ) {
+								ppairidxorefPrev->second = std::nullopt;
 							}
-							tc::swap(ppairidxorefPrev, ppairidxorefCurrent);
-							ppairidxorefCurrent->first = ppairidxorefPrev->first;
-							tc::increment_index(rng, ppairidxorefCurrent->first); // MAYTHROW
+							return !bEqual;
+						}() ) {
+							tc_return_if_break(tc::implicit_cast<BreakOrContinue>(tc::continue_if_not_break(sink, **ppairidxorefCurrent->second) /* MAYTHROW */));
 						}
+						tc::swap(ppairidxorefPrev, ppairidxorefCurrent);
+						ppairidxorefCurrent->first = ppairidxorefPrev->first;
+						tc::increment_index(rng, ppairidxorefCurrent->first); // MAYTHROW
+					}
 
-						return tc::constant<tc::continue_>();
-					}();
+					return tc::implicit_cast<BreakOrContinue>(tc::constant<tc::continue_>());
 				} else {
 					std::optional<tc::range_value_t<decltype(std::declval<Self>().base_range())>> ovalLast;
 					return tc::for_each(tc_move_if_owned(self).base_range(), [&](auto&& elem) MAYTHROW {
 						bool const bSkip = tc::and_then(ovalLast, [&](auto const& valLast) MAYTHROW {
 							return self.m_equals(valLast, tc::as_const(elem)); // MAYTHROW
 						});
-						ovalLast.emplace(tc_move_if_owned(elem));
+						tc::optional_emplace(ovalLast, tc_move_if_owned(elem));
 						return tc_conditional_prvalue_as_val(bSkip, tc::constant<tc::continue_>(), tc::continue_if_not_break(sink, *ovalLast) /*MAYTHROW*/);
 					});
 				}
@@ -168,57 +167,34 @@ namespace tc {
 
 		template<typename Rng, typename Equals>
 		struct [[nodiscard]] unique_adaptor<Rng, Equals, true>
-			: unique_adaptor<Rng, Equals, false>
-			, tc::range_iterator_from_index<
+			: tc::index_range_adaptor<
 				unique_adaptor<Rng, Equals, true>,
-				tc::index_t<std::remove_reference_t<Rng>>
+				Rng,
+				tc::index_range_adaptor_flags::inherit_begin_end | tc::index_range_adaptor_flags::inherit_dereference,
+				unique_adaptor<Rng, Equals, false>
 			>
 		{
 		private:
 			using this_type = unique_adaptor;
+			using base_ = typename unique_adaptor::index_range_adaptor;
 		public:
-			using typename this_type::range_iterator_from_index::tc_index;
+			using typename base_::tc_index;
 			static constexpr bool c_bHasStashingIndex=tc::has_stashing_index<std::remove_reference_t<Rng>>::value;
+			static constexpr bool c_bPrefersForEach = true;
 
-			using unique_adaptor<Rng, Equals, false>::unique_adaptor;
+			constexpr unique_adaptor() = default;
+			using base_::base_;
 			
 		private:
-			STATIC_FINAL_MOD(constexpr, begin_index)() const& noexcept -> tc_index {
-				return this->base_begin_index();
-			}
-
-			STATIC_FINAL_MOD(constexpr, end_index)() const& noexcept -> tc_index {
-				return this->base_end_index();
-			}
-
-			STATIC_FINAL_MOD(constexpr, at_end_index)(tc_index const& idx) const& noexcept -> bool {
-				return tc::at_end_index(this->base_range(),idx);
-			}
-
-			STATIC_FINAL_MOD(constexpr, dereference_index)(tc_index const& idx) const& return_decltype_MAYTHROW(
-				tc::dereference_index(this->base_range(),idx)
-			)
-
-			STATIC_FINAL_MOD(constexpr, dereference_index)(tc_index const& idx) & return_decltype_MAYTHROW(
-				tc::dereference_index(this->base_range(),idx)
-			)
-
 			STATIC_FINAL_MOD(constexpr, increment_index)(tc_index& idx) const& noexcept(noexcept(unique_adaptor_detail::increment_index(this->base_range(), idx, this->m_equals))) -> void {
 				_ASSERTE(!this->at_end_index(idx));
 				unique_adaptor_detail::increment_index(this->base_range(), idx, this->m_equals);
 			}
 
-			STATIC_FINAL_MOD(
-				constexpr,
-				decrement_index
-			)(tc_index& idx) const& noexcept(noexcept(unique_adaptor_detail::decrement_index(this->base_range(), idx, this->m_equals))) -> void
+			STATIC_FINAL_MOD(constexpr, decrement_index)(tc_index& idx) const& noexcept(noexcept(unique_adaptor_detail::decrement_index(this->base_range(), idx, this->m_equals))) -> void
 				requires tc::has_decrement_index<std::remove_reference_t<Rng>>
 			{
 				unique_adaptor_detail::decrement_index(this->base_range(), idx, this->m_equals);
-			}
-		public:
-			static constexpr auto element_base_index(tc_index const& idx) noexcept {
-				return idx;
 			}
 		};
 	}
@@ -259,18 +235,18 @@ namespace tc {
 				return tc::at_end_index(this->base_range(),idx.m_idxBegin);
 			}
 
-			STATIC_OVERRIDE_MOD(constexpr, end_index)() const& noexcept -> tc_index {
+			STATIC_OVERRIDE_MOD(constexpr, end_index)() const& noexcept -> tc_index requires tc::has_end_index<std::remove_reference_t<Rng>> {
 				auto idxEnd = this->base_end_index();
 				return {idxEnd, idxEnd};
 			}
 
-			STATIC_OVERRIDE_MOD(constexpr, dereference_index)(tc_index const& idx) const& return_decltype_noexcept(
-				tc::slice(this->base_range(), idx.m_idxBegin, idx.m_idxEnd)
-			)
+			STATIC_OVERRIDE_MOD(constexpr, dereference_index)(auto&& idx) const& noexcept -> decltype(auto) { // return_decltype_noexcept confuses MSVC 19.39
+				return tc::slice(this->base_range(), tc_move_if_owned(idx).m_idxBegin, tc_move_if_owned(idx).m_idxEnd);
+			}
 
-			STATIC_OVERRIDE_MOD(constexpr, dereference_index)(tc_index const& idx) & return_decltype_noexcept(
-				tc::slice(this->base_range(), idx.m_idxBegin, idx.m_idxEnd)
-			)
+			STATIC_OVERRIDE_MOD(constexpr, dereference_index)(auto&& idx) & noexcept -> decltype(auto) { // return_decltype_noexcept confuses MSVC 19.39
+				return tc::slice(this->base_range(), tc_move_if_owned(idx).m_idxBegin, tc_move_if_owned(idx).m_idxEnd);
+			}
 		};
 	}
 	using subrange_range_adaptor_adl::subrange_range_adaptor;
@@ -306,17 +282,12 @@ namespace tc {
 			template<typename PartitionRange, std::enable_if_t<
 				tc::decayed_derived_from<PartitionRange, partition_range_adaptor>
 			>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
-			friend constexpr auto join_impl(PartitionRange&& partrng) return_decltype_xvalue_by_ref_noexcept(
+			friend constexpr auto join_impl(PartitionRange&& partrng) return_decltype_allow_xvalue_noexcept(
 				tc_move_if_owned(partrng).base_range()
 			)
 
 			template<typename SubPartitionRange, std::enable_if_t<
-				tc::decayed_derived_from<
-					tc::type::only_t<
-						typename tc::is_instance<std::remove_reference_t<SubPartitionRange>, subrange>::arguments
-					>,
-					partition_range_adaptor
-				>
+				tc::decayed_derived_from<tc::subrange_arg_t<SubPartitionRange>, partition_range_adaptor>
 			>* = nullptr>
 			friend constexpr auto join_impl(SubPartitionRange&& subpartrng) return_decltype_noexcept(
 				tc::slice(
@@ -396,49 +367,25 @@ namespace tc {
 	template<typename Rng, typename Equals>
 	constexpr auto enable_stable_index_on_move<unique_range_adjacent_adaptor<Rng, Equals>> = tc::stable_index_on_move<Rng>;
 
-	template<
-		typename Rng,
-		typename Equals
-	>
-	constexpr auto front_unique_range(Rng&& rng, Equals&& equals) return_ctor_noexcept(
+	template<typename Rng, typename Equals = decltype(tc::equal_to)>
+	constexpr auto front_unique_range(Rng&& rng, Equals&& equals = {}) return_ctor_noexcept(
 		TC_FWD(unique_range_front_adaptor< Rng, tc::decay_t<Equals> >),
 		(tc_move_if_owned(rng), tc_move_if_owned(equals))
 	)
 
-	template< typename Rng >
-	constexpr auto front_unique_range(Rng&& rng) return_decltype_noexcept(
-		front_unique_range(tc_move_if_owned(rng),tc::fn_equal_to())
-	)
-
-	template<
-		typename Rng,
-		typename Equals
-	>
-	auto adjacent_unique_range(Rng&& rng, Equals&& equals) return_ctor_noexcept(
+	template<typename Rng, typename Equals = decltype(tc::equal_to)>
+	auto adjacent_unique_range(Rng&& rng, Equals&& equals = {}) return_ctor_noexcept(
 		TC_FWD(unique_range_adjacent_adaptor< Rng, tc::decay_t<Equals> >),
 		(tc_move_if_owned(rng), tc_move_if_owned(equals))
-	)
-
-	template< typename Rng >
-	auto adjacent_unique_range(Rng&& rng) return_decltype_noexcept(
-		adjacent_unique_range(tc_move_if_owned(rng), tc::fn_equal_to())
 	)
 
 	/*
 		In contrast to std::unique, tc::adjacent_unique / tc::adjacent_unique_inplace always compares adjacent elements. This allows implementing
 		bidirectional tc::adjacent_unique, with tc::adjacent_unique_inplace yielding the same result.
 	*/
-	template<
-		typename Rng,
-		typename Equals
-	>
-	constexpr auto adjacent_unique(Rng&& rng, Equals&& equals) return_ctor_noexcept(
+	template<typename Rng, typename Equals = decltype(tc::equal_to)>
+	constexpr auto adjacent_unique(Rng&& rng, Equals&& equals = {}) return_ctor_noexcept(
 		TC_FWD(unique_adaptor< Rng, tc::decay_t<Equals> >),
 		(tc_move_if_owned(rng), tc_move_if_owned(equals))
-	)
-
-	template< typename Rng >
-	constexpr auto adjacent_unique(Rng&& rng) return_decltype_noexcept(
-		adjacent_unique(tc_move_if_owned(rng),tc::fn_equal_to())
 	)
 }

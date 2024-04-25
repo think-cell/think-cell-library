@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -21,13 +21,13 @@ namespace tc {
 			using base_::base_;
 
 			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, ordered_pairs_adaptor>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
-			friend auto range_output_t_impl(Self&&) -> tc::type::list<tc::tuple<
+			friend auto range_output_t_impl(Self&&) -> boost::mp11::mp_list<tc::tuple<
 				std::iter_reference_t<tc::iterator_t<decltype(std::declval<Self&>().base_range())>>&&,
 				std::iter_reference_t<tc::iterator_t<decltype(std::declval<Self&>().base_range())>>&&
 			>> {} // unevaluated
 
 			template<tc::decayed_derived_from<ordered_pairs_adaptor> Self, typename Sink> 
-			friend constexpr auto for_each_impl(Self&& self, Sink sink) MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(sink, std::declval<tc::type::only_t<tc::range_output_t<Self>>>())), tc::constant<tc::continue_>> {
+			friend constexpr auto for_each_impl(Self&& self, Sink sink) MAYTHROW -> tc::common_type_t<decltype(tc::continue_if_not_break(sink, std::declval<tc::mp_only<tc::range_output_t<Self>>>())), tc::constant<tc::continue_>> {
 				auto idx1st = self.base_begin_index();
 				// tc::ordered_pairs(rng) is a subsequence of tc::cartesian_product(rng, rng).
 				if(!tc::at_end_index(self.base_range(), idx1st)) {
@@ -37,7 +37,7 @@ namespace tc {
 						if(tc::at_end_index(self.base_range(), idx2nd)) break;
 						decltype(auto) ref1st = tc::dereference_index(self.base_range(), idx1st);
 						do {
-							tc_yield(sink, tc::forward_as_tuple(ref1st, tc::dereference_index(self.base_range(), idx2nd)));
+							tc_return_if_break(tc::continue_if_not_break(sink, tc::tie(ref1st, tc::dereference_index(self.base_range(), idx2nd))))
 							tc::increment_index(self.base_range(), idx2nd);
 						} while(!tc::at_end_index(self.base_range(), idx2nd));
 						tc::increment_index(self.base_range(), idx1st);

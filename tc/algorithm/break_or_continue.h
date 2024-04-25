@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -10,10 +10,8 @@
 
 #include "../base/assert_defs.h"
 #include "../base/enum.h"
-#include "../base/utility.h"
 #include "../base/noncopyable.h"
 #include "../base/derivable.h"
-#include "../base/invoke.h"
 
 #include <type_traits>
 #include <functional>
@@ -30,7 +28,7 @@ namespace tc {
 		}
 	}
 
-	#define tc_return_if_break(...) \
+	#define tc_return_if_break_impl(sometimes_break_value, ...) \
 	{ \
 		auto boc__ = (__VA_ARGS__); \
 		/* Inline constexpr bools as soon as "constexpr if" works properly in MSVC */ \
@@ -43,10 +41,12 @@ namespace tc {
 		} \
 		else if constexpr (!bNeverBreaks) { \
 			if( tc::break_ == boc__ ) { \
-				return tc::break_; \
+				return sometimes_break_value; \
 			} \
 		} \
 	}
+	#define tc_return_if_break(...) \
+		tc_return_if_break_impl(tc::break_, __VA_ARGS__)
 	
 	namespace continue_if_not_break_adl {
 		template<typename BreakOrContinueDefault = tc::constant<tc::continue_>>
@@ -55,14 +55,14 @@ namespace tc {
 		};
 		inline constexpr impl_t<> impl = {tc::constant<tc::continue_>()};
 		template<typename BreakOrContinue>
-		using is_break_or_continue = tc::type::find_unique<tc::type::list<tc::break_or_continue, tc::constant<tc::break_>, tc::constant<tc::continue_>>, BreakOrContinue>;
+		using is_break_or_continue = boost::mp11::mp_set_contains<boost::mp11::mp_list<tc::break_or_continue, tc::constant<tc::break_>, tc::constant<tc::continue_>>, BreakOrContinue>;
 
-		template<typename BreakOrContinue> requires is_break_or_continue<BreakOrContinue>::found
+		template<typename BreakOrContinue> requires is_break_or_continue<BreakOrContinue>::value
 		constexpr impl_t<BreakOrContinue> operator,(BreakOrContinue boc, impl_t<> const&) noexcept {
 			return {boc};
 		}
 		// The built-in "operator," would be fine, but this is needed to protect against other libraries that overload "operator," (e.g. boost::proto).
-		template<typename NotBreakOrContinue> requires (!is_break_or_continue<std::remove_cvref_t<NotBreakOrContinue>>::found)
+		template<typename NotBreakOrContinue> requires (!is_break_or_continue<std::remove_cvref_t<NotBreakOrContinue>>::value)
 		constexpr impl_t<> const& operator,(NotBreakOrContinue&& /*notboc*/, impl_t<> const& _) noexcept {
 			return _;
 		}
@@ -90,10 +90,8 @@ namespace tc {
 
 	template<typename Sink, typename... Args>
 	constexpr auto continue_if_not_break(Sink const& sink, Args&&... args) return_decltype_MAYTHROW(
-		tc_internal_continue_if_not_break(tc::invoke(sink, tc_move_if_owned(args)...))
+		tc_internal_continue_if_not_break(tc_invoke_pack(sink, tc_move_if_owned(args)))
 	)
-
-	#define tc_yield(...) tc_return_if_break(tc::continue_if_not_break(__VA_ARGS__))
 
 	namespace no_adl {
 
@@ -102,12 +100,13 @@ namespace tc {
 
 		// Supports constructing tc::move_only_function<tc::break_or_continue_(...)> from a callable with return type other than break_or_continue_.
 		// TODO: Implement on top of std::move_only_function once it becomes available
-		template<typename Func>
+		template<typename Func> requires (!std::is_final_v<tc::decay_t<Func>>) && std::move_constructible<tc::decay_t<Func>>
 		struct movable_functor_adaptor_base : tc::derivable_t<tc::decay_t<Func>> {
 		private:
 			using base_t = tc::derivable_t<tc::decay_t<Func>>;
 		public:
-			movable_functor_adaptor_base(Func&& func) noexcept : base_t(tc_move_if_owned(func)) {}
+			movable_functor_adaptor_base(Func&& func) noexcept requires tc::safely_constructible_from<base_t, Func&&>
+				: base_t(tc_move_if_owned(func)) {}
 			movable_functor_adaptor_base(movable_functor_adaptor_base&&) = default; // not noexcept to "inherit" exception-specifier from base class
 			movable_functor_adaptor_base(movable_functor_adaptor_base const& mfa) noexcept
 				: base_t(tc_move_always(tc::as_mutable(tc::base_cast<base_t>(mfa))))
@@ -117,38 +116,49 @@ namespace tc {
 			}
 		};
 
-		template<typename Ret, typename Func>
+		template<typename /*Ret*/, typename Func> requires requires { typename movable_functor_adaptor_base<Func>; }
 		struct movable_functor_adaptor final : movable_functor_adaptor_base<Func> {
 			using movable_functor_adaptor_base<Func>::movable_functor_adaptor_base;
 
-			template<typename... Args>
-			Ret operator()(Args&& ... args) & MAYTHROW {
+			// no return_decltype_..._MAYTHROW: type is still incomplete in function signature - tc::base_cast does not compile on clang
+			template<typename... Args> requires requires { std::declval<tc::decay_t<Func>&>()(std::declval<Args>()...); }
+			decltype(auto) operator()(Args&& ... args) & noexcept(noexcept(std::declval<tc::decay_t<Func>&>()(std::declval<Args>()...))) {
 				return tc::base_cast<tc::decay_t<Func>>(*this)(tc_move_if_owned(args)...);
 			}
 
-			template<typename... Args>
-			Ret operator()(Args&& ... args) const& MAYTHROW {
+			// no return_decltype_..._MAYTHROW: type is still incomplete in function signature - tc::base_cast does not compile on clang
+			template<typename... Args> requires requires { std::declval<tc::decay_t<Func> const&>()(std::declval<Args>()...); }
+			decltype(auto) operator()(Args&& ... args) const& noexcept(noexcept(std::declval<tc::decay_t<Func> const&>()(std::declval<Args>()...))) {
 				return tc::base_cast<tc::decay_t<Func>>(*this)(tc_move_if_owned(args)...);
 			}
 		};
 
-		template<typename Func>
+		template<typename Func> requires requires { typename movable_functor_adaptor_base<Func>; }
 		struct movable_functor_adaptor<tc::break_or_continue, Func> final : movable_functor_adaptor_base<Func> {
 			using movable_functor_adaptor_base<Func>::movable_functor_adaptor_base;
 
-			template<typename... Args>
-			tc::break_or_continue operator()(Args&& ... args) & MAYTHROW {
+			// no return_decltype_..._MAYTHROW: type is still incomplete in function signature - tc::base_cast does not compile on clang
+			template<typename... Args> requires requires { tc::continue_if_not_break(std::declval<tc::decay_t<Func>&>(), std::declval<Args>()...); }
+			tc::break_or_continue operator()(Args&& ... args) & noexcept(noexcept(
+				tc::continue_if_not_break(std::declval<tc::decay_t<Func>&>(), std::declval<Args>()...)
+			)) {
 				return tc::continue_if_not_break(tc::base_cast<tc::decay_t<Func>>(*this), tc_move_if_owned(args)...);
 			}
 
-			template<typename... Args>
-			tc::break_or_continue operator()(Args&& ... args) const& MAYTHROW {
+			// no return_decltype_..._MAYTHROW: type is still incomplete in function signature - tc::base_cast does not compile on clang
+			template<typename... Args> requires requires { tc::continue_if_not_break(std::declval<tc::decay_t<Func> const&>(), std::declval<Args>()...); }
+			tc::break_or_continue operator()(Args&& ... args) const& noexcept(noexcept(
+				tc::continue_if_not_break(std::declval<tc::decay_t<Func> const&>(), std::declval<Args>()...)
+			)) {
 				return tc::continue_if_not_break(tc::base_cast<tc::decay_t<Func>>(*this), tc_move_if_owned(args)...);
 			}
 		};
 
 		template< bool bNoExcept, typename Ret, typename... Args >
 		struct move_only_function_base: tc::noncopyable {
+		private:
+			std::function< Ret(Args...) > m_func;
+		public:
 			move_only_function_base() noexcept {} // creates an empty function
 			move_only_function_base(std::nullptr_t) noexcept {} // creates an empty function
 
@@ -158,9 +168,12 @@ namespace tc {
 				return *this;
 			}
 
-			template< typename Func > requires (!tc::decayed_derived_from<Func, move_only_function_base>)
-			move_only_function_base(Func&& func) noexcept
-				: m_func( tc::no_adl::movable_functor_adaptor<Ret, Func>( tc_move_if_owned(func) ) )
+			template< typename Func > requires
+				(!tc::decayed_derived_from<Func, move_only_function_base>) &&
+				tc::safely_constructible_from<movable_functor_adaptor<Ret, Func>, Func&&> &&
+				tc::safely_constructible_from<decltype(m_func), movable_functor_adaptor<Ret, Func>>
+			move_only_function_base(Func&& func) noexcept 
+				: m_func(movable_functor_adaptor<Ret, Func>(tc_move_if_owned(func)))
 			{
 				static_assert(!tc::decayed_derived_from<Func, std::function< Ret(Args...) >>);
 				// TODO: static_assert(!tc::decayed_derived_from<Func, std::move_only_function< Ret(Args...) >>);
@@ -171,14 +184,15 @@ namespace tc {
 				//static_assert(!bNoExcept || noexcept(std::declval<tc::decay_t<Func>&>()(std::declval<Args>()...)));
 			}
 
-			explicit operator bool() const& noexcept { return tc::explicit_cast<bool>(m_func); }
+			explicit operator bool() const& noexcept { tc_return_cast(m_func); }
 
 			Ret operator()(Args ... args) const& noexcept(bNoExcept) {
 				return m_func(tc_move_if_owned(args)...);
 			}
 
-		private:
-			std::function< Ret(Args...) > m_func;
+			friend decltype(auto) debug_output_impl(move_only_function_base const& self) noexcept {
+				return self.m_func.target_type().name();
+			}
 		};
 
 		template< typename Signature >

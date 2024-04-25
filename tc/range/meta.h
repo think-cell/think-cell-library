@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -124,15 +124,18 @@ namespace tc {
 	concept contiguous_range = tc::range_with_iterators<Rng> && std::contiguous_iterator<tc::iterator_t<Rng>>;
 #endif
 
+	template <typename Rng>
+	concept prefers_for_each = !tc::range_with_iterators<Rng> || Rng::c_bPrefersForEach;
+
 	template <typename ... Rng>
 	concept ranges_with_common_reference
-		= (... && tc::range_with_iterators<Rng>) && tc::has_common_reference_prvalue_as_val<std::iter_reference_t<tc::iterator_t<Rng>>...>;
+		= (... && tc::range_with_iterators<Rng>) && requires { typename tc::common_reference_t<std::iter_reference_t<tc::iterator_t<Rng>>...>; };
 
 	namespace range_output_t_adl {
 		DEFINE_ADL_TAG_TYPE(adl_tag);
 
 		template<typename T, T... t>
-		auto range_output_t_impl(adl_tag_t, std::integer_sequence<T, t...> const&) -> tc::type::list<T>; // declaration only
+		auto range_output_t_impl(adl_tag_t, std::integer_sequence<T, t...> const&) -> boost::mp11::mp_list<T>; // declaration only
 	}
 
 	namespace range_output_no_adl {
@@ -141,7 +144,7 @@ namespace tc {
 
 		template<typename Rng> requires (!std::is_void<std::iter_reference_t<tc::iterator_t<Rng>>>::value)
 		struct from_iter_reference<Rng> {
-			using type = tc::type::list<tc::remove_rvalue_reference_t<std::iter_reference_t<tc::iterator_t<Rng>>>>;
+			using type = boost::mp11::mp_list<tc::remove_rvalue_reference_t<std::iter_reference_t<tc::iterator_t<Rng>>>>;
 		};
 
 		template<typename Rng>
@@ -150,8 +153,8 @@ namespace tc {
 		template<typename Rng> requires requires { /*adl*/range_output_t_impl(tc::range_output_t_adl::adl_tag, std::declval<Rng>()); }
 		struct from_adl_with_tag<Rng> {
 			using type = decltype(/*adl*/range_output_t_impl(tc::range_output_t_adl::adl_tag, std::declval<Rng>()));
-			static_assert(tc::decayed<type> && tc::instance<type, tc::type::list>);
-			static_assert(!tc::type::any_of<type, std::is_rvalue_reference>::value);
+			static_assert(tc::decayed<type> && tc::instance<type, boost::mp11::mp_list>);
+			static_assert(!boost::mp11::mp_any_of<type, std::is_rvalue_reference>::value);
 		};
 
 		template<typename Rng>
@@ -160,12 +163,17 @@ namespace tc {
 		template<typename Rng> requires requires { /*adl*/range_output_t_impl(std::declval<Rng>()); }
 		struct from_adl<Rng> {
 			using type = decltype(/*adl*/range_output_t_impl(std::declval<Rng>()));
-			static_assert(tc::decayed<type> && tc::instance<type, tc::type::list>);
-			static_assert(!tc::type::any_of<type, std::is_rvalue_reference>::value);
+			static_assert(tc::decayed<type> && tc::instance<type, boost::mp11::mp_list>);
+			static_assert(!boost::mp11::mp_any_of<type, std::is_rvalue_reference>::value);
 		};
 	}
 	template<typename Rng>
 	using range_output_t = typename range_output_no_adl::from_adl<Rng>::type;
+
+	namespace make_lazy_adl {
+		template<typename Func>
+		auto range_output_t_impl(make_lazy<Func> const&) noexcept -> tc::range_output_t<decltype(std::declval<Func const&>()())>; // declaration only
+	}
 
 	namespace no_adl {
 		template<typename T>
@@ -177,19 +185,19 @@ namespace tc {
 	using value_t = typename tc::no_adl::value_type_impl<tc::decay_t<T>>::type;
 
 	namespace range_value_no_adl {
-		template<typename Rng, typename = void>
+		template<typename Rng>
 		struct from_range_output final { using type = void; };
 
-		template<typename Rng>
-		struct from_range_output<Rng, std::void_t<tc::type::apply_t<tc::common_type_decayed_t, tc::type::transform_t<tc::range_output_t<Rng>, tc::value_t>>>> final {
-			using type = tc::type::apply_t<tc::common_type_decayed_t, tc::type::transform_t<tc::range_output_t<Rng>, tc::value_t>>;
+		template<typename Rng> requires requires { typename boost::mp11::mp_apply<tc::common_type_t, tc::mp_transform<tc::value_t, tc::range_output_t<Rng>>>; }
+		struct from_range_output<Rng> final {
+			using type = boost::mp11::mp_apply<tc::common_type_t, tc::mp_transform<tc::value_t, tc::range_output_t<Rng>>>;
 		};
 
-		template<typename Rng, typename = void>
+		template<typename Rng>
 		struct from_cont final { using type = void; };
 
-		template<typename Cont>
-		struct from_cont<Cont, std::void_t<typename std::remove_reference_t<Cont>::value_type>> final {
+		template<typename Cont> requires requires { typename std::remove_reference_t<Cont>::value_type; }
+		struct from_cont<Cont> final {
 			using type = typename std::remove_reference_t<Cont>::value_type;
 		};
 
@@ -220,14 +228,8 @@ namespace tc {
 	template<typename Rng>
 	using range_value_t = typename tc::range_value_no_adl::range_value<Rng>::type;
 
-	namespace no_adl {
-		template<typename Rng, typename Enable=void>
-		struct has_range_value /*final*/: tc::constant<false> {};
-
-		template<typename Rng>
-		struct has_range_value<Rng, tc::void_t<tc::range_value_t<Rng>>> /*final*/: tc::constant<true> {};
-	}
-	using no_adl::has_range_value;
+	template<typename Rng>
+	concept has_range_value = requires { typename tc::range_value_t<Rng>; };
 
 	namespace no_adl {
 		template<typename Rng>
@@ -245,9 +247,9 @@ namespace tc {
 	namespace zero_termination_sentinel_adl {
 		struct zero_termination_sentinel final {};
 
-		template<tc::char_type Char>
-		constexpr bool operator==(zero_termination_sentinel, Char const* psz) noexcept {
-			return static_cast<Char>(0) == *psz;
+		template<typename T>
+		constexpr bool operator==(zero_termination_sentinel, T* p) noexcept {
+			return !*VERIFY(p);
 		}
 	}
 	using zero_termination_sentinel_adl::zero_termination_sentinel;
@@ -355,15 +357,17 @@ CHAR_RANGE(char32_t)
 
 #pragma pop_macro("CHAR_RANGE")
 
-namespace tc{
+namespace tc {
 	namespace no_adl {
-		template<template<typename...> typename TTrait, typename Rng>
-		struct is_range_of final: tc::constant<false> {};
-
-		template<template<typename...> typename TTrait, typename Rng> requires TTrait<tc::range_value_t<Rng>>::value
-		struct is_range_of<TTrait, Rng> final: tc::constant<true> {};
+		template<typename TTarget>
+		struct curried_safely_convertible_to {
+			template<typename TSource>
+			using fn = tc::constant<tc::safely_convertible_to<TSource, TTarget>>;
+		};
 	}
-	using no_adl::is_range_of;
+
+	template<typename Rng, typename T>
+	concept range_of = boost::mp11::mp_all_of<tc::range_output_t<Rng>, no_adl::curried_safely_convertible_to<T>::template fn>::value;
 }
 
 namespace tc_begin_end_no_adl {
@@ -433,7 +437,7 @@ namespace std::ranges {
 // range customizations for tuple_like types
 namespace tc {
 	namespace no_adl {
-		template<typename Tuple> requires requires { std::tuple_size<Tuple>::value; } && (!requires { tc::begin(std::declval<Tuple>()); })
+		template<tuple_like Tuple> requires (!requires { tc::begin(std::declval<Tuple>()); })
 		struct constexpr_size_impl<Tuple>: tc::least_uint_constant<std::tuple_size<Tuple>::value> {};
 	}
 
@@ -482,3 +486,25 @@ namespace tc {
 		);
 	}
 }
+
+//////////////////////////////////////////////
+// range customizations for boost::mp11::mp_list
+namespace tc {
+	namespace no_adl {
+		template<typename ... T>
+		struct constexpr_size_impl<boost::mp11::mp_list<T...>>: tc::least_uint_constant<sizeof...(T)> {};
+	}
+
+	// Returns an mp_list<mp_list<...>, ...>, tc::for_each turns it into a range of tc::tuple<std::type_identity<...>, ...>.
+	template<typename ... Lists> requires (tc::instance<std::remove_reference_t<Lists>, boost::mp11::mp_list> && ...)
+	[[nodiscard]] constexpr auto zip(Lists&&...) noexcept {
+		return tc::mp_zip<Lists...>{};
+	}
+
+	// Returns an mp_list<mp_list<tc::constant<0>, ...>, ...>, tc::for_each turns it into a range of tc::tuple<tc::constant<N>, std::type_identity<...>>.
+	template<typename List> requires tc::instance<std::remove_reference_t<List>, boost::mp11::mp_list>
+	[[nodiscard]] constexpr auto enumerate(List&&) noexcept {
+		return tc::mp_enumerate<List>{};
+	}
+}
+

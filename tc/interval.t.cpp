@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -20,7 +20,7 @@ STATICASSERTEQUAL( sizeof(tc::interval<int>), sizeof(int) * 2 );
 UNITTESTDEF(interval_center) {
 
 	{
-		static auto constexpr TestCenterContained=[](auto low, auto high, auto center) noexcept {
+		tc_static_auto_constexpr_lambda(TestCenterContained) = [](auto low, auto high, auto center) noexcept {
 			auto const intvl = tc::make_interval(tc_move_if_owned(low), tc_move_if_owned(high));
 			_ASSERTEQUAL( intvl.midpoint(), center );
 			_ASSERT( intvl.empty() || intvl.contains(intvl.midpoint()) ); // The empty interval contains nothing, not even its center
@@ -33,7 +33,7 @@ UNITTESTDEF(interval_center) {
 		TestCenterContained(0.0, 1.0, 0.5);
 	}
 	{
-		static auto constexpr TestCenterContained=[](auto pos, auto extent) noexcept {
+		tc_static_auto_constexpr_lambda(TestCenterContained) = [](auto pos, auto extent) noexcept {
 			auto intvl = tc::make_centered_interval(pos, tc_move(extent));
 			_ASSERTEQUAL( intvl.midpoint(), pos );
 			_ASSERT( intvl.contains(pos) );
@@ -50,13 +50,13 @@ UNITTESTDEF(interval_center) {
 #if TC_PRIVATE
 	tc::chrono::sys_days const tp = tc::chrono::year_month_day(2000,1,1).time_point();
 
-	static auto constexpr AddDays=[](tc::chrono::sys_days const& tpBase, int const nDays) noexcept {
+	tc_static_auto_constexpr_lambda(AddDays) = [](tc::chrono::sys_days const& tpBase, int const nDays) noexcept {
 		return tpBase + tc::chrono::days(nDays);
 	};
 #endif
 	//expand_length roundtrips
 	{
-		static auto constexpr TestRoundtrip=[](auto intvl, auto extent, auto intvlExpanded) noexcept {
+		tc_static_auto_constexpr_lambda(TestRoundtrip) = [](auto intvl, auto extent, auto intvlExpanded) noexcept {
 			_ASSERTEQUAL(
 				tc_modified(intvl, {
 					_.expand_length(extent);
@@ -91,7 +91,7 @@ UNITTESTDEF(interval_center) {
 	}
 	//OffsetToFit
 	{
-		static auto constexpr TestOffsetToFit=[](auto intvlToFit, auto intvlFitTarget) noexcept {
+		tc_static_auto_constexpr_lambda(TestOffsetToFit) = [](auto intvlToFit, auto intvlFitTarget) noexcept {
 			auto const offset = intvlToFit.OffsetToFit(intvlFitTarget);
 			if (intvlToFit.length() <= intvlFitTarget.length()) {
 				_ASSERT( intvlFitTarget.contains(intvlToFit + offset) );
@@ -161,10 +161,10 @@ UNITTESTDEF(minmax_interval) {
 }
 
 UNITTESTDEF(linear_interval_transform) {
-	static auto constexpr Test = [](auto srcLo, auto srcHi, auto dstLo, auto dstHi, auto... pairsrcdst) noexcept {
+	tc_static_auto_constexpr_lambda(Test) = [](auto srcLo, auto srcHi, auto dstLo, auto dstHi, auto... pairsrcdst) noexcept {
 		tc::linear_interval_transform const intvltrans(tc::interval(srcLo, srcHi), tc::interval(dstLo, dstHi));
 		tc::for_each(
-			tc::forward_as_tuple(
+			tc::tie(
 				// check exactness
 				std::make_pair(srcLo, dstLo),
 				std::make_pair(srcHi, dstHi),

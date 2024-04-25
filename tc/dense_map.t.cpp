@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -50,12 +50,10 @@ UNITTESTDEF(dense_map_with_non_moveable_type) {
 	static_cast<void>(myenumONE);
 	static_cast<void>(myenumTWO);
 
-#ifndef _MSC_VER // MSVC support for guaranteed copy elision seems to be incomplete.
 	// https://developercommunity.visualstudio.com/t/chained-copy-elision-with-function-resul/1404507
 	[[maybe_unused]] auto anoncopyFromTransform = tc::make_dense_map<MyEnum>(47, 11).transform([](int const n) {
 		return NonCopyNonMoveable(n);
 	});
-#endif
 }
 
 UNITTESTDEF(test_dense_map_recursive_transform) {
@@ -150,7 +148,7 @@ UNITTESTDEF(test_dense_map_with_ordering_key) {
 
 UNITTESTDEF(dense_map_tuple) {
 	using T = tc::tuple<bool, MyEnum>;
-	static constexpr tc::dense_map<T, int> dm(1,2,3,4);
+	tc_static_auto_constexpr(dm, tc::make_dense_map<T>(1,2,3,4));
 	_ASSERTEQUAL((dm[T{false, myenumONE}]), 1);
 	_ASSERTEQUAL((dm[T{false, myenumTWO}]), 2);
 	_ASSERTEQUAL((dm[T{true, myenumONE}]), 3);
@@ -158,10 +156,10 @@ UNITTESTDEF(dense_map_tuple) {
 	static_assert(tc::equal(dm, tc::iota(1, 5)));
 	_ASSERT(tc::equal(tc::all_values<T>(), tc::make_array(tc::aggregate_tag, T{false, myenumONE}, T{false, myenumTWO}, T{true, myenumONE}, T{true, myenumTWO})));
 
-	STATICASSERTSAME(decltype(tc::all_constants<MyEnum>), (tc::tuple<tc::constant<myenumONE>, tc::constant<myenumTWO>> const));
+	STATICASSERTSAME(decltype(tc::all_constants<MyEnum>), TC_FWD(tc::tuple<tc::constant<myenumONE>, tc::constant<myenumTWO>> const));
 
 #if defined(__clang__) || defined(_MSC_VER) // Fixed in GCC 13: https://gcc.gnu.org/bugzilla/show_bug.cgi?id=92505
-	STATICASSERTSAME(decltype(tc::all_constants<tc::tuple<MyEnum, MyEnum>>), (tc::tuple<
+	STATICASSERTSAME(decltype(tc::all_constants<tc::tuple<MyEnum, MyEnum>>), TC_FWD(tc::tuple<
 		tc::constant<tc::make_tuple(myenumONE, myenumONE)>,
 		tc::constant<tc::make_tuple(myenumONE, myenumTWO)>,
 		tc::constant<tc::make_tuple(myenumTWO, myenumONE)>,

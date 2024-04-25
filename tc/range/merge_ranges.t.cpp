@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -16,8 +16,8 @@
 UNITTESTDEF(merge_ranges_with_simple_usecase) {
 
 	tc::vector<tc::vector<int>> vecvecn;
-	tc::cont_emplace_back(vecvecn, std::initializer_list<int>{1,3,5});
-	tc::cont_emplace_back(vecvecn, std::initializer_list<int>{2,4});
+	tc::cont_emplace_back(vecvecn, tc::make_array(tc::aggregate_tag,1,3,5));
+	tc::cont_emplace_back(vecvecn, tc::make_array(tc::aggregate_tag,2,4));
 
 	int N=0;
 	tc::for_each(
@@ -74,18 +74,18 @@ UNITTESTDEF(zip_range_adaptor_test) {
 
 UNITTESTDEF(merge_ranges_with_unique_range_2) {
 	tc::vector<tc::vector<int>> vecvecn;
-	tc::cont_emplace_back(vecvecn, std::initializer_list<int>{10});
-	tc::cont_emplace_back(vecvecn, std::initializer_list<int>{1,1,3,3,3,5,5,5,5,11});
-	tc::cont_emplace_back(vecvecn, std::initializer_list<int>{6,9});
-	tc::cont_emplace_back(vecvecn, std::initializer_list<int>{2,2,4,12});
-	tc::cont_emplace_back(vecvecn, std::initializer_list<int>{7,8});
+	tc::cont_emplace_back(vecvecn, tc::make_array(tc::aggregate_tag,10));
+	tc::cont_emplace_back(vecvecn, tc::make_array(tc::aggregate_tag,1,1,3,3,3,5,5,5,5,11));
+	tc::cont_emplace_back(vecvecn, tc::make_array(tc::aggregate_tag,6,9));
+	tc::cont_emplace_back(vecvecn, tc::make_array(tc::aggregate_tag,2,2,4,12));
+	tc::cont_emplace_back(vecvecn, tc::make_array(tc::aggregate_tag,7,8));
 
 	tc::vector<tc::vector<int>> vecvecn2;
-	tc::cont_emplace_back(vecvecn2, std::initializer_list<int>{100});
-	tc::cont_emplace_back(vecvecn2, std::initializer_list<int>{101,102,103,104,105,106,107,108,109,110});
-	tc::cont_emplace_back(vecvecn2, std::initializer_list<int>{111,112});
-	tc::cont_emplace_back(vecvecn2, std::initializer_list<int>{113,114,115,116});
-	tc::cont_emplace_back(vecvecn2, std::initializer_list<int>{117,118});
+	tc::cont_emplace_back(vecvecn2, tc::make_array(tc::aggregate_tag,100));
+	tc::cont_emplace_back(vecvecn2, tc::make_array(tc::aggregate_tag,101,102,103,104,105,106,107,108,109,110));
+	tc::cont_emplace_back(vecvecn2, tc::make_array(tc::aggregate_tag,111,112));
+	tc::cont_emplace_back(vecvecn2, tc::make_array(tc::aggregate_tag,113,114,115,116));
+	tc::cont_emplace_back(vecvecn2, tc::make_array(tc::aggregate_tag,117,118));
 
 	auto lesspred = tc::projected(tc::fn_less(), tc_fn(tc::get<0>));
 

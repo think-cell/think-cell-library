@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -33,7 +33,7 @@ namespace tc {
 			}
 
 			constexpr auto operator*() const& return_decltype_noexcept( *m_ref )
-			constexpr auto operator*() && return_decltype_xvalue_by_ref_noexcept( *tc_move(m_ref) )
+			constexpr auto operator*() && return_decltype_allow_xvalue_noexcept( *tc_move(m_ref) )
 			constexpr auto operator*() const&& noexcept = delete;
 		};
 	}

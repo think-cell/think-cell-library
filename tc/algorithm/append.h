@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -21,7 +21,10 @@
 
 #include "../range/subrange.h"
 #include "../range/transform.h"
+#include "../range/repeat_n.h"
 #include "../range/concat_adaptor.h"
+
+#include <boost/range/algorithm/copy.hpp>
 
 namespace tc {
 	namespace append_detail {
@@ -38,12 +41,12 @@ namespace tc {
 		concept range_insertable =
 			(!conv_enc_needed<Rng, tc::range_value_t<Cont>>) &&
 			has_mem_fn_reserve<Cont> &&
-			!tc::is_concat_range<std::remove_cvref_t<Rng>>::value && // it might be more efficient to append by ranges than by iterators
 			tc::common_range<Rng> &&
 			std::convertible_to<
 				typename std::iterator_traits<tc::iterator_t<Rng>>::iterator_category,
 				std::random_access_iterator_tag
 			> &&
+			(!tc::prefers_for_each<Rng>) && // it might be more efficient to append by ranges than by iterators
 			tc::econstructionIMPLICIT==tc::construction_restrictiveness<tc::range_value_t<Cont>, std::iter_reference_t<tc::iterator_t<Rng>>>::value;
 	}
 
@@ -77,6 +80,33 @@ namespace tc {
 			void chunk(append_detail::conv_enc_needed<tc::range_value_t<Cont>> auto&& rng) const& return_MAYTHROW(
 				tc::implicit_cast<void>(tc::for_each(tc::convert_enc<tc::range_value_t<Cont>>(tc_move_if_owned(rng)), *this))
 			)
+
+			template<ENABLE_SFINAE> requires std::is_same<tc::range_value_t<SFINAE_TYPE(Cont)&>, unsigned char>::value
+			auto write_offset(std::size_t n) const& noexcept {
+				struct stream_pos_writer final {
+					Cont& m_cont;
+					decltype(tc::size_raw(m_cont)) m_pos;
+
+					explicit stream_pos_writer(Cont& cont) noexcept
+						: m_cont(cont)
+						, m_pos(tc::size_raw(m_cont))
+					{}
+
+					void mark() & noexcept {
+						// The offset is counted from _after_ the written offset.
+						boost::copy(tc::as_blob(tc::explicit_cast<std::uint32_t>(tc::size_raw(m_cont)-m_pos-sizeof(std::uint32_t))), tc::begin_next(m_cont, m_pos));
+						m_pos+=sizeof(std::uint32_t);
+					}
+
+					void mark_null() & noexcept {
+						boost::copy(tc::as_blob(std::numeric_limits<std::uint32_t>::max()), tc::begin_next(m_cont, m_pos));
+						m_pos+=sizeof(std::uint32_t);
+					}
+				};
+				stream_pos_writer ow(m_cont);
+				tc::for_each(tc::repeat_n(sizeof(std::uint32_t)*n, tc::explicit_cast<unsigned char>(0)), *this);
+				return ow;
+			}
 		};
 
 		template< typename Cont >
@@ -211,7 +241,7 @@ namespace tc {
 
 		template<appendable_container TTarget, typename Rng0, tc::appendable<TTarget&>... RngN>
 			requires explicit_convert_to_container_detail::use_ctor<TTarget, Rng0, RngN...>::value
-		constexpr TTarget explicit_convert_impl(adl_tag_t, tc::type::identity<TTarget>, Rng0&& rng0, RngN&&... rngN) MAYTHROW {
+		constexpr TTarget explicit_convert_impl(adl_tag_t, std::type_identity<TTarget>, Rng0&& rng0, RngN&&... rngN) MAYTHROW {
 			if constexpr(0<sizeof...(RngN)) {
 				TTarget cont=tc_move_if_owned(rng0);
  				tc::append(cont, tc_move_if_owned(rngN)...);
@@ -223,7 +253,7 @@ namespace tc {
 
 		template<appendable_container TTarget, tc::appendable<TTarget&> Rng0, tc::appendable<TTarget&>... RngN>
 			requires (!explicit_convert_to_container_detail::use_ctor<TTarget, Rng0, RngN...>::value)
-		constexpr TTarget explicit_convert_impl(adl_tag_t, tc::type::identity<TTarget>, Rng0&& rng0, RngN&&... rngN) MAYTHROW {
+		constexpr TTarget explicit_convert_impl(adl_tag_t, std::type_identity<TTarget>, Rng0&& rng0, RngN&&... rngN) MAYTHROW {
 			TTarget cont;
  			tc::append(cont, tc_move_if_owned(rng0), tc_move_if_owned(rngN)...);
 			return cont;

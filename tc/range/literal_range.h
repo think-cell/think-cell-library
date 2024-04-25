@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -16,10 +16,16 @@ namespace tc {
 		template <typename T, auto ... Ts>
 		inline constexpr T const array[] = {T(Ts)...};
 
-		// We make it static, so it matches a string literal.
-		// That way, compilers are able to de-duplicate it: https://godbolt.org/z/4bbYK5E95
 		template <tc::char_like T, auto ... Ts>
-		static constexpr T const str[] = {T(Ts)..., T()};
+#if defined(__clang__) && !defined(_DEBUG)
+		// We make it static, so it matches a string literal.
+		// That way, compilers are able to de-duplicate it: https://godbolt.org/z/9hjjxrTnx
+		// This de-duplicate only works with clang release build
+		static
+#else
+		inline
+#endif
+		constexpr T const str[] = {T(Ts)..., T()};
 	}
 
 	namespace literal_range_adl {

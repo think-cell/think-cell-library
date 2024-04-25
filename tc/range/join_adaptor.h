@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -17,33 +17,29 @@
 #include "reverse_adaptor.h"
 
 namespace tc {
-	void join();
+	DECLARE_TMPL_FUNC_WITH_CUSTOMIZATIONS(join)
 	
 	tc_define_fn(size_linear_raw)
 
 	namespace no_adl {
 		namespace join_adaptor_detail {
-			template <typename RngRng>
-			struct is_joinable_with_iterators : tc::constant<false> {};
+			template<typename RngRng>
+			concept joinable_with_iterators = tc::range_with_iterators<RngRng>
+				&& !tc::has_stashing_index<std::remove_reference_t<RngRng>>::value // RngRgn must not have "stashing" index/iterator: copying the composite index would invalidate the inner index/iterator.
+				&& tc::borrowed_range<std::iter_reference_t<tc::iterator_t<RngRng>>>;
 
-			template <tc::range_with_iterators RngRng>
-			struct is_joinable_with_iterators<RngRng> : tc::constant<
-				tc::range_with_iterators<std::iter_reference_t<tc::iterator_t<RngRng>>> &&
-				std::is_lvalue_reference<std::iter_reference_t<tc::iterator_t<RngRng>>>::value
-			> {};
-
-			template <typename RngRng, typename CommonOutput = tc::type::apply_t<
-				tc::common_reference_xvalue_as_ref_t,
-				tc::type::transform_t<
-					tc::range_output_t<RngRng>,
-					std::add_rvalue_reference_t
+			template <typename RngRng, typename CommonOutput = boost::mp11::mp_apply<
+				tc::common_reference_t,
+				tc::mp_transform<
+					std::add_rvalue_reference_t,
+					tc::range_output_t<RngRng>
 				>>
 			>
 				requires tc::has_constexpr_size<CommonOutput>
 			auto constexpr rng_constexpr_size = tc::constexpr_size<CommonOutput>;
 		}
 
-		template<typename RngRng, bool bHasIterator = join_adaptor_detail::is_joinable_with_iterators<RngRng>::value>
+		template<typename RngRng, bool bHasIterator = join_adaptor_detail::joinable_with_iterators<RngRng>>
 		struct join_adaptor;
 
 		template<typename Sink, bool bReverse>
@@ -99,7 +95,7 @@ namespace tc {
 			)
 
 			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, join_adaptor>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
-			friend auto range_output_t_impl(Self&&) -> tc::type::unique_t<tc::type::join_t<tc::type::transform_t<tc::range_output_t<decltype(std::declval<Self>().base_range())>, tc::range_output_t>>> {} // unevaluated
+			friend auto range_output_t_impl(Self&&) -> boost::mp11::mp_unique<boost::mp11::mp_flatten<tc::mp_transform<tc::range_output_t, tc::range_output_t<decltype(std::declval<Self>().base_range())>>>> {} // unevaluated
 			
 		};
 
@@ -119,14 +115,12 @@ namespace tc {
 		public:
 			using typename this_type::range_iterator_from_index::tc_index;
 
-			static_assert(!tc::has_stashing_index<std::remove_reference_t<RngRng>>::value,
-				"RngRgn must not have \"stashing\" index/iterator: copying the composite index would invalidate the inner index/iterator."
-			);
 			static constexpr bool c_bHasStashingIndex=tc::has_stashing_index<std::remove_reference_t<std::iter_reference_t<tc::iterator_t<RngRng>>>>::value;
+			static constexpr bool c_bPrefersForEach = true;
 		private:
 			tc::index_t<std::remove_reference_t<std::iter_reference_t<tc::iterator_t<RngRng>>>> find_valid_index(tc::index_t<std::remove_reference_t<RngRng>>& idxFirst) const& noexcept {
 				while (!tc::at_end_index(this->base_range(), idxFirst)) {
-					auto& rngSecond = tc::dereference_index(this->base_range_best_access(), idxFirst);
+					decltype(auto) rngSecond = tc::dereference_index(this->base_range_best_access(), idxFirst);
 					auto idxSecond = tc::begin_index(rngSecond);
 					if (tc::at_end_index(rngSecond, idxSecond)) {
 						tc::increment_index(this->base_range(), idxFirst);
@@ -164,11 +158,15 @@ namespace tc {
 				}
 			}
 
-			STATIC_FINAL_MOD(constexpr, decrement_index)(tc_index& idx) const& noexcept -> void {
+			STATIC_FINAL_MOD(constexpr, decrement_index)(tc_index& idx) const& noexcept -> void
+				requires tc::has_decrement_index<std::remove_reference_t<RngRng>>
+					&& tc::has_end_index<std::remove_reference_t<std::iter_reference_t<tc::iterator_t<RngRng>>>>
+					&& tc::has_decrement_index<std::remove_reference_t<std::iter_reference_t<tc::iterator_t<RngRng>>>>
+			{
 				auto const funcReverseFindValidIndex = [&]() noexcept {
 					for (;;) {
 						tc::decrement_index(this->base_range(), tc::get<0>(idx));
-						auto& rngSecond = tc::dereference_index(this->base_range_best_access(), tc::get<0>(idx));
+						decltype(auto) rngSecond = tc::dereference_index(this->base_range_best_access(), tc::get<0>(idx));
 						tc::get<1>(idx) = tc::end_index(rngSecond);
 						if (tc::begin_index(rngSecond) != tc::get<1>(idx)) {
 							tc::decrement_index(rngSecond, tc::get<1>(idx));
@@ -188,12 +186,18 @@ namespace tc {
 				}
 			}
 
-			STATIC_FINAL_MOD(constexpr, dereference_index)(tc_index const& idx) const& noexcept -> decltype(auto) {
-				return tc::dereference_index(tc::dereference_index(this->base_range(), tc::get<0>(idx)), tc::get<1>(idx));
+			STATIC_FINAL_MOD(constexpr, dereference_index)(auto&& idx) const& MAYTHROW -> decltype(auto) {
+				return tc::dereference_index(
+					tc::dereference_index(this->base_range(), tc::get<0>(tc_move_if_owned(idx))),
+					tc::get<1>(tc_move_if_owned(idx))
+				);
 			}
 
-			STATIC_FINAL_MOD(constexpr, dereference_index)(tc_index const& idx) & noexcept -> decltype(auto) {
-				return tc::dereference_index(tc::dereference_index(this->base_range(), tc::get<0>(idx)), tc::get<1>(idx));
+			STATIC_FINAL_MOD(constexpr, dereference_index)(auto&& idx) & MAYTHROW -> decltype(auto) {
+				return tc::dereference_index(
+					tc::dereference_index(this->base_range(), tc::get<0>(tc_move_if_owned(idx))),
+					tc::get<1>(tc_move_if_owned(idx))
+				);
 			}
 
 			static constexpr auto element_base_index(tc_index const& idx) noexcept {

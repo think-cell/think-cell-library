@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -14,14 +14,16 @@
 #include "../container/insert.h"
 #include "for_each_xxx.h"
 
+#include <tuple>
+
 STATICASSERTEQUAL(tc_internal_continue_if_not_break(tc::break_), tc::break_);
 STATICASSERTEQUAL(tc_internal_continue_if_not_break(tc::continue_), tc::continue_);
-STATICASSERTSAME((decltype(tc_internal_continue_if_not_break(tc::break_))), (tc::break_or_continue));
-STATICASSERTSAME((decltype(tc_internal_continue_if_not_break(tc::continue_))), (tc::break_or_continue));
-STATICASSERTSAME((decltype(tc_internal_continue_if_not_break(tc::constant<tc::break_>()))), (tc::constant<tc::break_>));
-STATICASSERTSAME((decltype(tc_internal_continue_if_not_break(tc::constant<tc::continue_>()))), (tc::constant<tc::continue_>));
-STATICASSERTSAME((decltype(tc_internal_continue_if_not_break(23))), (tc::constant<tc::continue_>));
-STATICASSERTSAME((decltype(tc_internal_continue_if_not_break(void()))), (tc::constant<tc::continue_>));
+STATICASSERTSAME(decltype(tc_internal_continue_if_not_break(tc::break_)), tc::break_or_continue);
+STATICASSERTSAME(decltype(tc_internal_continue_if_not_break(tc::continue_)), tc::break_or_continue);
+STATICASSERTSAME(decltype(tc_internal_continue_if_not_break(tc::constant<tc::break_>())), tc::constant<tc::break_>);
+STATICASSERTSAME(decltype(tc_internal_continue_if_not_break(tc::constant<tc::continue_>())), tc::constant<tc::continue_>);
+STATICASSERTSAME(decltype(tc_internal_continue_if_not_break(23)), tc::constant<tc::continue_>);
+STATICASSERTSAME(decltype(tc_internal_continue_if_not_break(void())), tc::constant<tc::continue_>);
 
 
 //---- for_each ---------------------------------------------------------------------------------------------------------------
@@ -285,4 +287,94 @@ UNITTESTDEF(ordered_pairs) {
 	_ASSERT(tc::empty(tc::ordered_pairs(tc::single(1))));
 }
 
+//-----------------------------------------------------------------------------------------------------------------------------
+
+STATICASSERTSAME(TC_FWD(tc::range_output_t<tc::tuple<int, double&, int, char&&>>), TC_FWD(boost::mp11::mp_list<int, double&, char>));
+STATICASSERTSAME(TC_FWD(tc::range_output_t<tc::tuple<int, double&, int, char&&>&>), TC_FWD(boost::mp11::mp_list<int&, double&, char&>));
+STATICASSERTSAME(TC_FWD(tc::range_output_t<std::pair<int, double&>>), TC_FWD(boost::mp11::mp_list<int, double&>));
+STATICASSERTSAME(TC_FWD(tc::range_output_t<std::pair<int, int>&>), TC_FWD(boost::mp11::mp_list<int&>));
+STATICASSERTSAME(TC_FWD(tc::range_output_t<std::pair<int, int&>&>), TC_FWD(boost::mp11::mp_list<int&>));
+STATICASSERTSAME(TC_FWD(tc::range_output_t<std::pair<int*, int*>>), TC_FWD(boost::mp11::mp_list<int&>)); // Beware! pair<It, It> has semantics of range [first, second[
+
+UNITTESTDEF(for_each_tuple) {
+	auto const CheckTuple = [](auto&& tpl) noexcept {
+		int i = 0;
+		tc::for_each(tc_move_if_owned(tpl), [&](auto&& x) {
+			switch_no_default(i++) {
+#pragma push_macro("CASE")
+#define CASE(k, type, val) \
+		case k: \
+			if constexpr(std::same_as<tc::remove_rvalue_reference_t<decltype(x)>, tc::remove_rvalue_reference_t<decltype(val)>>) { \
+				_ASSERTEQUAL(x, TC_FWD(val)); \
+			} else { \
+				_ASSERTFALSE; \
+			} \
+			break;
+
+				CASE(0, int, 3)
+				CASE(1, double, tc::as_lvalue(1.4))
+				CASE(2, int, 59)
+				CASE(3, char, std::move('f'))
+#pragma pop_macro("CASE")
+			}
+		});
+		_ASSERTEQUAL(i, tc::size(tpl));
+	};
+
+	CheckTuple(tc::tuple<int, double&, int, char&&>{3, tc::as_lvalue(1.4), 59, std::move('f')});
+	CheckTuple(std::tuple<int, double&, int, char&&>{3, tc::as_lvalue(1.4), 59, std::move('f')});
+	CheckTuple(std::pair<int, double&>{3, tc::as_lvalue(1.4)});
+}
+
+//-----------------------------------------------------------------------------------------------------------------------------
+UNITTESTDEF(for_each_mp_list) {
+	auto i = 0;
+	tc::for_each(boost::mp11::mp_list<int, float, char>{}, [&]<typename T>(std::type_identity<T>) {
+		switch_no_default(i) {
+		case 0:
+			_ASSERT(std::same_as<T, int>);
+			break;
+		case 1:
+			_ASSERT(std::same_as<T, float>);
+			break;
+		case 2:
+			_ASSERT(std::same_as<T, char>);
+			break;
+		}
+		++i;
+	});
+
+	i = 0;
+	tc::for_each(tc::zip(boost::mp11::mp_list<int, float, char>{}, boost::mp11::mp_list<int*, float*, char*>{}), [&]<typename T>(std::type_identity<T>, std::type_identity<T*>) {
+		switch_no_default(i) {
+		case 0:
+			_ASSERT(std::same_as<T, int>);
+			break;
+		case 1:
+			_ASSERT(std::same_as<T, float>);
+			break;
+		case 2:
+			_ASSERT(std::same_as<T, char>);
+			break;
+		}
+		++i;
+	});
+
+	i = 0;
+	tc::for_each(tc::enumerate(boost::mp11::mp_list<int, float, char>{}), [&]<int I, typename T>(tc::constant<I>, std::type_identity<T>) {
+		_ASSERTEQUAL(I, i);
+		switch_no_default(i) {
+		case 0:
+			_ASSERT(std::same_as<T, int>);
+			break;
+		case 1:
+			_ASSERT(std::same_as<T, float>);
+			break;
+		case 2:
+			_ASSERT(std::same_as<T, char>);
+			break;
+		}
+		++i;
+	});
+}
 }

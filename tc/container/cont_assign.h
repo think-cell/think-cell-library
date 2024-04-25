@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -78,27 +78,37 @@ namespace tc {
 
 	template< typename Cont, typename Rng >
 	bool cont_change(Cont& cont, Rng const& rng) noexcept {
-		auto itcont=tc::begin(cont);
-		auto const itcontEnd=tc::end(cont);
-		auto itrng=tc::begin(rng);
-		auto const itrngEnd=tc::end(rng);
-		for(;;) {
-			if( itcont==itcontEnd ) {
-				if( itrng==itrngEnd ) {
-					return false;
-				} else {
+		if constexpr(std::is_same<Rng, tc::empty_range>::value) {
+			// TODO: make work with generators, then this branch should be subsumed in it
+			if(!tc::empty(cont)) {
+				tc::cont_assign(cont);
+				return true;
+			} else {
+				return false;
+			}
+		} else {
+			auto itcont=tc::begin(cont);
+			auto const itcontEnd=tc::end(cont);
+			auto itrng=tc::begin(rng);
+			auto const itrngEnd=tc::end(rng);
+			for(;;) {
+				if( itcont==itcontEnd ) {
+					if( itrng==itrngEnd ) {
+						return false;
+					} else {
+						break;
+					}
+				}
+				if( itrng==itrngEnd || !tc::equal_to(*itcont, *itrng) ) {
+					tc::take_inplace( cont, itcont );
 					break;
 				}
+				++itcont;
+				++itrng;
 			}
-			if( itrng==itrngEnd || !tc::equal_to(*itcont, *itrng) ) {
-				tc::take_inplace( cont, itcont );
-				break;
-			}
-			++itcont;
-			++itrng;
+			tc::append(cont,tc::drop(rng,itrng));
+			return true;
 		}
-		tc::append(cont,tc::drop(rng,itrng));
-		return true;
 	}
 
 	template<typename T, std::size_t N, typename Rng>

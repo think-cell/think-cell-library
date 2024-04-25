@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -42,7 +42,7 @@ namespace tc {
 				tc::for_each(
 					tc_move_if_owned(self).base_range(),
 					[&](auto&& t) MAYTHROW -> tc::break_or_continue {
-						if (tc::invoke(self.m_pred, tc::as_const(t))) {
+						if (tc_invoke(self.m_pred, tc::as_const(t))) {
 							boc = tc::continue_if_not_break(sink, tc_move_if_owned(t));
 							return boc;
 						} else {
@@ -68,6 +68,8 @@ namespace tc {
 
 		public:
 			using typename base_::tc_index;
+			static constexpr bool c_bHasStashingIndex=tc::has_stashing_index<std::remove_reference_t<Rng>>::value;
+			static constexpr bool c_bPrefersForEach = tc::prefers_for_each<std::remove_reference_t<Rng>>;
 
 			constexpr take_while_adaptor() = default;
 			using base_::base_;
@@ -76,13 +78,8 @@ namespace tc {
 			STATIC_FINAL_MOD(constexpr, end_index)() const& = delete;  // let range_iterator_from_index::end return end_sentinel
 
 			STATIC_FINAL_MOD(constexpr, at_end_index)(tc_index const& idx) const& return_MAYTHROW(
-				tc::at_end_index(this->base_range(), idx) || !tc::invoke(this->m_pred, tc::as_const(this->dereference_index(idx)))
+				tc::at_end_index(this->base_range(), idx) || !tc_invoke(this->m_pred, tc::as_const(this->dereference_index(idx)))
 			)
-
-		public:
-			constexpr static auto element_base_index(tc_index const& idx) noexcept {
-				return idx;
-			}
 		};
 	}
 	using no_adl::take_while_adaptor;

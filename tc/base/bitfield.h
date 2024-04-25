@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -20,18 +20,7 @@
 namespace tc {
 	template<typename Uint>
 	[[nodiscard]] constexpr int index_of_least_significant_bit(Uint u) noexcept {
-#if defined(_MSC_VER) && defined(_M_ARM64EC)
-		// https://developercommunity.visualstudio.com/t/Usage-of-std::countr_zero-when-compiling/1645529
-		if( std::is_constant_evaluated() ) {
-			return std::_Countr_zero_fallback(VERIFYPRED(u, 0 != _));
-		} else {
-			unsigned long nIndex;
-			VERIFY(_BitScanForward64(&nIndex, VERIFYPRED(u, 0 != _)));
-			return nIndex;
-		}
-#else
 		return std::countr_zero(VERIFYPRED(u, 0 != _));
-#endif
 	}
 
 	template<typename Uint>

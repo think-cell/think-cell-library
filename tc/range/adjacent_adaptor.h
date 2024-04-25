@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -16,6 +16,82 @@
 #include "../algorithm/size_bounded.h"
 
 namespace tc {
+	namespace adjacent_adaptor_detail {
+		namespace no_adl {
+			template<typename Sink, typename T, std::size_t... i>
+			struct adjacent_adaptor_generator_base_sink { // MSVC workaround: not a lambda for shorter symbol names
+				static auto constexpr N = sizeof...(i) + 1; // corresponds to adjacent_adaptor<Rng, N+1>
+				Sink m_sink;
+				std::array<tc::storage_for<T>, N> m_aoval;
+				std::size_t m_n = 0;
+
+				constexpr ~adjacent_adaptor_generator_base_sink() {
+					tc::for_each(tc::begin_next<tc::return_take>(m_aoval, tc::min(m_n, N)), tc_mem_fn(.dtor));
+				}
+
+				constexpr auto operator()(auto&& u) & MAYTHROW {
+					auto const CallSink = [&]() MAYTHROW {
+						return tc::continue_if_not_break( // MAYTHROW
+							m_sink,
+							tc::tie(
+								tc_move_always(*tc::at(m_aoval, m_n % N)),
+								*tc::at(m_aoval, (m_n + i + 1) % N)...,
+								u
+							)
+						);
+					};
+					if (m_n < N) {
+						tc::at(m_aoval, m_n).ctor(tc_move_if_owned(u));
+					} else {
+						tc_return_if_break( CallSink() ); // MAYTHROW
+						tc::assign_explicit_cast(*tc::at(m_aoval, m_n % N), tc_move_if_owned(u)); // MAYTHROW
+					}
+					++m_n;
+					return tc::implicit_cast<tc::common_type_t<decltype(CallSink()), tc::constant<tc::continue_>>>(tc::constant<tc::continue_>());
+				}
+			};
+		}
+
+		template<typename Self, typename Sink, std::size_t... i /*=0,1,...,N-2*/, std::size_t N = sizeof...(i) + 1>
+		constexpr auto adjacent_adaptor_for_each(Self&& self, Sink sink, std::index_sequence<i...>) MAYTHROW {
+			if constexpr (tc::range_with_iterators<decltype(self.base_range())>) {
+				auto const GenerateAdjacentTuples = [&]() MAYTHROW {
+					auto const itEnd = tc::end(self.base_range());
+					auto it = tc::begin(self.base_range());
+					auto ait=tc::explicit_cast<std::array<
+						tc::iterator_cache<decltype(it)>,
+						N
+					>>(tc::func_tag, [&](std::size_t) noexcept { return it++; });
+
+					for (;;) {
+						for (std::size_t n = 0; n<N; ++n) {
+							if (it == itEnd) {
+								return tc::continue_if_not_break(sink, tc::tie(*tc_move_always(tc::at(ait, n)), *tc_move_always(tc::at(ait, (n + i + 1) % N))...)); // MAYTHROW
+							}
+							tc_return_if_break(tc::continue_if_not_break(sink, tc::tie(*tc_move_always(tc::at(ait, n)), *tc::at(ait, (n + i + 1) % N)...))) // MAYTHROW
+							tc::at(ait, n) = it;
+							++it;
+						}
+					}
+				};
+				return tc_conditional_prvalue_as_val(
+					tc::size_bounded(self.base_range(), N)<N,
+					tc::constant<tc::continue_>(),
+					GenerateAdjacentTuples() // MAYTHROW
+				);
+			} else {
+				return tc::for_each(
+					tc_move_if_owned(self).base_range(),
+					std::ref(tc::as_lvalue(no_adl::adjacent_adaptor_generator_base_sink<
+						tc::decay_t<Sink>,
+						tc::range_value_t<decltype(std::declval<Self>().base_range())>,
+						i...
+					>{tc_move(sink)}))
+				);
+			}
+		}
+	}
+
 	namespace adjacent_adaptor_adl {
 		template<typename Rng, std::size_t N, bool HasIterator = tc::range_with_iterators<Rng>>
 		struct adjacent_adaptor;
@@ -27,7 +103,7 @@ namespace tc {
 
 			template<tc::decayed_derived_from<adjacent_adaptor> Self, typename Sink>
 			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
-				return internal_for_each(
+				return adjacent_adaptor_detail::adjacent_adaptor_for_each(
 					tc_move_if_owned(self),
 					tc_move_if_owned(sink),
 					std::make_index_sequence<N - (tc::range_with_iterators<Rng> ? 1 : 2)>()
@@ -45,74 +121,19 @@ namespace tc {
 			}
 
 		private:
-			template<typename Self, typename Sink, std::size_t... i /*=0,1,...,N-2*/>
-			static constexpr auto internal_for_each(Self&& self, Sink const sink, std::index_sequence<i...>) MAYTHROW {
-				if constexpr (tc::range_with_iterators<Rng>) {
-					auto const GenerateAdjacentTuples = [&]() MAYTHROW {
-						auto const itEnd = tc::end(self.base_range());
-						auto it = tc::begin(self.base_range());
-						auto ait=tc::explicit_cast<std::array<
-							tc::iterator_cache<decltype(it)>,
-							N
-						>>(tc::func_tag, [&](std::size_t) noexcept { return it++; });
-
-						for (;;) {
-							for (std::size_t n = 0; n<N; ++n) {
-								if (it == itEnd) {
-									return tc::continue_if_not_break(sink, tc::forward_as_tuple(*tc_move_always(tc::at(ait, n)), *tc_move_always(tc::at(ait, (n + i + 1) % N))...)); // MAYTHROW
-								}
-								tc_yield(sink, tc::forward_as_tuple(*tc_move_always(tc::at(ait, n)), *tc::at(ait, (n + i + 1) % N)...)); // MAYTHROW
-								tc::at(ait, n) = it;
-								++it;
-							}
-						}
-					};
-					return tc_conditional_prvalue_as_val(
-						tc::size_bounded(self.base_range(), N)<N,
-						tc::constant<tc::continue_>(),
-						GenerateAdjacentTuples() // MAYTHROW
-					);
-				} else {
-					std::array<tc::storage_for<tc::range_value_t<decltype(std::declval<Self>().base_range())>>, N - 1> aoval;
-					std::size_t n = 0;
-					tc_scope_exit { tc::for_each(tc::begin_next<tc::return_take>(aoval, tc::min(n, N - 1)), tc_mem_fn(.dtor)); };
-
-					return tc::for_each(tc_move_if_owned(self).base_range(), [&](auto&& u) MAYTHROW {
-						auto const CallSink = [&]() MAYTHROW {
-							return tc::continue_if_not_break( // MAYTHROW
-								sink,
-								tc::forward_as_tuple(
-									tc_move_always(*tc::at(aoval, n % (N - 1))),
-									*tc::at(aoval, (n + i + 1) % (N - 1))...,
-									u
-								)
-							);
-						};
-						if (n < N - 1) {
-							tc::at(aoval, n).ctor(tc_move_if_owned(u));
-						} else {
-							tc_return_if_break( CallSink() ); // MAYTHROW
-							tc::renew(*tc::at(aoval, n % (N - 1)), tc_move_if_owned(u));
-						}
-						++n;
-						return tc::implicit_cast<tc::common_type_t<decltype(CallSink()), tc::constant<tc::continue_>>>(tc::constant<tc::continue_>());
-					});
-				}
-			}
-
 			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, adjacent_adaptor>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
-			friend auto range_output_t_impl(Self&&) -> tc::type::list<tc::type::apply_t<tc::tuple,
-				tc::type::repeat_n_t<
-					N,
-					tc::type::apply_t<
-						tc::common_reference_xvalue_as_ref_t,
-						tc::type::transform_t<
-							tc::range_output_t<decltype(std::declval<Self>().base_range())>,
-							std::add_rvalue_reference_t
+			friend auto range_output_t_impl(Self&&) -> boost::mp11::mp_list<
+				boost::mp11::mp_repeat_c<
+					tc::tuple<boost::mp11::mp_apply<
+						tc::common_reference_t,
+						tc::mp_transform<
+							std::add_rvalue_reference_t,
+							tc::range_output_t<decltype(std::declval<Self>().base_range())>
 						>
-					>
+					>>,
+					N
 				>
-			>> {} // unevaluated
+			> {} // unevaluated
 		};
 	}
 
@@ -151,6 +172,7 @@ namespace tc {
 		public:
 			using typename this_type::range_iterator_from_index::tc_index;
 			static constexpr bool c_bHasStashingIndex=std::disjunction<tc::has_stashing_index<std::remove_reference_t<Rng>>>::value;
+			static constexpr bool c_bPrefersForEach = true;
 
 			using adjacent_adaptor<Rng, N, false>::adjacent_adaptor;
 
@@ -205,21 +227,21 @@ namespace tc {
 				tc::decrement_index(this->base_range(), idx.m_aidx[0]);
 			}
 
-			template<typename Self, std::size_t... I>
-			static constexpr auto dereference_index_impl(Self&& self, tc_index const& idx, std::index_sequence<I...>) noexcept
-				-> tc::tuple<decltype(tc::dereference_index(self.base_range(), idx.m_aidx[I]))...>
+			template<std::size_t... I>
+			static constexpr auto dereference_index_impl(auto& self, auto&& idx, std::index_sequence<I...>) MAYTHROW
+				-> tc::tuple<decltype(tc::dereference_index(self.base_range(), tc_move_if_owned(idx).m_aidx[I]))...>
 			{
 				return {{
-					{ tc::dereference_index(self.base_range(), idx.m_aidx[I]) }...
+					{ tc::dereference_index(self.base_range(), tc_move_if_owned(idx).m_aidx[I]) }...
 				}};
 			}
 
-			STATIC_FINAL_MOD(constexpr, dereference_index)(tc_index const& idx) const& noexcept {
-				return dereference_index_impl(*this, idx, std::make_index_sequence<N>());
+			STATIC_FINAL_MOD(constexpr, dereference_index)(auto&& idx) const& MAYTHROW {
+				return dereference_index_impl(*this, tc_move_if_owned(idx), std::make_index_sequence<N>());
 			}
 
-			STATIC_FINAL_MOD(constexpr, dereference_index)(tc_index const& idx) & noexcept {
-				return dereference_index_impl(*this, idx, std::make_index_sequence<N>());
+			STATIC_FINAL_MOD(constexpr, dereference_index)(auto&& idx) & MAYTHROW {
+				return dereference_index_impl(*this, tc_move_if_owned(idx), std::make_index_sequence<N>());
 			}
 
 			STATIC_FINAL_MOD(

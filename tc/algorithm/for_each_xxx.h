@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -29,7 +29,7 @@ namespace tc {
 				auto const itEnd=tc::end(*m_rng);
 				while( it!=itEnd ) {
 					auto const rsize = restrict_size_decrement(*m_rng, 0, 1);
-					tc_yield(func, *it++);
+					tc_return_if_break(tc::continue_if_not_break(func, *it++))
 				}
 				return tc::constant<tc::continue_>();
 			}

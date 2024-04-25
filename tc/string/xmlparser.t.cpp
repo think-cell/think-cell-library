@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -13,12 +13,11 @@
 #include "xmlparser.h"
 #include "xmltransform.h"
 
-using SAssertingErrorHandler = tc::xml::simple_error_handler<decltype([](tc::unused) noexcept { _ASSERTFALSE; })>;
 struct ExErrorHandled final {};
 
 UNITTESTDEF(xmlparser_error_handling) {
 	{
-		struct SErrorHandler final : SAssertingErrorHandler {
+		struct SErrorHandler final : decltype(tc::xml::assert_no_error) {
 			void child_expected(tc::span<char const> strInput, char const* itch, tc::span<char const> strName) const& THROW(ExErrorHandled) {
 				_ASSERT(tc::equal(strInput, "<a></a>"));
 				_ASSERT(tc::equal(tc::drop(strInput, itch), "</a>"));
@@ -35,7 +34,7 @@ UNITTESTDEF(xmlparser_error_handling) {
 		}
 	}
 	{
-		struct SErrorHandler final : SAssertingErrorHandler {
+		struct SErrorHandler final : decltype(tc::xml::assert_no_error) {
 			void attribute_expected(tc::span<char const> strInput, char const* itch, tc::span<char const> strTag, tc::span<char const> strName) const& THROW(ExErrorHandled) {
 				_ASSERT(tc::equal(tc::drop(strInput, itch), strInput));
 				_ASSERT(tc::equal(strTag, "tag"));
@@ -52,7 +51,7 @@ UNITTESTDEF(xmlparser_error_handling) {
 		}
 	}
 	{
-		struct SErrorHandler final : SAssertingErrorHandler {
+		struct SErrorHandler final : decltype(tc::xml::assert_no_error) {
 			void parse_error(tc::unused, tc::unused, tc::unused) const& THROW(ExErrorHandled) {
 				throw ExErrorHandled();
 			}
@@ -69,7 +68,7 @@ UNITTESTDEF(xmlparser_error_handling) {
 		}
 	}
 	{
-		struct SErrorHandler final : SAssertingErrorHandler {
+		struct SErrorHandler final : decltype(tc::xml::assert_no_error) {
 			void parse_error(tc::unused, tc::unused, tc::unused, tc::unused) const& THROW(ExErrorHandled) {
 				throw ExErrorHandled();
 			}
@@ -89,15 +88,15 @@ namespace {
 }
 
 UNITTESTDEF(namespace_) {
-	static constexpr char asz[] = R"(
+	tc_static_auto_constexpr_litstr(asz, R"(
 <mso:customUI xmlns:mso="http://schemas.microsoft.com/office/2009/07/customui">
 	<mso:ribbon>
 		<mso:qat/>
 		<mso:tabs/>
 	</mso:ribbon>
 </mso:customUI>
-)";
-	auto parser=tc::xml::make_parser(asz, SAssertingErrorHandler());
+)");
+	auto parser=tc::xml::make_parser(asz, tc::xml::assert_no_error);
 	auto const nsMSO = parser.register_namespace(c_strMsoNamespace);
 	_ASSERT(parser.register_namespace("http://schemas.microsoft.com/office/2009/07/CustomUI") != nsMSO);
 	_ASSERT(parser.register_namespace("http://schemas.microsoft.com/office/2009/&#x30;&#x37;/customui") == nsMSO);
@@ -112,16 +111,16 @@ UNITTESTDEF(namespace_) {
 }
 
 UNITTESTDEF(default_namespace) {
-	static constexpr char asz[] = R"(
+	tc_static_auto_constexpr_litstr(asz, R"(
 <customUI xmlns="http://schemas.microsoft.com/office/2009/07/customui">
 	<ribbon>
 		<qat/>
 		<tabs/>
 	</ribbon>
 </customUI>
-)";
+)");
 	
-	auto parser=tc::xml::make_parser(asz, SAssertingErrorHandler());
+	auto parser=tc::xml::make_parser(asz, tc::xml::assert_no_error);
 	auto const nsMSO = parser.register_namespace(c_strMsoNamespace);
 	NOEXCEPT(parser.expect_child(nsMSO, "customUI"));
 		NOEXCEPT(parser.expect_child(nsMSO, "ribbon"));
@@ -132,7 +131,7 @@ UNITTESTDEF(default_namespace) {
 }
 
 UNITTESTDEF(namespace_prefix_undeclared) {
-	static constexpr char asz[] = R"(
+	tc_static_auto_constexpr_litstr(asz, R"(
 <customUI xmlns:mso="">
 	<ribbon>
 		<mso:qat/>
@@ -140,9 +139,9 @@ UNITTESTDEF(namespace_prefix_undeclared) {
 		<mso:tabs/>
 	</ribbon>
 </customUI>
-)";
+)");
 	
-	struct SErrorHandler final : SAssertingErrorHandler {
+	struct SErrorHandler final : decltype(tc::xml::assert_no_error) {
 		void invalid_namespace_prefix(tc::unused, tc::unused) const& THROW(ExErrorHandled) {
 			throw ExErrorHandled();
 		}
@@ -159,7 +158,7 @@ UNITTESTDEF(namespace_prefix_undeclared) {
 }
 
 UNITTESTDEF(namespace_override) {
-	static constexpr char asz[] = R"(
+	tc_static_auto_constexpr_litstr(asz, R"(
 <customUI xmlns:mso="">
 	<ribbon>
 		<qat/>
@@ -167,9 +166,9 @@ UNITTESTDEF(namespace_override) {
 		<mso:tabs/>
 	</ribbon>
 </customUI>
-)";
+)");
 	
-	auto parser=tc::xml::make_parser(asz, SAssertingErrorHandler());
+	auto parser=tc::xml::make_parser(asz, tc::xml::assert_no_error);
 	auto const nsTEST = parser.register_namespace("test");
 	
 	NOEXCEPT(parser.expect_child("customUI")); // default namespace has no value
@@ -180,7 +179,7 @@ UNITTESTDEF(namespace_override) {
 }
 
 UNITTESTDEF(default_namespace_override) {
-	static constexpr char asz[] = R"(
+	tc_static_auto_constexpr_litstr(asz, R"(
 <customUI xmlns="test">
 	<ribbon>
 		<qat/>
@@ -188,9 +187,9 @@ UNITTESTDEF(default_namespace_override) {
 		<tabs/>
 	</ribbon>
 </customUI>
-)";
+)");
 	
-	auto parser=tc::xml::make_parser(asz, SAssertingErrorHandler());
+	auto parser=tc::xml::make_parser(asz, tc::xml::assert_no_error);
 	auto const nsTEST = parser.register_namespace("test");
 	
 	NOEXCEPT(parser.expect_child(nsTEST, "customUI")); // default namespace has a value
@@ -203,7 +202,7 @@ UNITTESTDEF(default_namespace_override) {
 }
 
 UNITTESTDEF(xml_transform_append) {
-	static constexpr char asz[] = R"(
+	tc_static_auto_constexpr_litstr(asz, R"(
 <customUI xmlns:mso="">
 	<ribbon>
 		<qat></qat>
@@ -211,10 +210,10 @@ UNITTESTDEF(xml_transform_append) {
 		<tabs/>
 	</ribbon>
 </customUI>
-)";
+)");
 	tc::string<char> strOutput;
 	{
-		auto transform=tc::xml::make_transform(asz, SAssertingErrorHandler(), strOutput);
+		auto transform=tc::xml::make_transform(asz, tc::xml::assert_no_error, strOutput);
 		auto const nsTEST = transform.register_namespace("test");
 			
 		NOEXCEPT(transform.expect_child("customUI"));
@@ -243,7 +242,7 @@ UNITTESTDEF(xml_transform_append) {
 	}
 	
 	{
-		auto parser=tc::xml::make_parser(strOutput, SAssertingErrorHandler());
+		auto parser=tc::xml::make_parser(strOutput, tc::xml::assert_no_error);
 		auto const nsTEST = parser.register_namespace("test");
 			
 		NOEXCEPT(parser.expect_child("customUI"));
@@ -264,7 +263,7 @@ UNITTESTDEF(xml_transform_append) {
 
 
 UNITTESTDEF(xml_transform_insert_and_parse) {
-	static constexpr char asz[] = R"(
+	tc_static_auto_constexpr_litstr(asz, R"(
 <customUI xmlns:mso="">
 	<ribbon>
 		<qat></qat>
@@ -272,10 +271,10 @@ UNITTESTDEF(xml_transform_insert_and_parse) {
 		<tabs/>
 	</ribbon>
 </customUI>
-)";
+)");
 	tc::string<char> strOutput;
 	{
-		auto transform=tc::xml::make_transform(asz, SAssertingErrorHandler(), strOutput);
+		auto transform=tc::xml::make_transform(asz, tc::xml::assert_no_error, strOutput);
 		auto const nsTEST = transform.register_namespace("test");
 			
 		NOEXCEPT(transform.expect_child("customUI"));
@@ -316,7 +315,7 @@ UNITTESTDEF(xml_transform_insert_and_parse) {
 	}
 	
 	{
-		auto parser=tc::xml::make_parser(strOutput, SAssertingErrorHandler());
+		auto parser=tc::xml::make_parser(strOutput, tc::xml::assert_no_error);
 		auto const nsTEST = parser.register_namespace("test");
 			
 		NOEXCEPT(parser.expect_child("customUI"));
@@ -341,14 +340,14 @@ UNITTESTDEF(xml_transform_insert_and_parse) {
 }
 
 UNITTESTDEF(xml_transform_modify_attributes) {
-	static constexpr char asz[] = R"(
+	tc_static_auto_constexpr_litstr(asz, R"(
 <customUI>
 	<ribbon foo="1" bar="something"/>
 </customUI>
-)";
+)");
 	tc::string<char> strOutput;
 	{
-		auto transform=tc::xml::make_transform(asz, SAssertingErrorHandler(), strOutput);
+		auto transform=tc::xml::make_transform(asz, tc::xml::assert_no_error, strOutput);
 		NOEXCEPT(transform.expect_child("customUI"));
 		NOEXCEPT(transform.expect_child("ribbon"));
 		NOEXCEPT(transform.modify_element_attributes(
@@ -365,7 +364,7 @@ UNITTESTDEF(xml_transform_modify_attributes) {
 	}
 	
 	{
-		auto parser=tc::xml::make_parser(strOutput, SAssertingErrorHandler());
+		auto parser=tc::xml::make_parser(strOutput, tc::xml::assert_no_error);
 			
 		NOEXCEPT(parser.expect_child("customUI"));
 		NOEXCEPT(parser.expect_child("ribbon"));
@@ -375,14 +374,14 @@ UNITTESTDEF(xml_transform_modify_attributes) {
 }
 
 UNITTESTDEF(xml_transform_insert_empty_child_before) {
-	static constexpr char asz[] = R"(
+	tc_static_auto_constexpr_litstr(asz, R"(
 <customUI xmlns:mso="test">
 	<ribbon/>
 </customUI>
-)";
+)");
 	tc::string<char> strOutput;
 	{
-		auto transform=tc::xml::make_transform(asz, SAssertingErrorHandler(), strOutput);
+		auto transform=tc::xml::make_transform(asz, tc::xml::assert_no_error, strOutput);
 		auto const nsTEST = transform.register_namespace("test");
 
 		NOEXCEPT(transform.expect_child("customUI"));
@@ -402,7 +401,7 @@ UNITTESTDEF(xml_transform_insert_empty_child_before) {
 	}
 	
 	{
-		auto parser=tc::xml::make_parser(strOutput, SAssertingErrorHandler());
+		auto parser=tc::xml::make_parser(strOutput, tc::xml::assert_no_error);
 		auto const nsTEST = parser.register_namespace("test");
 		NOEXCEPT(parser.expect_child("customUI"));
 			NOEXCEPT(parser.expect_child(nsTEST, "element"));
@@ -417,14 +416,14 @@ UNITTESTDEF(xml_transform_insert_empty_child_before) {
 
 
 UNITTESTDEF(xml_transform_insert_before2) {
-	static constexpr char asz[] = R"(
+	tc_static_auto_constexpr_litstr(asz, R"(
 <customUI xmlns:mso="test">
 	<ribbon/>
 </customUI>
-)";
+)");
 	tc::string<char> strOutput;
 	{
-		auto transform=tc::xml::make_transform(asz, SAssertingErrorHandler(), strOutput);
+		auto transform=tc::xml::make_transform(asz, tc::xml::assert_no_error, strOutput);
 		auto ons = transform.register_namespace("test");
 		NOEXCEPT(transform.expect_child("customUI"));
 		NOEXCEPT(transform.expect_child("ribbon"));
@@ -441,7 +440,7 @@ UNITTESTDEF(xml_transform_insert_before2) {
 	}
 	
 	{
-		auto parser=tc::xml::make_parser(strOutput, SAssertingErrorHandler());
+		auto parser=tc::xml::make_parser(strOutput, tc::xml::assert_no_error);
 		auto ons = parser.register_namespace("test");
 		NOEXCEPT(parser.expect_child("customUI"));
 			NOEXCEPT(parser.expect_child("ribbon"));
@@ -455,14 +454,14 @@ UNITTESTDEF(xml_transform_insert_before2) {
 }
 
 UNITTESTDEF(xml_transform_insert_elements_before) {
-	static constexpr char asz[] = R"(
+	tc_static_auto_constexpr_litstr(asz, R"(
 <customUI xmlns:mso="test">
 	<ribbon/>
 </customUI>
-)";
+)");
 	tc::string<char> strOutput;
 	{
-		auto transform=tc::xml::make_transform(asz, SAssertingErrorHandler(), strOutput);
+		auto transform=tc::xml::make_transform(asz, tc::xml::assert_no_error, strOutput);
 		auto ons = transform.register_namespace("test");
 		NOEXCEPT(transform.expect_child("customUI"));
 
@@ -484,7 +483,7 @@ UNITTESTDEF(xml_transform_insert_elements_before) {
 	}
 	
 	{
-		auto parser=tc::xml::make_parser(strOutput, SAssertingErrorHandler());
+		auto parser=tc::xml::make_parser(strOutput, tc::xml::assert_no_error);
 		auto ons = parser.register_namespace("test");
 		NOEXCEPT(parser.expect_child("customUI"));
 			NOEXCEPT(parser.expect_child(ons, "element"));
@@ -499,14 +498,14 @@ UNITTESTDEF(xml_transform_insert_elements_before) {
 
 
 UNITTESTDEF(xml_transform_insert_child_before3) {
-	static constexpr char asz[] = R"(
+	tc_static_auto_constexpr_litstr(asz, R"(
 <customUI xmlns:mso="test">
 	<ribbon/>
 </customUI>
-)";
+)");
 	tc::string<char> strOutput;
 	{
-		auto transform=tc::xml::make_transform(asz, SAssertingErrorHandler(), strOutput);
+		auto transform=tc::xml::make_transform(asz, tc::xml::assert_no_error, strOutput);
 		auto ons = transform.register_namespace("test");
 		NOEXCEPT(transform.expect_child("customUI"));
 		NOEXCEPT(transform.expect_child("ribbon"));
@@ -527,7 +526,7 @@ UNITTESTDEF(xml_transform_insert_child_before3) {
 	}
 	
 	{
-		auto parser=tc::xml::make_parser(strOutput, SAssertingErrorHandler());
+		auto parser=tc::xml::make_parser(strOutput, tc::xml::assert_no_error);
 		auto ons = parser.register_namespace("test");
 		NOEXCEPT(parser.expect_child("customUI"));
 			NOEXCEPT(parser.expect_child("ribbon"));
@@ -540,7 +539,7 @@ UNITTESTDEF(xml_transform_insert_child_before3) {
 }
 
 UNITTESTDEF(xml_transform_drop_element) {
-	static constexpr char asz[] = R"(
+	tc_static_auto_constexpr_litstr(asz, R"(
 <customUI>
 	<ribbon>
 		<qat></qat>
@@ -548,17 +547,17 @@ UNITTESTDEF(xml_transform_drop_element) {
 		<mso:tabs/>
 	</ribbon>
 </customUI>
-)";
+)");
 	tc::string<char> strOutput;
 	{
-		auto transform=tc::xml::make_transform(asz, SAssertingErrorHandler(), strOutput);
+		auto transform=tc::xml::make_transform(asz, tc::xml::assert_no_error, strOutput);
 		NOEXCEPT(transform.expect_child("customUI"));
 		NOEXCEPT(transform.expect_child("ribbon"));
 		NOEXCEPT(transform.drop_element());
 	}
 	
 	{
-		auto parser=tc::xml::make_parser(strOutput, SAssertingErrorHandler());
+		auto parser=tc::xml::make_parser(strOutput, tc::xml::assert_no_error);
 		NOEXCEPT(parser.expect_child("customUI"));
 		NOEXCEPT(parser.expect_element_end());
 	}
@@ -570,14 +569,14 @@ namespace
 	auto constexpr MatchOrInsertTest = [](tc::span<char const> strXml) noexcept {
 		tc::string<char> strOutput;
 		{
-			auto transform=tc::xml::make_transform(strXml, SAssertingErrorHandler(), strOutput);
+			auto transform=tc::xml::make_transform(strXml, tc::xml::assert_no_error, strOutput);
 			NOEXCEPT(transform.expect_child("customUI"));
 			auto on1 = NOEXCEPT(transform.match_or_insert_child("ribbon"));
 			auto on2 = NOEXCEPT(transform.match_or_insert_child("tabs"));
 		}
 	
 		{
-			auto parser=tc::xml::make_parser(strOutput, SAssertingErrorHandler());
+			auto parser=tc::xml::make_parser(strOutput, tc::xml::assert_no_error);
 			NOEXCEPT(parser.expect_child("customUI"));
 				NOEXCEPT(parser.expect_child("ribbon"));
 					NOEXCEPT(parser.expect_child("tabs"));

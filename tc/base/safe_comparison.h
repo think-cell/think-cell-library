@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -31,51 +31,4 @@ namespace tc {
 
 	template <typename T, typename U>
 	concept safely_totally_ordered_with = std::totally_ordered_with<T, U> && safe_comparison<tc::decay_t<T>, tc::decay_t<U>>;
-}
-
-//////////////////////////////////////////////////////////////////////////
-// cmp_equal/cmp_less/cmp_greater...
-
-namespace tc { // TODO c++20: replace these functions with std versions
-	template< tc::actual_integer T, tc::actual_integer U >
-	constexpr bool cmp_equal( T t, U u ) noexcept
-	{
-	    if constexpr (std::is_signed_v<T> == std::is_signed_v<U>)
-	        return t == u;
-	    else if constexpr (std::is_signed_v<T>)
-	        return t < 0 ? false : static_cast<std::make_unsigned_t<T>>(t) == u;
-	    else
-	        return u < 0 ? false : t == static_cast<std::make_unsigned_t<U>>(u);
-	}
-	 
-	template< typename T, typename U>
-	constexpr auto cmp_not_equal( T t, U u ) return_decltype_noexcept(
-		!cmp_equal(t, u)
-	)
-	 
-	template< tc::actual_integer T, tc::actual_integer U>
-	constexpr bool cmp_less( T t, U u ) noexcept
-	{
-	    if constexpr (std::is_signed_v<T> == std::is_signed_v<U>)
-	        return t < u;
-	    else if constexpr (std::is_signed_v<T>)
-	        return t < 0 ? true : static_cast<std::make_unsigned_t<T>>(t) < u;
-	    else
-	        return u < 0 ? false : t < static_cast<std::make_unsigned_t<U>>(u);
-	}
-	 
-	template< typename T, typename U>
-	constexpr auto cmp_greater( T t, U u ) return_decltype_noexcept(
-	    cmp_less(u, t)
-	)
-	 
-	template< typename T, typename U >
-	constexpr auto cmp_less_equal( T t, U u ) return_decltype_noexcept(
-	    !cmp_greater(t, u)
-	)
-	 
-	template< typename T, typename U >
-	constexpr auto cmp_greater_equal( T t, U u ) return_decltype_noexcept(
-	    !cmp_less(t, u)
-	)
 }

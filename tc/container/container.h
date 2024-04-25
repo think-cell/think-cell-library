@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -9,7 +9,7 @@
 #pragma once
 #include "../base/assert_defs.h"
 #include "../base/type_traits.h"
-#include "../base/assign.h"
+#include "../base/change.h"
 #include "../algorithm/compare.h"
 #include <vector>
 #include <memory>
@@ -77,10 +77,10 @@ namespace tc {
 	template<typename Result, typename T>
 	struct fn_hash;
 
-	template<typename Key, typename Hash=tc::fn_hash<std::size_t, Key>, typename KeyEqual=tc::fn_equal_to, typename Alloc=std::allocator<Key>>
+	template<typename Key, typename Hash=tc::fn_hash<std::size_t, Key>, typename KeyEqual=tc::decay_t<decltype(tc::equal_to)>, typename Alloc=std::allocator<Key>>
 	using unordered_set=std::unordered_set<Key, Hash, KeyEqual, Alloc>;
 
-	template<typename Key, typename T, typename Hash=tc::fn_hash<std::size_t, Key>, typename KeyEqual=tc::fn_equal_to, typename Alloc=std::allocator<std::pair<Key const, T>>>
+	template<typename Key, typename T, typename Hash=tc::fn_hash<std::size_t, Key>, typename KeyEqual=tc::decay_t<decltype(tc::equal_to)>, typename Alloc=std::allocator<std::pair<Key const, T>>>
 	using unordered_map=std::unordered_map<Key, T, Hash, KeyEqual, Alloc>;
 #else
 	template<

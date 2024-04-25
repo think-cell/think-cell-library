@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -93,10 +93,10 @@ namespace tc {
 
 	template<typename Rng, typename It>
 		requires (!tc::has_index<Rng>)
-	constexpr auto dereference_index(Rng&& rng, It&& it) noexcept(noexcept(*tc_move_if_owned(it)))
+	constexpr auto dereference_index(Rng&& /*rng*/, It&& it) noexcept(noexcept(*tc_move_if_owned(it)))
 		-> typename std::conditional_t<
 			tc::safely_convertible_to<decltype(*std::declval<It>()), std::iter_reference_t<tc::iterator_t<Rng>>>,
-			tc::type::identity<std::iter_reference_t<tc::iterator_t<Rng>>>,
+			std::type_identity<std::iter_reference_t<tc::iterator_t<Rng>>>,
 			tc::decay<std::iter_reference_t<tc::iterator_t<Rng>>>
 		>::type
 	{
@@ -104,7 +104,7 @@ namespace tc {
 	}
 
 	template<tc::has_index Rng, typename Index>
-	constexpr auto dereference_index(Rng&& rng, Index&& idx) return_decltype_xvalue_by_ref_MAYTHROW(
+	constexpr auto dereference_index(Rng&& rng, Index&& idx) return_decltype_allow_xvalue_MAYTHROW(
 		tc_move_if_owned(rng).dereference_index(tc_move_if_owned(idx))
 	)
 
@@ -135,6 +135,9 @@ namespace tc {
 		// tc::counting_iterator are stashing, as well as the iterators of all ranges adapted from a counting range.
 		template <typename Element>
 		struct is_stashing_element : tc::constant<false> {};
+
+		template <typename Element> requires Element::c_bHasStashingElement
+		struct is_stashing_element<Element> : tc::constant<Element::c_bHasStashingElement> {};
 
 		template<typename Rng>
 		struct has_stashing_index : is_stashing_element<index_t<Rng>> {
@@ -229,12 +232,12 @@ namespace tc {
 #else
 		requires (!tc::has_index<Rng>) && std::contiguous_iterator<std::decay_t<It>>
 #endif
-	constexpr auto index_to_address(Rng&&, It&& it) MAYTHROW {
+	constexpr auto index_to_address(Rng&&, It&& it) noexcept {
 		return std::to_address(tc_move_if_owned(it));
 	}
 
 	template<tc::has_index Rng, typename Index>
-	constexpr auto index_to_address(Rng&& rng, Index&& idx) return_decltype_MAYTHROW(
+	constexpr auto index_to_address(Rng&& rng, Index&& idx) return_decltype_noexcept(
 		tc_move_if_owned(rng).index_to_address(tc_move_if_owned(idx))
 	)
 
@@ -255,7 +258,7 @@ namespace tc {
 		#endif
 	}
 
-	template<typename Rng, typename ItLhs, typename ItRhs>
+	template<typename Rng, std::forward_iterator ItLhs, std::forward_iterator ItRhs>
 		requires (!tc::has_index<Rng>)
 	constexpr void middle_point(Rng const&, ItLhs& itLhs, ItRhs const& itRhs) MAYTHROW {
 		itLhs = tc::iterator::middle_point(tc::as_const(itLhs), itRhs);

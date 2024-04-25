@@ -1,14 +1,13 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 #include "base/assert_defs.h"
-#include "base/const_forward.h"
 #include "base/reference_or_value.h"
 #include "base/type_traits.h"
 #include "base/explicit_cast_fwd.h"
@@ -137,7 +136,7 @@ namespace tc {
 
 #if defined(TC_PRIVATE) && defined(_DEBUG) && !defined(__clang__)
 			friend constexpr bool check_initialized_impl(array const& a) noexcept {
-				return tc::all_of(a, tc_fn(tc::check_initialized));
+				return tc::all_of(a, tc::check_initialized);
 			}
 #endif
 		};
@@ -164,73 +163,102 @@ namespace tc {
 
 	namespace explicit_convert_std_array_detail {
 		template<typename T, std::size_t N, typename Func, std::size_t... IndexPack>
-		constexpr std::array<T, N> with_func_tag_impl(tc::type::identity<std::array<T, N>>, Func func, std::index_sequence<IndexPack...>) MAYTHROW {
-			return {{func(IndexPack)...}};
+		constexpr std::array<T, N> with_func_tag_impl(std::type_identity<std::array<T, N>>, Func func, std::index_sequence<IndexPack...>) noexcept(noexcept(T(func(std::declval<std::size_t>()))))
+			requires tc::safely_convertible_to<decltype(func(std::declval<std::size_t>())), T>
+		{
+			return {func(IndexPack)...};
 		}
 
-		template<typename T, std::size_t N, std::size_t ...IndexPack, typename... Args>
-		constexpr std::array<T, N> with_fill_tag_impl(tc::type::identity<std::array<T, N>>, std::index_sequence<IndexPack...>, Args&&... args) MAYTHROW {
+		template<typename T, std::size_t N, std::size_t ...IndexPack>
+		constexpr std::array<T, N> with_fill_tag_impl(std::type_identity<std::array<T, N>>, std::index_sequence<IndexPack...>, auto&&... args) noexcept(
+			noexcept(tc::explicit_cast<T>(tc_const_forward(args)...)) &&
+			noexcept(tc::explicit_cast<T>(tc_move_if_owned(args)...))
+		) requires
+			requires { tc::explicit_cast<T>(tc_const_forward(args)...); } &&
+			requires { tc::explicit_cast<T>(tc_move_if_owned(args)...); }
+		{
 			STATICASSERTEQUAL(N, sizeof...(IndexPack)+1);
-			return { {
-				(tc::discard(IndexPack), tc::explicit_cast<T>(tc::const_forward<Args>(args)...))...,
+			return {
+				(tc::discard(IndexPack), tc::explicit_cast<T>(tc_const_forward(args)...))...,
 				tc::explicit_cast<T>(tc_move_if_owned(args)...)
-			} };
+			};
 		}
 
 		template<typename T, typename Iterator, typename Dummy>
-		constexpr std::array<T, 1> with_range_tag_impl(tc::type::identity<std::array<T, 1>>, Iterator it, Iterator itEnd, Dummy&&) MAYTHROW {
-			return std::array<T, 1>{ {(_ASSERTE(itEnd != it), _ASSERTE(itEnd == tc_modified(it, ++_)), *it)} };
+		constexpr std::array<T, 1> with_range_tag_impl(std::type_identity<std::array<T, 1>>, Iterator it, Iterator itEnd, Dummy&&) noexcept(noexcept(T(*it)))
+			requires tc::safely_convertible_to<decltype(*it), T>
+		{
+			return {(_ASSERTE(itEnd != it), _ASSERTE(itEnd == tc_modified(it, ++_)), *it)};
 		}
 
 		template<typename T, std::size_t N, typename Iterator, std::size_t... IndexPack> requires (1<N)
-		constexpr std::array<T, N> with_range_tag_impl(tc::type::identity<std::array<T, N>>, Iterator it, Iterator itEnd, std::index_sequence<IndexPack...>) MAYTHROW {
+		constexpr std::array<T, N> with_range_tag_impl(std::type_identity<std::array<T, N>>, Iterator it, Iterator itEnd, std::index_sequence<IndexPack...>) noexcept(noexcept(T(*it)) && noexcept(++it))
+			requires tc::safely_convertible_to<decltype(*it), T>
+		{
 			STATICASSERTEQUAL(N, sizeof...(IndexPack)+2);
-			return std::array<T, N>{ {
+			return {
 				(_ASSERTE(itEnd != it), *it),
 				(static_cast<void>(IndexPack), ++it, _ASSERTE(itEnd != it), *it)...,
 				(++it, _ASSERTE(itEnd != it), _ASSERTE(itEnd == tc_modified(it, ++_)), *it)
-			} };
+			};
+		}
+
+		namespace no_adl {
+			template<typename It>
+			struct fn_construct_element_and_increment { // MSVC workaround: not a lambda for shorter symbol names
+				It& m_itOut;
+				constexpr auto operator()(auto&& t) const& noexcept(noexcept(tc::renew(*m_itOut, tc_move_if_owned(t)))) {
+					tc::renew(*m_itOut, tc_move_if_owned(t)); // MAYTHROW
+					++m_itOut;
+				}
+			};
 		}
 	}
 
 	namespace explicit_convert_adl {
 		template<typename T, std::size_t N, typename Func>
-		constexpr std::array<T, N> explicit_convert_impl(adl_tag_t, tc::type::identity<std::array<T, N>> id, tc::func_tag_t, Func func) MAYTHROW {
+		constexpr std::array<T, N> explicit_convert_impl(adl_tag_t, std::type_identity<std::array<T, N>> id, tc::func_tag_t, Func func) noexcept(noexcept(tc::explicit_convert_std_array_detail::with_func_tag_impl(id, tc_move(func), std::make_index_sequence<N>()))) {
 			static_assert(tc::safely_constructible_from<T, decltype(func(N-1))>);
 			return tc::explicit_convert_std_array_detail::with_func_tag_impl(id, tc_move(func), std::make_index_sequence<N>());
 		}
 
 		template<typename T, std::size_t N, typename... Args> requires (0!=N) && tc::explicit_castable_from<T, Args&&...>
-		constexpr std::array<T, N> explicit_convert_impl(adl_tag_t, tc::type::identity<std::array<T, N>> id, tc::fill_tag_t, Args&& ... args) MAYTHROW {
-			return tc::explicit_convert_std_array_detail::with_fill_tag_impl(id, std::make_index_sequence<N-1>(), tc_move_if_owned(args)...);
-		}
+		constexpr std::array<T, N> explicit_convert_impl(adl_tag_t, std::type_identity<std::array<T, N>> id, tc::fill_tag_t, Args&& ... args) return_MAYTHROW(
+			tc::explicit_convert_std_array_detail::with_fill_tag_impl(id, std::make_index_sequence<N-1>(), tc_move_if_owned(args)...)
+		)
 
 		template<typename T, std::size_t N, typename... Args> requires (tc::explicit_castable_from<T, Args&&> && ...)
-		constexpr std::array<T, N> explicit_convert_impl(adl_tag_t, tc::type::identity<std::array<T, N>>, tc::aggregate_tag_t, Args&& ... args) MAYTHROW {
+		constexpr std::array<T, N> explicit_convert_impl(adl_tag_t, std::type_identity<std::array<T, N>>, tc::aggregate_tag_t, Args&& ... args) noexcept((... && noexcept(tc::explicit_cast<T>(tc_move_if_owned(args))))) {
 			STATICASSERTEQUAL(sizeof...(Args), N, "array initializer list does not match number of elements");
-			return {{tc::explicit_cast<T>(tc_move_if_owned(args))...}};
+			return {tc::explicit_cast<T>(tc_move_if_owned(args))...};
 		}
 
+		template<typename TTarget, typename TSource>
+		concept noexcept_explicit_castable = std::same_as<TTarget, TSource> /*optimistically assume guaranteed copy elision*/ || noexcept(tc::explicit_cast<TTarget>(std::declval<TSource>()));
+
+		template<typename TTarget, typename TSource>
+		using noexcept_explicit_castable_t=tc::constant<noexcept_explicit_castable<TTarget, TSource>>;
+
 		template<typename T, std::size_t N>
-		constexpr std::array<T, N> explicit_convert_impl(adl_tag_t, tc::type::identity<std::array<T, N>> id, auto&& rng) MAYTHROW
+		constexpr std::array<T, N> explicit_convert_impl(adl_tag_t, std::type_identity<std::array<T, N>> id, auto&& rng) noexcept(
+			0==N ||
+			boost::mp11::mp_apply<boost::mp11::mp_all, tc::mp_transform<boost::mp11::mp_bind_front<noexcept_explicit_castable_t, T>::template fn, tc::range_output_t<decltype(rng)>>>::value
+		)
 			requires (0 == N)
-				|| (econstructionEXPLICIT <= tc::type::apply_t<tc::elementwise_construction_restrictiveness, tc::type::concat_t<tc::type::list<T>, tc::range_output_t<decltype(rng)>>>::value)
+				|| (econstructionEXPLICIT <= boost::mp11::mp_apply<tc::elementwise_construction_restrictiveness, boost::mp11::mp_append<boost::mp11::mp_list<T>, tc::range_output_t<decltype(rng)>>>::value)
 		{
 			if constexpr( 0 == N ) {
 				_ASSERTE(tc::empty(rng));
 				return {};
 			} else if constexpr( std::is_trivially_default_constructible<T>::value && std::is_trivially_destructible<T>::value ) {
 				std::array<T, N> at;
-				auto itOut = tc::begin(at); // MAYTHROW
+				auto itOut = tc::begin(at);
 				// cont_assign(at, transform(tc_move_if_owned(rng), tc_fn(tc::explicit_cast<T>))); without moving rng and avoiding dependency
-				tc::for_each(tc_move_if_owned(rng), [&](auto&& t) MAYTHROW {
-					tc::renew(*itOut, tc_move_if_owned(t)); // MAYTHROW
-					++itOut;
-				}); // MAYTHROW
+				tc::for_each(tc_move_if_owned(rng), explicit_convert_std_array_detail::no_adl::fn_construct_element_and_increment<decltype(itOut)>{itOut}); // MAYTHROW
 				_ASSERTE(tc::end(at)==itOut);
 				return at;
-			} else if constexpr( 
-				// The initialization of the C array inside std::array when writing std::array<T,1>{{...}} is
+			} else if constexpr(
+				// The initialization of the C array inside std::array when writing std::array<T,1>{...} is
 				// copy list initialization, not direct list initialization, so explicit constructors are not allowed.
 				// int to double is considered narrowing, forbidden in list initialization (but double is already handled above)
 				tc::safely_convertible_to<decltype(*tc::as_lvalue(tc::begin(rng))), T>

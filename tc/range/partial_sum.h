@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -15,15 +15,26 @@
 namespace tc {
 	/////////////////////////////////////////////////////
 	// partial_sum
-
 	namespace no_adl {
+		template<typename Sink, typename Accu, typename AccuOp>
+		struct partial_sum_sink { // MSVC workaround: not a lambda for shorter symbol names. clang workaround: not a lambda to avoid ICE.
+			Sink const& m_sink;
+			Accu& m_accu;
+			AccuOp const& m_accuop;
+
+			constexpr auto operator()(auto&& arg) const& MAYTHROW {
+				tc_invoke(m_accuop, m_accu, tc_move_if_owned(arg));
+				return tc::continue_if_not_break(m_sink, tc::as_const(m_accu));
+			}
+		};
+
 		template <typename Rng, typename T, typename AccuOp, bool c_bIncludeInit>
 		struct [[nodiscard]] partial_sum_adaptor : private tc::range_adaptor_base_range<Rng> {
 		private:
-			reference_or_value<T> m_init;
+			tc::reference_or_value<T> m_init;
 			tc::decay_t<AccuOp> m_accuop;
 		public:
-			friend auto range_output_t_impl(partial_sum_adaptor const&) -> tc::type::list<tc::decay_t<T> const&>; // declaration only
+			friend auto range_output_t_impl(partial_sum_adaptor const&) -> boost::mp11::mp_list<tc::decay_t<T> const&>; // declaration only
 
 			template <typename RngRef, typename TRef, typename AccuOpRef>
 			constexpr partial_sum_adaptor(RngRef&& rng, TRef&& init, AccuOpRef&& accuop) noexcept
@@ -35,16 +46,13 @@ namespace tc {
 			template <typename Sink>
 			constexpr auto operator()(Sink sink) const& MAYTHROW {
 				tc::decay_t<T> accu = *m_init;
-				return tc_break_or_continue_sequence(
+				tc_return_break_or_continue(
 					(tc_conditional_prvalue_as_val(
 						c_bIncludeInit,
 						tc::continue_if_not_break(sink, tc::as_const(accu)),
 						tc::constant<tc::continue_>()
 					))
-					(tc::for_each(this->base_range(), [&](auto&& arg) MAYTHROW {
-						m_accuop(accu, tc_move_if_owned(arg));
-						return tc::continue_if_not_break(sink, tc::as_const(accu));
-					}))
+					(tc::for_each(this->base_range(), no_adl::partial_sum_sink<decltype(sink), decltype(accu), decltype(m_accuop)>{sink, accu, m_accuop}))
 				);
 			}
 

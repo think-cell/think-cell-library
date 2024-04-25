@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -40,7 +40,10 @@ TEST_TERNARY_STATIC_CAST_LVALUEREF(S&, S&, S&);
 TEST_TERNARY_STATIC_CAST_LVALUEREF(S&&, S&&, S&&);
 TEST_TERNARY_STATIC_CAST_LVALUEREF(S const&&, S const&&, S const&&);
 
-namespace { // https://developercommunity.visualstudio.com/content/problem/1178976/ternary-operator-with-xvalue-operands-for-non-clas.html
+namespace {
+	// MSVC used to create extra temporaries and report errors regarding returning of these temporaries.
+	// Making sure this is no longer the case.
+	// https://developercommunity.visualstudio.com/content/problem/1178976/ternary-operator-with-xvalue-operands-for-non-clas.html
 	[[maybe_unused]] decltype(auto) foo(bool b, S&& s1, S&& s2) {
 		return b ? static_cast<S&&>(s1) : static_cast<S&&>(s2);
 	}

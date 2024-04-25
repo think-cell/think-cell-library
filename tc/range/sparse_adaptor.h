@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -13,12 +13,31 @@
 #include "range_adaptor.h"
 #include "meta.h"
 #include "repeat_n.h"
-#include <tuple>
 
 
 namespace tc {
 
 	namespace no_adl {
+		template<typename Sink, typename TValue>
+		struct sparse_adaptor_sink { // MSVC workaround: not a lambda for shorter symbol names
+			Sink const m_sink;
+			std::size_t const m_nEnd;
+			TValue const m_default;
+			std::size_t m_n=0;
+
+			auto GenerateDefaultUpTo(std::size_t const nEnd) & MAYTHROW {
+				_ASSERT( m_n <= nEnd );
+				auto const bc=tc::for_each(tc::repeat_n(nEnd - m_n, m_default), m_sink); // MAYTHROW
+				m_n = nEnd;
+				return bc;
+			}
+
+			auto operator()(std::size_t const nIndex, auto&& value) & MAYTHROW {
+				tc_return_if_break(GenerateDefaultUpTo(nIndex)); // MAYTHROW
+				++m_n;
+				return tc::continue_if_not_break(m_sink, tc_move_if_owned(value)); // MAYTHROW
+			}
+		};
 
 		template<
 			typename RngPairIndexValue,
@@ -34,7 +53,7 @@ namespace tc {
 		struct [[nodiscard]] sparse_adaptor<RngPairIndexValue, TValue, false> : tc::range_adaptor_base_range<RngPairIndexValue> {
 		protected:
 			std::size_t m_nEnd;
-			reference_or_value<TValue> m_default;
+			tc::reference_or_value<TValue> m_default;
 
 		public:
 			template<typename Rhs, typename RHSValue>
@@ -44,21 +63,10 @@ namespace tc {
 				, m_default(aggregate_tag, tc_move_if_owned(defaultValue))
 			{}
 
-			template<typename Func>
-			auto operator()(Func func) const& MAYTHROW {
-				std::size_t n=0;
-				auto const GenerateDefaultUpTo = [&](std::size_t const nEnd) MAYTHROW {
-					_ASSERT( n <= nEnd );
-					auto bc=tc::for_each(tc::repeat_n(nEnd - n, *m_default), func); // MAYTHROW
-					n = nEnd;
-					return bc;
-				};
-				tc_return_if_break(tc::for_each(this->base_range(), [&](auto&& pairindexvalue) MAYTHROW {
-					tc_return_if_break(GenerateDefaultUpTo(get<0>(pairindexvalue))); // MAYTHROW
-					++n;
-					return tc::continue_if_not_break(func, tc::get<1>(tc_move_if_owned(pairindexvalue))); // MAYTHROW
-				}));
-				return GenerateDefaultUpTo(m_nEnd); // MAYTHROW
+			auto operator()(auto&& sink) const& MAYTHROW {
+				sparse_adaptor_sink<tc::decay_t<decltype(sink)>, decltype(*m_default)> adaptedsink{tc_move_if_owned(sink), m_nEnd, *m_default};
+				tc_return_if_break(tc::for_each(this->base_range(), std::ref(adaptedsink))); // MAYTHROW
+				return adaptedsink.GenerateDefaultUpTo(m_nEnd); // MAYTHROW
 			}
 		};
 
@@ -118,12 +126,11 @@ namespace tc {
 				return idx.m_n == this->m_nEnd;
 			}
 
-			STATIC_FINAL(dereference_index)(tc_index const& idx) const& return_decltype_MAYTHROW(
-				IndexIsDefault(idx)
+			STATIC_FINAL(dereference_index)(auto&& idx) const& MAYTHROW -> decltype(auto) { // MSVC 19.39 gets confused when using return_decltype_MAYTHROW
+				return IndexIsDefault(idx)
 					? *(this->m_default)
-					: tc::get<1>(tc::dereference_index(this->base_range(),idx.m_idxBase))
-			)
-
+					: tc::get<1>(tc::dereference_index(this->base_range(), tc_move_if_owned(idx).m_idxBase));
+			}
 		};
 	}
 

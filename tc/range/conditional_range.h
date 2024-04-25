@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -24,6 +24,18 @@
 #include <boost/preprocessor/punctuation/comma_if.hpp>
 
 namespace tc {
+	namespace no_adl {
+		template <typename Sink>
+		struct select_range_visitor { // MSVC workaround: not a lambda for shorter symbol names
+			Sink m_sink;
+
+			template<typename Rng>
+			constexpr auto operator()(Rng&& rng) const& MAYTHROW {
+				return tc::for_each(*tc_move_if_owned(rng), m_sink);
+			}
+		};
+	}
+
 	namespace select_range_adaptor_adl {
 		template <bool HasIterator, typename... Rng>
 		struct select_range_adaptor;
@@ -34,7 +46,7 @@ namespace tc {
 			friend select_range_adaptor<true, Rng...>;
 
 		private:
-			std::variant<tc::reference_or_value<Rng>...> m_ubaserng;
+			std::variant<tc::reference_or_value<Rng, /*bBestAccess*/true>...> m_ubaserng;
 
 		public:
 			template<typename... FuncRng>
@@ -87,15 +99,13 @@ namespace tc {
 			}
 
 			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, select_range_adaptor>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
-			friend auto range_output_t_impl(Self&&) -> tc::type::unique_t<tc::type::concat_t<
-				tc::range_output_t<decltype(*std::declval<tc::apply_cvref_t<tc::reference_or_value<Rng>, Self>>())>...
+			friend auto range_output_t_impl(Self&&) -> boost::mp11::mp_unique<boost::mp11::mp_append<
+				tc::range_output_t<decltype(*std::declval<tc::apply_cvref_t<tc::reference_or_value<Rng, /*bBestAccess*/true>, Self>>())>...
 			>> {} // unevaluated
 
 			template<typename Self, typename Sink> requires tc::decayed_derived_from<Self, select_range_adaptor>
 			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
-				return tc::fn_visit([&](auto&& rng) MAYTHROW {
-					return tc::for_each(*tc_move_if_owned(rng), sink);
-				})(tc_move_if_owned_msvc_workaround(Self&&, self).m_ubaserng);
+				return tc::fn_visit(no_adl::select_range_visitor<tc::decay_t<Sink>>{tc_move_if_owned(sink)})(tc_move_if_owned_msvc_workaround(Self&&, self).m_ubaserng);
 			}
 
 			template<typename Self, typename Sink> requires tc::decayed_derived_from<Self, select_range_adaptor>
@@ -107,7 +117,7 @@ namespace tc {
 		};
 
 		template <typename ... Rng>
-		using select_range_adaptor_index = tc::type::apply_t<std::variant, tc::type::unique_t<tc::type::list<tc::index_t<Rng>...>>>;
+		using select_range_adaptor_index = boost::mp11::mp_apply<std::variant, boost::mp11::mp_unique<boost::mp11::mp_list<tc::index_t<Rng>...>>>;
 
 		template <typename... Rng>
 		struct select_range_adaptor<true, Rng...>
@@ -120,6 +130,7 @@ namespace tc {
 		public:
 			using typename this_type::range_iterator_from_index::tc_index;
 			static constexpr bool c_bHasStashingIndex = (... || tc::has_stashing_index<std::remove_reference_t<Rng>>::value);
+			static constexpr bool c_bPrefersForEach = true;
 
 			using difference_type = tc::common_type_t<typename boost::range_difference<Rng>::type...>;
 
@@ -127,64 +138,72 @@ namespace tc {
 
 		private:
 #pragma push_macro("forward_to_active")
-#define forward_to_active(...) \
-	tc::fn_visit([&](auto& base_rng) MAYTHROW { \
-		auto&& rng = base_rng.best_access(); \
-		using index_t = tc::index_t<decltype(rng)>; \
+#define forward_to_active(preamble, ...) \
+	tc::fn_visit([&](auto& baserng) MAYTHROW -> decltype(auto) { \
+		using range_t = decltype(baserng.best_access()); \
+		using index_t = tc::index_t<range_t>; \
+		preamble; \
 		return __VA_ARGS__; \
 	})(this->m_ubaserng)
+#pragma push_macro("with_range_and_index")
+#define with_range_and_index auto&& rng = *baserng; auto&& idx=tc::get<index_t>(tc_move_if_owned(idx_));
 
 			STATIC_FINAL_MOD(constexpr, begin_index)() const& MAYTHROW {
-				return forward_to_active(tc_index(tc::begin_index(rng)));
+				return forward_to_active(auto&& rng = baserng.best_access(), tc::implicit_cast<tc_index>(tc::begin_index(rng)));
 			}
 
 			STATIC_FINAL_MOD(constexpr, end_index)() const& MAYTHROW
 				requires (... && tc::has_end_index<Rng>)
 			{
-				return forward_to_active(tc_index(tc::end_index(rng)));
+				return forward_to_active(auto&& rng = baserng.best_access(), tc::implicit_cast<tc_index>(tc::end_index(rng)));
 			}
-			STATIC_FINAL_MOD(constexpr, at_end_index)(tc_index const& idx) const& MAYTHROW {
-				return forward_to_active(tc::at_end_index(rng, tc::get<index_t>(idx)));
-			}
-
-			STATIC_FINAL_MOD(constexpr, dereference_index)(tc_index const& idx) & MAYTHROW -> decltype(auto) {
-				return forward_to_active(tc::dereference_index(rng, tc::get<index_t>(idx)));
-			}
-			STATIC_FINAL_MOD(constexpr,dereference_index)(tc_index const& idx) const& MAYTHROW -> decltype(auto) {
-				return forward_to_active(tc::dereference_index(rng, tc::get<index_t>(idx)));
+			STATIC_FINAL_MOD(constexpr, at_end_index)(tc_index const& idx_) const& MAYTHROW {
+				return forward_to_active(with_range_and_index, tc::at_end_index(rng, idx));
 			}
 
-			STATIC_FINAL_MOD(constexpr, increment_index)(tc_index& idx) const& MAYTHROW {
-				forward_to_active(tc::increment_index(rng, tc::get<index_t>(idx)));
+			STATIC_FINAL_MOD(constexpr, dereference_index)(auto&& idx_) & MAYTHROW -> decltype(auto) {
+				return forward_to_active(with_range_and_index,
+					tc::explicit_cast<tc::common_reference_t<std::iter_reference_t<tc::iterator_t<Rng>>...>>(tc::dereference_index(rng, tc_move_if_owned(idx)))
+				);
 			}
-			STATIC_FINAL_MOD(constexpr, decrement_index)(tc_index& idx) const& MAYTHROW
+			STATIC_FINAL_MOD(constexpr, dereference_index)(auto&& idx_) const& MAYTHROW -> decltype(auto) {
+				return forward_to_active(with_range_and_index,
+					tc::explicit_cast<tc::common_reference_t<std::iter_reference_t<tc::iterator_t<Rng const&>>...>>(tc::dereference_index(rng, tc_move_if_owned(idx)))
+				);
+			}
+
+			STATIC_FINAL_MOD(constexpr, increment_index)(tc_index& idx_) const& MAYTHROW {
+				forward_to_active(with_range_and_index,tc::increment_index(rng, idx));
+			}
+			STATIC_FINAL_MOD(constexpr, decrement_index)(tc_index& idx_) const& MAYTHROW
 				requires (... && tc::has_decrement_index<Rng>)
 			{
-				forward_to_active(tc::decrement_index(rng, tc::get<index_t>(idx)));
+				forward_to_active(with_range_and_index, tc::decrement_index(rng, idx));
 			}
-			STATIC_FINAL_MOD(constexpr, advance_index)(tc_index& idx, difference_type d) const& MAYTHROW
+			STATIC_FINAL_MOD(constexpr, advance_index)(tc_index& idx_, difference_type d) const& MAYTHROW
 				requires (... && tc::has_advance_index<Rng>)
 			{
-				forward_to_active(tc::advance_index(rng, tc::get<index_t>(idx), tc::explicit_cast<typename boost::range_difference<std::remove_cvref_t<decltype(rng)>>::type>(d)));
+				forward_to_active(with_range_and_index, tc::advance_index(rng, idx, tc::explicit_cast<typename boost::range_difference<std::remove_cvref_t<range_t>>::type>(d)));
 			}
 			STATIC_FINAL_MOD(constexpr, distance_to_index)(tc_index const& idxLhs, tc_index const& idxRhs) const& MAYTHROW
 				requires (... && tc::has_distance_to_index<Rng>)
 			{
-				return forward_to_active(tc::distance_to_index(rng, tc::get<index_t>(idxLhs), tc::get<index_t>(idxRhs)));
+				return forward_to_active(auto&& rng = *baserng, tc::distance_to_index(rng, tc::get<index_t>(idxLhs), tc::get<index_t>(idxRhs)));
 			}
 			STATIC_FINAL_MOD(constexpr, middle_point)( tc_index& idxBegin, tc_index const& idxEnd ) const& MAYTHROW
 				requires (... && tc::has_middle_point<Rng>)
 			{
-				forward_to_active(tc::middle_point(rng, tc::get<index_t>(idxBegin), tc::get<index_t>(idxEnd)));
+				forward_to_active(auto&& rng = *baserng, tc::middle_point(rng, tc::get<index_t>(idxBegin), tc::get<index_t>(idxEnd)));
 			}
 
+#pragma pop_macro("with_range_and_index")
 #pragma pop_macro("forward_to_active")
 		};
 
 		// While we normally try to use `tc::subrange` in the case of all ranges having the same iterator type,
 		// we can't do that if we have rvalues that we need to aggregate.
 		template <typename... Rng>
-			requires (1 == tc::type::size<tc::type::unique_t<tc::type::list<tc::iterator_t<Rng>...>>>::value)
+			requires (1 == boost::mp11::mp_size<boost::mp11::mp_unique<boost::mp11::mp_list<tc::iterator_t<Rng>...>>>::value)
 		struct select_range_adaptor<true, Rng...>
 			: select_range_adaptor<false, Rng...>
 		{
@@ -211,8 +230,8 @@ namespace tc {
 	template <typename ... Rng>
 	using select_range_adaptor = select_range_adaptor_adl::select_range_adaptor<tc::ranges_with_common_reference<Rng...>, Rng...>;
 
-	template<typename... FuncRng> requires tc::has_common_reference_xvalue_as_ref<decltype(std::declval<FuncRng>()())...>
-	constexpr auto select_range(int n, FuncRng&&... funcrng) MAYTHROW -> tc::common_reference_xvalue_as_ref_t<decltype(std::declval<FuncRng>()())...> {
+	template<typename... FuncRng> requires requires { typename tc::common_reference_t<decltype(std::declval<FuncRng>()())...>; }
+	constexpr auto select_range(int n, FuncRng&&... funcrng) MAYTHROW -> tc::common_reference_t<decltype(std::declval<FuncRng>()())...> {
 #ifdef _MSC_VER
 		// The following assert must not hold: A function pointer to a function that returns a fixed size array by reference must also return a fixed size array by reference, not by value!
 		// If MSVC fixed that bug, please unify select_range.
@@ -225,7 +244,7 @@ namespace tc {
 			>::value
 		);
 
-		tc::storage_for<tc::common_reference_xvalue_as_ref_t<decltype(std::declval<FuncRng>()())...>> result;
+		tc::storage_for<tc::common_reference_t<decltype(std::declval<FuncRng>()())...>> result;
 		tc_scope_exit { result.dtor(); };
 
 		tc::invoke_with_constant<std::index_sequence_for<FuncRng...>>(
@@ -246,7 +265,7 @@ namespace tc {
 		);
 
 		return tc::invoke_with_constant<std::index_sequence_for<FuncRng...>>(
-			[&](auto const nconstIndex) MAYTHROW -> tc::common_reference_xvalue_as_ref_t<decltype(std::declval<FuncRng>()())...> {
+			[&](auto const nconstIndex) MAYTHROW -> tc::common_reference_t<decltype(std::declval<FuncRng>()())...> {
 				return tc::select_nth<nconstIndex()>(tc_move_if_owned(funcrng)...)();
 			},
 			n
@@ -260,21 +279,21 @@ namespace tc {
 	)
 
 	template<typename FuncRngTrue, typename FuncRngFalse>
-	constexpr auto conditional_range(tc::bool_context b, FuncRngTrue&& funcrngTrue, FuncRngFalse&& funcrngFalse) return_decltype_xvalue_by_ref_MAYTHROW(
+	constexpr auto conditional_range(tc::bool_context b, FuncRngTrue&& funcrngTrue, FuncRngFalse&& funcrngFalse) return_decltype_allow_xvalue_MAYTHROW(
 		tc::select_range(b ? 0 : 1, tc_move_if_owned(funcrngTrue), tc_move_if_owned(funcrngFalse))
 	)
 	template<typename FuncRngTrue, typename FuncRngFalse>
-	constexpr auto conditional_range(tc::constant<true>, FuncRngTrue funcrngTrue, FuncRngFalse&& /*funcrngFalse*/) return_decltype_xvalue_by_ref_MAYTHROW(
+	constexpr auto conditional_range(tc::constant<true>, FuncRngTrue funcrngTrue, FuncRngFalse&& /*funcrngFalse*/) return_decltype_allow_xvalue_MAYTHROW(
 		funcrngTrue()
 	)
 
 	template<typename FuncRngTrue, typename FuncRngFalse>
-	constexpr auto conditional_range(tc::constant<false>, FuncRngTrue&& /*funcrngTrue*/, FuncRngFalse funcrngFalse) return_decltype_xvalue_by_ref_MAYTHROW(
+	constexpr auto conditional_range(tc::constant<false>, FuncRngTrue&& /*funcrngTrue*/, FuncRngFalse funcrngFalse) return_decltype_allow_xvalue_MAYTHROW(
 		funcrngFalse()
 	)
 
 	template<typename Bool, typename FuncRngTrue>
-	constexpr auto conditional_range(Bool&& b, FuncRngTrue&& funcrngTrue) return_decltype_xvalue_by_ref_MAYTHROW(
+	constexpr auto conditional_range(Bool&& b, FuncRngTrue&& funcrngTrue) return_decltype_allow_xvalue_MAYTHROW(
 		tc::conditional_range(tc_move_if_owned(b), tc_move_if_owned(funcrngTrue), tc::fn_explicit_cast<tc::empty_range>())
 	)
 }

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -261,7 +261,7 @@ namespace tc {
 				}
 			}()));
 		} else {
-			return tc::explicit_cast<Char>(nCodePoint);
+			tc_return_cast(nCodePoint);
 		}
 	}
 
@@ -272,36 +272,24 @@ namespace tc {
 		// Lazily convert UTF-8/UTF-16 strings to UTF-32
 		template<typename Rng>
 		struct [[nodiscard]] SStringConversionRange<char32_t, Rng>
-			: tc::range_iterator_from_index<
+			: tc::index_range_adaptor<
 				SStringConversionRange<char32_t, Rng>,
-				tc::index_t<std::remove_reference_t<Rng>>
+				Rng,
+				tc::index_range_adaptor_flags::inherit_begin_end
 			>
-			, tc::range_adaptor_base_range<Rng>
 		{
+		private:
+			using base_ = typename SStringConversionRange::index_range_adaptor;
 			static_assert( std::is_same<char, tc::range_value_t<Rng>>::value || std::is_same<tc::char16, tc::range_value_t<Rng>>::value );
 
-			using tc::range_adaptor_base_range<Rng>::range_adaptor_base_range;
-			using typename SStringConversionRange::range_iterator_from_index::tc_index;
+		public:
+			using base_::base_;
+			using typename base_::tc_index;
 
-			static constexpr bool c_bHasStashingIndex=tc::has_stashing_index<std::remove_reference_t<Rng>>::value;
+			static constexpr bool c_bHasStashingIndex=false;
 
 		private:
 			using this_type = SStringConversionRange;
-
-			STATIC_FINAL_MOD(constexpr, begin_index)() const& return_decltype_MAYTHROW(
-				this->base_begin_index()
-			)
-
-			STATIC_FINAL_MOD(
-				template<ENABLE_SFINAE> constexpr,
-				end_index
-			)() const& return_decltype_MAYTHROW(
-				SFINAE_VALUE(this)->base_end_index()
-			)
-
-			STATIC_FINAL_MOD(constexpr, at_end_index)(tc_index const& idx) const& return_decltype_MAYTHROW(
-				tc::at_end_index(this->base_range(), idx)
-			)
 
 			STATIC_FINAL_MOD(constexpr, increment_index)(tc_index& idx) const& MAYTHROW {
 				VERIFYNOTIFYEQUAL(tc::codepoint_increment_index(this->base_range(), idx), ecodeunitseqtypVALID);
@@ -519,7 +507,7 @@ namespace tc {
 
 	template<tc::char_like Dst, typename Src>
 	[[nodiscard]] decltype(auto) convert_enc(Src&& src) noexcept {
-		if constexpr(tc::has_range_value<Src>::value) {
+		if constexpr(tc::has_range_value<Src>) {
 			static_assert(tc::char_like<tc::range_value_t<Src>>);
 			if constexpr(tc::safely_convertible_to<tc::range_value_t<Src>, Dst>) {
 				return tc_move_if_owned(src);

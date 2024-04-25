@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -62,8 +62,8 @@ namespace {
 	using ELetterB = tc::restricted_enum<ELetter, eletterB, eletterB>;
 	using ELetterBC = tc::restricted_enum<ELetter, eletterB, eletterC>;
 	void restricted_enums() noexcept {
-		static constexpr ELetterAB eletterabA(eletterA);
-		static constexpr ELetterAB eletterabB(eletterB);
+		tc_static_auto_constexpr(eletterabA, ELetterAB(eletterA));
+		tc_static_auto_constexpr(eletterabB, ELetterAB(eletterB));
 		ELetterAB eletterabOutput;
 		eletterabOutput = eletterabA;
 		eletterabOutput = eletterA;
@@ -71,7 +71,7 @@ namespace {
 		eletterbcOutput = eletterabA;
 		_ASSERTEQUAL(eletterabOutput, eletterbcOutput);
 		// _ASSERTEQUAL(eletterabOutput, tc::char_ascii('0')); // Doesn't compile: nonsensical comparison.
-		static constexpr ELetterB eletterb(eletterB);
+		tc_static_auto_constexpr(eletterb, ELetterB(eletterB));
 		_ASSERTEQUAL(eletterabA - eletterabOutput, 0);
 		_ASSERTEQUAL(eletterabOutput + (eletterabB - eletterabOutput), eletterabB);
 

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -22,6 +22,9 @@
 #include "char.h"
 
 #include <boost/version.hpp>
+#include <boost/fusion/support/config.hpp>
+#include <boost/fusion/support/tag_of_fwd.hpp>
+#include <boost/fusion/iterator/iterator_facade.hpp>
 
 #ifndef __clang__
 MODIFY_WARNINGS_BEGIN(
@@ -36,13 +39,115 @@ MODIFY_WARNINGS_BEGIN(
 #pragma clang diagnostic ignored "-Wunknown-warning-option"
 #pragma clang diagnostic ignored "-Wdeprecated-copy"
 #endif
-#include <boost/spirit/home/x3.hpp>
+#include "spirit/x3.hpp"
 #ifndef __clang__
 MODIFY_WARNINGS_END
 #else
 #pragma clang diagnostic pop
 #endif
-#include <boost/fusion/adapted/std_tuple.hpp>
+
+
+// Adapt tc::tuple for boost::fusion
+
+namespace boost::fusion {
+	struct tc_tuple_tag;
+	struct random_access_traversal_tag;
+
+	template <typename Tuple, int Index>
+	struct tc_tuple_iterator : iterator_facade<tc_tuple_iterator<Tuple, Index>, random_access_traversal_tag> {
+		using tuple_type = Tuple;
+		static auto constexpr index = Index;
+
+		constexpr explicit tc_tuple_iterator(Tuple& tuple) noexcept : m_tuple(tuple) {}
+
+		Tuple& m_tuple;
+
+		template <typename Iterator>
+		struct value_of : std::tuple_element<Iterator::index, typename remove_const<typename Iterator::tuple_type>::type> {};
+
+		template <typename Iterator>
+		struct deref {
+			using type = decltype(tc::get<Index>(std::declval<Iterator const&>().m_tuple));
+			static constexpr type call(Iterator const& iter) noexcept {
+				return tc::get<Index>(iter.m_tuple);
+			}
+		};
+
+		template <typename Iterator, typename N>
+		struct advance {
+			using type = tc_tuple_iterator<typename Iterator::tuple_type, Iterator::index+N::value>;
+			static constexpr auto call(Iterator const& i) noexcept {
+				return type(i.m_tuple);
+			}
+		};
+
+		template <typename Iterator>
+		struct next : advance<Iterator, tc::constant<1>> {};
+
+		template <typename Iterator>
+		struct prior : advance<Iterator, tc::constant<-1>> {};
+
+		template <typename First, typename Last>
+		struct distance {
+			using type = tc::constant<Last::index-First::index>;
+			static constexpr type call(First const&, Last const&) noexcept { return {}; }
+		};
+	};
+
+	namespace traits {
+		template <typename... Elements>
+		struct tag_of<tc::tuple<Elements...>> {
+			using type = tc_tuple_tag;
+		};
+	}
+
+	namespace extension {
+		template<> struct is_sequence_impl<tc_tuple_tag> {
+			template<typename T> using apply = tc::constant<true>;
+		};
+
+		template<> struct is_view_impl<tc_tuple_tag> {
+			template<typename T> using apply = tc::constant<false>;
+		};
+
+		template<> struct category_of_impl<tc_tuple_tag> {
+			template<typename T> using apply = std::type_identity<random_access_traversal_tag>;
+		};
+
+		template <> struct size_impl<tc_tuple_tag> {
+			template <typename Sequence> using apply = tc::constant<std::tuple_size<Sequence>::value>;
+		};
+
+		template <> struct at_impl<tc_tuple_tag> {
+			template <typename Sequence, typename N>
+			struct apply {
+				static constexpr decltype(auto) call(Sequence& seq) noexcept {
+					return tc::get<N::value>(seq);
+				}
+			};
+		};
+
+		template <> struct begin_impl<tc_tuple_tag> {
+			template <typename Sequence>
+			struct apply {
+				using type = tc_tuple_iterator<Sequence, 0>;
+				static constexpr auto call(Sequence& v) noexcept {
+					return type(v);
+				}
+			};
+		};
+
+		template <> struct end_impl<tc_tuple_tag> {
+			template <typename Sequence>
+			struct apply {
+				using type = tc_tuple_iterator<Sequence, std::tuple_size<typename remove_const<Sequence>::type>::value>;
+				static constexpr auto call(Sequence& v) noexcept {
+					return type(v);
+				}
+			};
+		};
+	}
+}
 
 // We prefer x3::rule to simple parser. Because:
 //   1. parsers are copied around in spirit.
@@ -60,53 +165,38 @@ namespace tc {
 	template< typename Rng, typename Expr, typename... Attr>
 	bool parse( Rng const& rng, Expr const& expr, Attr&... attr ) MAYTHROW {
 		if constexpr( 2 <= sizeof...(Attr) ) {
-			return tc::parse(rng, expr, tc::as_lvalue(std::tie(attr...)));
+			return tc::parse(rng, expr, tc::as_lvalue(tc::tie(attr...)));
 		} else {
-			try {
-				return x3::parse( tc::begin(rng), tc::end(rng), expr, attr... ); // MAYTHROW
-			} catch (x3::expectation_failure<tc::decay_t<decltype(tc::begin(rng))>> const&) {
-				return false;
-			}
+			return x3::parse( tc::begin(rng), tc::end(rng), x3::with<x3::expectation_failure_tag>(false)[expr], attr... ); // MAYTHROW
 		}
 	}
 	template< typename Iterator, typename Expr, typename... Attr>
 	bool parse_iterator( Iterator& itBegin, Iterator const& itEnd, Expr const& expr, Attr&... attr ) MAYTHROW {
 		if constexpr( 2 <= sizeof...(Attr) ) {
-			return tc::parse_iterator(itBegin, itEnd, expr, tc::as_lvalue(std::tie(attr...))); // MAYTHROW
+			return tc::parse_iterator(itBegin, itEnd, expr, tc::as_lvalue(tc::tie(attr...))); // MAYTHROW
 		} else {
-			auto itBegin2=itBegin;
-			try {
-				if(x3::parse( itBegin, itEnd, expr, attr... )) return true; // MAYTHROW
-			} catch (x3::expectation_failure<Iterator> const&) {}
-			itBegin=itBegin2;
-			return false;
+			return x3::parse( itBegin, itEnd, x3::with<x3::expectation_failure_tag>(false)[expr], attr... ); // MAYTHROW
 		}
 	}
 	template< typename Rng, typename Expr, typename... Attr>
 	bool parse_consume( Rng & rng, Expr const& expr, Attr&... attr ) MAYTHROW {
 		if constexpr( 2 <= sizeof...(Attr) ) {
-			return tc::parse_consume(rng, expr, tc::as_lvalue(std::tie(attr...))); // MAYTHROW
+			return tc::parse_consume(rng, expr, tc::as_lvalue(tc::tie(attr...))); // MAYTHROW
 		} else {
-			try {
-				auto itBegin = tc::begin(rng);
-				if(x3::parse( itBegin, tc::end(rng), expr, attr... )) { // MAYTHROW
-					tc::drop_inplace( rng, itBegin );
-					return true;
-				}
-			} catch (x3::expectation_failure<tc::decay_t<decltype(tc::begin(rng))>> const&) {}
+			auto itBegin = tc::begin(rng);
+			if(x3::parse( itBegin, tc::end(rng), x3::with<x3::expectation_failure_tag>(false)[expr], attr... )) { // MAYTHROW
+				tc::drop_inplace( rng, itBegin );
+				return true;
+			}
 			return false;
 		}
 	}
 	template< typename Rng, typename Expr, typename Skipper, typename... Attr>
 	bool phrase_parse( Rng const& rng, Expr const& expr, Skipper const& skipper, Attr&... attr ) MAYTHROW {
 		if constexpr( 2 <= sizeof...(Attr) ) {
-			return tc::phrase_parse(rng, expr, skipper, tc::as_lvalue(std::tie(attr...)));
+			return tc::phrase_parse(rng, expr, skipper, tc::as_lvalue(tc::tie(attr...)));
 		} else {
-			try {
-				return x3::phrase_parse( tc::begin(rng), tc::end(rng), expr, skipper, attr... ); // MAYTHROW
-			} catch (x3::expectation_failure<tc::decay_t<decltype(tc::begin(rng))>> const&) {
-				return false;
-			}
+			return x3::phrase_parse( tc::begin(rng), tc::end(rng), x3::with<x3::expectation_failure_tag>(false)[expr], skipper, attr... ); // MAYTHROW
 		}
 	}
 
@@ -133,7 +223,9 @@ namespace tc {
 			static bool const has_attribute = false;
 			using attribute_type = x3::unused_type;
 
-			constexpr bool test(tc::unused /*char*/, tc::unused /*context*/) const& noexcept {
+			template<typename Context>
+			constexpr bool test(tc::unused /*char*/, Context const&) const& noexcept {
+				static_assert(!x3::has_skipper<Context>::value);
 				return true;
 			}
 		};
@@ -146,15 +238,17 @@ namespace tc {
 			static bool const has_attribute = true;
 			using attribute_type = T;
 
-			template<typename U>
-			bool test(U const u, tc::unused /*context*/) const& noexcept {
+			template<typename U, typename Context>
+			bool test(U const u, Context const&) const& noexcept {
+				// A skipper with a parser that takes anything is strange. We do use skippers with restricted_enums.
+				static_assert(requires { T::constructible_from(std::declval<U const&>()); } || !x3::has_skipper<Context>::value);
 				return parse_match(u);
 			}
 
 			template<typename U>
 			bool parse_match(U const u) const& noexcept {
-				if constexpr (requires { T::constructable_from(std::declval<T>()); }) {
-					return T::constructable_from(u);
+				if constexpr (requires { T::constructible_from(std::declval<U const&>()); }) {
+					return T::constructible_from(u);
 				} else {
 					static_assert(tc::safely_constructible_from<T, U const&>);
 					return true;
@@ -228,10 +322,10 @@ namespace tc {
 		//   })]];
 		template<typename T>
 		struct attr_is_type {
-			template<typename Expr>
+			template<x3::spirit_parser Expr>
 			constexpr auto operator[](Expr&& expr) const& noexcept {
-				// returns a x3::rule_definition with attr_is_id, Attribute type of T and rhs parser of x3::as_parser(expr)
-				return x3::rule<struct attr_is_id, T>{"attr_is"} = x3::as_parser(tc_move_if_owned(expr));
+				// returns a x3::rule_definition with attr_is_id, Attribute type of T and rhs parser of expr
+				return x3::rule<struct attr_is_id, T>{"attr_is"} = tc_move_if_owned(expr);
 			}
 		};
 	}
@@ -365,11 +459,11 @@ namespace boost::spirit::x3 {
 	template <typename ID>
 	struct with_val_gen
 	{	
-		template <typename Subject>
-		constexpr with_val_directive<typename extension::as_parser<Subject>::value_type, ID>
+		template <x3::spirit_parser Subject>
+		constexpr with_val_directive<Subject, ID>
 		operator[](Subject const& subject) const
 		{
-			return { as_parser(subject) };
+			return { subject };
 		}
 	};
 

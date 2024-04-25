@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -100,7 +100,7 @@ namespace tc {
 			}
 		public:
 			constexpr auto size() const& MAYTHROW requires (... && tc::has_size<Rng>) {
-				return tc::apply([](auto const& ... rng) MAYTHROW {
+				return tc_apply([](auto const& ... rng) MAYTHROW {
 					return tc::compute_range_adaptor_size<[](auto const ... n) noexcept {
 						return tc::as_unsigned((... + n));
 					}>(rng.base_range()...);
@@ -112,7 +112,7 @@ namespace tc {
 			}
 
 			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, concat_adaptor_impl>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
-			friend auto range_output_t_impl(Self&&) -> tc::type::unique_t<tc::type::concat_t<
+			friend auto range_output_t_impl(Self&&) -> boost::mp11::mp_unique<boost::mp11::mp_append<
 				tc::range_output_t<decltype(std::declval<tc::apply_cvref_t<tc::range_adaptor_base_range<Rng>, Self>>().base_range())>...
 			>> {} // unevaluated
 		};
@@ -139,7 +139,7 @@ namespace tc {
 
 		template<typename ConcatRng, std::size_t... I>
 		[[nodiscard]] constexpr auto forward_base_ranges_as_tuple(ConcatRng&& rng, std::index_sequence<I...>) noexcept {
-			return tc::forward_as_tuple(tc::get<I>(tc_move_if_owned(rng).m_tupleadaptbaserng).base_range()...);
+			return tc::tie(tc::get<I>(tc_move_if_owned(rng).m_tupleadaptbaserng).base_range()...);
 		}
 
 		struct concat_end_index final {
@@ -167,6 +167,7 @@ namespace tc {
 		public:
 			using typename this_type::range_iterator_from_index::tc_index;
 			static constexpr bool c_bHasStashingIndex=std::disjunction<tc::has_stashing_index<std::remove_reference_t<Rng>>...>::value;
+			static constexpr bool c_bPrefersForEach = true;
 
 			using difference_type = tc::common_type_t<typename boost::range_difference<Rng>::type...>;
 
@@ -267,19 +268,25 @@ namespace tc {
 			}
 
 MODIFY_WARNINGS(((suppress)(4544))) // 'Func2': default template argument ignored on this template declaration
-			STATIC_FINAL_MOD(constexpr, dereference_index)(tc_index const& idx) const& noexcept -> decltype(auto) {
+			STATIC_FINAL_MOD(constexpr, dereference_index)(auto&& idx) const& MAYTHROW -> decltype(auto) {
 				return tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
-					[&](auto const nconstIndex) constexpr noexcept -> decltype(auto) { // return_decltype leads to ICE
-						return tc::dereference_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(), tc::get<nconstIndex()>(idx));
+					[&](auto const nconstIndex) constexpr MAYTHROW -> decltype(auto) { // return_decltype leads to ICE
+						return tc::dereference_index(
+							tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(),
+							tc::get<nconstIndex()>(tc_move_if_owned(idx))
+						);
 					},
 					idx.index()
 				);
 			}
 
-			STATIC_FINAL_MOD(constexpr, dereference_index)(tc_index const& idx) & noexcept -> decltype(auto) {
+			STATIC_FINAL_MOD(constexpr, dereference_index)(auto&& idx) & MAYTHROW -> decltype(auto) {
 				return tc::invoke_with_constant<std::index_sequence_for<Rng...>>(
-					[&](auto const nconstIndex) constexpr noexcept -> decltype(auto) { // return_decltype leads to ICE
-						return tc::dereference_index(tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(), tc::get<nconstIndex()>(idx));
+					[&](auto const nconstIndex) constexpr MAYTHROW -> decltype(auto) { // return_decltype leads to ICE
+						return tc::dereference_index(
+							tc::get<nconstIndex()>(this->m_tupleadaptbaserng).base_range(),
+							tc::get<nconstIndex()>(tc_move_if_owned(idx))
+						);
 					},
 					idx.index()
 				);
@@ -460,13 +467,13 @@ MODIFY_WARNINGS(((suppress)(4544))) // 'Func2': default template argument ignore
 			} else if constexpr( tc::is_concat_range<std::remove_cvref_t<Rng>>::value ) {
 				return forward_base_ranges_as_tuple(tc_move_if_owned(rng), typename std::remove_cvref_t<Rng>::index_seq());
 			} else {
-				return tc::forward_as_tuple(tc_move_if_owned(rng));
+				return tc::tie(tc_move_if_owned(rng));
 			}
 		}
 	}
 
 	template<typename... Rng>
 	[[nodiscard]] constexpr decltype(auto) concat(Rng&&... rng) noexcept {
-		return tc::apply(tc::no_adl::fn_concat_impl(), tc::tuple_cat(tc::concat_detail::forward_range_as_tuple(tc_move_if_owned(rng))...));
+		return tc_apply(tc::no_adl::fn_concat_impl(), tc::tuple_cat(tc::concat_detail::forward_range_as_tuple(tc_move_if_owned(rng))...));
 	}
 }

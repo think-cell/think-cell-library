@@ -1,16 +1,16 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "type_traits.h"
+#include "type_traits_fwd.h"
 #include "template_func.h"
-#include "return_decltype.h"
+#include "invoke.h"
 #include <array>
 
 //////////////////////////////////////////////////////////////////
@@ -94,34 +94,44 @@ namespace tc {
 		// This is the default explicit_convert, not a specialization, because aggregate initialization must have lower priority than other specializations which could also be aggregate types
 		// Aggregate types are tc::safely_constructible_from same type (copy/move). This is handled in the default explicit_cast below.
 		template<typename TTarget, typename... Args> requires std::is_class<TTarget>::value && std::is_aggregate<TTarget>::value
-		constexpr auto explicit_convert_impl(tc::type::identity<TTarget>, Args&&... args)
+		constexpr auto explicit_convert_impl(std::type_identity<TTarget>, Args&&... args)
 			return_decltype_MAYTHROW( TTarget{tc_move_if_owned(args)...} )
 
 		template<typename T, std::size_t N, typename... Args>
-		std::array<T, N> explicit_convert_impl(tc::type::identity<std::array<T, N>>, Args&&... args) = delete; // explicitly delete direct list construction of std::array
+		std::array<T, N> explicit_convert_impl(std::type_identity<std::array<T, N>>, Args&&... args) = delete; // explicitly delete direct list construction of std::array
 	}
 
 	DEFINE_TMPL_FUNC_WITH_CUSTOMIZATIONS(explicit_convert)
 
-	template<typename TTarget, typename... Args, std::enable_if_t<!tc::safely_constructible_from<std::remove_cv_t<TTarget>, Args&&...>>* = nullptr>
-	[[nodiscard]] constexpr auto explicit_cast(Args&&... args)
-		return_decltype_MAYTHROW(tc::explicit_convert(tc::type::identity<std::remove_cv_t<TTarget>>(), tc_move_if_owned(args)...))
+	namespace no_adl {
+		template<typename TTarget>
+		struct fn_internal_explicit_cast final {
+			template<typename... Args, std::enable_if_t<!tc::safely_constructible_from<std::remove_cv_t<TTarget>, Args&&...>>* = nullptr>
+			constexpr auto operator()(Args&&... args) const&
+				return_decltype_MAYTHROW(tc::explicit_convert(std::type_identity<std::remove_cv_t<TTarget>>(), tc_move_if_owned(args)...))
 
-	template<typename TTarget, typename... Args> requires tc::safely_constructible_from<std::remove_cv_t<TTarget>, Args&&...>
-	[[nodiscard]] constexpr auto explicit_cast(Args&&... args)
-		return_ctor_MAYTHROW(std::remove_cv_t<TTarget>, (tc_move_if_owned(args)...))
+			template<typename... Args> requires tc::safely_constructible_from<std::remove_cv_t<TTarget>, Args&&...>
+			constexpr auto operator()(Args&&... args) const&
+				return_ctor_MAYTHROW(std::remove_cv_t<TTarget>, (tc_move_if_owned(args)...))
+		};
+	}
+
+	template<typename TTarget>
+	[[nodiscard]] constexpr auto explicit_cast(auto&&... args) return_decltype_MAYTHROW(
+		tc_invoke_pack(no_adl::fn_internal_explicit_cast<TTarget>(), tc_move_if_owned(args))
+	)
 
 	template<typename TTarget, typename... Args>
 	concept explicit_castable_from = requires { tc::explicit_cast<TTarget>(std::declval<Args>()...); };
 
 	// Using decltype(this->member) ensures casting to the correct type even if member is shadowed (but disallows base classes).
-	#define tc_member_init_cast(member, ...) member(tc::explicit_cast<decltype(this->member)>(__VA_ARGS__))
+	#define tc_member_init(member, ...) member(tc::explicit_cast<decltype(this->member)>(__VA_ARGS__))
 
 	namespace no_adl {
 		struct bool_context final {
 			template< typename T >
 			constexpr bool_context(T const& t) noexcept
-				: tc_member_init_cast(m_b, t)
+				: tc_member_init(m_b, t)
 			{}
 			constexpr operator bool() const& noexcept { return m_b; }
 		private:
@@ -140,8 +150,26 @@ namespace tc {
 		}
 	}
 
-	template<typename Lhs, typename Rhs>
-	constexpr void assign_explicit_cast(Lhs& lhs, Rhs&& rhs) noexcept {
-		lhs=tc::explicit_cast<Lhs>(tc_move_if_owned(rhs));
-	}
+	//////////////////////////////////////////////////////////////////////////
+	// concepts
+
+	template <typename Func, typename T>
+	concept predicate = tc::invocable<Func const&, std::remove_cvref_t<T> const&>
+		&& requires(Func const& f, std::remove_cvref_t<T> const& t) { tc::explicit_cast<bool>(tc_invoke(f, t)); };
+	template <typename Func, typename T>
+	concept nothrow_predicate = tc::predicate<Func, T> && tc::nothrow_invocable<Func const&, std::remove_cvref_t<T> const&>;
+
+	template <typename Func, typename T>
+	concept constant_predicate = tc::predicate<Func, T>
+		&& requires(Func const& f, std::remove_cvref_t<T> const& t) { tc::explicit_cast<bool>(decltype(tc_invoke(f, t))::value); };
+
+	template <typename Func, typename T>
+	concept constant_predicate_true = tc::constant_predicate<Func, T>
+		&& tc::explicit_cast<bool>(decltype(tc_invoke(std::declval<Func const&>(), std::declval<std::remove_cvref_t<T> const&>()))::value);
+	template <typename Func, typename T>
+	concept constant_predicate_false = tc::constant_predicate<Func, T>
+		&& !tc::explicit_cast<bool>(decltype(tc_invoke(std::declval<Func const&>(), std::declval<std::remove_cvref_t<T> const&>()))::value);
+
+	template <typename Func, typename T>
+	concept runtime_predicate = tc::predicate<Func, T> && (!tc::constant_predicate<Func, T>);
 }

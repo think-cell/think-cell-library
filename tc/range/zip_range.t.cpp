@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -47,8 +47,8 @@ namespace
 }
 
 UNITTESTDEF(zip_range_supported_ops) {
-	std::vector<int> data = { 1, 2, 3, 4, 5 };
-	std::vector<float> dataf = { 1, 2, 3, 4, 5 };
+	tc::vector<int> data = { 1, 2, 3, 4, 5 };
+	tc::vector<float> dataf = { 1, 2, 3, 4, 5 };
 	auto data_fwd = traversal_override_adaptor<tc::vector<int>, boost::iterators::forward_traversal_tag>(data);
 	auto data_bidir = traversal_override_adaptor<tc::vector<int>, boost::iterators::bidirectional_traversal_tag>(data);
 	auto data_gen = [&](auto sink) noexcept { return tc::for_each(data, sink); };
@@ -115,7 +115,7 @@ UNITTESTDEF(zip_range_difference_type) {
 	static_assert(std::is_same<boost::range_difference<decltype(tc::zip(rngSmallDiff, rngSmallDiff))>::type, SmallDiffType>::value);
 }
 
-STATICASSERTSAME( (tc::range_value_t<decltype(tc::zip(std::declval<tc::vector<int>>(), std::declval<std::array<double,4>>()))>), (tc::tuple<int, double>) );
+STATICASSERTSAME( TC_FWD(tc::range_value_t<decltype(tc::zip(std::declval<tc::vector<int>>(), std::declval<std::array<double,4>>()))>), TC_FWD(tc::tuple<int, double>) );
 
 UNITTESTDEF(zip_range_sort_inplace) {
 	tc::vector<int> veci = {47,11,23};
@@ -133,15 +133,15 @@ UNITTESTDEF(zip_range_range_output_t) {
 	tc::vector<int> const vecn ={1, 2, 3};
 	tc::vector<double> vecf ={1.2, 2.2, 3.2};
 	auto const rngnf = tc::zip(vecn, vecf);
-	STATICASSERTSAME(tc::range_output_t<decltype(rngnf)>, (tc::type::list<tc::tuple<int const&, double&>>));
-	STATICASSERTSAME(tc::range_value_t<decltype(rngnf)>, (tc::tuple<int, double>));
+	STATICASSERTSAME(tc::range_output_t<decltype(rngnf)>, TC_FWD(boost::mp11::mp_list<tc::tuple<int const&, double&>>));
+	STATICASSERTSAME(tc::range_value_t<decltype(rngnf)>, TC_FWD(tc::tuple<int, double>));
 
 	auto const rngch = tc::generator_range_output<char const&>([](auto sink) noexcept {
 		tc::for_each("abc", sink);
 	});
-	STATICASSERTSAME(tc::range_output_t<decltype(rngch)>, (tc::type::list<char const&>));
+	STATICASSERTSAME(tc::range_output_t<decltype(rngch)>, TC_FWD(boost::mp11::mp_list<char const&>));
 	auto const rngnchf = tc::zip(vecn, rngch, vecf);
 
-	STATICASSERTSAME(tc::range_output_t<decltype(rngnchf)>, (tc::type::list<tc::tuple<int const&, char const&, double&>>));
-	STATICASSERTSAME(tc::range_value_t<decltype(rngnchf)>, (tc::tuple<int, char, double>));
+	STATICASSERTSAME(tc::range_output_t<decltype(rngnchf)>, TC_FWD(boost::mp11::mp_list<tc::tuple<int const&, char const&, double&>>));
+	STATICASSERTSAME(tc::range_value_t<decltype(rngnchf)>, TC_FWD(tc::tuple<int, char, double>));
 }

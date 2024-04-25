@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -24,14 +24,14 @@ namespace tc {
 
 			struct return_take_base {
 				template<typename It, typename Rng>
-				static constexpr auto pack_border(It&& it, Rng&& rng) return_decltype_xvalue_by_ref_noexcept(
+				static constexpr auto pack_border(It&& it, Rng&& rng) return_decltype_allow_xvalue_noexcept(
 					tc::take(tc_move_if_owned(rng), tc_move_if_owned(it))
 				)
 			};
 
 			struct return_drop_base {
 				template<typename It, typename Rng>
-				static constexpr auto pack_border(It&& it, Rng&& rng) return_decltype_xvalue_by_ref_noexcept(
+				static constexpr auto pack_border(It&& it, Rng&& rng) return_decltype_allow_xvalue_noexcept(
 					tc::drop(tc_move_if_owned(rng), tc_move_if_owned(it))
 				)
 			};
@@ -80,7 +80,7 @@ namespace tc {
 				static constexpr bool requires_iterator = true;
 
 				template<typename Rng>
-				static constexpr auto pack_no_element(Rng&& rng) noexcept code_return_decltype_xvalue_by_ref(
+				static constexpr auto pack_no_element(Rng&& rng) noexcept code_return_decltype_allow_xvalue(
 					if constexpr( !bSupportsNoElement ) _ASSERTFALSE;,
 					ReturnBorder::pack_no_border(tc_move_if_owned(rng))
 				)
@@ -90,20 +90,20 @@ namespace tc {
 			struct pack_as_border_before : pack_as_border_base<ReturnBorder, bSupportsNoElement> {
 				static constexpr bool allowed_if_always_has_border = true;
 				template<typename It, typename Rng>
-				static constexpr auto pack_element(It&& it, Rng&& rng, tc::unused /*ref*/={}) return_decltype_xvalue_by_ref_noexcept(
+				static constexpr auto pack_element(It&& it, Rng&& rng, tc::unused /*ref*/={}) return_decltype_allow_xvalue_noexcept(
 					ReturnBorder::pack_border(tc_move_if_owned(it), tc_move_if_owned(rng))
 				)
 				template<typename It, typename Rng>
-				static constexpr decltype(auto) pack_border(It&& it, Rng&& rng) noexcept(noexcept(--it)) {
+				static constexpr decltype(auto) pack_border(It it, Rng&& rng) noexcept(noexcept(--it)) {
 					if( tc::begin(rng) != it ) {
 						--it;
-						return ReturnBorder::pack_border(tc_move_if_owned(it), tc_move_if_owned(rng));
+						return ReturnBorder::pack_border(tc_move(it), tc_move_if_owned(rng));
 					} else {
 						return ReturnBorder::pack_no_border(tc_move_if_owned(rng));
 					}
 				}
 				template<typename Rng, typename Begin, typename End>
-				static constexpr auto pack_view(Rng&& rng, Begin&& begin, End&& end) return_decltype_xvalue_by_ref_noexcept(
+				static constexpr auto pack_view(Rng&& rng, Begin&& begin, End&& end) return_decltype_allow_xvalue_noexcept(
 					ReturnBorder::pack_border(tc_move_if_owned(begin), tc_move_if_owned(rng))
 				)
 			};
@@ -112,21 +112,21 @@ namespace tc {
 			struct pack_as_border_after : pack_as_border_base<ReturnBorder, bSupportsNoElement> {
 				static constexpr bool allowed_if_always_has_border = true;
 				template<typename It, typename Rng>
-				static constexpr auto pack_element(It&& it, Rng&& rng, tc::unused /*ref*/={}) return_decltype_xvalue_by_ref_MAYTHROW(
+				static constexpr auto pack_element(It it, Rng&& rng, tc::unused /*ref*/={}) return_decltype_allow_xvalue_MAYTHROW(
 					++it, // MAYTHROW
-					ReturnBorder::pack_border(tc_move_if_owned(it), tc_move_if_owned(rng))
+					ReturnBorder::pack_border(tc_move(it), tc_move_if_owned(rng))
 				)
 				template<typename It, typename Rng>
-				static constexpr decltype(auto) pack_border(It&& it, Rng&& rng) noexcept(noexcept(--it)) {
+				static constexpr decltype(auto) pack_border(It it, Rng&& rng) noexcept(noexcept(--it)) {
 					if( tc::end(rng) != it ) {
 						++it;
-						return ReturnBorder::pack_border(tc_move_if_owned(it), tc_move_if_owned(rng));
+						return ReturnBorder::pack_border(tc_move(it), tc_move_if_owned(rng));
 					} else {
 						return ReturnBorder::pack_no_border(tc_move_if_owned(rng));
 					}
 				}
 				template<typename Rng, typename Begin, typename End>
-				static constexpr auto pack_view(Rng&& rng, Begin&&, End&& end) return_decltype_xvalue_by_ref_noexcept(
+				static constexpr auto pack_view(Rng&& rng, Begin&&, End&& end) return_decltype_allow_xvalue_noexcept(
 					ReturnBorder::pack_border(tc_move_if_owned(end), tc_move_if_owned(rng))
 				)
 			};
@@ -310,7 +310,7 @@ namespace tc {
 			static constexpr bool allowed_if_always_has_border = false;
 
 			template<typename Rng, typename... OptEndIt>
-			static constexpr auto pack_no_border(Rng&& rng, OptEndIt&&...) return_decltype_xvalue_by_ref_MAYTHROW(
+			static constexpr auto pack_no_border(Rng&& rng, OptEndIt&&...) return_decltype_allow_xvalue_MAYTHROW(
 				tc::take(tc_move_if_owned(rng), tc::begin(rng))
 			)
 		};
@@ -319,12 +319,12 @@ namespace tc {
 			static constexpr bool allowed_if_always_has_border = false;
 
 			template<typename Rng>
-			static constexpr auto pack_no_border(Rng&& rng) return_decltype_xvalue_by_ref_MAYTHROW(
+			static constexpr auto pack_no_border(Rng&& rng) return_decltype_allow_xvalue_MAYTHROW(
 				tc::drop(tc_move_if_owned(rng), tc::end(rng))
 			)
 
 			template<typename Rng>
-			static constexpr auto pack_no_border(Rng&& rng, tc::iterator_t<Rng>&& itEnd) return_decltype_xvalue_by_ref_MAYTHROW(
+			static constexpr auto pack_no_border(Rng&& rng, tc::iterator_t<Rng>&& itEnd) return_decltype_allow_xvalue_MAYTHROW(
 				tc::drop(tc_move_if_owned(rng), tc_move(itEnd))
 			)
 		};
@@ -438,6 +438,28 @@ namespace tc {
 			}
 			template<typename Rng>
 			static constexpr std::optional<tc::range_value_t<Rng>> pack_no_element() noexcept {
+				return std::nullopt;
+			}
+		};
+
+		struct return_reference_or_none final {
+			static constexpr bool requires_iterator = true;
+
+			template<typename Rng>
+			using optional_t = tc::optional<std::iter_reference_t<tc::iterator_t<Rng>>>; // may be optional value
+
+			template<typename It, typename Rng, typename Ref>
+			static constexpr optional_t<Rng> pack_element(It&&, Rng&&, Ref&& ref) noexcept {
+				static_assert(!tc::is_stashing_element<std::remove_cvref_t<It>>::value);
+				return tc_move_if_owned(ref);
+			}
+			template<typename It, typename Rng>
+			static constexpr optional_t<Rng> pack_element(It&& it, Rng&&) noexcept {
+				static_assert(!tc::is_stashing_element<std::remove_cvref_t<It>>::value);
+				return *tc_move_if_owned(it);
+			}
+			template<typename Rng>
+			static constexpr optional_t<Rng> pack_no_element(Rng&&) noexcept {
 				return std::nullopt;
 			}
 		};
@@ -601,6 +623,7 @@ namespace tc {
 	using no_adl::return_value;
 	using no_adl::return_value_or_default;
 	using no_adl::return_value_or_none;
+	using no_adl::return_reference_or_none;
 	using no_adl::return_element_index;
 	using no_adl::return_element_index_or_none;
 	using no_adl::return_element_index_or_npos;

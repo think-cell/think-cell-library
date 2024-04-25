@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -100,39 +100,31 @@ namespace tc {
 			constexpr T& dereference(size_type n) & noexcept { return m_a.m_at[n]; }
 		public:
 			constexpr static_vector_base_trivial() noexcept
-				: m_a([]() noexcept {
+				: m_a([]() noexcept -> SValueInitIfConstexpr {
 					if( std::is_constant_evaluated() ) {
-						return SValueInitIfConstexpr(constexpr_tag);
+						return {constexpr_tag};
 					} else {
-						return SValueInitIfConstexpr();
+						return {};
 					}
 				}())
 			{}
 
-			// This specialization for trivially-assignable types is usable in constant expressions.
-			// The normal version of emplace_back cannot be used in constant expressions, because it uses placement new.
-			template<typename... Args>
-			constexpr typename std::enable_if<std::is_trivially_assignable<T&, T>::value && noexcept(T(std::declval<Args&&>()...)), T&>::type emplace_back(Args&& ... args) & noexcept {
+			constexpr T& emplace_back(auto&&... args) & noexcept(noexcept(tc::ctor(std::declval<T&>(), tc_move_if_owned(args)...))) {
 				_ASSERTE(!this->full());
 				T& t = m_a.m_at[this->m_iEnd];
-				++this->m_iEnd;
-				t = T(tc_move_if_owned(args)...);
-				return t;
-			}
-
-			template<typename... Args>
-			typename std::enable_if < !std::is_trivially_assignable<T&, T>::value || !noexcept(T(std::declval<Args&&>()...)), T&>::type emplace_back(Args&& ... args) & noexcept(noexcept(T(tc_move_if_owned(args)...))) {
-				_ASSERTE(!this->full());
-				T& t = m_a.m_at[this->m_iEnd];
-				++this->m_iEnd;
 				// Inside element ctors, the element is already in the container.
-				try {
-					tc::ctor(t, tc_move_if_owned(args)...); // MAYTHROW
-					return t;
-				} catch (...) {
-					--this->m_iEnd;
-					throw;
+				++this->m_iEnd;
+				if constexpr(noexcept(tc::ctor(t, tc_move_if_owned(args)...))) { // Avoid try-catch to not inhibit inlining on MSVC
+					tc::ctor(t, tc_move_if_owned(args)...);
+				} else {
+					try {
+						tc::ctor(t, tc_move_if_owned(args)...); // MAYTHROW
+					} catch (...) {
+						--this->m_iEnd;
+						throw;
+					}
 				}
+				return t;
 			}
 		protected:
 			[[nodiscard]] constexpr T* data() & noexcept {
@@ -204,18 +196,15 @@ namespace tc {
 		template< typename T, tc::static_vector_size_t N >
 		struct [[nodiscard]] static_vector
 			: static_vector_base_t<T, N>
-			, tc::range_iterator_from_index<
-				static_vector<T, N>,
-				tc::static_vector_size_t // fixed width integer for shared heap
-			>
+			, tc::iota_range_adaptor<static_vector<T, N>, tc::static_vector_size_t>
 		{
 		private:
 			using this_type = static_vector;
 		public:
 			using base = static_vector_base_t<T, N>;
-			using typename this_type::range_iterator_from_index::tc_index;
+			using typename this_type::index_range_adaptor::tc_index;
 
-			using difference_type = std::make_signed_t<tc_index>;
+			using difference_type = std::make_signed_t<tc::static_vector_size_t>;
 			using reference = T&;
 			using value_type = T;
 
@@ -262,19 +251,12 @@ namespace tc {
 				return *this;
 			}
 		private:
-			STATIC_FINAL_MOD(constexpr, begin_index)() const& noexcept -> tc_index { return 0; }
+			STATIC_FINAL_MOD(constexpr static, begin_index)() noexcept -> tc_index { return 0; }
 			STATIC_FINAL_MOD(constexpr, end_index)() const& noexcept -> tc_index { return this->m_iEnd; }
-			STATIC_FINAL_MOD(constexpr, increment_index)(tc_index& idx) const& noexcept -> void { ++idx; }
-			STATIC_FINAL_MOD(constexpr, decrement_index)(tc_index& idx) const& noexcept -> void { --idx; }
-			STATIC_FINAL_MOD(constexpr, advance_index)(tc_index& idx, difference_type d) const& noexcept -> void { idx += static_cast<tc_index>(d); } /* static_cast suppresses C4308 warning (negative integral constant converted to unsigned) when an iterator is decremented in a constant expression */
-			STATIC_FINAL_MOD(constexpr, distance_to_index)(tc_index const& idxLhs, tc_index const& idxRhs) const& noexcept -> difference_type { return idxRhs - idxLhs; }
-			STATIC_FINAL_MOD(constexpr, middle_point)( tc_index & idxBegin, tc_index const& idxEnd ) const& noexcept -> void {
-				this->advance_index(idxBegin,this->distance_to_index(idxBegin,idxEnd)/2);
-			}
-			STATIC_FINAL_MOD(constexpr, dereference_index)(tc_index idx) & noexcept -> T& { return this->dereference(idx); }
-			STATIC_FINAL_MOD(constexpr, dereference_index)(tc_index idx) const& noexcept -> T const& { return this->dereference(idx); }
-			STATIC_FINAL_MOD(constexpr, index_to_address)(const tc_index& idx)& noexcept ->  T* { return this->data() + idx; }
-			STATIC_FINAL_MOD(constexpr, index_to_address)(const tc_index& idx) const& noexcept ->  const T* { return this->data() + idx; }
+			STATIC_FINAL_MOD(constexpr, dereference_index)(tc_index idx) & noexcept -> T& { return this->dereference(*idx); }
+			STATIC_FINAL_MOD(constexpr, dereference_index)(tc_index idx) const& noexcept -> T const& { return this->dereference(*idx); }
+			STATIC_FINAL_MOD(constexpr, index_to_address)(tc_index const& idx) & noexcept ->  T* { return this->data() + *idx; }
+			STATIC_FINAL_MOD(constexpr, index_to_address)(tc_index const& idx) const& noexcept ->  const T* { return this->data() + *idx; }
 		public:
 			constexpr void clear() & noexcept {
 				this->shrink(0);
@@ -307,7 +289,7 @@ namespace tc {
 
 			template<typename It>
 			constexpr void take_inplace( It const& it ) & noexcept {
-				this->shrink(it.get_index());
+				this->shrink(*it.get_index());
 			}
 
 			template<typename It>

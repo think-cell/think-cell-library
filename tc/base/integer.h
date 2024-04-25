@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -12,16 +12,31 @@
 #include "explicit_cast.h"
 
 namespace tc {
-	// integer<nBits> must be able to represent -2^(nBits-1) and 2^(nBits-1)-1
-	template< int nBits, bool bBuiltIn=nBits<=std::numeric_limits<std::uintmax_t>::digits >
-	struct integer;
+	namespace no_adl {
+		template<int nBits>
+		struct int_least;
 
-	template< int nBits >
-	struct integer<nBits,true> final {
-		using signed_=typename boost::int_t<nBits>::least;
-		using unsigned_=typename boost::uint_t<nBits>::least;
-	};
+		template<int nBits> requires (nBits<=std::numeric_limits<std::intmax_t>::digits)
+		struct int_least<nBits> {
+			using type=typename boost::int_t<nBits+1>::least; // boost::int_t<Bits>::least uses bit-width including sign bit
+		};
 
+		template<int nBits>
+		struct uint_least;
+
+		template<int nBits> requires (nBits<=std::numeric_limits<std::uintmax_t>::digits)
+		struct uint_least<nBits> {
+			using type=typename boost::uint_t<nBits>::least;
+		};
+	}
+
+	// nBits is the number of radix-2 digits the type can represent without change. It does not include sign bit. nBits<=std::numeric_limits<tc::int_least_t<nBits>>::digits.
+	template<int nBits>
+	using int_least_t = typename no_adl::int_least<nBits>::type;
+
+	template<int nBits>
+	using uint_least_t = typename no_adl::uint_least<nBits>::type;
+	
 	namespace actual_integer_like_detail {
 		template<typename T>
 		inline constexpr bool actual_integer_like_impl = tc::actual_integer<T>;

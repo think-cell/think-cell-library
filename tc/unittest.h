@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -14,7 +14,7 @@ namespace tc {
 	// create a generator range that gives the same values as the rng it takes (for testing)
 	template<typename Rng> 
 	constexpr auto make_generator_range(Rng&& rng) noexcept {
-		return tc::generator_range_output<tc::type::transform_t<tc::range_output_t<decltype(*tc::as_const(tc::as_lvalue(tc::make_reference_or_value(tc_move_if_owned(rng)))))>, std::add_rvalue_reference_t>>([rng=tc::make_reference_or_value(tc_move_if_owned(rng))](auto&& sink) noexcept {
+		return tc::generator_range_output<tc::mp_transform<std::add_rvalue_reference_t, tc::range_output_t<decltype(*tc::as_const(tc::as_lvalue(tc::make_reference_or_value(tc_move_if_owned(rng)))))>>>([rng=tc::make_reference_or_value(tc_move_if_owned(rng))](auto&& sink) noexcept {
 			return tc::for_each(*rng, tc_move_if_owned(sink));
 		});
 	}
@@ -37,7 +37,7 @@ namespace tc {
 		template<typename RngChunk, typename Rng>
 		struct chunk_range_adaptor {
 			tc::reference_or_value<Rng> m_baserng;
-			friend auto range_output_t_impl(chunk_range_adaptor const&) -> tc::type::list<RngChunk>; // declaration only
+			friend auto range_output_t_impl(chunk_range_adaptor const&) -> boost::mp11::mp_list<RngChunk>; // declaration only
 
 			template<typename Sink>
 			auto operator()(Sink sink) const& noexcept {
@@ -58,7 +58,6 @@ namespace tc {
 
 #ifdef TC_PRIVATE
 
-#include "Library/ErrorReporting/_Assert.h" // required by _ASSERTPRINT
 #include "Library/ErrorReporting/UnitTest.h"
 
 #define TEST_RANGE_EQUAL(EXPECT, IS) _ASSERT(tc::equal(EXPECT, IS))

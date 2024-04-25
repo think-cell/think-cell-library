@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -14,6 +14,7 @@
 #include "../base/type_traits.h"
 #include "../base/generic_macros.h"
 #include "../base/tag_type.h"
+#include "../base/renew.h"
 #include "../container/container_traits.h"
 #include "../range/meta.h"
 
@@ -34,7 +35,7 @@ namespace tc {
 	namespace size_proxy_adl {
 		template< typename T >
 		struct size_proxy final {
-			static_assert(tc::actual_integer<T>);
+			static_assert(tc::actual_integer<T> && tc::decayed<T>);
 		private:
 			constexpr void AssertInvariant() & noexcept {
 				// npos should only be represented by a signed number. Otherwise casts to (larger) unsigned types may not preserve npos as static_cast<T>(-1)
@@ -51,7 +52,7 @@ namespace tc {
 
 			template<typename S>
 			constexpr explicit size_proxy(size_proxy<S> const& other) noexcept
-				: tc_member_init_cast( m_t, other.m_t )
+				: tc_member_init( m_t, other.m_t )
 			{
 				AssertInvariant();
 			}
@@ -184,24 +185,21 @@ namespace tc {
 	}
 
 	namespace no_adl {
-		template<typename T0, typename T1, typename Enable=void>
-		struct common_type_decayed_size_proxy_base {};
+		template <typename T0, typename T1>
+		using size_proxy_common_type = tc::size_proxy<tc::common_type_t<T0, T1>>;
 
-		template<typename T0, typename T1>
-		struct common_type_decayed_size_proxy_base<T0, T1, tc::void_t<tc::common_type_decayed_t<T0, T1>>> {
-			using type = tc::size_proxy<tc::common_type_decayed_t<T0,T1>>;
-		};
+		template <tc::actual_integer T0, tc::actual_integer T1>
+		struct common_type_decayed_impl<tc::size_proxy<T0>, tc::size_proxy<T1>> : boost::mp11::mp_defer<size_proxy_common_type, T0, T1> {};
 
-		template<typename T0, typename T1>
-		struct common_type_decayed<tc::size_proxy<T0>, tc::size_proxy<T1>>: common_type_decayed_size_proxy_base<T0, T1> {};
-
-		template<typename T0, typename T1>
-		struct common_type_decayed<tc::size_proxy<T0>, T1> {
+		template <tc::actual_integer T0, tc::actual_integer T1>
+		struct common_type_decayed_impl<tc::size_proxy<T0>, T1> {
 			using type = T1;
 		};
 
-		template<typename T0, typename T1>
-		struct common_type_decayed<T0, tc::size_proxy<T1>> : tc::common_type_decayed<tc::size_proxy<T1>, T0> {};
+		template <tc::actual_integer T0, tc::actual_integer T1>
+		struct common_type_decayed_impl<T0, tc::size_proxy<T1>> {
+			using type = T0;
+		};
 	}
 
 	////////////////////////////////

@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -102,7 +102,7 @@ namespace tc {
 				std::optional<tc::element_return_type_t<RangeReturn, Rng>> ot;
 				auto const boc = tc::for_each(tc_move_if_owned(rng), [&](auto&& t) MAYTHROW {
 					if(!ot) {
-						ot.emplace(RangeReturn::template pack_element<Rng>(tc_move_if_owned(t))); // MAYTHROW
+						tc::optional_emplace(ot, RangeReturn::template pack_element<Rng>(tc_move_if_owned(t))); // MAYTHROW
 						return tc::continue_;
 					} else {
 						return tc::break_;
@@ -193,25 +193,31 @@ namespace tc {
 	\
 	/* Use tc::fn_front() instead of tc_fn(tc::front) because the latter returns a dangling xvalue reference when used with counting ranges. */ \
 	/* Support tc::fn_front<tc::return_xxx>() for consistency*/ \
-	namespace fn_ ## name ## _adl { \
+	namespace no_adl { \
 		template<typename RangeReturn=void> \
-		struct fn_ ## name { \
-			template<typename Rng> \
-			decltype(auto) operator()(Rng&& rng) const& return_MAYTHROW( \
-				tc::name<RangeReturn>(tc_move_if_owned(rng)) \
+		struct [[nodiscard]] fn_ ## name final { \
+			template <typename Rng> requires tc::borrowed_range<Rng> \
+			auto operator()(Rng&& rng) const& return_decltype_allow_xvalue_MAYTHROW( \
+				tc::name<RangeReturn>(tc_unwrap_temporary(tc_move_if_owned(rng))) \
 			) \
-			friend tc::constant<true> returns_reference_to_argument(fn_ ## name); /*mark as returning reference to argument. */ \
+			template <typename Rng> \
+			auto operator()(Rng&& rng) const& return_decltype_allow_xvalue_MAYTHROW( \
+				tc_rewrap_temporary(Rng, tc::name<RangeReturn>(tc_unwrap_temporary(tc_move_if_owned(rng)))) \
+			) \
 		}; \
 		template<> \
-		struct fn_ ## name<void> { \
-			template<typename Rng> \
-			decltype(auto) operator()(Rng&& rng, tc::element_stash<Rng>&& stash={}) const& return_MAYTHROW( \
-				tc::name(tc_move_if_owned(rng), tc_move(stash)) \
+		struct [[nodiscard]] fn_ ## name<void> final { \
+			template <typename Rng> requires tc::borrowed_range<Rng> || tc::is_stashing_element<tc::iterator_t<Rng>>::value \
+			auto operator()(Rng&& rng, tc::element_stash<Rng>&& stash={}) const& return_decltype_allow_xvalue_MAYTHROW( \
+				tc::name(tc_unwrap_temporary(tc_move_if_owned(rng)), tc_move(stash)) \
 			) \
-			friend tc::constant<true> returns_reference_to_argument(fn_ ## name); /*mark as returning reference to argument. */ \
+			template <typename Rng> \
+			auto operator()(Rng&& rng, tc::element_stash<Rng>&& stash={}) const& return_decltype_allow_xvalue_MAYTHROW( \
+				tc_rewrap_temporary(Rng, tc::name(tc_unwrap_temporary(tc_move_if_owned(rng)), tc_move(stash))) \
+			) \
 		}; \
 	} \
-	using fn_ ## name ## _adl::fn_ ## name;
+	using no_adl::fn_ ## name;
 
 	RETURN_REFERENCE_FROM_ELEMENT(front)
 	RETURN_REFERENCE_FROM_ELEMENT(back)

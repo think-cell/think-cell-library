@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -33,7 +33,7 @@ namespace tc {
 
 			template<typename A1> requires (tc::econstructionEXPLICIT==tc::construction_restrictiveness<T, A1&&>::value)
 			explicit derivable_wrapper(A1&& a1) noexcept
-				: tc_member_init_cast( m_t, tc_move_if_owned(a1) )
+				: tc_member_init( m_t, tc_move_if_owned(a1) )
 			{}
 
 			operator T const&() const& noexcept {
@@ -65,7 +65,7 @@ namespace tc {
 	#pragma push_macro("BASE_CAST_IMPL")
 	#define BASE_CAST_IMPL(cvref) \
 	template<typename Dst> requires (!std::is_class<Dst>::value) \
-	[[nodiscard]] constexpr Dst cvref base_cast(tc::type::identity_t<tc::derivable_t<Dst>> cvref t) noexcept { \
+	[[nodiscard]] constexpr Dst cvref base_cast(std::type_identity_t<tc::derivable_t<Dst>> cvref t) noexcept { \
 		STATICASSERTSAME(std::remove_cvref_t<Dst>, Dst); \
 		return static_cast<Dst cvref>(t); \
 	}
@@ -82,7 +82,7 @@ namespace tc {
 	#pragma push_macro("BASE_CAST_IMPL")
 	#define BASE_CAST_IMPL(cvref) \
 	template<typename Dst> requires (!std::is_class<Dst>::value) \
-	[[nodiscard]] constexpr Dst cvref base_cast(tc::type::identity_t<tc::derivable_t<Dst>> cvref p) noexcept { \
+	[[nodiscard]] constexpr Dst cvref base_cast(std::type_identity_t<tc::derivable_t<Dst>> cvref p) noexcept { \
 		STATICASSERTSAME(std::remove_cvref_t<Dst>, Dst); \
 		return std::addressof(tc::base_cast<Dst>(*p)); \
 	}

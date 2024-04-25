@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -84,7 +84,7 @@ namespace tc {
 	namespace explicit_convert_adl {
 		template<typename TTarget, typename Rng>
 			requires has_mem_fn_lower_bound<TTarget> || has_mem_fn_hash_function<TTarget>
-		TTarget explicit_convert_impl(adl_tag_t, tc::type::identity<TTarget>, Rng&& rng) noexcept {
+		TTarget explicit_convert_impl(adl_tag_t, std::type_identity<TTarget>, Rng&& rng) noexcept {
 			TTarget cont;
 			// force each element to be inserted
 			tc::cont_must_insert_range(cont, tc_move_if_owned(rng));
@@ -162,7 +162,7 @@ namespace tc {
 	}
 #endif
 	template<typename Rng, typename Less = tc::fn_less>
-	constexpr void sort_inplace(Rng&& rng, Less&& less = Less()) noexcept {
+	constexpr void sort_inplace(Rng&& rng, Less&& less = Less()) noexcept(noexcept(less(tc::front(rng), tc::front(rng)))) {
 		if constexpr( has_mem_fn_sort< Rng >) {
 			static_assert( std::is_lvalue_reference<Rng>::value );
 			rng.sort( tc_move_if_owned(less) );
@@ -181,52 +181,55 @@ namespace tc {
 	}
 
 	template<typename Rng, typename Less = tc::fn_less>
-	void stable_sort_inplace(Rng&& rng, Less&& less = Less()) noexcept {
+	void stable_sort_inplace(Rng&& rng, Less&& less = Less()) noexcept(noexcept(less(tc::front(rng), tc::front(rng)))) {
 		std::stable_sort(tc::begin(rng), tc::end(rng), tc_move_if_owned(less));
+	}
+
+	template< typename Less=tc::fn_less >
+	constexpr void strictly_sort_inplace(auto&& rng, Less less=Less()) noexcept(noexcept(less(tc::front(rng), tc::front(rng)))) {
+		tc::sort_inplace(rng, less);
+		_ASSERT( tc::is_strictly_sorted(rng, less) );
 	}
 
 	namespace no_adl {
 		template<typename Rng, bool bStable>
 		struct [[nodiscard]] sorted_index_adaptor final
-			: tc::range_iterator_from_index<
+			: tc::range_adaptor_base_range<Rng>
+			, tc::index_range_adaptor<
 				sorted_index_adaptor<Rng, bStable>,
-				tc::iterator_t<tc::vector<tc::index_t<std::remove_reference_t<Rng>>> const>
+				tc::vector<tc::index_t<std::remove_reference_t<Rng>>>,
+				index_range_adaptor_flags::inherit_begin_end | index_range_adaptor_flags::inherit_traversal
 			>
-			, tc::range_adaptor_base_range<Rng>
 			, private tc::nonmovable // disable copy ctor and default move ctor
 		{
 		private:
 			using this_type = sorted_index_adaptor;
-
-			tc::vector<tc::index_t<std::remove_reference_t<Rng>>> m_vecidx;
+			using base_range_base = tc::range_adaptor_base_range<Rng>;
+			using index_base = typename this_type::index_range_adaptor;
 
 		public:
-			using typename this_type::range_iterator_from_index::tc_index;
+			using base_range_base::base_range;
+			using typename index_base::tc_index;
 			static constexpr bool c_bHasStashingIndex=false;
-
-			using difference_type = typename decltype(m_vecidx)::difference_type;
 
 			template<typename LessOrComp>
 			explicit sorted_index_adaptor(Rng&& rng, LessOrComp lessorcomp) noexcept
-				: tc::range_adaptor_base_range<Rng>(tc::aggregate_tag, tc_move_if_owned(rng))
+				: base_range_base(tc::aggregate_tag, tc_move_if_owned(rng))
+				, index_base(tc::aggregate_tag, tc::explicit_cast<tc::vector<tc::index_t<std::remove_reference_t<Rng>>>>(
+					tc::transform(tc::make_range_of_iterators(base_range()), tc_fn(tc::iterator2index<Rng>))
+				))
 			{
-				if constexpr (tc::has_size<Rng>) {
-					tc::cont_reserve(m_vecidx, tc::size(this->base_range()));
-				}
-				for(auto idx=this->base_begin_index(); !tc::at_end_index(this->base_range(), idx); tc::increment_index(this->base_range(), idx)) {
-					tc::cont_emplace_back(m_vecidx, idx);
-				}
 				tc::sort_inplace(
-					m_vecidx,
+					this->index_base::base_range(),
 					[&](auto const& idxLhs, auto const& idxRhs ) noexcept -> bool {
-						tc_auto_cref(lhs, tc::dereference_index(this->base_range(), idxLhs));
-						tc_auto_cref(rhs, tc::dereference_index(this->base_range(), idxRhs));
+						tc_auto_cref(lhs, tc::dereference_index(base_range(), idxLhs));
+						tc_auto_cref(rhs, tc::dereference_index(base_range(), idxRhs));
 						if constexpr (bStable) {
 							static_assert(tc::random_access_range<Rng>);
 							tc_auto_cref(order, lessorcomp(lhs, rhs));
 							static_assert(tc::is_comparison_category<std::remove_cvref_t<decltype(order)>>);
 							if(tc::is_eq(order)) {
-								return 0<tc::distance_to_index(this->base_range(), idxLhs, idxRhs);
+								return 0<tc::distance_to_index(base_range(), idxLhs, idxRhs);
 							} else if(std::is_lt(order)) {
 								return true;
 							} else {
@@ -240,43 +243,19 @@ namespace tc {
 				);
 			}
 
-			sorted_index_adaptor(sorted_index_adaptor&& rng) noexcept requires tc::stable_index_on_move<Rng> // reference_or_value is movable for const Rng as well
-				: range_adaptor_base_range<Rng>(tc_move(rng))
-				, m_vecidx(tc_move(rng).m_vecidx)
-			{
-			}
+			sorted_index_adaptor(sorted_index_adaptor&& src) noexcept requires tc::stable_index_on_move<Rng> // tc::reference_or_value is movable for const Rng as well
+				: base_range_base(tc::base_cast<base_range_base>(tc_move(src)))
+				, index_base(tc::base_cast<index_base>(tc_move(src)))
+			{}
 		private:
-			STATIC_FINAL(begin_index)() const& noexcept -> tc_index {
-				return tc::begin(m_vecidx);
-			}
-
-			STATIC_FINAL(end_index)() const& noexcept -> tc_index {
-				return tc::end(m_vecidx);
-			}
-
 			STATIC_FINAL(dereference_index)(tc_index const& idx) const& return_decltype_MAYTHROW(
-				tc::dereference_index(this->base_range(), *idx)
+				tc::dereference_index(base_range(), *idx)
 			)
 
 			STATIC_FINAL(dereference_index)(tc_index const& idx) & return_decltype_MAYTHROW(
-				tc::dereference_index(this->base_range(), *idx)
+				tc::dereference_index(base_range(), *idx)
 			)
 
-			STATIC_FINAL(increment_index)(tc_index& idx) const& noexcept -> void {
-				++idx;
-			}
-
-			STATIC_FINAL(decrement_index)(tc_index& idx) const& noexcept -> void {
-				--idx;
-			}
-
-			STATIC_FINAL(advance_index)(tc_index& idx, difference_type d) const& noexcept -> void {
-				idx+=d;
-			}
-
-			STATIC_FINAL(distance_to_index)(tc_index const& idxLhs, tc_index const& idxRhs) const& noexcept -> difference_type {
-				return idxRhs-idxLhs;
-			}
 		public:
 			static decltype(auto) element_base_index(tc_index const& idx) noexcept {
 				return *idx;
@@ -286,7 +265,7 @@ namespace tc {
 			}
 
 			constexpr decltype(auto) dereference_untransform(tc_index const& idx) const& noexcept {
-				return this->base_range().dereference_untransform(*idx);
+				return base_range().dereference_untransform(*idx);
 			}
 		};
 	}
@@ -325,19 +304,20 @@ namespace tc {
 			>
 		{
 		private:
+			using this_type = untransform_adaptor;
 			using base_ = typename untransform_adaptor::index_range_adaptor;
 
 		public:
 			using typename base_::tc_index;
 			using base_::base_;
 
-			constexpr decltype(auto) STATIC_VIRTUAL_METHOD_NAME(dereference_index)(tc_index const& idx) & MAYTHROW {
-				return this->base_range().dereference_untransform(idx);
-			}
+			STATIC_FINAL_MOD(template<typename Index> constexpr, dereference_index)(Index&& idx) & return_decltype_MAYTHROW(
+				this->base_range().dereference_untransform(tc_move_if_owned(idx))
+			)
 
-			constexpr decltype(auto) STATIC_VIRTUAL_METHOD_NAME(dereference_index)(tc_index const& idx) const& MAYTHROW {
-				return this->base_range().dereference_untransform(idx);
-			}
+			STATIC_FINAL_MOD(template<typename Index> constexpr, dereference_index)(Index&& idx) const& return_decltype_MAYTHROW(
+				this->base_range().dereference_untransform(tc_move_if_owned(idx))
+			)
 		};
 	}
 
@@ -360,7 +340,7 @@ namespace tc {
 		std::optional<tc::range_value_t<Rng>> oelem;
 		tc::for_each(tc_move_if_owned(rng), [&](auto&& element) noexcept {
 			if (!oelem || less(*oelem, element)) {
-				tc_yield(funcStart);
+				tc_return_if_break(tc::continue_if_not_break(funcStart))
 				tc::optional_emplace(oelem, element);
 			}
 			return tc::continue_if_not_break(funcElem,tc_move_if_owned(element));
@@ -385,8 +365,7 @@ namespace tc {
 	}
 
 	template< typename Rng, typename Less, typename Accu >
-	void sort_accumulate_each_unique_range(Rng&& cont, Less less, Accu accu) noexcept {
-		tc::sort_inplace( cont, less );
+	void accumulate_each_unique_range(Rng&& cont, Less less, Accu accu) noexcept {
 		range_filter< tc::decay_t<Rng> > rngfilter( cont );
 		tc::for_each(
 			tc::ordered_unique_range(
@@ -399,20 +378,26 @@ namespace tc {
 					it!=tc::end(rngEqualSubRange);
 					++it
 				) {
-					tc::invoke(accu,*tc::begin(rngEqualSubRange), *it);
+					tc_invoke(accu,*tc::begin(rngEqualSubRange), *it);
 				}
 				rngfilter.keep( tc::begin(rngEqualSubRange) );
 			}
 		);
 	}
 
-	template< typename Cont, typename Equals = tc::fn_equal_to >
-	void front_unique_inplace(Cont & cont, Equals&& pred=Equals()) noexcept {
+	template< typename Rng, typename Less, typename Accu >
+	void sort_accumulate_each_unique_range(Rng&& cont, Less less, Accu accu) noexcept {
+		tc::sort_inplace( cont, less );
+		tc::accumulate_each_unique_range(cont, tc_move(less), tc_move(accu));
+	}
+
+	template< typename Cont, typename Equals = decltype(tc::equal_to)>
+	void front_unique_inplace(Cont& cont, Equals&& pred={}) noexcept(noexcept(pred(tc::front(cont), tc::front(cont)))) {
 		tc::range_filter< tc::decay_t<Cont> > rngfilter(cont);
 		tc::for_each(
 			tc::transform(
 				tc::front_unique_range(cont, tc_move_if_owned(pred)),
-				tc_fn(tc::begin) // fn_boost_begin does not work, need subrange as lvalue to get non-const iterator
+				tc_fn(tc::begin)
 			),
 			[&](auto it) noexcept {
 				rngfilter.keep(tc_move(it));
@@ -424,8 +409,8 @@ namespace tc {
 		In contrast to std::unique, tc::adjacent_unique / tc::adjacent_unique_inplace always compares adjacent elements. This allows implementing
 		bidirectional tc::adjacent_unique, with tc::adjacent_unique_inplace yielding the same result.
 	*/
-	template< typename Cont, typename Equals=tc::fn_equal_to >
-	constexpr void adjacent_unique_inplace(Cont & cont, Equals&& pred=Equals()) MAYTHROW {
+	template< typename Cont, typename Equals=decltype(tc::equal_to)>
+	constexpr void adjacent_unique_inplace(Cont & cont, Equals&& pred={}) noexcept(noexcept(pred(tc::front(cont), tc::front(cont)))) {
 		tc::range_filter< tc::decay_t<Cont> > rngfilter(cont);
 		// When this function is evaluated at compile time, the range returned by tc::make_range_of_iterators cannot use an rvalue as a base range.
 		// This is because it stores the base range in a mutable field inside tc::reference_or_value.
@@ -438,19 +423,19 @@ namespace tc {
 	}
 
 	template<typename Cont, typename Less=tc::fn_less>
-	constexpr void ordered_unique_inplace( Cont& cont, Less less=Less() ) MAYTHROW {
+	constexpr void ordered_unique_inplace( Cont& cont, Less less=Less() ) noexcept(noexcept(less(tc::front(cont), tc::front(cont)))) {
 		_ASSERTDEBUG( tc::is_sorted( cont, less ) );
 		tc::adjacent_unique_inplace( cont, std::not_fn( tc_move(less) ) );
 	}
 
 	template< typename Cont, typename Less=tc::fn_less >
-	constexpr void sort_unique_inplace(Cont& cont, Less less=Less()) noexcept {
+	constexpr void sort_unique_inplace(Cont& cont, Less less=Less()) noexcept(noexcept(less(tc::front(cont), tc::front(cont)))) {
 		tc::sort_inplace( cont, less );
 		tc::ordered_unique_inplace( cont, tc_move(less) );
 	}
 
 	template< typename Cont, typename Less=tc::fn_less >
-	void stable_sort_unique_inplace(Cont& cont, Less less=Less()) noexcept {
+	void stable_sort_unique_inplace(Cont& cont, Less less=Less()) noexcept(noexcept(less(tc::front(cont), tc::front(cont)))) {
 		tc::stable_sort_inplace( cont, less );
 		tc::ordered_unique_inplace( cont, tc_move(less) );
 	}
@@ -482,27 +467,30 @@ namespace tc {
 	}
 
 	template< typename RangeReturn, typename Rng, typename Pred >
-	[[nodiscard]] auto trim_left_if(Rng&& rng, Pred&& pred) MAYTHROW code_return_decltype_xvalue_by_ref(
-		static_assert( RangeReturn::allowed_if_always_has_border );,
-		RangeReturn::pack_border( tc::find_first_if<tc::return_border_before_or_end>( rng, std::not_fn(tc_move_if_owned(pred)) ), tc_move_if_owned(rng))
-	)
+	[[nodiscard]] decltype(auto) trim_left_if(Rng&& rng, Pred&& pred) MAYTHROW {
+		static_assert( RangeReturn::allowed_if_always_has_border );
+		return tc_rewrap_temporary(Rng&&, RangeReturn::pack_border(
+			tc::find_first_if<tc::return_border_before_or_end>( tc_unwrap_temporary(rng), std::not_fn(tc_move_if_owned(pred)) ),
+			tc_unwrap_temporary(tc_move_if_owned(rng))
+		));
+	}
 
 	template< typename RangeReturn, typename Rng, typename Pred >
-	[[nodiscard]] auto trim_right_if(Rng&& rng, Pred&& pred) MAYTHROW code_return_decltype_xvalue_by_ref(
-		static_assert( RangeReturn::allowed_if_always_has_border );,
-		RangeReturn::pack_border( tc::find_last_if<tc::return_border_after_or_begin>( rng, std::not_fn(tc_move_if_owned(pred)) ), tc_move_if_owned(rng))
-	)
+	[[nodiscard]] decltype(auto) trim_right_if(Rng&& rng, Pred&& pred) MAYTHROW {
+		static_assert( RangeReturn::allowed_if_always_has_border );
+		return tc_rewrap_temporary(Rng&&, RangeReturn::pack_border(
+			tc::find_last_if<tc::return_border_after_or_begin>( tc_unwrap_temporary(rng), std::not_fn(tc_move_if_owned(pred)) ),
+			tc_unwrap_temporary(tc_move_if_owned(rng))
+		));
+	}
 
 	template< typename Rng, typename Pred >
 	[[nodiscard]] decltype(auto) trim_if(Rng&& rng, Pred&& pred) MAYTHROW {
-		decltype(auto) rngTrimmed = tc::trim_right_if<tc::return_take>( tc_move_if_owned(rng), pred );
-		if constexpr (std::is_reference<decltype(rngTrimmed)>::value) {
-			_ASSERTEQUAL(std::addressof(rngTrimmed), std::addressof(rng));
-			return tc::trim_left_if<tc::return_drop>( tc_move_if_owned(rngTrimmed), tc_move_if_owned(pred) );
-		} else {
-			static_assert(tc::instance<decltype(rngTrimmed), tc::subrange>);
-			return tc::decay_copy(tc::trim_left_if<tc::return_drop>( tc_move(rngTrimmed), tc_move_if_owned(pred) ));
-		}
+		return tc_invoke(tc::chained(
+			 // clang crashes if we use return_decltype_allow_xvalue
+			[&](auto&& rng)	-> decltype(auto) { return tc::trim_left_if<tc::return_drop>(tc_move_if_owned(rng), tc_move_if_owned(pred)); },
+			[&](auto&& rng)	-> decltype(auto) { return tc::trim_right_if<tc::return_take>(tc_move_if_owned(rng), pred); }
+		), tc_move_if_owned(rng));
 	}
 
 	template< typename RangeReturn, typename Rng, typename RngTrim >
@@ -603,10 +591,10 @@ namespace tc {
 #endif
 
 			for (;;) {
-				tc::cont_extend(cont, cont.capacity()/*, boost::container::default_init*/); // Allow func to use the whole allocated buffer
+				tc::cont_extend(cont, cont.capacity(), boost::container::default_init); // Allow func to use the whole allocated buffer
 
 				// sentinel to detect buffer overrun
-				static constexpr typename boost::range_size<Cont>::type nSentinel=
+				IF_NO_MSVC_WORKAROUND(static) constexpr typename boost::range_size<Cont>::type nSentinel= // workaround MSVC compiler bug: https://developercommunity.visualstudio.com/t/code-generation-bug-on-static-variable-i/10541326
 #if defined(TC_PRIVATE) && defined(_DEBUG) && !defined(__clang__)
 					1;
 				_ASSERT(nOffset+nSentinel <= tc::size(cont));
@@ -781,7 +769,7 @@ namespace tc {
 	typename tc::size_proxy< typename boost::range_size<Cont>::type > remove_count_erase_if(Cont& cont, Pred pred) noexcept {
 		typename boost::range_size<Cont>::type count=0;
 		tc::filter_inplace( cont, [&]( auto&& t ) noexcept ->bool {
-			bool const b=tc::invoke(pred, tc_move_if_owned(t));
+			bool const b=tc_invoke(pred, tc_move_if_owned(t));
 			count += (b ? 1 : 0);
 			return !b;
 		} );
@@ -800,7 +788,7 @@ namespace tc {
 	// subranges of containers, so it must accept rvalues.
 
 	template<typename Rng>
-	void reverse_inplace(Rng&& rng) noexcept {
+	constexpr void reverse_inplace(Rng&& rng) noexcept {
 		if constexpr( has_mem_fn_reverse<std::remove_reference_t<Rng>> ) {
 			rng.reverse();
 		} else {
@@ -868,7 +856,7 @@ namespace tc {
 			// rng, which is not a problem as long as these items are not searched for.
 
 			// preserve order of arguments for 3way predicates
-			static constexpr bool c_b3way = tc::is_comparison_category<decltype(predLessOr3way(tc::front(rng), t))>;
+			auto const c_b3way = tc::is_comparison_category<decltype(predLessOr3way(tc::front(rng), t))>; // tc_static_auto_constexpr_capture causes ICE
 			auto it=[&]() noexcept {
 				if constexpr(c_b3way) {
 					_ASSERTDEBUG( tc::is_sorted(rng, tc::lessfrom3way(std::ref(predLessOr3way))) );
@@ -953,106 +941,151 @@ namespace tc {
 		if( itB==itEndB ) goto endB;
 		for(;;) {
 			if(tc_auto_cref(order, comp( tc::as_const(*itA), tc::as_const(*itB) )); std::is_lt(order)) {
-				tc_yield(fnElementA, itA++, itB);
+				tc_return_if_break(tc::continue_if_not_break(fnElementA, itA++, itB))
 				if( itA==itEndA ) goto endA;
 			} else if(tc::is_eq(order)) {
-				tc_yield(fnElementBoth, itA++, itB++);
+				tc_return_if_break(tc::continue_if_not_break(fnElementBoth, itA++, itB++))
 				if( itA==itEndA ) goto endA;
 				if( itB==itEndB ) goto endB;
 			} else {
 				_ASSERTDEBUG(std::is_gt(order));
-				tc_yield(fnElementB, itA, itB++);
+				tc_return_if_break(tc::continue_if_not_break(fnElementB, itA, itB++))
 				if( itB==itEndB ) goto endB;
 			}
 		}
 	endB:
-		while (itA != itEndA) tc_yield(fnElementA, itA++, itEndB);
+		while (itA != itEndA) tc_return_if_break(tc::continue_if_not_break(fnElementA, itA++, itEndB))
 		tc_return_cast(tc::continue_);
 	endA:
-		while(itB != itEndB) tc_yield(fnElementB, itEndA, itB++);
+		while(itB != itEndB) tc_return_if_break(tc::continue_if_not_break(fnElementB, itEndA, itB++))
 		tc_return_cast(tc::continue_);
 	}
 
 	template< typename RngA, typename RngB, typename Comp, typename FuncElementA, typename FuncElementB, typename FuncElementBoth >
 	auto interleave_may_remove_current(RngA&& rngA, RngB&& rngB, Comp comp, FuncElementA fnElementA, FuncElementB fnElementB, FuncElementBoth fnElementBoth) noexcept {
 		return interleave_may_remove_current_iterator(rngA, rngB, comp,
-			[&](auto const& lhs, tc::unused /*rhs*/) noexcept { return tc::invoke(fnElementA, *lhs); },
-			[&](tc::unused /*lhs*/, auto const& rhs) noexcept { return tc::invoke(fnElementB, *rhs); },
-			[&](auto const& lhs, auto const& rhs) noexcept { return tc::invoke(fnElementBoth, *lhs, *rhs); }
+			[&](auto const& lhs, tc::unused /*rhs*/) noexcept { return tc_invoke(fnElementA, *lhs); },
+			[&](tc::unused /*lhs*/, auto const& rhs) noexcept { return tc_invoke(fnElementB, *rhs); },
+			[&](auto const& lhs, auto const& rhs) noexcept { return tc_invoke(fnElementBoth, *lhs, *rhs); }
 		);
 	}
 
-	namespace no_adl {
-		// MSVC (from 15.8 to 17.0.2) sometimes crashes when this is inlined as a lambda in interleave_2.
-		template<typename ItB, typename EndB, typename Comp, typename SinkA, typename SinkB, typename SinkAB>
-		struct interleave_2_sink {
-			ItB& m_itb;
-			EndB const& m_endb;
-			Comp const& m_comp;
-			SinkA const& m_sinka;
-			SinkB const& m_sinkb;
-			SinkAB const& m_sinkab;
+	namespace interleave_2_detail {
+		DEFINE_TAG_TYPE(lhs_tag)
+		DEFINE_TAG_TYPE(rhs_tag)
+		DEFINE_TAG_TYPE(lhsrhs_tag)
 
-			template<typename A>
-			auto operator()(A&& a) const& MAYTHROW -> tc::common_type_t<
-				decltype(tc::continue_if_not_break(m_sinka, std::declval<A>())),
-				decltype(tc::continue_if_not_break(m_sinkb, *m_itb)),
-				decltype(tc::continue_if_not_break(m_sinkab, std::declval<A>(), *m_itb)),
-				tc::constant<tc::continue_>
-			> {
-				for (;;) {
-					if( m_itb == m_endb ) {
-						return tc::continue_if_not_break(m_sinka, tc_move_if_owned(a));
-					} else if(auto const order=tc::invoke(m_comp, tc::as_const(a), tc::as_const(*m_itb) ); std::is_lt(order)) {
-						return tc::continue_if_not_break(m_sinka, tc_move_if_owned(a));
-					} else if (std::is_gt(order)) {
-						tc_yield(m_sinkb, *m_itb);
-						++m_itb;
-					} else {
-						tc_yield(m_sinkab, tc_move_if_owned(a), *m_itb);
-						++m_itb;
-						return tc::constant<tc::continue_>();
+		namespace no_adl {
+			// MSVC (from 15.8 to 17.0.2) sometimes crashes when this is inlined as a lambda in interleave_2.
+			template<typename RngRhs, typename Comp, typename Sink>
+			struct interleave_2_sink {
+				tc::iterator_t<RngRhs>& m_itrhs;
+				tc::sentinel_t<RngRhs> const& m_endrhs;
+				Comp const m_comp;
+				Sink const& m_sink;
+
+				template<typename Lhs>
+				constexpr auto operator()(Lhs&& lhs) const& MAYTHROW -> tc::common_type_t<
+					decltype(tc::continue_if_not_break(m_sink, lhs_tag, std::declval<Lhs>())),
+					decltype(tc::continue_if_not_break(m_sink, rhs_tag, *m_itrhs)),
+					decltype(tc::continue_if_not_break(m_sink, lhsrhs_tag, std::declval<Lhs>(), *m_itrhs)),
+					tc::constant<tc::continue_>
+				> {
+					for (;;) {
+						if( m_itrhs == m_endrhs ) {
+							return tc::continue_if_not_break(m_sink, lhs_tag, tc_move_if_owned(lhs));
+						} else {
+							decltype(auto) rhs = *m_itrhs;
+							if(auto const order=tc_invoke(m_comp, tc::as_const(lhs), tc::as_const(rhs) ); std::is_lt(order)) {
+								return tc::continue_if_not_break(m_sink, lhs_tag, tc_move_if_owned(lhs));
+							} else if (std::is_gt(order)) {
+								tc_return_if_break(tc::continue_if_not_break(m_sink, rhs_tag, tc_move_if_owned(rhs)))
+								++m_itrhs;
+							} else {
+								tc_return_if_break(tc::continue_if_not_break(m_sink, lhsrhs_tag, tc_move_if_owned(lhs), tc_move_if_owned(rhs)))
+								++m_itrhs;
+								return tc::constant<tc::continue_>();
+							}
+						}
 					}
 				}
-			}
-		};
-	}
+			};
 
-	template< typename RngA, tc::range_with_iterators RngB, typename Comp, typename SinkA, typename SinkB, typename SinkAB >
-	auto interleave_2(RngA&& rnga, RngB&& rngb, Comp const comp, SinkA const sinka, SinkB const sinkb, SinkAB const sinkab) MAYTHROW -> tc::common_type_t<
-		decltype(tc::for_each(rnga,
-			std::declval<no_adl::interleave_2_sink<decltype(tc::begin(rngb)), decltype(tc::end(rngb)), Comp, SinkA, SinkB, SinkAB>>()
-		)),
-		decltype(tc::continue_if_not_break(sinkb, *tc::begin(rngb)))
-	> {
-		auto itb=tc::begin(rngb);
-		auto endb=tc::end(rngb);
+			template<typename SinkLhs, typename SinkRhs, typename SinkLhsRhs>
+			struct SDemultiplexByTagSink { // MSVC workaround: not a lambda for shorter symbol names
+				SinkLhs const m_sinklhs;
+				SinkRhs const m_sinkrhs;
+				SinkLhsRhs const m_sinklhsrhs;
+				template<typename... Args>
+				constexpr auto operator()(lhs_tag_t, Args&&... args) const& return_decltype_MAYTHROW( m_sinklhs(tc_move_if_owned(args)...) )
+				template<typename... Args>
+				constexpr auto operator()(rhs_tag_t, Args&&... args) const& return_decltype_MAYTHROW( m_sinkrhs(tc_move_if_owned(args)...) )
+				template<typename... Args>
+				constexpr auto operator()(lhsrhs_tag_t, Args&&... args) const& return_decltype_MAYTHROW( m_sinklhsrhs(tc_move_if_owned(args)...) )
+			};
 
-		tc_return_if_break(tc::for_each(
-			rnga,
-			no_adl::interleave_2_sink<decltype(itb), decltype(endb), Comp, SinkA, SinkB, SinkAB>{itb, endb, comp, sinka, sinkb, sinkab}
-		));
+			template<typename Sink>
+			struct SExchangedRangeSink { // MSVC workaround: not a lambda for shorter symbol names
+				Sink const m_sink;
+				template<typename Rhs>
+				constexpr auto operator()(lhs_tag_t, Rhs&& rhs) const& return_decltype_MAYTHROW( tc_invoke(m_sink, rhs_tag, tc_move_if_owned(rhs)) )
+				template<typename Lhs>
+				constexpr auto operator()(rhs_tag_t, Lhs&& lhs) const& return_decltype_MAYTHROW( tc_invoke(m_sink, lhs_tag, tc_move_if_owned(lhs)) )
+				template<typename Rhs, typename Lhs>
+				constexpr auto operator()(lhsrhs_tag_t, Rhs&& rhs, Lhs&& lhs) const& return_decltype_MAYTHROW( tc_invoke(m_sink, lhsrhs_tag, tc_move_if_owned(lhs), tc_move_if_owned(rhs)) )
+			};
 
-		while (itb != endb) {
-			tc_yield(sinkb, *itb);
-			++itb;
+			template<typename Comp>
+			struct SExchangedRangeComp { // MSVC workaround: not a lambda for shorter symbol names
+				Comp const m_comp;
+				constexpr auto operator()(auto const& rhs, auto const& lhs) const& MAYTHROW {
+					return tc::negate(tc_invoke(m_comp, lhs, rhs));
+				}
+			};
 		}
-		return tc::constant<tc::continue_>();
+
+		template< typename RngLhs, tc::range_with_iterators RngRhs, typename Comp, typename Sink>
+			requires tc::prefers_for_each<RngLhs> || (!tc::prefers_for_each<RngRhs>)
+		constexpr auto internal_interleave_2(RngLhs&& rnglhs, RngRhs&& rngrhs, Comp&& comp, Sink const sink) MAYTHROW {
+			auto itrhs=tc::begin(rngrhs);
+			auto endrhs=tc::end(rngrhs);
+
+			tc_return_if_break(tc::for_each(
+				rnglhs,
+				no_adl::interleave_2_sink<RngRhs, decay_t<Comp>, Sink>{itrhs, endrhs, tc_move_if_owned(comp), sink}
+			));
+
+			while (itrhs != endrhs) {
+				tc_return_if_break(tc::continue_if_not_break(sink, rhs_tag, *itrhs))
+				++itrhs;
+			}
+			return tc::implicit_cast<decltype(tc::for_each(rnglhs,
+				std::declval<no_adl::interleave_2_sink<RngRhs, tc::decay_t<Comp>, Sink>>()
+			))>(tc::constant<tc::continue_>());
+		}
+
+		template< tc::range_with_iterators RngLhs, tc::prefers_for_each RngRhs, typename Comp, typename Sink>
+			requires (!tc::prefers_for_each<RngLhs>)
+		constexpr auto internal_interleave_2(RngLhs&& rnglhs, RngRhs&& rngrhs, Comp&& comp, Sink&& sink) MAYTHROW {
+			return interleave_2_detail::internal_interleave_2(
+				tc_move_if_owned(rngrhs),
+				tc_move_if_owned(rnglhs),
+				no_adl::SExchangedRangeComp<tc::decay_t<Comp>>{tc_move_if_owned(comp)},
+				no_adl::SExchangedRangeSink<tc::decay_t<Sink>>{tc_move_if_owned(sink)}
+			);
+		}
 	}
 
-	template< tc::range_with_iterators RngA, typename RngB, typename Comp, typename SinkA, typename SinkB, typename SinkAB >
-		requires (!tc::range_with_iterators<RngB>)
-	auto interleave_2(RngA&& rnga, RngB&& rngb, Comp&& comp, SinkA&& sinka, SinkB&& sinkb, SinkAB&& sinkab) MAYTHROW {
-		return tc::interleave_2(
-			tc_move_if_owned(rngb),
-			tc_move_if_owned(rnga),
-			[comp=tc::decay_copy(tc_move_if_owned(comp))](auto const& elemb, auto const& elema) noexcept {
-				return tc::negate(comp(elema, elemb));
-			},
-			tc_move_if_owned(sinkb),
-			tc_move_if_owned(sinka),
-			[sinkab=tc::decay_copy(tc_move_if_owned(sinkab))](auto&& elemb, auto&& elema) noexcept {
-				return sinkab(tc_move_if_owned(elema), tc_move_if_owned(elemb));
+	template<typename SinkLhs, typename SinkRhs, typename SinkLhsRhs>
+	constexpr auto interleave_2(auto&& rnglhs, auto&& rngrhs, auto&& comp, SinkLhs&& sinklhs, SinkRhs&& sinkrhs, SinkLhsRhs&& sinklhsrhs) MAYTHROW  {
+		return interleave_2_detail::internal_interleave_2(
+			tc_move_if_owned(rnglhs),
+			tc_move_if_owned(rngrhs),
+			tc_move_if_owned(comp),
+			interleave_2_detail::no_adl::SDemultiplexByTagSink<tc::decay_t<SinkLhs>, tc::decay_t<SinkRhs>, tc::decay_t<SinkLhsRhs>>{
+				tc_move_if_owned(sinklhs),
+				tc_move_if_owned(sinkrhs),
+				tc_move_if_owned(sinklhsrhs)
 			}
 		);
 	}
@@ -1122,9 +1155,7 @@ namespace tc {
 				bool ab[sizeof...(PairItIt)];
 
 				while (FindBest(tc::begin(ab), pairitit...)) {
-					tc_yield(func,
-						std::make_pair(pairitit.first, tc::at(ab, I))...
-					);
+					tc_return_if_break(tc::continue_if_not_break(func, std::make_pair(pairitit.first, tc::at(ab, I))...  ));
 
 					([](auto& it, bool const b) noexcept {if (b) ++it;}(pairitit.first, tc::at(ab,I)), ...);
 				}
@@ -1189,10 +1220,10 @@ namespace tc {
 	auto iterate(T&& t, FuncIterate&& funcIterate) noexcept {
 		return tc::generator_range_output<tc::decay_t<T> const&>([funcIterate=tc::make_reference_or_value(tc_move_if_owned(funcIterate)),t_=tc::make_reference_or_value(tc_move_if_owned(t))](auto func) noexcept {
 			auto t = *t_;
-			tc_yield(func,tc::as_const(t));
+			tc_return_if_break(tc::continue_if_not_break(func,tc::as_const(t)))
 			for (;;) {
-				tc::invoke(*funcIterate, t);
-				tc_yield(func,tc::as_const(t));
+				tc_invoke(*funcIterate, t);
+				tc_return_if_break(tc::continue_if_not_break(func,tc::as_const(t)))
 			}
 		});
 	}

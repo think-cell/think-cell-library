@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -25,7 +25,7 @@
 */
 
 namespace tc {
-	template<std::size_t I, typename Variant> requires (I < tc::type::size<typename tc::is_instance_or_derived<std::remove_reference_t<Variant>, std::variant>::arguments>::value)
+	template<std::size_t I, typename Variant> requires (I < boost::mp11::mp_size<typename tc::is_instance_or_derived<std::remove_reference_t<Variant>, std::variant>::arguments>::value)
 	[[nodiscard]] constexpr auto get_if(Variant&& v) noexcept -> tc::optional<tc::apply_cvref_t<std::variant_alternative_t<I, typename tc::is_instance_or_derived<std::remove_reference_t<Variant>, std::variant>::base_instance>, Variant&&>> {
 		if(auto pval=std::get_if<I>(std::addressof(v))) {
 			return tc::forward_like<Variant>(*pval);
@@ -34,7 +34,7 @@ namespace tc {
 		}
 	}
 
-	template<typename T, typename Variant> requires tc::type::find_unique<typename tc::is_instance_or_derived<std::remove_reference_t<Variant>, std::variant>::arguments, T>::found
+	template<typename T, typename Variant> requires boost::mp11::mp_set_contains<typename tc::is_instance_or_derived<std::remove_reference_t<Variant>, std::variant>::arguments, T>::value
 	[[nodiscard]] constexpr auto get_if(Variant&& v) noexcept -> tc::optional<tc::apply_cvref_t<T, Variant&&>> {
 		if(auto pval=std::get_if<T>(std::addressof(v))) {
 			return tc::forward_like<Variant>(*pval);
@@ -57,12 +57,12 @@ namespace tc {
 ```
 */
 namespace tc_get_impl {
-	template<std::size_t I, typename Variant> requires (I < tc::type::size<typename tc::is_instance_or_derived<std::remove_reference_t<Variant>, std::variant>::arguments>::value)
+	template<std::size_t I, typename Variant> requires (I < boost::mp11::mp_size<typename tc::is_instance_or_derived<std::remove_reference_t<Variant>, std::variant>::arguments>::value)
 	[[nodiscard]] constexpr decltype(auto) get(Variant&& v) noexcept {
 		return tc::forward_like<Variant>(*VERIFYNORETURN(tc::get_if<I>(v)));
 	}
 
-	template<typename T, typename Variant> requires tc::type::find_unique<typename tc::is_instance_or_derived<std::remove_reference_t<Variant>, std::variant>::arguments, T>::found
+	template<typename T, typename Variant> requires boost::mp11::mp_set_contains<typename tc::is_instance_or_derived<std::remove_reference_t<Variant>, std::variant>::arguments, T>::value
 	[[nodiscard]] constexpr decltype(auto) get(Variant&& v) noexcept {
 		return tc::forward_like<Variant>(*VERIFYNORETURN(tc::get_if<T>(v)));
 	}
@@ -74,32 +74,35 @@ namespace tc {
 			template<typename Overload>
 			struct overload_result_type final {
 				template<typename... Args>
-				using with_args = decltype(tc::invoke(std::declval<Overload const&>(), std::declval<Args>()...));
+				using with_args = decltype(tc_invoke_pack(std::declval<Overload const&>(), std::declval<Args>()));
 
 				template<typename ArgList>
-				using with_arglist = tc::type::apply_t<with_args, ArgList>;
+				using with_arglist = boost::mp11::mp_apply<with_args, ArgList>;
 			};
 		}
 
 		template<typename Overload, typename... Variants>
-		using visit_result_t = tc::type::apply_t<
-			tc::common_reference_prvalue_as_val_t,
-			tc::type::transform_t<
-				tc::type::cartesian_product_t<
-					tc::type::transform_t<
-						typename tc::is_instance_or_derived<std::remove_reference_t<Variants>, std::variant>::arguments,
-						tc::type::rcurry<tc::same_cvref_t, Variants>::template type
+		using visit_result_t = boost::mp11::mp_apply<
+			tc::common_reference_t,
+			tc::mp_transform<
+				no_adl::overload_result_type<Overload>::template with_arglist,
+				boost::mp11::mp_product<
+					boost::mp11::mp_list,
+					tc::mp_transform<
+						boost::mp11::mp_bind_back<tc::same_cvref_t, Variants>::template fn,
+						typename tc::is_instance_or_derived<std::remove_reference_t<Variants>, std::variant>::arguments
 					>...
-				>,
-				no_adl::overload_result_type<Overload>::template with_arglist
+				>
 			>
 		>;
 
-
-		template<typename Result, typename Overload>
-		constexpr decltype(auto) projected_result(Overload&& overload) noexcept {
-			return [overload=tc_move_if_owned(overload)](auto&&... args) MAYTHROW -> Result {
-				return tc::invoke(overload, tc_move_if_owned(args)...);
+		namespace no_adl {
+			template<typename Result, typename Overload>
+			struct projected_result {
+				Overload const& m_overload;
+				constexpr Result operator()(auto&&... args) MAYTHROW {
+					return tc_invoke_pack(m_overload, tc_move_if_owned(args));
+				}
 			};
 		}
 	}
@@ -133,7 +136,7 @@ namespace tc {
 		[&](int) -> tc::vector<int>& { return vecn; },
 		[&](const std::string&) { return rngn; }
 	)(var);
-	static_assert(std::is_same_v<decltype(a2), tc::subrange<tc::vector<int>&>>);
+	static_assert(std::is_same_v<decltype(a2), tc::slice_t<tc::vector<int>&>>);
 ```
 	
 	Currying allows concise use with our range library avoiding additional indirections when they are not needed.
@@ -163,14 +166,14 @@ namespace tc {
 					std::visit
 #endif
 					(
-						detail::projected_result<detail::visit_result_t<Overload, Variant...>>(tc::base_cast<Overload>(*this)),
+						detail::no_adl::projected_result<detail::visit_result_t<Overload, Variant...>, Overload>{*this},
 						tc_move_if_owned(v)...
 					);
 			}
 
 			template<typename... T> requires (... && (!tc::instance_or_derived<std::remove_reference_t<T>, std::variant>))
 			constexpr decltype(auto) operator()(T&&... t) const& MAYTHROW {
-				return tc::invoke(tc::base_cast<Overload>(*this), tc_move_if_owned(t)...);
+				return tc_invoke_pack(tc::base_cast<Overload>(*this), tc_move_if_owned(t));
 			}
 		};
 	}
@@ -183,9 +186,9 @@ namespace tc {
 		template<typename Var, typename T>
 		struct variant_type_index;
 
-		template<typename... Ts, typename T> requires (std::is_same<Ts, T>::value || ...)
+		template<typename... Ts, typename T> requires tc::mp_find_unique<std::variant<Ts...>, T>::found
 		struct variant_type_index<std::variant<Ts...>, T> final:
-			tc::constant<tc::type::find_unique<tc::type::list<Ts...>, T>::index>
+			tc::constant<tc::mp_find_unique<std::variant<Ts...>, T>::index>
 		{};
 	}
 	using no_adl::variant_type_index;
@@ -203,7 +206,7 @@ namespace tc {
 
 	namespace explicit_convert_adl {
 		template<typename TVariant, std::size_t I, typename... Args, tc::explicit_castable_from<Args...> Alternative = std::variant_alternative_t<I, TVariant>>
-		constexpr TVariant explicit_convert_impl(adl_tag_t, tc::type::identity<TVariant>, std::in_place_index_t<I> tag, Args&&... args) noexcept(
+		constexpr TVariant explicit_convert_impl(adl_tag_t, std::type_identity<TVariant>, std::in_place_index_t<I> tag, Args&&... args) noexcept(
 			noexcept(tc::explicit_cast<Alternative>(tc_move_if_owned(args)...))
 		) {
 			return tc::with_lazy_explicit_cast<Alternative>(
@@ -213,12 +216,12 @@ namespace tc {
 		}
 
 		template<typename TVariant, typename T, typename... Args>
-		constexpr auto explicit_convert_impl(adl_tag_t, tc::type::identity<TVariant>, std::in_place_type_t<T>, Args&&... args) return_decltype_MAYTHROW(
+		constexpr auto explicit_convert_impl(adl_tag_t, std::type_identity<TVariant>, std::in_place_type_t<T>, Args&&... args) return_decltype_MAYTHROW(
 			tc::explicit_cast<TVariant>(std::in_place_index_t<tc::variant_type_index<TVariant, T>::value>(), tc_move_if_owned(args)...)
 		)
 
 		template<typename... TT, typename Variant> requires	tc::explicit_convert_detail::explicit_castable_between_variants<std::variant<TT...>, Variant>
-		std::variant<TT...> explicit_convert_impl(adl_tag_t, tc::type::identity<std::variant<TT...>>, Variant&& var) MAYTHROW {
+		std::variant<TT...> explicit_convert_impl(adl_tag_t, std::type_identity<std::variant<TT...>>, Variant&& var) MAYTHROW {
 			using TTarget = std::variant<TT...>;
 			return tc::invoke_with_constant<std::make_index_sequence<sizeof...(TT)>>(
 				[&](auto const nconstIndex) MAYTHROW -> TTarget {
@@ -268,9 +271,9 @@ namespace tc {
 		template<typename... Ts, typename TValue> requires
 			(!tc::derived_from<TValue, std::variant<Ts...>>) &&
 			(!tc::derived_from<TValue, std::optional<std::variant<Ts...>>>)
-		struct is_variant_equality_comparable_to_value<std::variant<Ts...>, TValue> final: tc::constant<
-			tc::type::find_unique_if<tc::type::list<Ts const&...>, tc::type::curry<tc::is_equality_comparable_with, TValue const&>::template type>::found
-		> {};
+		struct is_variant_equality_comparable_to_value<std::variant<Ts...>, TValue> final: 
+			boost::mp11::mp_any_of<boost::mp11::mp_list<Ts const&...>, boost::mp11::mp_bind_front<tc::is_equality_comparable_with, TValue const&>::template fn>
+		{};
 	}
 	using no_adl::is_variant_equality_comparable_to_value;
 }
@@ -280,11 +283,11 @@ namespace tc::variant_detail {
 	[[nodiscard]] bool equal_to_impl(std::variant<Ts...> const& lhs, TRhs const& rhs) noexcept {
 	#if 0 // TODO: subrange.h cannot be included here -> move and_then into separate header
 		return tc::and_then(
-			tc::get_if<tc::type::find_unique_if<tc::type::list<Ts const&...>, tc::type::curry<tc::is_equality_comparable_with, TRhs const&>::template type>::index>(lhs),
+			tc::get_if<tc::mp_find_unique_if<boost::mp11::mp_list<Ts const&...>, boost::mp11::mp_bind_front<tc::is_equality_comparable_with, TRhs const&>::template fn>::index>(lhs),
 			[&](auto const& t) noexcept { return t==rhs; }
 		);
 	#endif
-		if (auto o = tc::get_if<tc::type::find_unique_if<tc::type::list<Ts const&...>, tc::type::curry<tc::is_equality_comparable_with, TRhs const&>::template type>::index>(lhs)) {
+		if (auto o = tc::get_if<tc::mp_find_unique_if<boost::mp11::mp_list<Ts const&...>, boost::mp11::mp_bind_front<tc::is_equality_comparable_with, TRhs const&>::template fn>::index>(lhs)) {
 			return *o==rhs;
 		} else {
 			return false;

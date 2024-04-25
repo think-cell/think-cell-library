@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -12,6 +12,10 @@
 #include "../base/modified.h"
 #include "../base/empty_chain.h"
 #include "round.h"
+#ifdef MSVC_WORKAROUND
+#include <boost/preprocessor/punctuation/comma.hpp>
+#include <boost/preprocessor/punctuation/paren.hpp>
+#endif
 
 namespace tc {
 	#pragma push_macro("GENERIC_OP_BODY")
@@ -43,7 +47,7 @@ namespace tc {
 		struct name##_conversion_type { \
 			using type = Lhs; \
 		}; \
-		template< typename Lhs, typename Rhs, typename=void > \
+		template< typename Lhs, typename Rhs> \
 		struct internal_##name##_conversion_type : name##_conversion_type<Lhs, Rhs> { }; \
 	} \
 	namespace generic_operator_helper { \
@@ -143,7 +147,8 @@ namespace tc {
 		#pragma push_macro("PROXY_CONVERSION")
 		#define PROXY_CONVERSION(nameFrom, nameTo) \
 		template< typename Lhs, typename Rhs > \
-		struct internal_##nameFrom##_conversion_type<Lhs, Rhs, tc::void_t<typename nameTo##_conversion_type<Lhs, Rhs>::type>> \
+			requires requires { typename nameTo##_conversion_type<Lhs, Rhs>::type; } \
+		struct internal_##nameFrom##_conversion_type<Lhs, Rhs> \
 			: nameTo##_conversion_type<Lhs, Rhs> \
 		{}
 
@@ -179,9 +184,10 @@ namespace tc {
 		template<typename FnOp, typename Rhs>
 		struct func {
 			Rhs const& m_rhs;
-			template<typename LhsElement>
-			constexpr auto operator()(LhsElement&& lhselem) const& return_decltype_xvalue_by_ref_MAYTHROW( // should be NOEXCEPT, but NOEXCEPT does not allow xvalues.
-				FnOp()(tc_move_if_owned(lhselem), m_rhs)
+
+			template <typename LhsElement>
+			constexpr auto operator()(LhsElement&& lhselem) const& return_decltype_allow_xvalue_MAYTHROW( // should be NOEXCEPT, but NOEXCEPT does not allow xvalues.
+				tc_invoke(FnOp(), tc_move_if_owned(lhselem), m_rhs)
 			)
 		};
 
@@ -208,9 +214,16 @@ namespace tc {
 	namespace no_adl { \
 		template<typename Base = void, std::size_t nTransformDepth = 0, typename PrePostOperation = prepostopdefault> \
 		struct TC_EMPTY_BASES scalar_ ## name : std::conditional_t<std::is_void<Base>::value, tc::empty_chain<scalar_ ## name<void, nTransformDepth, PrePostOperation>>, Base> { \
-			template<tc::decayed_derived_from<scalar_ ## name> Lhs, typename Rhs> requires requires { \
-				std::declval<Lhs>().template transform<nTransformDepth>(std::declval<scalar_binary_op_detail::no_adl::func<fnop, Rhs>>()); \
-			} \
+			template<tc::decayed_derived_from<scalar_ ## name> Lhs, typename Rhs \
+			IF_MSVC_WORKAROUND_ELSE( \
+				TC_FWD(BOOST_PP_COMMA() typename=decltype BOOST_PP_LPAREN()), /* workaround VS17.8 compiler bug: https://developercommunity.visualstudio.com/t/template-member-function-is-not-recogniz/10504199 */ \
+				TC_FWD(> requires requires {) \
+			) \
+				std::declval<Lhs>().template transform<nTransformDepth>(std::declval<scalar_binary_op_detail::no_adl::func<fnop, Rhs>>())IF_NO_MSVC_WORKAROUND(;) \
+			IF_MSVC_WORKAROUND_ELSE( \
+				BOOST_PP_RPAREN()>, \
+				} \
+			) \
 			[[nodiscard]] friend constexpr decltype(auto) operator op(Lhs&& lhs, Rhs const& rhs) noexcept { \
 				PrePostOperation::pre(rhs); \
 				decltype(auto) _ = tc_move_if_owned(lhs).template transform<nTransformDepth>(scalar_binary_op_detail::no_adl::func<fnop, Rhs>{rhs}); \

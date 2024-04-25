@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -23,8 +23,6 @@
 
 
 namespace {
-
-static_assert( tc::is_range_of<TRAITFROMCONCEPT(tc::char_type), wchar_t const* const>::value );
 
 //---- Basic ------------------------------------------------------------------------------------------------------------------
 UNITTESTDEF( basic ) {
@@ -92,7 +90,7 @@ UNITTESTDEF( basic ) {
 	};
 
 	template<typename Rng>
-	auto void_range(Rng&& rng) return_decltype_xvalue_by_ref_MAYTHROW(
+	auto void_range(Rng&& rng) return_decltype_allow_xvalue_MAYTHROW(
 		tc::derived_cast<void_range_struct<Rng&&>>(tc_move_if_owned(rng))
 	)
 
@@ -257,36 +255,36 @@ UNITTESTDEF( construct_array_from_range ) {
 }
 
 struct GeneratorInt {
-	friend auto range_output_t_impl(GeneratorInt const&) -> tc::type::list<int>; // declaration only
+	friend auto range_output_t_impl(GeneratorInt const&) -> boost::mp11::mp_list<int>; // declaration only
 	template<typename Func>
 	tc::break_or_continue operator()(Func func) const& {
-		tc_yield(func, 1);
-		tc_yield(func, 6);
-		tc_yield(func, 3);
-		tc_yield(func, 4);
+		tc_return_if_break(tc::continue_if_not_break(func, 1))
+		tc_return_if_break(tc::continue_if_not_break(func, 6))
+		tc_return_if_break(tc::continue_if_not_break(func, 3))
+		tc_return_if_break(tc::continue_if_not_break(func, 4))
 		return tc::continue_;
 	}
 };
 
 struct GeneratorLong {
-	friend auto range_output_t_impl(GeneratorLong const&) -> tc::type::list<long>; // declaration only
+	friend auto range_output_t_impl(GeneratorLong const&) -> boost::mp11::mp_list<long>; // declaration only
 	template<typename Func>
 	tc::break_or_continue operator()(Func func) const& {
-		tc_yield(func, 1l);
-		tc_yield(func, 6l);
-		tc_yield(func, 3l);
-		tc_yield(func, 4l);
+		tc_return_if_break(tc::continue_if_not_break(func, 1l))
+		tc_return_if_break(tc::continue_if_not_break(func, 6l))
+		tc_return_if_break(tc::continue_if_not_break(func, 3l))
+		tc_return_if_break(tc::continue_if_not_break(func, 4l))
 		return tc::continue_;
 	}
 
 };
 
 struct GeneratorGeneratorInt {
-	friend auto range_output_t_impl(GeneratorGeneratorInt const&) -> tc::type::list<GeneratorInt>; // declaration only
+	friend auto range_output_t_impl(GeneratorGeneratorInt const&) -> boost::mp11::mp_list<GeneratorInt>; // declaration only
 	template<typename Func>
 	tc::break_or_continue operator()(Func func) const& {
-		tc_yield(func, GeneratorInt());
-		tc_yield(func, GeneratorInt());
+		tc_return_if_break(tc::continue_if_not_break(func, GeneratorInt()))
+		tc_return_if_break(tc::continue_if_not_break(func, GeneratorInt()))
 		return tc::continue_;
 	}
 };
@@ -294,13 +292,13 @@ struct GeneratorGeneratorInt {
 struct GeneratorMutableInt {
 	int m_an[3] = {1,2,3};
 
-	friend auto range_output_t_impl(GeneratorMutableInt&) -> tc::type::list<int&>; // declaration only
+	friend auto range_output_t_impl(GeneratorMutableInt&) -> boost::mp11::mp_list<int&>; // declaration only
 
 	template<typename Func>
 	tc::break_or_continue operator()(Func func) & {
-		tc_yield(func, m_an[0]);
-		tc_yield(func, m_an[1]);
-		tc_yield(func, m_an[2]);
+		tc_return_if_break(tc::continue_if_not_break(func, m_an[0]))
+		tc_return_if_break(tc::continue_if_not_break(func, m_an[1]))
+		tc_return_if_break(tc::continue_if_not_break(func, m_an[2]))
 		return tc::continue_;
 	}
 };
@@ -319,7 +317,7 @@ static_assert(
 				std::declval<GeneratorMutableInt>(),
 				dummy_pred()
 			)
-	)>::value
+	)>
 );
 
 static_assert(
@@ -328,7 +326,7 @@ static_assert(
 			std::declval<GeneratorMutableInt>(),
 			dummy_pred()
 		)
-	)>>::value
+	)>>
 );
 
 static_assert(
@@ -367,7 +365,7 @@ static_assert(
 				dummy_pred()
 			)
 		)
-	>::value
+	>
 );
 
 static_assert(
@@ -378,7 +376,7 @@ static_assert(
 				dummy_pred()
 			)
 		)>
-	>::value
+	>
 );
 
 static_assert(
@@ -535,21 +533,22 @@ UNITTESTDEF(join_repeat) {
 //---- Cartesian product ------------------------------------------------------------------------------------------------------
 
 namespace {
+	// cannot be local to workaround MSVC compiler bugs
+	auto constexpr an1 = std::array<int, 5>{ 0, 1, 2, 3, 4 };
+	auto constexpr an2 = std::array<int, 3>{ 0, 1, 2 };
 	[[maybe_unused]] void cartesian_product_test(std::array<int, 2>& an) {
 		tc::for_each(tc::cartesian_product(an, an), [](auto&& x){
-			STATICASSERTSAME(decltype(x), (tc::tuple<int&, int&>&&));
+			STATICASSERTSAME(decltype(x), TC_FWD(tc::tuple<int&, int&>&&));
 		});
 		tc::for_each(tc::cartesian_product(tc::as_const(an), tc::as_const(an)), [](auto&& x){
-			STATICASSERTSAME(decltype(x), (tc::tuple<int const&, const int&>&&));
+			STATICASSERTSAME(decltype(x), TC_FWD(tc::tuple<int const&, const int&>&&));
 		});
-		static auto constexpr rvaluerng = [](auto sink) { sink(1); };
+		tc_static_auto_constexpr_lambda(rvaluerng) = [](auto sink) { sink(1); };
 		tc::for_each(tc::cartesian_product(rvaluerng, rvaluerng), [](auto&& x){
-			STATICASSERTSAME(decltype(x), (tc::tuple<int const&&, int&&>&&));
+			STATICASSERTSAME(decltype(x), TC_FWD(tc::tuple<int const&&, int&&>&&));
 		});
 
-		static auto constexpr an1 = std::array<int, 5>{ 0, 1, 2, 3, 4 };
-		static auto constexpr an2 = std::array<int, 3>{ 0, 1, 2 };
-		static auto constexpr rng = tc::cartesian_product(an1, an2);
+		tc_static_auto_constexpr(rng, tc::cartesian_product(an1, an2));
 
 		GCC_WORKAROUND_STATIC_ASSERT( *++tc::begin(rng) == tc::make_tuple(0, 1) );
 		GCC_WORKAROUND_STATIC_ASSERT( *--tc::end(rng) == tc::make_tuple(4, 2) );
@@ -598,8 +597,10 @@ namespace {
 	}
 }
 
-STATICASSERTSAME((tc::range_output_t<tc::tuple<int, double, int, double const&>>), (tc::type::list<int, double, double const&>));
-STATICASSERTSAME((tc::range_output_t<std::tuple<int, double, int, double const&>>), (tc::type::list<int, double, double const&>));
+STATICASSERTSAME(TC_FWD(tc::range_output_t<tc::tuple<int, double, int, double const&>>), TC_FWD(boost::mp11::mp_list<int, double, double const&>));
+#ifndef TC_PRIVATE
+STATICASSERTSAME(TC_FWD(tc::range_output_t<std::tuple<int, double, int, double const&>>), TC_FWD(boost::mp11::mp_list<int, double, double const&>));
+#endif
 STATICASSERTSAME(tc::range_value_t<decltype(tc::concat_nonempty_with_separator("-", "1", "2"))>, char);
 STATICASSERTSAME(tc::range_value_t<decltype(tc::concat_nonempty_with_separator("-", "1", tc::string<char>("2")))>, char);
 STATICASSERTSAME(tc::range_value_t<decltype(tc::concat_nonempty_with_separator("-", "1", tc::empty_range()))>, char);

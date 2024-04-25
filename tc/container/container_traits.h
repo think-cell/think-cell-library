@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -16,14 +16,13 @@
 
 namespace tc {
 	namespace no_adl {
-		template <typename, typename Cont, typename... T>
+		template <typename Cont, typename... T>
 		struct has_emplace_back : std::false_type {};
 
-		template <typename Cont, typename... T>
-		struct has_emplace_back<std::void_t<decltype(std::declval<Cont&>().emplace_back(std::declval<T>()...))>, Cont, T...> : std::true_type {};
+		template <typename Cont, typename... T> requires requires (Cont& cont, T&&... ts) { cont.emplace_back(tc_move_if_owned(ts)...); }
+		struct has_emplace_back<Cont, T...> : std::true_type {};
 	}
-	template<typename Cont, typename... T>
-	using has_emplace_back = no_adl::has_emplace_back<void, Cont, T...>;
+	using no_adl::has_emplace_back;
 
 	// Todo: move those below into namespace
 }

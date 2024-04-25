@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -97,19 +97,19 @@ static_assert(0 == std::numeric_limits<tc::char16>::lowest() && 0xFFFF == std::n
 
 UNITTESTDEF(string_literal) {
 	auto ascii = "abc"_tc;
-	STATICASSERTSAME(decltype(ascii), (tc::literal_range<tc::char_ascii, 'a', 'b', 'c'>));
+	STATICASSERTSAME(decltype(ascii), TC_FWD(tc::literal_range<tc::char_ascii, 'a', 'b', 'c'>));
 
 	// Due to the bug shown in https://godbolt.org/z/Kzc8orP4j, we can't use the same characters as the ASCII string.
 	// (MSVC thinks u8"abc" is the same instantiation as "abc" and re-uses the same result.)
 	// It is already fixed in newer versions of MSVC and shouldn't affect our codebase - why would we have an ASCII and a UTF-8 string with the same characters.
 	auto utf8 = u8"ABC"_tc;
-	STATICASSERTSAME(decltype(utf8), (tc::literal_range<char, u8'A', u8'B', u8'C'>));
+	STATICASSERTSAME(decltype(utf8), TC_FWD(tc::literal_range<char, u8'A', u8'B', u8'C'>));
 
 	auto utf16 = u"abc"_tc;
-	STATICASSERTSAME(decltype(utf16), (tc::literal_range<tc::char16, u'a', u'b', u'c'>));
+	STATICASSERTSAME(decltype(utf16), TC_FWD(tc::literal_range<tc::char16, u'a', u'b', u'c'>));
 
 	auto utf32 = U"abc"_tc;
-	STATICASSERTSAME(decltype(utf32), (tc::literal_range<char32_t, U'a', U'b', U'c'>));
+	STATICASSERTSAME(decltype(utf32), TC_FWD(tc::literal_range<char32_t, U'a', U'b', U'c'>));
 }
 
 UNITTESTDEF(char_literal) {

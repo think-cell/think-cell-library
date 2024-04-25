@@ -1,21 +1,19 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
 
 #pragma once
 
-#include "fundamental.h"
-#include "type_list.h"
 #include "generic_macros.h"
 #include "move.h"
+#include "type_list.h"
 
 #include <boost/preprocessor/facilities/empty.hpp>
 #include <boost/preprocessor/facilities/overload.hpp>
-#include <boost/preprocessor/punctuation/remove_parens.hpp>
 #include <boost/preprocessor/seq/cat.hpp>
 #include <boost/integer.hpp>
 
@@ -61,39 +59,17 @@ namespace tc::static_assert_impl {
 
 // STATICASSERTEQUAL_IMPL and STATICASSERTSAME_IMPL should expand to something that is allowed wherever static_assert is allowed
 // and has no effect on the generated code, but forces NotEqual::test() or NotSame::test() to be compiled, which is why we use static_assert((test(), true)).
-// Non static-call to avoid MSVC 19.29 compiler bug.
-#define STATICASSERTEQUAL_IMPL(n1, n2) static_assert((tc::static_assert_impl::NotEqual<decltype(n1), n1, decltype(n2), n2>().test(), true))
-#define STATICASSERTSAME_IMPL(t1, t2) static_assert((tc::static_assert_impl::NotSame<BOOST_PP_REMOVE_PARENS(TC_FWD(t1)), BOOST_PP_REMOVE_PARENS(TC_FWD(t2))>().test(), true))
+#define STATICASSERTEQUAL_IMPL(n1, n2) static_assert((tc::static_assert_impl::NotEqual<decltype(n1), n1, decltype(n2), n2>::test(), true))
+#define STATICASSERTSAME_IMPL(t1, t2) static_assert((tc::static_assert_impl::NotSame<t1, t2>::test(), true))
 
 // Each macro should static_assert at the point of expansion (to point to the correct error location and show the correct message)
 // as well is inside the template (to show the erroneous parameters).
-#define STATICASSERTEQUAL_2(n1, n2) static_assert((n1) == (n2)); STATICASSERTEQUAL_IMPL(TC_FWD(n1), TC_FWD(n2))
-#define STATICASSERTEQUAL_3(n1, n2, strMessage) static_assert((n1) == (n2), strMessage); STATICASSERTEQUAL_IMPL(TC_FWD(n1), TC_FWD(n2))
-#define STATICASSERTEQUAL(...) BOOST_PP_CAT(BOOST_PP_OVERLOAD(STATICASSERTEQUAL_, __VA_ARGS__)(__VA_ARGS__),BOOST_PP_EMPTY())
-#define STATICASSERTSAME_2(t1, t2) static_assert(std::is_same<BOOST_PP_REMOVE_PARENS(TC_FWD(t1)), BOOST_PP_REMOVE_PARENS(TC_FWD(t2))>::value); STATICASSERTSAME_IMPL(TC_FWD(t1), TC_FWD(t2))
-#define STATICASSERTSAME_3(t1, t2, strMessage) static_assert(std::is_same<BOOST_PP_REMOVE_PARENS(TC_FWD(t1)), BOOST_PP_REMOVE_PARENS(TC_FWD(t2))>::value , strMessage); STATICASSERTSAME_IMPL(TC_FWD(t1), TC_FWD(t2))
-#define STATICASSERTSAME(...) BOOST_PP_CAT(BOOST_PP_OVERLOAD(STATICASSERTSAME_, __VA_ARGS__)(__VA_ARGS__),BOOST_PP_EMPTY())
+#define STATICASSERTEQUAL(n1, n2, ...) static_assert((n1) == (n2) __VA_OPT__(,) __VA_ARGS__); STATICASSERTEQUAL_IMPL(TC_FWD(n1), TC_FWD(n2))
+#define STATICASSERTSAME(t1, t2, ...) static_assert(std::is_same<t1, t2>::value __VA_OPT__(,) __VA_ARGS__); STATICASSERTSAME_IMPL(TC_FWD(t1), TC_FWD(t2))
 
 // Use as type of constructor arguments that are required for enabling / disabling constructor through SFINAE.
 // To be replaced by template parameter default when Visual C++ supports template parameter defaults for functions.
 struct unused_arg final {};
-
-namespace tc {
-	namespace no_adl {
-		template<auto ConceptLambda>
-		struct trait_from_concept {
-			template<typename T>
-			using trait = std::conditional_t<
-				ConceptLambda.template operator()<T>(),
-				std::true_type,
-				std::false_type
-			>;
-		};
-	}
-}
-
-#define TRAITFROMCONCEPT(TheConcept) \
-	tc::no_adl::trait_from_concept<[]<typename T> () consteval { return TheConcept<T>; }>::template trait
 
 namespace tc {
 	//////////////////////////
@@ -170,30 +146,11 @@ namespace tc {
 		return tc_move_if_owned(t);
 	}
 	
-	/////////////////////////////
-	// remove_rvalue_reference
-
-	namespace no_adl {
-		template <typename T>
-		struct remove_rvalue_reference {
-			using type=T;
-		};
-		template <typename T>
-		struct remove_rvalue_reference<T&&> {
-			using type=T;
-		};
-	}
-
-	using no_adl::remove_rvalue_reference;
-
-	template<typename T>
-	using remove_rvalue_reference_t=typename tc::remove_rvalue_reference<T>::type;
-
 	//////////////////////////
 	// type classification concepts
 
 	template<typename T>
-	concept char_type = tc::type::find_unique<tc::type::list<char, wchar_t, char8_t, char16_t, char32_t>, std::remove_cv_t<T>>::found;
+	concept char_type = boost::mp11::mp_set_contains<boost::mp11::mp_list<char, wchar_t, char8_t, char16_t, char32_t>, std::remove_cv_t<T>>::value;
 
 	template< typename T >
 	concept char_ptr = std::is_pointer<T>::value && tc::char_type<std::remove_pointer_t<T>>;
@@ -225,6 +182,16 @@ namespace tc {
 	template<typename T>
 	concept enum_type = std::is_enum<T>::value;
 
+	template<tc::actual_integer auto val>
+	using int_value_least_t = std::conditional_t<
+		0<=val,
+		typename boost::int_max_value_t<val>::least,
+		typename boost::int_min_value_t<val>::least
+	>;
+
+	template<tc::actual_integer auto val>
+	using uint_value_least_t = typename boost::uint_value_t<val>::least;
+
 	//////////////////////////////////////////////////////////////////////////
 	// constant
 
@@ -232,7 +199,21 @@ namespace tc {
 	using constant = std::integral_constant<decltype(t), t>;
 
 	template<tc::actual_integer auto N> requires (N >= 0)
-	using least_uint_constant = tc::constant<static_cast<typename boost::uint_value_t<N>::least>(N)>;
+	using least_uint_constant = tc::constant<static_cast<tc::uint_value_least_t<N>>(N)>;
+
+	//////////////////////////////////////////////////////////////////////////
+	// TRAITFROMCONCEPT
+
+	namespace no_adl {
+		template<auto ConceptLambda>
+		struct trait_from_concept {
+			template<typename T>
+			using trait = tc::constant<ConceptLambda.template operator()<T>()>;
+		};
+	}
+
+	#define TRAITFROMCONCEPT(TheConcept) \
+		tc::no_adl::trait_from_concept<[]<typename TraitFromConceptType /* prevent name shadow */> () consteval { return TheConcept<TraitFromConceptType>; }>::template trait
 
 	//////////////////////////
 	// derived_from
@@ -291,9 +272,11 @@ template<typename TInstance, template<TC_PP_PARAMS_TYPE_ENUM(seq)> typename Temp
 concept instance ## suffix = no_adl::is_instance ## suffix<TInstance, Template>::value;
 
 namespace tc {
-	IS_INSTANCE_TRAIT(, ((typename)(...)(T)), using arguments=tc::type::list<T...>;)
-	IS_INSTANCE_TRAIT(2, ((typename)(T1))((typename)(T2))((bool)(b)), using first_argument=T1;using second_argument=T2;static constexpr auto third_argument=b;)
-	IS_INSTANCE_TRAIT(_b, ((bool)(b))((typename)(...)(T)),)
+	// Each n in the suffix adds one non-type template parameter, each t a prefix type template parameter.
+	IS_INSTANCE_TRAIT(, ((typename)(...)(T)), using arguments = boost::mp11::mp_list<T...>;)
+	IS_INSTANCE_TRAIT(_n, ((auto)(V))((typename)(...)(T)), using arguments = boost::mp11::mp_list<tc::constant<V>, T...>; )
+	IS_INSTANCE_TRAIT(_tn, ((typename)(T1))((auto)(V))((typename)(...)(T)), using arguments = boost::mp11::mp_list<T1, tc::constant<V>, T...>;)
+	IS_INSTANCE_TRAIT(_ttn, ((typename)(T1))((typename)(T2))((auto)(V))((typename)(...)(T)), using arguments = boost::mp11::mp_list<T1, T2, tc::constant<V>, T...>;)
 }
 
 	/////////////////////////////////////////////
@@ -324,7 +307,7 @@ concept instance_or_derived ## suffix = \
 	BOOST_PP_CAT(is_instance_or_derived, suffix)<TInstance, Template>::value;
 
 namespace tc {
-	IS_INSTANCE_OR_DERIVED_TRAIT(, ((typename)(...)(T)), using base_instance=Template<T...>;using arguments = tc::type::list<T...>;)
+	IS_INSTANCE_OR_DERIVED_TRAIT(, ((typename)(...)(T)), using base_instance=Template<T...>;using arguments = boost::mp11::mp_list<T...>;)
 
 	/////////////////////////////////////////////
 	// apply_cvref
@@ -391,8 +374,8 @@ namespace tc {
 			static_assert(!std::is_reference<TTarget>::value);
 		};
 
-		// default construction of classes is ok
-		template <typename TTarget> requires std::is_class<TTarget>::value
+		// non-trivial default construction of classes is ok
+		template <typename TTarget> requires (!std::is_trivially_default_constructible<TTarget>::value)
 		struct is_value_safely_constructible_base<TTarget> : tc::constant<true> {
 			static_assert(!std::is_reference<TTarget>::value);
 		};
@@ -511,33 +494,17 @@ MODIFY_WARNINGS_END
 
 		template <typename TTarget, typename... Args>
 		struct is_value_safely_constructible final : is_value_safely_constructible_base<TTarget, Args...> {}; // Has customizations
-	}
 
-	namespace safely_convertible_to_detail {
-		template<typename TSource, typename TTarget>
-		concept expanded_convertible_to =
-			// 1. std::convertible_to
-			std::convertible_to<TSource, TTarget> // void could only std::convertible_to or from void
-			||
-			// 2. or, if TTarget is const&&, consider std::convertible_to const& also convertible_to const&&. static_cast is needed in this case.
-			(
-				std::is_rvalue_reference<TTarget>::value &&
-				std::is_const<std::remove_reference_t<TTarget>>::value &&
-				std::convertible_to<TSource, std::remove_reference_t<TTarget>&>
-			);
+		template <typename TSource, typename TTarget>
+		struct is_safely_convertible_to_reference final  {
+			// creates no reference to temporary
+			// For target references that may bind to temporaries, i.e., const&, &&, const&&
+			// prevent initialization by
+			//  - value -> (const)&&
+			//  - value or (const)&& -> const&
+			// binding to reference is only allowed to same type or derived to base conversion
 
-		// used when expanded_convertible_to is met
-		template<typename TSource, typename TTarget>
-		concept safely_convertible_to_reference =
-			std::is_reference<TTarget>::value
-			&&
-			(   // creates no reference to temporary
-				// For target references that may bind to temporaries, i.e., const&, &&, const&&
-				// prevent initialization by
-				//  - value -> (const)&&
-				//  - value or (const)&& -> const&
-				// binding to reference is only allowed to same type or derived to base conversion
-
+			static auto constexpr value = 
 				// 1. a mutable lvalue reference does not bind to temporary objects, so it is safe to allow it
 				(std::is_lvalue_reference<TTarget>::value && !std::is_const<std::remove_reference_t<TTarget>>::value)
 				|| 
@@ -555,8 +522,26 @@ MODIFY_WARNINGS_END
 						std::remove_reference_t<TSource>,
 						std::remove_reference_t<TTarget>
 					>
-				)
+				);
+		};
+	}
+
+	namespace safely_convertible_to_detail {
+		template<typename TSource, typename TTarget>
+		concept expanded_convertible_to =
+			// 1. std::convertible_to
+			std::convertible_to<TSource, TTarget> // void could only std::convertible_to or from void
+			||
+			// 2. or, if TTarget is const&&, consider std::convertible_to const& also convertible_to const&&. static_cast is needed in this case.
+			(
+				std::is_rvalue_reference<TTarget>::value &&
+				std::is_const<std::remove_reference_t<TTarget>>::value &&
+				std::convertible_to<TSource, std::remove_reference_t<TTarget>&>
 			);
+
+		// used when expanded_convertible_to is met
+		template<typename TSource, typename TTarget>
+		concept safely_convertible_to_reference = std::is_reference<TTarget>::value && no_adl::is_safely_convertible_to_reference<TSource, TTarget>::value;
 
 		// used when expanded_convertible_to is met
 		template<typename TSource, typename TTarget>
@@ -612,20 +597,27 @@ MODIFY_WARNINGS_END
 
 	template<typename TTarget, typename... Args>
 	concept implicit_constructible_from =
-		is_implicitly_constructible_detail::implicit_constructible_from_single_source<TTarget, tc::type::only_t<tc::type::list<Args...>>> ||
+		is_implicitly_constructible_detail::implicit_constructible_from_single_source<TTarget, tc::mp_only<boost::mp11::mp_list<Args...>>> ||
 		is_implicitly_constructible_detail::implicit_constructible_from_not_single_source<TTarget, Args...>;
 
 	namespace safely_constructible_from_detail {
+		// We can't use std::is_constructible/std::constructible_from for types with private destructors.
+		template<typename TTarget, typename ... Args>
+		concept object_constructible_from = requires(Args&&... args) {
+			// Note: Using the global placement new fails if TTarget is a reference type.
+			::new(static_cast<void*>(nullptr)) TTarget(tc_move_if_owned(args)...);
+		};
+
 		template<typename TTarget, typename... Args>
 		concept safely_constructible_from_not_single_source =
 			// Require std::is_class<TTarget>:
-			// - class types and const references to class types are std::is_constructible from two or more aguments. Initializing
+			// - class types and const references to class types are is_constructible from two or more aguments. Initializing
 			//	 a const reference using uniform initialization with multiple arguments would bind the reference to a temporary,
 			//   which we do not allow,
 			// - non-reference types may be std::is_constructible from zero arguments. We do not want this for native types like int.
 			1!=sizeof...(Args) &&
 			std::is_class<TTarget>::value &&
-			std::is_constructible<TTarget, Args...>::value &&
+			object_constructible_from<TTarget, Args...> &&
 			no_adl::is_value_safely_constructible<std::remove_cv_t<TTarget>, Args...>::value;
 
 		template<typename TTarget, typename TSource>
@@ -637,7 +629,7 @@ MODIFY_WARNINGS_END
 		concept value_safely_constructible_from_single_source =
 			(!std::is_reference<TTarget>::value) &&
 			(
-				std::is_constructible<TTarget, TSource>::value ||
+				object_constructible_from<TTarget, TSource> ||
 				std::is_same<TTarget, TSource>::value // optimistically assume guaranteed copy elision
 			) &&
 			(
@@ -656,7 +648,7 @@ MODIFY_WARNINGS_END
 
 	template<typename TTarget, typename... Args>
 	concept safely_constructible_from =
-		safely_constructible_from_detail::safely_constructible_from_single_source<TTarget, tc::type::only_t<tc::type::list<Args...>>> ||
+		safely_constructible_from_detail::safely_constructible_from_single_source<TTarget, tc::mp_only<boost::mp11::mp_list<Args...>>> ||
 		safely_constructible_from_detail::safely_constructible_from_not_single_source<TTarget, Args...>;
 
 	template<typename TTarget, typename TSource>
@@ -667,13 +659,9 @@ MODIFY_WARNINGS_END
 
 namespace tc {
 	namespace no_adl {
-		template<typename... T>
-		struct common_type_decayed;
+		template <typename T, typename U>
+		struct common_type_decayed_impl {}; // no common type
 	}
-	using no_adl::common_type_decayed;
-
-	template<typename... T>
-	using common_type_decayed_t = typename tc::common_type_decayed<T...>::type;
 
 	// 1. tc::common_type_t:
 	//		a) input: any
@@ -681,77 +669,69 @@ namespace tc {
 	//		c) customization: Yes (many)
 	//		d) SFINAE friendly: Yes
 	template<typename... T>
-	using common_type_t = typename tc::common_type_decayed<tc::decay_t<T>...>::type;
+	using common_type_t = tc::mp_fold_with_front<boost::mp11::mp_list<tc::decay_t<T>...>, boost::mp11::mp_quote_trait<no_adl::common_type_decayed_impl>::template fn>;
+
 	namespace no_adl {
-		template<typename T>
-		struct common_type_decayed<T> {
-			using type=T;
-		};
-
-		template<typename T0, typename T1>
-		struct common_type_decayed_base {};
-
-		// common_type is sfinae-friendly
 		template<typename T0, typename T1> requires
 			tc::safely_convertible_to<T0, std::common_type_t<T0, T1>> &&
 			tc::safely_convertible_to<T1, std::common_type_t<T0, T1>>
-		struct common_type_decayed_base<T0, T1> {
-			using type = std::common_type_t<T0, T1>;
-		};
-
-		template<typename T0, typename T1>
-		struct common_type_decayed<T0, T1> : common_type_decayed_base<T0, T1> {};
-
+		struct common_type_decayed_impl<T0, T1> : std::common_type<T0, T1> {};
 
 		template<typename T, typename U, U u>
-		struct common_type_decayed<T, std::integral_constant<U, u>> : common_type_decayed<T, U> {};
+		struct common_type_decayed_impl<T, std::integral_constant<U, u>> : common_type_decayed_impl<T, U> {};
 
 		template<typename T, T t, typename U>
-		struct common_type_decayed<std::integral_constant<T, t>, U> : common_type_decayed<T, U> {};
+		struct common_type_decayed_impl<std::integral_constant<T, t>, U> : common_type_decayed_impl<T, U> {};
 
 		template<typename T, T t, typename U, U u>
-		struct common_type_decayed<std::integral_constant<T, t>, std::integral_constant<U, u>> : std::conditional_t<
+		struct common_type_decayed_impl<std::integral_constant<T, t>, std::integral_constant<U, u>> : std::conditional_t<
 			t == u,
-			tc::type::identity<std::integral_constant<tc::common_type_t<T, U>, t>>,
-			common_type_decayed<T, U>
+			std::type_identity<std::integral_constant<tc::common_type_t<T, U>, t>>,
+			common_type_decayed_impl<T, U>
 		> {};
-
-		template<typename T0, typename T1, typename... Args>
-		struct common_type_decayed<T0, T1, Args...>
-			: tc::type::accumulate_with_front<tc::type::list<T0, T1, Args...>, tc::common_type_decayed_t> {};
 	} // namespace no_adl
 
-	template<bool bCondition, template<typename> typename template_, typename T>
-	using apply_if_t = std::conditional_t<
-		bCondition,
-		typename template_<T>::type,
-		T
-	>;
+	namespace no_adl {
+		template <typename T0, typename T1>
+		struct common_base_fallback {};
+
+		template <typename T>
+		struct common_base_fallback<T, T> {
+			using type = T;
+		};
+
+		template <typename T0, typename T1> requires tc::derived_from<T0, T1>
+		struct common_base_fallback<T0, T1> {
+			using type = T1;
+		};
+
+		template <typename T0, typename T1> requires tc::derived_from<T1, T0>
+		struct common_base_fallback<T0, T1> {
+			using type = T0;
+		};
+
+		template <typename T0, typename T1>
+		struct common_base_impl : common_base_fallback<T0, T1> {};
+	}
+
+	// 2. tc::common_base_t:
+	//		a) input: non-cvref-qualified types
+	//		b) result: the most-derived common base class of the types
+	//		c) customization: Yes (types derived from Obj)
+	//		d) SFINAE friendly: Yes
+	// Note: this is non-variadic as the default implementation is not-associative:
+	// `common_base_t<common_base_t<Base, Derived1>, Derived2>` is `Base`, but `common_base_t<Base, common_base_t<Derived1, Derived2>>` does not exist.
+	template <typename T0, typename T1> requires std::same_as<T0, std::remove_cvref_t<T0>> && std::same_as<T1, std::remove_cvref_t<T1>>
+	using common_base_t = typename no_adl::common_base_impl<T0, T1>::type;
 
 	namespace no_adl {
-		template<typename T0Value, typename T1Value>
-		using common_reference_base_type = std::remove_cv_t<
-			std::conditional_t<
-				tc::derived_from<T1Value, T0Value>,
-				T0Value,
-				std::conditional_t<
-					tc::derived_from<T0Value, T1Value>,
-					T1Value,
-					void
-				>
-			>
-		>;
+		template <typename T0, typename T1>
+		struct actual_common_reference {};
 
-		template<typename T0, typename T1>
-		struct actual_common_reference final {};
-
-		template<typename T0, typename T1>
-			requires std::is_reference<T0>::value
-				&& std::is_reference<T1>::value
-				&& (!std::is_same<common_reference_base_type<std::remove_reference_t<T0>, std::remove_reference_t<T1>>, void>::value)
-		struct actual_common_reference<T0, T1> final {
-			static_assert(std::is_reference<T0>::value && std::is_reference<T1>::value);
-
+		template <typename T0, typename T1>
+			requires std::is_reference<T0>::value && std::is_reference<T1>::value
+				&& requires { typename tc::common_base_t<std::remove_cvref_t<T0>, std::remove_cvref_t<T1>>; }
+		struct actual_common_reference<T0, T1> {
 			using T0Value = std::remove_reference_t<T0>;
 			using T1Value = std::remove_reference_t<T1>;
 
@@ -763,98 +743,72 @@ namespace tc {
 			>;
 
 			template<typename ValueType>
-			using constness = tc::apply_if_t<
+			using constness = std::conditional_t<
 				std::is_const<T0Value>::value || std::is_const<T1Value>::value || std::is_rvalue_reference<T0>::value != std::is_rvalue_reference<T1>::value,
-				std::add_const,
+				std::add_const_t<ValueType>,
 				ValueType
 			>;
 
 			template<typename ValueType>
-			using volatileness = tc::apply_if_t<
-				std::is_volatile<T0Value>::value ||
-				std::is_volatile<T1Value>::value,
-				std::add_volatile,
+			using volatileness = std::conditional_t<
+				std::is_volatile<T0Value>::value || std::is_volatile<T1Value>::value,
+				std::add_volatile_t<ValueType>,
 				ValueType
 			>;
 
-			using type = referenceness<
-				constness<
-					volatileness<common_reference_base_type<T0Value, T1Value>>
-				>
-			>;
-
+			using type = referenceness<constness<volatileness<common_base_t<std::remove_cv_t<T0Value>, std::remove_cv_t<T1Value>>>>>;
 			static_assert(tc::safely_convertible_to<T0, type>);
 			static_assert(tc::safely_convertible_to<T1, type>);
 		};
-		template<typename T0, typename T1>
-		using actual_common_reference_t = typename actual_common_reference<T0, T1>::type;
 	}
 
-	template<typename... T>
-	concept has_actual_common_reference = requires { typename tc::type::accumulate_with_front_t<tc::type::list<T...>, no_adl::actual_common_reference_t>; };
+	template <typename ... T>
+	using actual_common_reference_t = tc::mp_fold_with_front<boost::mp11::mp_list<T...>, boost::mp11::mp_quote_trait<no_adl::actual_common_reference>::template fn>;
 
 	namespace no_adl {
-		template<typename... T>
-		struct common_reference_xvalue_as_ref_common_type {};
+		// This trait can be specialized to add further common reference types.
+		template <typename T0, typename T1>
+		struct common_reference_impl {};
+		template <typename ... T>
+		using common_reference_impl_t = tc::mp_fold_with_front<boost::mp11::mp_list<T...>, boost::mp11::mp_quote_trait<common_reference_impl>::template fn>;
 
-		template<typename... T> requires (std::is_reference<T>::value && ...) && requires { typename tc::common_type_t<T...>; }
-		struct common_reference_xvalue_as_ref_common_type<T...> {
-			using type = tc::common_type_t<T...>;
+		template <typename ... T>
+		struct common_reference {};
+
+		template <typename ... T> requires
+			requires { typename actual_common_reference_t<T...>; }
+		struct common_reference<T...> {
+			using type = actual_common_reference_t<T...>;
 		};
 
-		template<typename... T>
-		struct common_reference_xvalue_as_ref final: common_reference_xvalue_as_ref_common_type<T...> {};
+		template <typename ... T> requires
+			requires { typename common_reference_impl_t<T...>; }
+			&& (!requires { typename actual_common_reference_t<T...>; })
+		struct common_reference<T...> {
+			using type = common_reference_impl_t<T...>;
+			static_assert((tc::safely_convertible_to<T, type> && ...));
+		};
 
-		template<typename... T> requires has_actual_common_reference<T...>
-		struct common_reference_xvalue_as_ref<T...> final {
-			using type = tc::type::accumulate_with_front_t<tc::type::list<T...>, actual_common_reference_t>;
+		template <typename ... T> requires
+			(!requires { typename common_reference_impl_t<T...>; })
+			&& (!requires { typename actual_common_reference_t<T...>; })
+			&& requires { typename tc::common_type_t<T...>; }
+		struct common_reference<T...> {
+			using type = tc::common_type_t<T...>;
 		};
 	}
 
-	// 2. tc::common_reference_xvalue_as_ref_t:
-	//		a) input: reference types, prvalue is not allowed
-	//		b) result:
-	//			i) all types are same/base/derived types: base type with correct cv ref (actual_common_reference)
-	//			ii) else: tc::common_type_t
-	//		c) customization: Yes (tc::span, tc::sub_range)
-	//		d) SFINAE friendly: Yes
-	template<typename... T>
-	using common_reference_xvalue_as_ref_t = typename no_adl::common_reference_xvalue_as_ref<T...>::type;
-
-	template<typename... T> // C++20 has std::common_reference_with<T, U>
-	concept has_common_reference_xvalue_as_ref = requires { typename tc::common_reference_xvalue_as_ref_t<T...>; };
-
-	namespace no_adl {
-		template<typename... T>
-		struct common_reference_prvalue_as_val_base {};
-
-		template<typename... T> requires requires { typename tc::common_type_t<T...>; }
-		struct common_reference_prvalue_as_val_base<T...> {
-			using type = tc::common_type_t<T...>;
-		};
-
-		template<typename... T>
-		struct common_reference_prvalue_as_val final : common_reference_prvalue_as_val_base<T...> {};
-
-		template<typename... T> requires (tc::safely_convertible_to<T, /*TTarget*/tc::common_reference_xvalue_as_ref_t<T&&...>> && ...)
-		struct common_reference_prvalue_as_val<T...> final {
-			using type = tc::common_reference_xvalue_as_ref_t<T&&...>;
-		};
-	}
-
-	// 3. tc::common_reference_prvalue_as_val_t:
+	// 3. tc::common_reference_t:
 	//		a) input: any
 	//		b) result:
-	//			i) tc::common_reference_xvalue_as_ref_t<T&&...> if all Input types are tc::safely_convertible_to the result type.
-	//			ii) else: tc::common_type_t
-	//			iii) Note: if input has at least 1 prvalue, the result will be a prvalue or none. Because prvalues are not tc::safely_convertible_to reference.
-	//		c) customization: No
+	//			i) all types are references to the same/base/derived types: base type with correct cv ref (actual_common_reference)
+	//			ii) if customized: user-defined type with reference semantics
+	//			iii) else: tc::common_type_t
+	//			Note: if input has at least 1 prvalue, the result (if it exists) will be a prvalue.
+	//		c) customization: Yes (tc::span, tc::subrange)
 	//		d) SFINAE friendly: Yes
-	template<typename... T>
-	using common_reference_prvalue_as_val_t = typename no_adl::common_reference_prvalue_as_val<T...>::type;
-
-	template<typename... T>
-	concept has_common_reference_prvalue_as_val = requires { typename tc::common_reference_prvalue_as_val_t<T...>; };
+	template <typename... T>
+	using common_reference_t = typename no_adl::common_reference<T...>::type;
 
 	namespace no_adl {
 		template <typename T>
@@ -870,25 +824,6 @@ namespace tc {
 		struct has_operator_arrow<T> final : tc::constant<true> {};
 	}
 	using no_adl::has_operator_arrow;
-
-	template< typename Func >
-	struct delayed_returns_reference_to_argument : decltype(returns_reference_to_argument(std::declval<Func>())) {}; // invoke ADL
-
-	namespace no_adl {
-		template<typename Func, typename TargetExpr, typename... SourceExpr>
-		struct transform_return final : std::conditional_t<
-			std::conjunction<
-				std::is_rvalue_reference<TargetExpr>,
-				std::negation<std::conjunction<std::is_reference<SourceExpr>...>>,
-				delayed_returns_reference_to_argument<Func>
-			>::value
-			, tc::decay<TargetExpr>
-			, tc::type::identity<TargetExpr>
-		> {};
-	}
-
-	template<typename... Args>
-	using transform_return_t = typename no_adl::transform_return<Args...>::type;
 
 	template <typename...>
 	struct dependent_false : tc::constant<false> {};

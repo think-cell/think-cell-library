@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -27,7 +27,7 @@ namespace tc {
 			return tc::constant<tc::continue_>();
 		}
 
-		auto range_output_t_impl(empty_range const&) noexcept -> tc::type::list<>; // declaration only
+		auto range_output_t_impl(empty_range const&) noexcept -> boost::mp11::mp_list<>; // declaration only
 	}
 	using empty_range_adl::empty_range;
 }

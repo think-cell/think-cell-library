@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -9,10 +9,8 @@
 #pragma once
 
 #include "assert_defs.h"
-
-#include "type_traits_fwd.h"
-#include "integer.h"
 #include "casts.h"
+#include "integer.h"
 
 #include <boost/integer.hpp>
 #include <boost/preprocessor/seq/enum.hpp>
@@ -78,7 +76,7 @@ namespace tc {
 	}
 
 	template<tc::contiguous_enum_type Enum>
-	[[nodiscard]] constexpr auto from_underlying_impl(tc::type::identity<Enum>, tc::underlying_type_t<Enum> n) {
+	[[nodiscard]] constexpr auto from_underlying_impl(std::type_identity<Enum>, tc::underlying_type_t<Enum> n) {
 		_ASSERTDEBUG(is_enum_value_or_end<Enum>(n)); // _ASSERT triggers win/ARM64EC/release ICE
 		return static_cast<Enum>(n);
 	}
@@ -147,7 +145,7 @@ struct CXmlReader;
 #endif
 
 namespace tc {
-	template< typename Enum, tc::void_t<decltype(tc::contiguous_enum<Enum>::end())>* = nullptr >
+	template< typename Enum> requires requires { tc::contiguous_enum<Enum>::end(); }
 	constexpr void assert_not_end(Enum e) noexcept {
 		_ASSERTDEBUG(
 			// There are values that e can have without UB that are not one its enum values, in particular when e has
@@ -158,7 +156,7 @@ namespace tc {
 		);
 	}
 
-	template< typename Enum, tc::void_t<decltype(tc::contiguous_enum<Enum>::end())>* = nullptr >
+	template< typename Enum> requires requires { tc::contiguous_enum<Enum>::end(); }
 	[[nodiscard]] constexpr Enum verify_not_end(Enum e) noexcept {
 		tc::assert_not_end(e);
 		return e;
@@ -182,8 +180,8 @@ namespace tc {
 	[[nodiscard]] inline bool check_initialized_impl(Enum const& e) noexcept { /*reference to avoid error C4701: potentially uninitialized local variable*/ \
 		return tc::is_enum_value_or_end<Enum>(tc::to_underlying(e)); \
 	} \
-	[[nodiscard]] constexpr boost::int_max_value_t< tc::enum_count<Enum>::value >::least operator-(Enum const e1, Enum const e2) noexcept { \
-		return static_cast<boost::int_max_value_t< tc::enum_count<Enum>::value >::least>(tc::to_underlying(e1)-tc::to_underlying(e2)); \
+	[[nodiscard]] constexpr tc::int_value_least_t< tc::enum_count<Enum>::value > operator-(Enum const e1, Enum const e2) noexcept { \
+		return static_cast<tc::int_value_least_t< tc::enum_count<Enum>::value >>(tc::to_underlying(e1)-tc::to_underlying(e2)); \
 	} \
 	template<ENABLE_SFINAE> \
 	[[nodiscard]] constexpr tc::enumset<SFINAE_TYPE(Enum)> operator|(Enum lhs, Enum rhs) noexcept { \
@@ -239,13 +237,16 @@ namespace tc {
 #define TC_PREFIX_CONSTANT_STRING( _, prefix, constant ) #prefix #constant
 
 #define TC_DEFINE_ENUM_REPORTSTREAM_PIPE( Enum, prefix, constants ) \
-	[[nodiscard]] inline char const* enum_literal(Enum e) noexcept { \
-		static constexpr char const* c_map[]={ \
-			BOOST_PP_SEQ_ENUM(BOOST_PP_SEQ_TRANSFORM(TC_PREFIX_CONSTANT_STRING, prefix, constants)), \
-			"tc::contiguous_enum<" #Enum ">::end()" \
-		}; \
-		return c_map[e-tc::contiguous_enum<Enum>::begin()]; \
-	}
+		namespace Enum ## _detail { \
+			/* TODO: move c_map back as static local after MSVC compiler bug is solved: https://developercommunity.visualstudio.com/t/code-generation-bug-on-static-variable-i/10541326 */ \
+			inline constexpr char const* c_map[]={ \
+				BOOST_PP_SEQ_ENUM(BOOST_PP_SEQ_TRANSFORM(TC_PREFIX_CONSTANT_STRING, prefix, constants)), \
+				"tc::contiguous_enum<" #Enum ">::end()" \
+			}; \
+		} \
+		[[nodiscard]] inline char const* enum_literal(Enum e) noexcept { \
+			return Enum ## _detail::c_map[e-tc::contiguous_enum<Enum>::begin()]; \
+		}
 #else
 #define TC_DEFINE_ENUM_REPORTSTREAM_PIPE( Enum, prefix, constants )
 #endif
@@ -270,7 +271,7 @@ namespace tc::enum_detail {
 
 #define TC_DEFINE_SCOPED_ENUM_WITH_OFFSET( Enum, prefix, offset, constants ) \
 	namespace Enum ## _adl { \
-		enum class Enum : boost::int_max_value_t<tc::enum_detail::max_value_for_underlying_type((offset), BOOST_PP_SEQ_SIZE(constants))>::least { \
+		enum class Enum : tc::int_value_least_t<tc::enum_detail::max_value_for_underlying_type((offset), BOOST_PP_SEQ_SIZE(constants))> { \
 			BOOST_PP_SEQ_HEAD(constants) = offset, \
 			BOOST_PP_SEQ_ENUM( BOOST_PP_SEQ_TAIL(BOOST_PP_SEQ_PUSH_BACK(constants, _END) ) ) \
 		}; \
@@ -314,17 +315,17 @@ namespace tc {
 
 	namespace explicit_convert_adl {
 		template<typename EnumSuper, typename EnumSub> requires tc::is_sub_enum_of<EnumSub, EnumSuper>::value
-		constexpr EnumSuper explicit_convert_impl(adl_tag_t, tc::type::identity<EnumSuper>, EnumSub const esub) noexcept {
+		constexpr EnumSuper explicit_convert_impl(adl_tag_t, std::type_identity<EnumSuper>, EnumSub const esub) noexcept {
 			return static_cast<EnumSuper>(esub); // cast from sub to super is always safe
 		}
 
 		template<typename EnumSub, typename EnumSuper> requires tc::is_sub_enum_of<EnumSub, EnumSuper>::value
-		constexpr EnumSub explicit_convert_impl(adl_tag_t, tc::type::identity<EnumSub>, EnumSuper const esuper) noexcept {
+		constexpr EnumSub explicit_convert_impl(adl_tag_t, std::type_identity<EnumSub>, EnumSuper const esuper) noexcept {
 			return tc::from_underlying<EnumSub>(tc::to_underlying(esuper));
 		}
 
 		template<typename EnumSub, typename EnumSuper> requires tc::is_sub_enum_of<EnumSub, EnumSuper>::value
-		constexpr std::optional<EnumSub> explicit_convert_impl(adl_tag_t, tc::type::identity<std::optional<EnumSub>>, EnumSuper const esuper) noexcept {
+		constexpr std::optional<EnumSub> explicit_convert_impl(adl_tag_t, std::type_identity<std::optional<EnumSub>>, EnumSuper const esuper) noexcept {
 			if (auto const n = tc::to_underlying(esuper); tc::is_enum_value<EnumSub>(n)) {
 				return static_cast<EnumSub>(n);
 			} else {
@@ -337,7 +338,7 @@ namespace tc {
 #define TC_VERIFY_EQUALITY_BETWEEN_ENUMSUPER_AND_ENUMSUB(state, pair, constant) \
 	static_assert(tc::to_underlying(BOOST_PP_TUPLE_ELEM(2, 0, pair)::constant) == tc::to_underlying(BOOST_PP_TUPLE_ELEM(2, 1, pair)::constant));
 
-#define DEFINE_SUB_ENUM(EnumSuper, EnumSub, prefixsub, constants) \
+#define TC_DEFINE_SUB_ENUM(EnumSuper, EnumSub, prefixsub, constants) \
 	TC_DEFINE_ENUM_WITH_OFFSET(EnumSub, prefixsub, tc::to_underlying(EnumSuper::BOOST_PP_SEQ_HEAD(constants)), constants) \
 	BOOST_PP_SEQ_FOR_EACH(TC_VERIFY_EQUALITY_BETWEEN_ENUMSUPER_AND_ENUMSUB, (EnumSuper, EnumSub), constants) \
 	namespace tc::no_adl { \

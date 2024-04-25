@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -75,10 +75,22 @@ UNITTESTDEF(filter_no_self_assignment_of_rvalues) {
 
 UNITTESTDEF( trim_leftright_if ) {
 	tc::vector<int> v{1,2,3,4,5,6,7,7,7};
-	auto rng = tc::trim_left_if<tc::return_drop>(v, [] (int const n) noexcept {return n<4;});
-	_ASSERT(tc::begin(rng) != tc::end(rng));
-	_ASSERTEQUAL(tc::size(rng), 6);
-	_ASSERTEQUAL(tc::size(tc::trim_right_if<tc::return_take>(rng, [] (int const n) noexcept {return n==7;})), 3);
+
+	decltype(auto) left = tc::trim_left_if<tc::return_drop>(v, [] (int const n) noexcept {return n<4;});
+	STATICASSERTSAME(decltype(left), tc::iterator_range_t<tc::vector<int>&>);
+	TEST_RANGE_EQUAL(left, (tc::literal_range_of<4, 5, 6, 7, 7, 7>));
+
+	decltype(auto) left_then_right = tc::trim_right_if<tc::return_take>(tc_move(left), [] (int const n) noexcept {return n==7;});
+	STATICASSERTSAME(decltype(left_then_right), tc::iterator_range_t<tc::vector<int>&>&&);
+	TEST_RANGE_EQUAL(left_then_right, (tc::literal_range_of<4, 5, 6>));
+
+	decltype(auto) both = tc::trim_if(v, [](int const n) { return n < 4 || n == 7; });
+	STATICASSERTSAME(decltype(both), tc::iterator_range_t<tc::vector<int>&>);
+	TEST_RANGE_EQUAL(both, (tc::literal_range_of<4, 5, 6>));
+
+	decltype(auto) both_prvalue = tc::trim_if(tc::decay_copy(v), [](int const n) { return n < 4 || n == 7; });
+	STATICASSERTSAME(decltype(both_prvalue), tc::slice_t<tc::vector<int>>);
+	TEST_RANGE_EQUAL(both_prvalue, (tc::literal_range_of<4, 5, 6>));
 }
 
 UNITTESTDEF( is_sorted ) {
@@ -151,7 +163,7 @@ UNITTESTDEF(Naryinterleave) {
 		tc::interleave_n(
 			tc::fn_compare(),
 			[&](auto const&... pairitb) noexcept {
-				auto tplpairitb = std::make_tuple(pairitb...);
+				auto tplpairitb = tc::tie(pairitb...);
 				if (tc::get<0>(tplpairitb).second) {
 					_ASSERTEQUAL(*itResult,*tc::get<0>(tplpairitb).first);
 					++itResult;
@@ -191,7 +203,7 @@ UNITTESTDEF(NaryinterleaveBreak) {
 		tc::interleave_n(
 			tc::fn_compare(),
 			[&](auto const&... pairitb) noexcept {
-				auto tplpairitb = std::make_tuple(pairitb...);
+				auto tplpairitb = tc::tie(pairitb...);
 				if (tc::get<0>(tplpairitb).second) {
 					_ASSERTEQUAL(*itResult, *tc::get<0>(tplpairitb).first);
 					++itResult;
@@ -301,13 +313,13 @@ UNITTESTDEF(constexpr_sort_test) {
 	std::mt19937 gen; // same sequence of numbers each time for reproducibility
 	std::uniform_int_distribution<> dist(0, 63);
 
-	static auto constexpr Test = [](auto rngn) noexcept {
+	tc_static_auto_constexpr_lambda(Test) = [](auto rngn) noexcept {
 		auto vecn = tc::explicit_cast<tc::vector<int>>(rngn);
 		_ASSERTEQUAL(tc_modified(vecn, tc::sort_inplace(_)), tc_modified(vecn, tc::constexpr_sort_inplace_detail::constexpr_sort_inplace(tc::begin(_), tc::end(_), tc::fn_less())));
 	};
 
 	for( int i = 0; i < 17; ++i ) {
-		Test(tc::begin_next<tc::return_take>([&](auto sink) noexcept { for(;;) tc_yield(sink, dist(gen)); }, dist(gen)));
+		Test(tc::begin_next<tc::return_take>([&](auto sink) noexcept { for(;;) tc_return_if_break(tc::continue_if_not_break(sink, dist(gen))); }, dist(gen)));
 		Test(tc::iota(0, i));
 		Test(tc::reverse(tc::iota(0, i)));
 		Test(tc::repeat_n(i, 0));

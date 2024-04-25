@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -90,7 +90,6 @@
 		#define _ASSERTPRINT( cond, ... ) _ASSERT( cond )
 	#endif
 	#ifndef VERIFYEQUAL
-		#include <utility>
 		namespace ErrorHandling {
 			template <typename Expr, typename Const>
 			constexpr Expr&& VerifyEqual(Expr&& expr, Const const& c) {
@@ -104,7 +103,6 @@
 		#define VERIFYEQUALNOPRINT VERIFYEQUAL
 	#endif
 	#ifndef VERIFY
-		#include <utility>
 		namespace ErrorHandling {
 			template <typename Expr>
 			constexpr Expr&& Verify(Expr&& expr) {
@@ -115,7 +113,6 @@
 		#define VERIFY ErrorHandling::Verify
 	#endif
 	#ifndef VERIFYPRED
-		#include <utility>
 		namespace ErrorHandling {
 			template <typename Expr, typename Pred>
 			constexpr Expr&& VerifyPred(Expr&& expr, Pred pred) {

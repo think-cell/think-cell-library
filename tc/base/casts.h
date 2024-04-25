@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -10,11 +10,6 @@
 
 #include "assert_defs.h"
 #include "functors.h"
-#include "move.h"
-
-#include "return_decltype.h"
-#include "type_traits_fwd.h"
-#include "template_func.h"
 #include "explicit_cast_fwd.h"
 
 #include <boost/integer.hpp>
@@ -43,7 +38,7 @@ namespace tc {
 	#pragma push_macro("BASE_CAST_IMPL")
 	#define BASE_CAST_IMPL(cvref) \
 	template<typename Dst> requires std::is_class<Dst>::value \
-	[[nodiscard]] constexpr Dst cvref base_cast(typename tc::type::identity<Dst>::type cvref t) noexcept { \
+	[[nodiscard]] constexpr Dst cvref base_cast(typename std::type_identity<Dst>::type cvref t) noexcept { \
 		STATICASSERTSAME(std::remove_cvref_t<Dst>, Dst); \
 		return static_cast<Dst cvref>(t); \
 	}
@@ -74,7 +69,7 @@ namespace tc {
 
 		namespace derived_cast_internal_default {
 			template<typename To, typename From, bool bChecked>
-			[[nodiscard]] constexpr same_cvref_t< To, From&&> derived_cast_internal_impl(tc::type::identity<To>, From&& t, std::bool_constant<bChecked>) noexcept {
+			[[nodiscard]] constexpr same_cvref_t< To, From&&> derived_cast_internal_impl(std::type_identity<To>, From&& t, std::bool_constant<bChecked>) noexcept {
 				static_assert( tc::derived_from<To, std::remove_reference_t<From>>, "derived_cast is for downcasts only.");
 				if constexpr (bChecked) {
 					check_derived_cast<To>(t);
@@ -83,7 +78,7 @@ namespace tc {
 			}
 
 			template<typename To, typename From, bool bChecked>
-			[[nodiscard]] constexpr same_cvref_t< To, From>* derived_cast_internal_impl(tc::type::identity<To>, From* pt, std::bool_constant<bChecked>) noexcept {
+			[[nodiscard]] constexpr same_cvref_t< To, From>* derived_cast_internal_impl(std::type_identity<To>, From* pt, std::bool_constant<bChecked>) noexcept {
 				static_assert( tc::derived_from<To, std::remove_pointer_t<From>>, "derived_cast is for downcasts only.");
 				if constexpr (bChecked) {
 					if (nullptr != pt) check_derived_cast<To>(*pt);
@@ -98,13 +93,13 @@ namespace tc {
 	template<typename To, typename From>
 	[[nodiscard]] constexpr decltype(auto) derived_cast(From&& t) noexcept {
 		STATICASSERTSAME(std::remove_reference_t<To>, To);
-		return tc::derived_cast_detail::derived_cast_internal(tc::type::identity<To>(), tc_move_if_owned(t), /*bChecked*/tc::constant<true>());
+		return tc::derived_cast_detail::derived_cast_internal(std::type_identity<To>(), tc_move_if_owned(t), /*bChecked*/tc::constant<true>());
 	}
 
 	template<typename To, typename From>
 	[[nodiscard]] constexpr decltype(auto) unchecked_derived_cast(From&& t) noexcept {
 		STATICASSERTSAME(std::remove_reference_t<To>, To);
-		return tc::derived_cast_detail::derived_cast_internal(tc::type::identity<To>(), tc_move_if_owned(t), /*bChecked*/tc::constant<false>());
+		return tc::derived_cast_detail::derived_cast_internal(std::type_identity<To>(), tc_move_if_owned(t), /*bChecked*/tc::constant<false>());
 	}
 
 	/////////////////////////////////////////////
@@ -136,18 +131,18 @@ namespace tc {
 	namespace from_underlying_detail {
 		namespace from_underlying_default {
 			template< tc::char_type T >
-			[[nodiscard]] constexpr auto from_underlying_impl(tc::type::identity<T>, underlying_type_t<T> t) noexcept {
+			[[nodiscard]] constexpr auto from_underlying_impl(std::type_identity<T>, underlying_type_t<T> t) noexcept {
 				// We don't need to do any checks, the underlying type has the same size.
 				return static_cast<T>(t);
 			}
 
 			template< tc::enum_type T >
-			[[nodiscard]] constexpr auto from_underlying_impl(tc::type::identity<T>, underlying_type_t<T> e) noexcept {
+			[[nodiscard]] constexpr auto from_underlying_impl(std::type_identity<T>, underlying_type_t<T> e) noexcept {
 				// We cannot do checks on arbitrary enums; there's a specialization for contiguous enums.
 				return static_cast<T>(e);
 			}
 
-			[[nodiscard]] constexpr auto from_underlying_impl(tc::type::identity<bool>, underlying_type_t<bool> b) noexcept {
+			[[nodiscard]] constexpr auto from_underlying_impl(std::type_identity<bool>, underlying_type_t<bool> b) noexcept {
 				_ASSERTANYOF(b, (0)(1));
 				return static_cast<bool>(b);
 			}
@@ -159,7 +154,7 @@ namespace tc {
 	template<typename T, typename U>
 		requires tc::explicit_castable_from<tc::underlying_type_t<T>, U>
 	[[nodiscard]] constexpr T from_underlying(const U& value) return_MAYTHROW(
-		from_underlying_detail::from_underlying(tc::type::identity<T>{}, tc::explicit_cast<tc::underlying_type_t<T>>(value))
+		from_underlying_detail::from_underlying(std::type_identity<T>{}, tc::explicit_cast<tc::underlying_type_t<T>>(value))
 	)
 
 	/////////////////////////////////////////////
@@ -181,16 +176,33 @@ namespace tc {
 		return static_cast<std::make_signed_t<T>>(t);
 	}
 
+#define tc_decay_bitfield(...) \
+	([&](auto char_const_volatile) noexcept { \
+		using BitfieldBaseType = std::remove_reference_t<decltype((__VA_ARGS__))>; \
+		static_assert( \
+			(tc::actual_integer<BitfieldBaseType> || tc::enum_type<BitfieldBaseType>) && \
+			/* Taking the address of a bit-field is disallowed and a non-const reference cannot bind to a bit-field. */ \
+			!requires { reinterpret_cast<typename decltype(char_const_volatile)::type&>(__VA_ARGS__); }, \
+			"\"" #__VA_ARGS__ "\" is not a bit field" \
+		); \
+		return __VA_ARGS__; \
+	})(std::type_identity<char const volatile>{})
+
 	/////////////////////////////////////////////
 	// const casts
 
 	MODIFY_WARNINGS_BEGIN(((disable)(4180))) // qualifier applied to function type has no meaning; ignored
 
-		template< typename T >
+		template <typename T>
 		[[nodiscard]] constexpr T const& as_const(T& t) noexcept { // intention is to avoid side-effects
 			return static_cast<T const&>(t);
 		}
-		template <typename T>
+		template <typename T, unsigned Lifetime>
+		[[nodiscard]] constexpr T const& as_const(tc::temporary<T, Lifetime>& tmp) noexcept {
+			return static_cast<T const&>(tmp);
+		}
+
+		template <typename T> requires std::is_rvalue_reference<T&&>::value
 		[[nodiscard]] constexpr T&& as_const(T&& t) noexcept { // needed in generic code when both values and references can occur
 			static_assert(!std::is_lvalue_reference<T&&>::value);
 			return static_cast<T&&>(t);

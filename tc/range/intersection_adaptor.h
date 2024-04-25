@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -14,6 +14,29 @@
 #include "filter_adaptor.h"
 
 namespace tc {
+	namespace intersection_difference_adaptor_detail::no_adl {
+		template<typename Sink, bool bIntersection, bool bSubset>
+		struct intersection_difference_sink {
+			Sink const m_sink;
+
+			constexpr auto operator()(interleave_2_detail::lhs_tag_t, auto&& lhs) const& noexcept {
+				if constexpr(!bIntersection) {
+					return tc_invoke(m_sink, tc_move_if_owned(lhs));
+				}
+			}
+			constexpr void operator()(interleave_2_detail::rhs_tag_t, tc::unused) const& noexcept {
+				if constexpr(bSubset) {
+					_ASSERTFALSE;
+				}
+			}
+			constexpr auto operator()(interleave_2_detail::lhsrhs_tag_t, auto&& lhs, tc::unused) const& noexcept {
+				if constexpr(bIntersection) {
+					return tc_invoke(m_sink, tc_move_if_owned(lhs));
+				}
+			}
+		};
+	}
+
 	namespace intersection_difference_adaptor_adl {
 		template<
 			bool bIntersection,
@@ -26,8 +49,8 @@ namespace tc {
 		{
 		private:
 			tc::tuple<
-				reference_or_value< Rng0 >,
-				reference_or_value< Rng1 >
+				tc::reference_or_value< Rng0 >,
+				tc::reference_or_value< Rng1 >
 			> m_tplbaserng;
 
 			Comp m_comp;
@@ -48,42 +71,14 @@ namespace tc {
 				//	_ASSERTDEBUG(tc::is_sorted(*tc::get<1>(m_tplbaserng), tc::lessfrom3way(comp)));
 			}
 
-		private:
-			template<typename Sink>
-			struct FForwardFirstArgOnly final {
-				Sink m_sink;
-				
-				template<typename T0, typename T1>
-				auto operator()(T0&& arg0, T1&&) const& MAYTHROW {
-					return tc::continue_if_not_break(m_sink, tc_move_if_owned(arg0));
-				}
-			};
-
-		public:
 			template<tc::decayed_derived_from<intersection_difference_adaptor> Self, typename Sink>
 			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
-				auto constexpr NotInRng0 = [](tc::unused) noexcept {
-					_ASSERT(!bSubset);
-				};
-				if constexpr (bIntersection) {
-					return tc::interleave_2(
-						*tc::get<0>(tc_move_if_owned(self).m_tplbaserng),
-						*tc::get<1>(tc_move_if_owned(self).m_tplbaserng),
-						tc_move_if_owned(self).m_comp,
-						tc::noop(),
-						NotInRng0,
-						FForwardFirstArgOnly<tc::decay_t<Sink>>{tc_move_if_owned(sink)}
-					);
-				} else {
-					return tc::interleave_2(
-						*tc::get<0>(tc_move_if_owned(self).m_tplbaserng),
-						*tc::get<1>(tc_move_if_owned(self).m_tplbaserng),
-						tc_move_if_owned(self).m_comp,
-						tc_move_if_owned(sink),
-						NotInRng0,
-						tc::noop()
-					);
-				}
+				return interleave_2_detail::internal_interleave_2(
+					*tc::get<0>(tc_move_if_owned(self).m_tplbaserng),
+					*tc::get<1>(tc_move_if_owned(self).m_tplbaserng),
+					tc_move_if_owned(self).m_comp,
+					intersection_difference_adaptor_detail::no_adl::intersection_difference_sink<tc::decay_t<Sink>, bIntersection, bSubset>{tc_move_if_owned(sink)}
+				);
 			}
 
 			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, intersection_difference_adaptor>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
@@ -97,7 +92,7 @@ namespace tc {
 		static_assert(tc::instance<std::remove_reference_t<Rng1>, std::unordered_set>);
 		return tc::filter(
 			tc_move_if_owned(rng0),
-			[rng1_ = reference_or_value< Rng1 >(tc::aggregate_tag, tc_move_if_owned(rng1))](auto const& element) noexcept {
+			[rng1_ = tc::reference_or_value< Rng1 >(tc::aggregate_tag, tc_move_if_owned(rng1))](auto const& element) noexcept {
 				if constexpr(bIntersection) {
 					return tc::cont_find<tc::return_bool>(*rng1_, element);
 				} else {

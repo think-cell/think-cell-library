@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -28,7 +28,7 @@ namespace tc {
 
 			template<typename T>
 			constexpr auto operator()(T&& t) const& return_decltype_MAYTHROW(
-				tc::invoke(m_sink, tc::invoke(m_func, tc_move_if_owned(t)))
+				tc_invoke(m_sink, tc_invoke(m_func, tc_move_if_owned(t)))
 			)
 		};
 	}
@@ -61,7 +61,7 @@ namespace tc {
 			}
 
 			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, transform_adaptor>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
-			friend auto range_output_t_impl(Self&&) -> tc::type::unique_t<tc::type::transform_t<tc::range_output_t<decltype(std::declval<Self>().base_range())>, tc::type::curry<tc::transform_output_t, Func>::template type>> {} // unevaluated
+			friend auto range_output_t_impl(Self&&) -> boost::mp11::mp_unique<tc::mp_transform<boost::mp11::mp_bind_front<tc::transform_output_t, Func>::template fn, tc::range_output_t<decltype(std::declval<Self>().base_range())>>> {} // unevaluated
 		};
 
 
@@ -77,48 +77,32 @@ namespace tc {
 			using base_ = typename transform_adaptor::index_range_adaptor;
 		public:
 			using typename base_::tc_index;
-			// TODO: static constexpr bool c_bHasStashingIndex=false if transform_return_t is a value?
+			// TODO: static constexpr bool c_bHasStashingIndex=false if dereference returns a prvalue?
+			static constexpr bool c_bPrefersForEach = tc::prefers_for_each<std::remove_reference_t<Rng>>;
 
 			constexpr transform_adaptor() = default;
 			using base_::base_;
-
-			template<ENABLE_SFINAE>
-			constexpr auto STATIC_VIRTUAL_METHOD_NAME(dereference_index)(tc_index const& idx) & MAYTHROW -> tc::transform_return_t<
-				SFINAE_TYPE(Func),
-				decltype(tc::invoke(std::declval<SFINAE_TYPE(Func) const&>(), tc::dereference_index(this->base_range(), std::declval<tc_index const&>()))),
-				decltype(tc::dereference_index(this->base_range(), std::declval<tc_index const&>()))
-			> {
+			
+			template <ENABLE_SFINAE, typename Index>
+			constexpr auto STATIC_VIRTUAL_METHOD_NAME(dereference_index)(Index&& idx) & return_decltype_allow_xvalue_slow_MAYTHROW(
 				// always call operator() const, which is assumed to be thread-safe
-				return tc::invoke(tc::as_const(this->m_func), tc::dereference_index(this->base_range(), idx));
+				tc_invoke(tc::as_const(SFINAE_VALUE(this->m_func)), tc::dereference_index(this->base_range(), tc_move_if_owned(idx)))
+			)
+			template <ENABLE_SFINAE, typename Index>
+			constexpr auto STATIC_VIRTUAL_METHOD_NAME(dereference_index)(Index&& idx) const& return_decltype_allow_xvalue_slow_MAYTHROW(
+				tc_invoke(SFINAE_VALUE(this->m_func), tc::dereference_index(this->base_range(), tc_move_if_owned(idx)))
+			)
+
+			static constexpr decltype(auto) border_base_index(auto&& idx) noexcept {
+				return tc_move_if_owned(idx);
 			}
 
-			template<ENABLE_SFINAE>
-			constexpr auto STATIC_VIRTUAL_METHOD_NAME(dereference_index)(tc_index const& idx) const& MAYTHROW -> tc::transform_return_t<
-				SFINAE_TYPE(Func),
-				decltype(tc::invoke(std::declval<SFINAE_TYPE(Func) const&>(), tc::dereference_index(this->base_range(), std::declval<tc_index const&>()))),
-				decltype(tc::dereference_index(this->base_range(), std::declval<tc_index const&>()))
-			> {
-				// always call operator() const, which is assumed to be thread-safe
-				return tc::invoke(tc::as_const(this->m_func), tc::dereference_index(this->base_range(), idx));
+			static constexpr decltype(auto) element_base_index(auto&& idx) noexcept {
+				return tc_move_if_owned(idx);
 			}
 
-			static constexpr decltype(auto) border_base_index(tc_index const& idx) noexcept {
-				return idx;
-			}
-
-			static constexpr decltype(auto) border_base_index(tc_index&& idx) noexcept {
-				return tc_move(idx);
-			}
-
-			static constexpr decltype(auto) element_base_index(tc_index const& idx) noexcept {
-				return idx;
-			}
-			static constexpr decltype(auto) element_base_index(tc_index&& idx) noexcept {
-				return tc_move(idx);
-			}
-
-			constexpr decltype(auto) dereference_untransform(tc_index const& idx) const& noexcept {
-				return tc::dereference_index(this->base_range(), idx);
+			constexpr decltype(auto) dereference_untransform(auto&& idx) const& MAYTHROW {
+				return tc::dereference_index(this->base_range(), tc_move_if_owned(idx));
 			}
 		};
 	}
@@ -131,18 +115,20 @@ namespace tc {
 	[[nodiscard]] constexpr auto transform(Rng&& rng, Func&& func)
 		return_ctor_noexcept(TC_FWD(transform_adaptor<tc::decay_t<Func>, Rng >), (tc_move_if_owned(rng), tc_move_if_owned(func)))
 
+	// A range like `tc::concat` produces different types for generators, but only the common reference when used as an iterator.
+	// Use `tc::transform_generator_only` if the transformation function does not work with the common reference.
+	template<typename Rng, typename Func>
+	[[nodiscard]] constexpr auto transform_generator_only(Rng&& rng, Func&& func)
+		return_ctor_noexcept(TC_FWD(transform_adaptor<tc::decay_t<Func>, Rng, false >), (tc_move_if_owned(rng), tc_move_if_owned(func)))
+
 	template<typename Rng>
-	requires tc::instance2<std::remove_reference_t<Rng>, transform_adaptor>
+	requires tc::instance_ttn<std::remove_reference_t<Rng>, transform_adaptor>
 	[[nodiscard]] decltype(auto) untransform(Rng&& rng) noexcept {
 		return tc_move_if_owned(rng).base_range();
 	}
 
 	template<typename Rng >
-	requires tc::instance2<std::remove_reference_t<
-			tc::type::only_t<
-				typename tc::is_instance<std::remove_reference_t<Rng>, subrange>::arguments
-			>
-		>, transform_adaptor>
+	requires tc::instance_ttn<std::remove_reference_t<tc::subrange_arg_t<Rng>>, transform_adaptor>
 	[[nodiscard]] auto untransform(Rng&& rng) noexcept {
 		return tc::slice(untransform(tc_move_if_owned(rng).base_range()), rng.begin_index(), rng.end_index());
 	}

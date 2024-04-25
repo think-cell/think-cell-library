@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -20,49 +20,79 @@
 #include "iota_range.h"
 
 namespace tc {
-	namespace zip_detail {
-		// These functions are only used in zip_adaptor::internal_for_each_impl. They do not depend on Sink, so having them outside saves compilation time (a few seconds for LayoutSolver.cpp).
-		template<typename... AdaptBaseRng>
-		constexpr auto MakeRngIndexPairTuple(AdaptBaseRng&&... adaptbaserng) MAYTHROW {
-			return tc::make_tuple(
-				std::pair<decltype(std::declval<AdaptBaseRng>().base_range()), decltype(adaptbaserng.base_begin_index())>(
-					tc_move_if_owned(adaptbaserng).base_range(),
-					adaptbaserng.base_begin_index() // MAYTHROW
-				)...
-			);
-		}
-		template<typename... AdaptBaseRng>
-		constexpr auto MakeRngEndIndexPairTuple(AdaptBaseRng&&... adaptbaserng) MAYTHROW {
-			return tc::make_tuple(
-				std::pair<decltype(std::declval<AdaptBaseRng>().base_range()), decltype(adaptbaserng.base_end_index())>(
-					tc_move_if_owned(adaptbaserng).base_range(),
-					adaptbaserng.base_end_index() // MAYTHROW
-				)...
-			);
-		}
+	namespace zip_detail::no_adl {
+		template<
+			typename Self, typename Sink, bool bReverse,
+			typename PrefixSeq = std::make_index_sequence<Self::generator_index()>,
+			typename SuffixSeq = std::make_index_sequence<Self::c_nZipAdaptorFactors - Self::generator_index() - 1>
+		>
+		struct zip_adaptor_sink;
 
-		template<typename PairRngIdx>
-		constexpr decltype(auto) DereferenceRngIndexPair(PairRngIdx& pairrngidx) MAYTHROW {
-			return tc::dereference_index(pairrngidx.first, pairrngidx.second); // MAYTHROW
-		}
+		template<typename Self, typename Sink, bool bReverse, std::size_t... nPrefix/*=0,...,generator_index()-1*/, std::size_t... nSuffix/*=0,...,sizeof...(Rng)-generator_index()-2*/>
+		struct zip_adaptor_sink<Self, Sink, bReverse, std::index_sequence<nPrefix...>, std::index_sequence<nSuffix...>> {
+			using guaranteed_break_or_continue = std::conditional_t<
+				std::is_same<tc::constant<tc::continue_>, tc::guaranteed_break_or_continue_t<Sink>>::value,
+				tc::constant<tc::continue_>,
+				tc::break_or_continue
+			>;
 
-		template<typename PairRngIdx>
-		constexpr void IncrementRngIndexPair(PairRngIdx& pairrngidx) MAYTHROW {
-			tc::increment_index(pairrngidx.first, pairrngidx.second);
-		}
+		private:
+			Self& m_self;
+			Sink const m_sink;
+			tc::tuple<decltype(tc::get<nPrefix>(std::declval<Self&>().m_tupleadaptbaserng).base_begin_index())...> m_tplidxPrefix;
+			tc::tuple<decltype(tc::get<sizeof...(nPrefix) + 1 + nSuffix>(std::declval<Self&>().m_tupleadaptbaserng).base_begin_index())...> m_tplidxSuffix;
 
-		template<typename PairRngIdx>
-		constexpr void DecrementRngIndexPair(PairRngIdx& pairrngidx) MAYTHROW {
-			tc::decrement_index(pairrngidx.first, pairrngidx.second);
-		}
+			template<std::size_t n>
+			constexpr decltype(auto) PrefixBase() const& noexcept {
+				return tc::get<n>(m_self.m_tupleadaptbaserng);
+			}
 
+			template<std::size_t n>
+			constexpr decltype(auto) SuffixBase() const& noexcept {
+				return tc::get<sizeof...(nPrefix) + 1 + n>(m_self.m_tupleadaptbaserng);
+			}
 
+		public:
+			constexpr zip_adaptor_sink(Self& self, auto&& sink) MAYTHROW
+				: m_self(self)
+				, m_sink(tc_move_if_owned(sink))
+				, m_tplidxPrefix{{ {bReverse ? PrefixBase<nPrefix>().base_end_index() : PrefixBase<nPrefix>().base_begin_index()}... }} // MAYTHROW
+				, m_tplidxSuffix{{ {bReverse ? SuffixBase<nSuffix>().base_end_index() : SuffixBase<nSuffix>().base_begin_index()}... }} // MAYTHROW
+			{}
+
+			constexpr auto operator()(auto&& u) & MAYTHROW {
+				if constexpr(bReverse) {
+					(tc::decrement_index(PrefixBase<nPrefix>().base_range(), tc::get<nPrefix>(m_tplidxPrefix)), ...); // MAYTHROW
+					(tc::decrement_index(SuffixBase<nSuffix>().base_range(), tc::get<nSuffix>(m_tplidxSuffix)), ...); // MAYTHROW
+				}
+				auto const boc = tc::continue_if_not_break(
+					m_sink,
+					tc::tie(
+						tc::dereference_index(PrefixBase<nPrefix>().base_range(), tc::get<nPrefix>(m_tplidxPrefix))...,  // MAYTHROW
+						tc_move_if_owned(u),
+						tc::dereference_index(SuffixBase<nSuffix>().base_range(), tc::get<nSuffix>(m_tplidxSuffix))...  // MAYTHROW
+					)
+				); // MAYTHROW
+				if constexpr(!bReverse) {
+					if( tc::continue_ == boc ) {
+						(tc::increment_index(PrefixBase<nPrefix>().base_range(), tc::get<nPrefix>(m_tplidxPrefix)), ...); // MAYTHROW
+						(tc::increment_index(SuffixBase<nSuffix>().base_range(), tc::get<nSuffix>(m_tplidxSuffix)), ...); // MAYTHROW
+					}
+				}
+				return boc;
+			}
 #ifdef _CHECKS
-		template<typename PairRngIdx>
-		constexpr bool RngIndexPairAtEnd(PairRngIdx& pairrngidx) noexcept {
-			return tc::at_end_index(pairrngidx.first, pairrngidx.second);
-		}
+			constexpr bool SameLength() const& MAYTHROW {
+				if constexpr(bReverse) {
+					return ((tc::begin_index(PrefixBase<nPrefix>().base_range()) == tc::get<nPrefix>(m_tplidxPrefix)) && ...) // MAYTHROW
+						&& ((tc::begin_index(SuffixBase<nSuffix>().base_range()) == tc::get<nSuffix>(m_tplidxSuffix)) && ...); // MAYTHROW
+				} else {
+					return (tc::at_end_index(PrefixBase<nPrefix>().base_range(), tc::get<nPrefix>(m_tplidxPrefix)) && ...) // MAYTHROW
+						&& (tc::at_end_index(SuffixBase<nSuffix>().base_range(), tc::get<nSuffix>(m_tplidxSuffix)) && ...); // MAYTHROW
+				}
+			}
 #endif
+		};
 	}
 
 	namespace no_adl {
@@ -86,29 +116,38 @@ namespace tc {
 		template<typename Rng>
 		using range_difference_t = typename boost::range_difference<std::remove_cvref_t<Rng>>::type;
 
+#if defined(__clang__)
+		template<typename T>
+		using is_range_with_iterators = tc::constant<tc::range_with_iterators<T>>;
+		template<typename T>
+		using prefers_for_each_workaround = tc::constant<tc::prefers_for_each<T>>;
+#endif
+
 		template<typename T, typename ConstIndex, typename... Rng>
-		using zip_adaptor_with_generator_forwarding_tuple_t = tc::type::apply_t<
-			tc::tuple,
-			tc::type::transform_t<
-				tc::type::concat_t<
-					tc::type::transform_t<
-						tc::type::transform_t<
-							tc::type::take_first_t<tc::type::list<Rng...>, ConstIndex::value>,
-							tc::iterator_t
-						>,
-						std::iter_reference_t
-					>,
-					tc::type::list<T>,
-					tc::type::transform_t<
-						tc::type::transform_t<
-							tc::type::drop_first_t<tc::type::list<Rng...>, ConstIndex::value+1>,
-							tc::iterator_t
-						>,
-						std::iter_reference_t
-					>
+		using zip_adaptor_with_generator_forwarding_tuple_t = tc::mp_transform<
+			std::add_rvalue_reference_t,
+			boost::mp11::mp_replace_at<
+				boost::mp11::mp_transform_if<
+#ifdef __clang__
+					is_range_with_iterators, // workaround Xcode14 clang segmentation fault
+#else
+					TRAITFROMCONCEPT(tc::range_with_iterators),
+#endif
+					tc::mp_chained<std::iter_reference_t, tc::iterator_t>::template fn, 
+					tc::tuple<Rng...>
 				>,
-				std::add_rvalue_reference_t // forwarding tuple
+				ConstIndex, T
 			>
+		>;
+
+		template<typename... Rng>
+		using zip_adaptor_prefers_for_each = boost::mp11::mp_any_of<
+			boost::mp11::mp_list<std::remove_reference_t<Rng>...>,
+#ifdef __clang__
+			prefers_for_each_workaround // workaround Xcode14 clang segmentation fault
+#else
+			TRAITFROMCONCEPT(tc::prefers_for_each)
+#endif
 		>;
 
 		template<typename Rng, typename Self>
@@ -126,30 +165,36 @@ namespace tc {
 		struct [[nodiscard]] zip_adaptor {
 		protected:
 			tc::tuple<tc::range_adaptor_base_range<Rng>...> m_tupleadaptbaserng;
-#ifdef __clang__
-		private:
-			template<typename T>
-			using is_range_with_iterators = tc::constant<tc::range_with_iterators<T>>;
-#endif
 
-#if !defined(__clang__) && !defined(_MSC_VER) // Bug in gcc12
+			template<typename Self, typename Sink, bool bReverse, typename PrefixSeq, typename SuffixSeq>
+			friend struct zip_detail::no_adl::zip_adaptor_sink;
+
 		public:
-#endif		
+			static auto constexpr c_nZipAdaptorFactors = sizeof...(Rng);
+
 			static constexpr std::size_t generator_index() noexcept {
-				using PureGenerator = tc::type::find_unique_if<
-					tc::type::list<Rng...>,
-					tc::type::negation<
+				using PureGenerator = tc::mp_find_unique_if<
+					boost::mp11::mp_list<Rng...>,
+					boost::mp11::mp_not_fn<
 #ifdef __clang__
 						is_range_with_iterators // workaround Xcode14 clang segmentation fault
 #else
 						TRAITFROMCONCEPT(tc::range_with_iterators)
 #endif
-					>::template type
+					>::template fn
 				>;
-				if constexpr( PureGenerator::found ) {
+				if constexpr(PureGenerator::found) {
 					return PureGenerator::index;
 				} else {
-					return 0; // TODO? Heuristically select generator to avoid complex iterators.
+					// Heuristically select generator of range with complex iterators.
+					return boost::mp11::mp_find_if<
+						boost::mp11::mp_list<std::remove_reference_t<Rng>...>,
+#ifdef __clang__
+						prefers_for_each_workaround // workaround Xcode14 clang segmentation fault
+#else
+						TRAITFROMCONCEPT(tc::prefers_for_each)
+#endif
+					>::value % sizeof...(Rng);
 				}
 			}
 
@@ -161,79 +206,35 @@ namespace tc {
 
 			template<tc::decayed_derived_from<zip_adaptor> Self, typename Sink>
 			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
-				return internal_for_each_impl(
-					tc_move_if_owned(self),
-					tc_move_if_owned(sink),
-					std::make_index_sequence<generator_index()>(),
-					std::make_index_sequence<sizeof...(Rng) - generator_index() - 1>()
-				); // MAYTHROW
+				zip_detail::no_adl::zip_adaptor_sink<std::remove_reference_t<Self>, tc::decay_t<Sink>, /*bReverse*/false> adaptedsink(self, tc_move_if_owned(sink)); // MAYTHROW
+				auto const boc = tc::for_each(
+					tc::get<generator_index()>(tc_move_if_owned(self).m_tupleadaptbaserng).base_range(),
+					std::ref(adaptedsink)
+				);  // MAYTHROW
+				_ASSERTE( tc::break_ == boc || adaptedsink.SameLength() );
+				return boc;
 			}
+
 			template<tc::decayed_derived_from<zip_adaptor> Self, typename Sink>
 			friend constexpr auto for_each_reverse_impl(Self&& self, Sink&& sink) MAYTHROW {
-				return internal_for_each_reverse_impl(
-					tc_move_if_owned(self),
-					tc_move_if_owned(sink),
-					std::make_index_sequence<generator_index()>(),
-					std::make_index_sequence<sizeof...(Rng) - generator_index() - 1>()
+				zip_detail::no_adl::zip_adaptor_sink<std::remove_reference_t<Self>, tc::decay_t<Sink>, /*bReverse*/true> adaptedsink(self, tc_move_if_owned(sink)); // MAYTHROW
+				auto const boc = tc::for_each(
+					tc::reverse(tc::get<generator_index()>(tc_move_if_owned(self).m_tupleadaptbaserng).base_range()),
+					std::ref(adaptedsink)
 				); // MAYTHROW
+				_ASSERTE( tc::break_ == boc || adaptedsink.SameLength() );
+				return boc;
 			}
 
 			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, zip_adaptor>>* = nullptr> // use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
-			friend auto range_output_t_impl(Self&&) -> tc::type::unique_t<tc::type::transform_t<
-				tc::range_output_t<apply_cvref_to_base_range_t<tc::type::at_t<tc::type::list<Rng...>, generator_index()>, Self>>,
-				tc::type::rcurry<
+			friend auto range_output_t_impl(Self&&) -> boost::mp11::mp_unique<tc::mp_transform<
+				boost::mp11::mp_bind_back<
 					zip_adaptor_with_generator_forwarding_tuple_t,
 					tc::constant<generator_index()>,
-					apply_cvref_to_base_range_t<Rng, Self>... // workaround VS compiler bug: https://developercommunity.visualstudio.com/t/visual-studio-fails-to-expand-parameter-pack-with/1620097
-				>::template type
+					apply_cvref_to_base_range_t<Rng, Self>...
+				>::template fn,
+				tc::range_output_t<apply_cvref_to_base_range_t<boost::mp11::mp_at_c<boost::mp11::mp_list<Rng...>, generator_index()>, Self>>
 			>> {} // unevaluated
-
-		private:
-			template<typename Self, typename Sink, std::size_t... nPrefix/*=0,...,generator_index()-1*/, std::size_t... nSuffix/*=0,...,sizeof...(Rng)-generator_index()-2*/>
-			static constexpr auto internal_for_each_impl(Self&& self, Sink&& sink, std::index_sequence<nPrefix...>, std::index_sequence<nSuffix...>) MAYTHROW {
-				STATICASSERTEQUAL( sizeof...(nPrefix), generator_index() );
-				STATICASSERTEQUAL( sizeof...(nPrefix) + 1 + sizeof...(nSuffix), sizeof...(Rng) );
-				auto tuplepairrngidxPrefix = zip_detail::MakeRngIndexPairTuple(tc::get<nPrefix>(tc_move_if_owned(self).m_tupleadaptbaserng)...); // MAYTHROW
-				auto tuplepairrngidxSuffix = zip_detail::MakeRngIndexPairTuple(tc::get<sizeof...(nPrefix) + 1 + nSuffix>(tc_move_if_owned(self).m_tupleadaptbaserng)...); // MAYTHROW
-				auto const boc = tc::for_each(tc::get<sizeof...(nPrefix)>(tc_move_if_owned(self).m_tupleadaptbaserng).base_range(), [&](auto&& u) MAYTHROW {
-					auto const boc = tc::continue_if_not_break(
-						sink,
-						tc::forward_as_tuple(
-							zip_detail::DereferenceRngIndexPair(tc::get<nPrefix>(tuplepairrngidxPrefix))...,  // MAYTHROW
-							tc_move_if_owned(u),
-							zip_detail::DereferenceRngIndexPair(tc::get<nSuffix>(tuplepairrngidxSuffix))...  // MAYTHROW
-						)
-					); // MAYTHROW
-					if( tc::continue_ == boc ) {
-						(zip_detail::IncrementRngIndexPair(tc::get<nPrefix>(tuplepairrngidxPrefix)), ...); // MAYTHROW
-						(zip_detail::IncrementRngIndexPair(tc::get<nSuffix>(tuplepairrngidxSuffix)), ...); // MAYTHROW
-					}
-					return boc;
-				});  // MAYTHROW
-				_ASSERTE( tc::break_ == boc || (zip_detail::RngIndexPairAtEnd(tc::get<nPrefix>(tuplepairrngidxPrefix)) && ...) && (zip_detail::RngIndexPairAtEnd(tc::get<nSuffix>(tuplepairrngidxSuffix)) && ...) );
-				return boc;
-			}
-			template<typename Self, typename Sink, std::size_t... nPrefix/*=0,...,generator_index()-1*/, std::size_t... nSuffix/*=0,...,sizeof...(Rng)-generator_index()-2*/>
-			static constexpr auto internal_for_each_reverse_impl(Self&& self, Sink&& sink, std::index_sequence<nPrefix...>, std::index_sequence<nSuffix...>) MAYTHROW {
-				STATICASSERTEQUAL( sizeof...(nPrefix), generator_index() );
-				STATICASSERTEQUAL( sizeof...(nPrefix) + 1 + sizeof...(nSuffix), sizeof...(Rng) );
-				auto tuplepairrngidxPrefix = zip_detail::MakeRngEndIndexPairTuple(tc::get<nPrefix>(tc_move_if_owned(self).m_tupleadaptbaserng)...); // MAYTHROW
-				auto tuplepairrngidxSuffix = zip_detail::MakeRngEndIndexPairTuple(tc::get<sizeof...(nPrefix) + 1 + nSuffix>(tc_move_if_owned(self).m_tupleadaptbaserng)...); // MAYTHROW
-				auto const boc = tc::for_each(tc::reverse(tc::get<sizeof...(nPrefix)>(tc_move_if_owned(self).m_tupleadaptbaserng).base_range()), [&](auto&& u) MAYTHROW {
-					(zip_detail::DecrementRngIndexPair(tc::get<nPrefix>(tuplepairrngidxPrefix)), ...); // MAYTHROW
-					(zip_detail::DecrementRngIndexPair(tc::get<nSuffix>(tuplepairrngidxSuffix)), ...); // MAYTHROW
-					return tc::continue_if_not_break(
-						sink,
-						tc::forward_as_tuple(
-							zip_detail::DereferenceRngIndexPair(tc::get<nPrefix>(tuplepairrngidxPrefix))...,  // MAYTHROW
-							tc_move_if_owned(u),
-							zip_detail::DereferenceRngIndexPair(tc::get<nSuffix>(tuplepairrngidxSuffix))...  // MAYTHROW
-						)
-					); // MAYTHROW
-				}); // MAYTHROW
-				_ASSERTE( tc::break_ == boc || ((tc::begin_index(tc::get<nPrefix>(tuplepairrngidxPrefix).first)==tc::get<nPrefix>(tuplepairrngidxPrefix).second) && ...) && ((tc::begin_index(tc::get<nSuffix>(tuplepairrngidxSuffix).first)==tc::get<nSuffix>(tuplepairrngidxSuffix).second) && ...) );
-				return boc;
-			}
 
 		public:
 			constexpr auto size() const& MAYTHROW requires (... || tc::has_size<Rng>) && (!(... || tc::has_constexpr_size<Rng>)) {
@@ -248,7 +249,7 @@ namespace tc {
 			}
 
 			constexpr auto size() const& noexcept requires (... || tc::has_constexpr_size<Rng>) {
-				using sized_rng = tc::type::front_t<tc::type::filter_t<tc::type::list<Rng...>, trait_from_concept_workaround::has_constexpr_size>>;
+				using sized_rng = boost::mp11::mp_front<boost::mp11::mp_filter<trait_from_concept_workaround::has_constexpr_size, boost::mp11::mp_list<Rng...>>>;
 				return tc::constexpr_size<sized_rng>;
 			}
 		};
@@ -271,6 +272,8 @@ namespace tc {
 
 			using typename this_type::range_iterator_from_index::tc_index;
 			using difference_type = smallest_numeric_type_t<range_difference_t<Rng>...>;
+
+			static constexpr bool c_bPrefersForEach = zip_adaptor_prefers_for_each<Rng...>::value;
 
 		private:
 			STATIC_FINAL_MOD(constexpr, begin_index)() const& noexcept -> tc_index {
@@ -352,8 +355,8 @@ namespace tc {
 	template<typename Rng0, typename Rng1>
 	constexpr auto zip_any(Rng0&& rng0, Rng1&& rng1) noexcept {
 		return [
-			rng0_ = reference_or_value<Rng0>(tc::aggregate_tag, tc_move_if_owned(rng0)),
-			rng1_ = reference_or_value<Rng1>(tc::aggregate_tag, tc_move_if_owned(rng1))
+			rng0_ = tc::reference_or_value<Rng0>(tc::aggregate_tag, tc_move_if_owned(rng0)),
+			rng1_ = tc::reference_or_value<Rng1>(tc::aggregate_tag, tc_move_if_owned(rng1))
 		](auto sink) MAYTHROW {
 			auto it0 = tc::begin(*rng0_);
 			auto it1 = tc::begin(*rng1_);
@@ -376,7 +379,7 @@ namespace tc {
 						}
 					);
 				} else {
-					tc_yield(sink, tc::forward_as_tuple(*it0, *it1));
+					tc_return_if_break(tc::continue_if_not_break(sink, tc::tie(*it0, *it1)))
 					++it0;
 					++it1;
 				}
@@ -384,17 +387,12 @@ namespace tc {
 		};
 	}
 
-	template<typename Rng> requires tc::instance_b<std::remove_reference_t<Rng>, no_adl::zip_adaptor>
+	template<typename Rng> requires tc::instance_n<std::remove_reference_t<Rng>, no_adl::zip_adaptor>
 	[[nodiscard]] constexpr decltype(auto) unzip(Rng&& rng) noexcept {
 		return std::remove_reference_t<Rng>::base_ranges(tc_move_if_owned(rng));
 	}
 
-	template<typename Rng> requires
-		tc::instance_b<std::remove_reference_t<
-				tc::type::only_t<
-					typename tc::is_instance<std::remove_reference_t<Rng>, subrange>::arguments
-				>
-			>, no_adl::zip_adaptor>
+	template<typename Rng> requires tc::instance_n<std::remove_reference_t<tc::subrange_arg_t<Rng>>, no_adl::zip_adaptor>
 	[[nodiscard]] constexpr auto unzip(Rng&& rng) noexcept {
 		return tc::tuple_transform(
 			tc::zip(
@@ -458,13 +456,13 @@ namespace tc {
 			friend constexpr auto for_each_impl(Self&& self, Sink&& sink) MAYTHROW {
 				int i = 0;
 				// return_decltype_MAYTHROW with tc_move_if_owned causes compiler segfault on Mac
-				return tc::for_each(tc_move_if_owned(self).base_range(), [&](auto&& t) noexcept(noexcept(tc::invoke(sink, std::declval<tc::tuple<int, decltype(t)>>()))) -> decltype(auto) {
-					return tc::invoke(sink, tc::tuple<int, decltype(t)>{i++, tc_move_if_owned(t)}); // MAYTHROW
+				return tc::for_each(tc_move_if_owned(self).base_range(), [&](auto&& t) noexcept(noexcept(tc_invoke(sink, (std::declval<tc::tuple<int, decltype(t)>>())))) -> decltype(auto) {
+					return tc_invoke(sink, (tc::tuple<int, decltype(t)>{i++, tc_move_if_owned(t)})); // MAYTHROW
 				});
 			}
 
 			template<typename Self, std::enable_if_t<tc::decayed_derived_from<Self, enumerate_generator_adaptor>>* = nullptr> // accept any cvref qualifiers. use terse syntax when Xcode supports https://cplusplus.github.io/CWG/issues/2369.html
-			friend auto range_output_t_impl(Self&&) -> typename tc::type::transform<tc::range_output_t<tc::no_adl::apply_cvref_to_base_range_t<Rng, Self>>, tc::type::curry<tc::tuple, int>::template type>::type {} // unevaluated
+			friend auto range_output_t_impl(Self&&) -> tc::mp_transform<boost::mp11::mp_bind_front<tc::tuple, int>::template fn, tc::range_output_t<tc::no_adl::apply_cvref_to_base_range_t<Rng, Self>>> {} // unevaluated
 		};
 	};
 

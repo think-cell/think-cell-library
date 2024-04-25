@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -26,13 +26,22 @@ namespace tc {
 				auto idxEnd = tc::end_index(rng);
 				while( idxBegin != idxEnd ) {
 					tc::decrement_index(rng, idxEnd);
-					tc_yield(sink, tc::dereference_index(rng, idxEnd));
+					tc_return_if_break(tc::continue_if_not_break(sink, tc::dereference_index(rng, idxEnd)))
 				}
 				return tc::constant<tc::continue_>();
 			}
 		}
 
 		DEFINE_TMPL_FUNC_WITH_CUSTOMIZATIONS(for_each_reverse)
+
+		namespace for_each_reverse_adl {
+			template<tc::tuple_like Tuple, typename Sink,
+				typename ReverseIndexList = tc::mp_integer_list<tc::make_reverse_integer_sequence<std::size_t, 0, std::tuple_size<std::remove_reference_t<Tuple>>::value>>
+				TC_REQUIRES_CWG2369_WORKAROUND(!tc::range_with_iterators<Tuple>)
+			constexpr auto for_each_reverse_impl(adl_tag_t, Tuple&& tuple, Sink&& sink) return_decltype_MAYTHROW(
+				for_each_detail::for_each_parameter_pack(ReverseIndexList(), for_each_detail::tuple_index_sink<Tuple, tc::decay_t<Sink>>{tc_move_if_owned(tuple), tc_move_if_owned(sink)})
+			)
+		}
 	}
 
 	namespace reverse_adaptor_adl {
@@ -52,6 +61,10 @@ namespace tc {
 			friend constexpr auto for_each_reverse_impl(Self&& self, Sink&& sink) return_MAYTHROW(
 				tc::for_each(tc_move_if_owned(self).base_range(), tc_move_if_owned(sink))
 			)
+
+			constexpr auto size() const& MAYTHROW requires tc::has_size<Rng> {
+				return tc::compute_range_adaptor_size<tc::identity{}>(this->base_range());
+			}
 		};
 
 		template<typename Rng>
@@ -75,10 +88,7 @@ namespace tc {
 			using typename reverse_adaptor::range_iterator_from_index::tc_index;
 			using reverse_adaptor<Rng, false>::reverse_adaptor;
 			static constexpr bool c_bHasStashingIndex=tc::has_stashing_index<std::remove_reference_t<Rng>>::value;
-
-			constexpr auto size() const& MAYTHROW requires tc::has_size<Rng> {
-				return tc::compute_range_adaptor_size<tc::identity{}>(this->base_range());
-			}
+			static constexpr bool c_bPrefersForEach = true;
 
 		private:
 			STATIC_FINAL(begin_index)() const& noexcept -> tc_index {
@@ -115,13 +125,13 @@ namespace tc {
 				}
 			}
 
-			STATIC_FINAL(dereference_index)(tc_index const& idx) const& return_decltype_MAYTHROW(
-				tc::dereference_index(this->base_range(),*idx)
-			)
+			STATIC_FINAL(dereference_index)(auto&& idx) const& MAYTHROW -> decltype(auto) { // return_decltype_MAYTHROW causes ICE on MSVC 19.39
+				return tc::dereference_index(this->base_range(), *tc_move_if_owned(idx));
+			}
 
-			STATIC_FINAL(dereference_index)(tc_index const& idx) & return_decltype_MAYTHROW(
-				tc::dereference_index(this->base_range(),*idx)
-			)
+			STATIC_FINAL(dereference_index)(auto&& idx) & MAYTHROW -> decltype(auto) { // return_decltype_MAYTHROW causes ICE on MSVC 19.39
+				return tc::dereference_index(this->base_range(), *tc_move_if_owned(idx));
+			}
 
 			STATIC_FINAL(distance_to_index)(tc_index const& idxLhs, tc_index const& idxRhs) const& noexcept
 				requires tc::has_distance_to_index<std::remove_reference_t<Rng>>

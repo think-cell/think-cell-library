@@ -1,7 +1,7 @@
 
 // think-cell public library
 //
-// Copyright (C) 2016-2023 think-cell Software GmbH
+// Copyright (C) think-cell Software GmbH
 //
 // Distributed under the Boost Software License, Version 1.0.
 // See accompanying file LICENSE_1_0.txt or copy at http://www.boost.org/LICENSE_1_0.txt
@@ -9,32 +9,27 @@
 #pragma once
 
 #include "../base/conditional.h"
-#include "../base/assign.h"
+#include "../base/change.h"
 #include "size.h"
 
 namespace tc {
 	namespace no_adl {	
-		template<typename Better>
-		struct best_impl final {
-
+		template <typename Better>
+		struct TC_EMPTY_BASES fn_best : private std::remove_cvref_t<Better> {
+			constexpr fn_best() noexcept = default;
 			template<typename BetterRef>
-			constexpr best_impl(BetterRef&& better) noexcept : m_better(tc_move_if_owned(better))
+			constexpr fn_best(BetterRef&& better) noexcept : std::remove_cvref_t<Better>(tc_move_if_owned(better))
 			{}
 
-		private:
-			static_assert(tc::decayed<Better>);
-			Better m_better;
-
-		public:
-			template<typename T>
-			constexpr auto operator()(T&& t) const& noexcept -> T&& {
+			template <typename T>
+			[[nodiscard]] constexpr decltype(auto) operator()(T&& t) const& noexcept {
 				return tc_move_if_owned(t);
 			}
 			
-			template<typename T0, typename T1, typename... Args>
-			constexpr auto operator()(T0&& t0, T1&& t1, Args&&... args) const& noexcept -> decltype(auto) {
+			template <typename T0, typename T1, typename... Args>
+			[[nodiscard]] constexpr decltype(auto) operator()(T0&& t0, T1&& t1, Args&&... args) const& noexcept {
 				// analogous to std::min/std::max: if equivalent, return the first parameter
-				auto b = m_better(tc::as_const(t1), tc::as_const(t0));
+				auto b = tc_invoke(static_cast<std::remove_cvref_t<Better> const&>(*this), tc::as_const(t1), tc::as_const(t0));
 				if constexpr (std::is_same<tc::constant<true>, decltype(b)>::value) {
 					// t1 is better
 					return operator()(tc_move_if_owned(t1), tc_move_if_owned(args)...);
@@ -52,72 +47,23 @@ namespace tc {
 			}
 		};
 	}
+	using no_adl::fn_best;
+	using fn_min = fn_best<tc::fn_less>;
+	using fn_max = fn_best<tc::fn_greater>;
 
-	template<
-		typename Better,
-		typename... Args
-	>
-	[[nodiscard]] constexpr auto best(Better&& better, Args&&... args) return_decltype_xvalue_by_ref_noexcept(
-		no_adl::best_impl<tc::decay_t<Better>>(tc_move_if_owned(better))(tc_move_if_owned(args)...)
+	template <typename Better, typename ... Args>
+	[[nodiscard]] constexpr auto best(Better&& better, Args&&... args) return_decltype_allow_xvalue_noexcept(
+		fn_best<std::remove_cvref_t<Better>>(tc_move_if_owned(better))(tc_move_if_owned(args)...)
 	)
 
-	template<typename... Args>
-	[[nodiscard]] constexpr auto min(Args&&... args) return_decltype_xvalue_by_ref_noexcept(
+	template <typename ... Args>
+	[[nodiscard]] constexpr auto min(Args&&... args) return_decltype_allow_xvalue_noexcept(
 		best(tc::fn_less(), tc_move_if_owned(args)...)
 	)
 
-	template<typename... Args>
-	[[nodiscard]] constexpr auto max(Args&&... args) return_decltype_xvalue_by_ref_noexcept(
+	template <typename ... Args>
+	[[nodiscard]] constexpr auto max(Args&&... args) return_decltype_allow_xvalue_noexcept(
 		best(tc::fn_greater(), tc_move_if_owned(args)...)
 	)
-
-	tc_define_fn(min);
-	tc::constant<true> returns_reference_to_argument(tc::fn_min) noexcept;
-
-	tc_define_fn(max);
-	tc::constant<true> returns_reference_to_argument(tc::fn_max) noexcept;
-
-	namespace no_adl {
-		template <typename Iter>
-		struct forward_iter : Iter {
-			explicit forward_iter(Iter const& iter) : Iter(iter) {}
-		};
-	}
-}
-
-namespace std {
-	template <typename BaseIter>
-	struct iterator_traits<tc::no_adl::forward_iter<BaseIter>> : iterator_traits<BaseIter> {
-		using iterator_category = std::forward_iterator_tag;
-	};
-}
-
-namespace tc {
-	template <typename Iter>
-	auto treat_as_forward_iterator(Iter&& iter) noexcept {
-		return no_adl::forward_iter<std::remove_reference_t<Iter>>{tc_move_if_owned(iter)};
-	}
-
-	template <typename T>
-	auto treat_as_forward_iterator(T* ptr) noexcept {
-		return ptr;
-	}
-
-	template<typename Rng>
-	[[nodiscard]] auto minmax_element(Rng& rng) noexcept {
-		return std::minmax_element(
-			treat_as_forward_iterator(tc::begin(rng)),
-			treat_as_forward_iterator(tc::end(rng))
-		);
-	}
-
-	template<typename Rng, typename Pred>
-	[[nodiscard]] auto minmax_element(Rng& rng, Pred&& pred) noexcept {
-		return std::minmax_element(
-			treat_as_forward_iterator(tc::begin(rng)),
-			treat_as_forward_iterator(tc::end(rng)),
-			tc_move_if_owned(pred)
-		);
-	}
 }
 
