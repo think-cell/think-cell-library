@@ -871,7 +871,15 @@ namespace tc {
 		{};
 
 		template <typename Rng1, typename Rng2>
-		struct common_iterator_range {};
+		struct common_iterator_range
+		    : std::conditional_t<
+		            std::same_as<std::remove_cvref_t<Rng1>, tc::empty_range>, boost::mp11::mp_defer<tc::iterator_range_t, Rng2>,
+		            std::conditional_t<
+                        std::same_as<std::remove_cvref_t<Rng2>, tc::empty_range>, boost::mp11::mp_defer<tc::iterator_range_t, Rng1>,
+                        boost::mp11::mp_list<> // no common iterator range in the primary specialization
+                    >
+            >
+		{};
 
 		// Rng have common iterator
 		template <typename Rng1, typename Rng2>
@@ -887,18 +895,6 @@ namespace tc {
 				&& tc::safely_constructible_from<tc::iterator_range<tc::common_type_t<tc::ptr_iterator_t<Rng1>, tc::ptr_iterator_t<Rng2>>>, Rng2>
 		struct common_iterator_range<Rng1, Rng2> {
 			using type = tc::iterator_range<tc::common_type_t<tc::ptr_iterator_t<Rng1>, tc::ptr_iterator_t<Rng2>>>;
-		};
-
-		// special case: empty_range
-		template <typename Rng, typename EmptyRng>
-			requires requires { typename tc::iterator_range_t<Rng>; } && std::same_as<std::remove_cvref_t<EmptyRng>, tc::empty_range>
-		struct common_iterator_range<Rng, EmptyRng> {
-			using type = tc::iterator_range_t<Rng>;
-		};
-		template <typename Rng, typename EmptyRng>
-			requires requires { typename tc::iterator_range_t<Rng>; } && std::same_as<std::remove_cvref_t<EmptyRng>, tc::empty_range>
-		struct common_iterator_range<EmptyRng, Rng> {
-			using type = tc::iterator_range_t<Rng>;
 		};
 
 		// If T0 and T1 have a common iterator range, that is their common reference.
