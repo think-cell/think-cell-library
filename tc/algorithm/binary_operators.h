@@ -20,12 +20,12 @@
 namespace tc {
 	#pragma push_macro("GENERIC_OP_BODY")
 	#define GENERIC_OP_BODY(op, operation_body) \
-		template< typename Lhs, typename Rhs, \
-			typename Result = std::conditional_t<std::is_same<conversion_t<Lhs, Rhs>, Lhs>::value, Lhs&&, conversion_t<Lhs, Rhs>> \
+		template< typename Lhs, typename Rhs \
 		> \
-			requires is_operation_available<Lhs&&, Rhs&&>::value \
-		[[nodiscard]] friend constexpr Result operator op(Lhs&& lhs, Rhs&& rhs) noexcept { \
+			requires is_operation_available<Lhs&&, Rhs&&> \
+		[[nodiscard]] friend constexpr auto operator op(Lhs&& lhs, Rhs&& rhs) noexcept { \
 			static_assert(tc::decayed<conversion_t<Lhs, Rhs>>); \
+			using Result = std::conditional_t<std::is_same<conversion_t<Lhs, Rhs>, Lhs>::value, Lhs&&, conversion_t<Lhs, Rhs>>; \
 			Result _ = tc_move_if_owned(lhs); \
 			operation_body; \
 			if constexpr( std::is_same<Result, Lhs&&>::value ) { \
@@ -67,10 +67,9 @@ namespace tc {
 			/*If we're not forwarding an rvalue, we're calling the operator on the result of tc::decay_copy(Lhs&), which is tc::decay_t<Lhs>& \
 				If we're forwarding an rvalue, we're calling the operator on remove_reference_t<Lhs>&. But is_same<tc::decay_t<Lhs>, remove_reference_t<Lhs>>::value. */ \
 			template< typename Lhs, typename Rhs > \
-			using is_operation_available = tc::constant< \
+			static constexpr auto is_operation_available = \
 				tc::derived_from<conversion_t<Lhs, Rhs>, name> \
-				&& is_compound_available<conversion_t<Lhs, Rhs>, Rhs> \
-			>; \
+				&& is_compound_available<conversion_t<Lhs, Rhs>, Rhs>; \
 		public: \
 			GENERIC_OP_BODY( op, _.operator op##=(tc_move_if_owned(rhs)) ); \
 		}; \
@@ -85,12 +84,11 @@ namespace tc {
 			static_assert( std::is_fundamental<Other>::value, "external_" #name " is only meant for fundamental types" ); \
 			STATICASSERTSAME( tc::decay_t<Other>, Other ); \
 			template< typename Lhs, typename Rhs > \
-			using is_operation_available = tc::constant< \
+			static constexpr auto is_operation_available =  \
 				tc::derived_from<std::remove_reference_t<Lhs>, Other> \
 				&& tc::derived_from<std::remove_reference_t<Rhs>, external_ ##name<Other, Base>> \
 				/* Same reasoning as in the internal operator */ \
-				&& is_compound_available<tc::decay_t<Lhs>, Rhs> \
-			>; \
+				&& is_compound_available<tc::decay_t<Lhs>, Rhs>; \
 		public: \
 			GENERIC_OP_BODY( op, { \
 				static_assert(!tc::generic_operator_helper::has_mem_fn_compound_ ##name<decltype((_)), decltype(tc_move_if_owned(rhs))>); \
